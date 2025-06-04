@@ -1,0 +1,1561 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../rotator/">
+      
+      
+        <link rel="next" href="../estimator/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Quantizer - RaBitQ Library</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.2afb09e1.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#quantizer" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            RaBitQ Library
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Quantizer
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    RaBitQ Library
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quick_start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quick Start
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    RaBitQ
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            RaBitQ
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rabitq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rotator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Rotator
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Quantizer
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Quantizer
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#implementations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implementations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Format
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Format">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#format-1-drop-in-replacement-of-uniform-scalar-quantization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 1 - Drop-in Replacement of Uniform Scalar Quantization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-2-distance-estimation-for-a-single-vector" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 2 - Distance Estimation for a Single Vector
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 2 - Distance Estimation for a Single Vector">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-3-distance-estimation-for-a-batch-of-vectors-for-qg" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 3 - Distance Estimation for a Batch of Vectors (for QG)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 3 - Distance Estimation for a Batch of Vectors (for QG)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-4-incremental-distance-estimation-for-split-single-vectors-for-hnsw" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 4 - Incremental Distance Estimation for Split Single Vectors (for HNSW)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 4 - Incremental Distance Estimation for Split Single Vectors (for HNSW)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-5-incremental-distance-estimation-for-split-batched-vectors-for-ivf" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 5 - Incremental Distance Estimation for Split Batched Vectors (for IVF)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 5 - Incremental Distance Estimation for Split Batched Vectors (for IVF)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../estimator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Estimator
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reranking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Reranking
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6" id="__nav_3_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Kernel
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6">
+            <span class="md-nav__icon md-icon"></span>
+            Kernel
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../compact_code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Compact Code Storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kernel_ip/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Inner Product
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    RaBitQ for Vector Search
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            RaBitQ for Vector Search
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../index/ivf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    IVF + RaBitQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../index/hnsw/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    HNSW + RaBitQ
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../index/qg/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    QG + RaBitQ (SymphonyQG)
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#implementations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Implementations
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Format
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Format">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#format-1-drop-in-replacement-of-uniform-scalar-quantization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 1 - Drop-in Replacement of Uniform Scalar Quantization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-2-distance-estimation-for-a-single-vector" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 2 - Distance Estimation for a Single Vector
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 2 - Distance Estimation for a Single Vector">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-3-distance-estimation-for-a-batch-of-vectors-for-qg" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 3 - Distance Estimation for a Batch of Vectors (for QG)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 3 - Distance Estimation for a Batch of Vectors (for QG)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-4-incremental-distance-estimation-for-split-single-vectors-for-hnsw" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 4 - Incremental Distance Estimation for Split Single Vectors (for HNSW)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 4 - Incremental Distance Estimation for Split Single Vectors (for HNSW)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#format-5-incremental-distance-estimation-for-split-batched-vectors-for-ivf" class="md-nav__link">
+    <span class="md-ellipsis">
+      Format 5 - Incremental Distance Estimation for Split Batched Vectors (for IVF)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Format 5 - Incremental Distance Estimation for Split Batched Vectors (for IVF)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indexing_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indexing
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querying_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Querying
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="quantizer">Quantizer</h1>
+<p>RaBitQLib includes two versions of implementations for the RaBitQ algorithm and designs various data formats to ease practical deployment. Specifically, the two implementaions offer different trade-offs as follows. </p>
+<ol>
+<li>Optimal accuracy with longer quantization time.</li>
+<li>Nearly-optimal accuracy with significantly fast quantization.</li>
+</ol>
+<p>Various advanced data formats are provided to support the following needs. </p>
+<ol>
+<li>Drop-in replacement for uniform scalar quantization.</li>
+<li>Efficient distance estimation for single vectors.</li>
+<li>Efficient distance estimation for batched vectors.</li>
+<li>Incremental distance estimation for splitted single vectors.</li>
+<li>Incremental distance estimation for splitted batched vectors.</li>
+</ol>
+<p>Note that these data formats only map raw floating-point vectors into codes of <code>uint8</code>/<code>uint32</code> arrays. To compactly store the code vector, please further refer to <code>rabitqlib/quantization/pack_ex_code.hpp</code>.</p>
+<p>RaBitQ quantizer is included in <code>rabitq_impl.hpp</code> and <code>rabitq.hpp</code>.
+<div class="highlight"><pre><span></span><code><span class="o">.</span>
+<span class="err">├──</span><span class="w"> </span><span class="nt">rabitqlib</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="o">...</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="nt">quantization</span>
+<span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="o">...</span>
+<span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="nt">rabitq_impl</span><span class="p">.</span><span class="nc">hpp</span>
+<span class="err">│</span><span class="w">       </span><span class="err">└──</span><span class="w"> </span><span class="nt">rabitq</span><span class="p">.</span><span class="nc">hpp</span>
+<span class="err">└──</span><span class="w"> </span><span class="o">...</span>
+</code></pre></div></p>
+<h2 id="implementations">Implementations</h2>
+<p>Let <span class="arithmatex"><span class="MathJax_Preview">B</span><script type="math/tex">B</script></span> be the bit-width for each dimension. Both implementations of RaBitQ include two steps. </p>
+<ol>
+<li>Compute a <strong>binary code</strong> by recording the sign of every coordinate. </li>
+<li>Compute an <strong>ex-code</strong> of <span class="arithmatex"><span class="MathJax_Preview">B-1</span><script type="math/tex">B-1</script></span> bits (when <span class="arithmatex"><span class="MathJax_Preview">B&gt;1</span><script type="math/tex">B>1</script></span>).</li>
+</ol>
+<p>The binary code is easily computed by the function <code>one_bit_code</code> in <code>rabitq_impl.hpp</code>.</p>
+<p>The computation of ex-codes includes two versions of implementation. </p>
+<p>In the first implementation, we compute the ex-codes of RaBitQ based on the algorithm described in the RaBitQ <a href="https://arxiv.org/abs/2409.09913">paper</a> (Section 3.2.2). For a vector, to minimize the quantization error, the algorithm tries many different rescaling factors. For each rescaling factor, it rescales the vector and performs rounding (i.e., scalar quantization) to generate a quantization code. Then it finds out the factor and codes which minimizes the quantization error. Note that in the library, the range of enumeration is approriately shrinked, which brings better efficiency without affecting the accuracy. </p>
+<p>In the second implementation, instead of enumerating different rescaling factors, it directly rounds every vector based on the <strong>expected optimal factor</strong>. Specifically, recall that all data vectors are randomly rotated before quantization. The expected optimal factor is computed as follows. We sample several random vectors which follow uniform distribution on the unit sphere and use the first implementation to quantize them. We record the optimal factor for each and take the average of the optimal factors as the expected optimal factor. This implementation introduces some accuracy decrease while significantly speeds up the quantization.</p>
+<h2 id="data-format">Data Format</h2>
+<h3 id="format-1-drop-in-replacement-of-uniform-scalar-quantization">Format 1 - Drop-in Replacement of Uniform Scalar Quantization</h3>
+<p>This format allows RaBitQ to be used as a direct replacement for uniform scalar quantization, which offers higher accuracy under the same bit-width. The improvement of accuracy is significant when the bit-width is small (<span class="arithmatex"><span class="MathJax_Preview">B &lt; 6</span><script type="math/tex">B < 6</script></span>).
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;cstdint&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;random&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;quantization/rabitq.hpp&quot;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vector</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="w"> </span><span class="n">rd</span><span class="p">;</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mt19937</span><span class="w"> </span><span class="n">gen</span><span class="p">(</span><span class="n">rd</span><span class="p">());</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">normal_distribution</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// generate a random vector</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">8</span><span class="p">;</span><span class="w">                  </span><span class="c1">// num of bits for total code</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="w"> </span><span class="n">code</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span><span class="w">  </span><span class="c1">// code</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">delta</span><span class="p">;</span><span class="w">                      </span><span class="c1">// delta for scalar quantization</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">vl</span><span class="p">;</span><span class="w">                         </span><span class="c1">// lower value for scalar quantization</span>
+
+<span class="w">    </span><span class="c1">// scalar quantization</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_scalar</span><span class="p">(</span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">,</span><span class="w"> </span><span class="n">code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">delta</span><span class="p">,</span><span class="w"> </span><span class="n">vl</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// faster version, must init a config struct first</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">RabitqConfig</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">faster_config</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">);</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_scalar</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">,</span><span class="w"> </span><span class="n">code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">delta</span><span class="p">,</span><span class="w"> </span><span class="n">vl</span><span class="p">,</span><span class="w"> </span><span class="n">config</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// Note that with this interface, the codes are not compactly stored.</span>
+<span class="w">    </span><span class="c1">// To compactly store the codes, please refer to</span>
+<span class="w">    </span><span class="c1">// `rabitqlib/quantization/pack_excode.hpp`</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<h3 id="format-2-distance-estimation-for-a-single-vector">Format 2 - Distance Estimation for a Single Vector</h3>
+<h4 id="indexing">Indexing</h4>
+<p>This format is designed for computing distance metrics between data vectors and query vectors efficiently. It includes precomputed factors to ease similarity calculations.
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;cstdint&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;random&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;quantization/rabitq.hpp&quot;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vector</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">centroid</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="w"> </span><span class="n">rd</span><span class="p">;</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mt19937</span><span class="w"> </span><span class="n">gen</span><span class="p">(</span><span class="n">rd</span><span class="p">());</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">normal_distribution</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// generate a random vector</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">8</span><span class="p">;</span><span class="w">                  </span><span class="c1">// num of bits for total code</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="w"> </span><span class="n">code</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span><span class="w">  </span><span class="c1">// code</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">f_add</span><span class="p">;</span><span class="w">                      </span><span class="c1">// factors for estimating similarity</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">f_rescale</span><span class="p">;</span><span class="w">                  </span><span class="c1">// factors for estimating similarity</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">f_error</span><span class="p">;</span><span class="w">                    </span><span class="c1">// factors for computing error bounds</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_full_single</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="p">,</span>
+<span class="w">        </span><span class="n">code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">f_add</span><span class="p">,</span>
+<span class="w">        </span><span class="n">f_rescale</span><span class="p">,</span>
+<span class="w">        </span><span class="n">f_error</span><span class="p">,</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// faster version, must init a config struct first</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">RabitqConfig</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">faster_config</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">);</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_full_single</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="p">,</span>
+<span class="w">        </span><span class="n">code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">f_add</span><span class="p">,</span>
+<span class="w">        </span><span class="n">f_rescale</span><span class="p">,</span>
+<span class="w">        </span><span class="n">f_error</span><span class="p">,</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span><span class="p">,</span>
+<span class="w">        </span><span class="n">config</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// Note that with this interface, the codes are not compactly stored.</span>
+<span class="w">    </span><span class="c1">// To compactly store the codes, please refer to</span>
+<span class="w">    </span><span class="c1">// `rabitqlib/quantization/pack_excode.hpp`</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<h4 id="querying">Querying</h4>
+<p>After quantization, we can use the pre-computed quantization codes and factors to get estimated distance for a given query.Here, we separately stored factors and quantization codes, and user may choose to compact them all together to get a improve space locality (e.g., implementation in our index). Also, we did not rotate the vectors in this example for simplicity of illustration.
+<div class="highlight"><pre><span></span><code><span class="p">...</span>
+<span class="w">    </span><span class="p">......</span><span class="w"> </span><span class="c1">// we omit the quantization code here</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">query</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">query</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// please refer to estimator.md for defination of these factors</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">c_1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">((</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2.F</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">k1xsumq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">c_1</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">accumulate</span><span class="p">(</span><span class="n">query</span><span class="p">.</span><span class="n">begin</span><span class="p">(),</span><span class="w"> </span><span class="n">query</span><span class="p">.</span><span class="n">end</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.F</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">g_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">euclidean_sqr</span><span class="p">(</span><span class="n">query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">);</span>
+
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">est_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">full_est_dist</span><span class="p">(</span>
+<span class="w">        </span><span class="n">code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">excode_ipimpl</span><span class="o">::</span><span class="n">ip_fxi</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="p">,</span>
+<span class="w">        </span><span class="n">f_add</span><span class="p">,</span>
+<span class="w">        </span><span class="n">f_rescale</span><span class="p">,</span>
+<span class="w">        </span><span class="n">g_add</span><span class="p">,</span>
+<span class="w">        </span><span class="n">k1xsumq</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">gt_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">euclidean_sqr</span><span class="p">(</span><span class="n">query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Estimated distance: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">est_dist</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;GT distance: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">gt_dist</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="sc">&#39;\n&#39;</span><span class="p">;</span>
+</code></pre></div></p>
+<h3 id="format-3-distance-estimation-for-a-batch-of-vectors-for-qg">Format 3 - Distance Estimation for a Batch of Vectors (for QG)</h3>
+<p>A variant of this data format is used in QG. </p>
+<h4 id="indexing_1">Indexing</h4>
+<p>This format is designed for scenarios where distances need to be computed between a query vector and multiple data vectors (quantized into 1-bit per dimension) simultaneously, providing significant performance improvements with <a href="https://arxiv.org/abs/1704.07355">FastScan</a> for batch processing. 
+In practical implementation of our SymphonyQG index, the data is compactly stored. Please refer to <code>QGBatchDataMap</code> in <code>rabitqlib/quantization/data_layout.hpp</code> for detailed information.</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;cstdint&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;random&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;quantization/rabitq_impl.hpp&quot;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span><span class="w">  </span><span class="c1">// a batch for FastScan contains 32 vectors</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vector</span><span class="p">(</span><span class="n">dim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">batch_size</span><span class="p">);</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">centroid</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="w"> </span><span class="n">rd</span><span class="p">;</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mt19937</span><span class="w"> </span><span class="n">gen</span><span class="p">(</span><span class="n">rd</span><span class="p">());</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">normal_distribution</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// generate a random vector</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// std::vector&lt;uint32_t&gt; code(dim);  // code</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">uint8_t</span><span class="o">&gt;</span><span class="w"> </span><span class="n">packed_code</span><span class="p">(</span><span class="n">batch_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">f_add</span><span class="p">(</span><span class="n">batch_size</span><span class="p">);</span><span class="w">      </span><span class="c1">// factors for estimating similarity</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">f_rescale</span><span class="p">(</span><span class="n">batch_size</span><span class="p">);</span><span class="w">  </span><span class="c1">// factors for estimating similarity</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">f_error</span><span class="p">(</span><span class="n">batch_size</span><span class="p">);</span><span class="w">    </span><span class="c1">// factors for computing error bounds</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">rabitq_impl</span><span class="o">::</span><span class="n">one_bit</span><span class="o">::</span><span class="n">one_bit_batch_code</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">batch_size</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">packed_code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">f_add</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">f_rescale</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">f_error</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<h4 id="querying_1">Querying</h4>
+<p>During querying, a query is pre-processed as follows. Then FastScan can be called to estimate distance batch by batch. The detailed implementation is in <code>rabitqlib/index/estimator.hpp</code>. 
+Here, we assume the data are compactly stored in the layout of <code>QGBatchDataMap</code> in <code>rabitqlib/quantization/data_layout.hpp</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span><span class="w">  </span><span class="c1">// the dimensionality</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">rotated_query</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="w"> </span><span class="n">batch_data</span><span class="p">(</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">QGBatchDataMap</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;::</span><span class="n">data_bytes</span><span class="p">(</span><span class="n">dim</span><span class="p">));</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">BatchQuery</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">processed_query</span><span class="p">(</span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// The factors should be set according to the centroid vector.</span>
+<span class="w">    </span><span class="c1">// For ANN, this is preprocessed for every center vector when a query comes.</span>
+<span class="w">    </span><span class="n">processed_query</span><span class="p">.</span><span class="n">set_g_add</span><span class="p">(</span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">euclidean_sqr</span><span class="p">(</span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">))</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">est_distance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">);</span><span class="w">  </span><span class="c1">// store the estimated distances</span>
+
+<span class="w">    </span><span class="c1">// We suggest users to customize the kernel if some outputs are not needed.</span>
+<span class="w">    </span><span class="c1">// Eg., QG does not need error bounds, thus we only get the estimated distance here.</span>
+<span class="w">    </span><span class="c1">// If users want to maintain the information of error bound, please refer to our</span>
+<span class="w">    </span><span class="c1">// implementation of IVF index.</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">qg_batch_estdist</span><span class="p">(</span>
+<span class="w">        </span><span class="n">batch_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">processed_query</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">est_distance</span><span class="p">.</span><span class="n">data</span><span class="p">()</span>
+<span class="w">    </span><span class="p">);</span>
+</code></pre></div>
+<h3 id="format-4-incremental-distance-estimation-for-split-single-vectors-for-hnsw">Format 4 - Incremental Distance Estimation for Split Single Vectors (for HNSW)</h3>
+<p>This format can be used in HNSW. </p>
+<h4 id="indexing_2">Indexing</h4>
+<p>This format supports computing distances incrementally when vectors are split across multiple memory locations or when only partial vector information is available at a time.</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;random&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;quantization/rabitq.hpp&quot;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vector</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">centroid</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="w"> </span><span class="n">rd</span><span class="p">;</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mt19937</span><span class="w"> </span><span class="n">gen</span><span class="p">(</span><span class="n">rd</span><span class="p">());</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">normal_distribution</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// generate a random vector</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w">  </span><span class="c1">// num of bits for total code</span>
+<span class="w">    </span><span class="c1">// `bin_data` includes compact binary codes (dim / 8 bytes) and three factors - f_add,</span>
+<span class="w">    </span><span class="c1">// f_rescale and f_error (12 bytes) f_error can be dropped if the error bound is not</span>
+<span class="w">    </span><span class="c1">// used in your index (e.g., QG).</span>
+<span class="w">    </span><span class="c1">// You can also use rabitqlib::BinDataMap&lt;float&gt;::data_bytes(dim) to get the bin data</span>
+<span class="w">    </span><span class="c1">// bytes</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="w"> </span><span class="n">bin_data</span><span class="p">((</span><span class="n">dim</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">12</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// `ex_data` includes compact binary codes (dim / 8 bytes) and two factors - f_add_ex,</span>
+<span class="w">    </span><span class="c1">// f_rescale_ex (8 bytes). Here, we drop f_error_ex since it is not used in this index.</span>
+<span class="w">    </span><span class="c1">// You can also use rabitqlib::ExDataMap&lt;float&gt;::data_bytes(dim, bits-1) to get the ex</span>
+<span class="w">    </span><span class="c1">// data bytes</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="w"> </span><span class="n">ex_data</span><span class="p">((</span><span class="n">dim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_split_single</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bin_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ex_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// use fast implementation for the data format</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">RabitqConfig</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">faster_config</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">);</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_split_single</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bin_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ex_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span><span class="p">,</span>
+<span class="w">        </span><span class="n">config</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<h4 id="querying_2">Querying</h4>
+<div class="highlight"><pre><span></span><code><span class="p">...</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span><span class="w">  </span><span class="c1">// the dimensionality</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w">   </span><span class="c1">// the bit-width of DATA vectors</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">rotated_query</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// the config of fast quantizer is necessary for preprocessing queries</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">RabitqConfig</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">faster_config</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">SplitSingleQuery</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">processed_query</span><span class="p">(</span>
+<span class="w">        </span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">config</span><span class="p">,</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// set factors for distance estimation.</span>
+<span class="w">    </span><span class="c1">// In ANN the factors are precomputed when a query comes.</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">norm</span><span class="w"> </span><span class="o">=</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">euclidean_sqr</span><span class="p">(</span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">error</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">dot_product</span><span class="p">(</span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// Compute estimated distances based on binary codes</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">ip_x0_qr</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">est_dist</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">low_dist</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">split_single_estdist</span><span class="p">(</span>
+<span class="w">        </span><span class="n">bin_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">processed_query</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">ip_x0_qr</span><span class="p">,</span><span class="w"> </span><span class="n">est_dist</span><span class="p">,</span><span class="w"> </span><span class="n">low_dist</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="n">norm</span><span class="p">,</span><span class="w"> </span><span class="n">error</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// the kernel of computing inner product between compact codes and query vectors</span>
+<span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="n">ip_func</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">select_excode_ipfunc</span><span class="p">(</span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// Compute more accurate distance based on full codes.</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">est_dist_ex</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">low_dist_ex</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">ip_x0_qr_ex</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">split_single_fulldist</span><span class="p">(</span>
+<span class="w">        </span><span class="n">bin_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ex_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ip_func</span><span class="p">,</span>
+<span class="w">        </span><span class="n">processed_query</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="n">est_dist_ex</span><span class="p">,</span>
+<span class="w">        </span><span class="n">low_dist_ex</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ip_x0_qr_ex</span><span class="p">,</span>
+<span class="w">        </span><span class="o">-</span><span class="n">norm</span><span class="p">,</span>
+<span class="w">        </span><span class="n">error</span>
+<span class="w">    </span><span class="p">);</span>
+</code></pre></div>
+<h3 id="format-5-incremental-distance-estimation-for-split-batched-vectors-for-ivf">Format 5 - Incremental Distance Estimation for Split Batched Vectors (for IVF)</h3>
+<p>This data format is used in IVF.</p>
+<h4 id="indexing_3">Indexing</h4>
+<p>This format combines the benefits of batched processing with incremental computation, allowing efficient distance estimation when dealing with large collections of split vectors.</p>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;random&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;quantization/rabitq.hpp&quot;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vector</span><span class="p">(</span><span class="n">dim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">batch_size</span><span class="p">);</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">centroid</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="w"> </span><span class="n">rd</span><span class="p">;</span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mt19937</span><span class="w"> </span><span class="n">gen</span><span class="p">(</span><span class="n">rd</span><span class="p">());</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">normal_distribution</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// generate a random vector</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">batch_size</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dist</span><span class="p">(</span><span class="n">gen</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w">  </span><span class="c1">// num of bits for full codes</span>
+<span class="w">    </span><span class="c1">// `batch_data` includes packed binary codes (dim / 8 bytes) and three factors - f_add,</span>
+<span class="w">    </span><span class="c1">// f_rescale and f_error (12 bytes)</span>
+<span class="w">    </span><span class="c1">// f_error can be dropped if the error bound is not used in your index (e.g., QG)</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="w"> </span><span class="n">batch_data</span><span class="p">((</span><span class="n">dim</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">12</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">batch_size</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// `ex_data` includes compact binary codes (dim / 8 bytes) and two factors - f_add_ex,</span>
+<span class="w">    </span><span class="c1">// f_rescale_ex (8 bytes). Here, we drop f_error_ex since it is not used in this index.</span>
+<span class="w">    </span><span class="c1">// You can also use rabitqlib::ExDataMap&lt;float&gt;::data_bytes(dim, bits-1) to get the ex</span>
+<span class="w">    </span><span class="c1">// data bytes</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">&gt;</span><span class="w"> </span><span class="n">ex_data</span><span class="p">((</span><span class="n">dim</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">8</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">batch_size</span><span class="p">);</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_split_batch</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">batch_size</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="n">batch_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ex_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// use fast implementation for the data format</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">RabitqConfig</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">faster_config</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="p">);</span>
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">quant</span><span class="o">::</span><span class="n">quantize_split_batch</span><span class="p">(</span>
+<span class="w">        </span><span class="n">vector</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">batch_size</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="n">batch_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ex_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span><span class="p">,</span>
+<span class="w">        </span><span class="n">config</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<h4 id="querying_3">Querying</h4>
+<div class="highlight"><pre><span></span><code><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">768</span><span class="p">;</span><span class="w">  </span><span class="c1">// the dimensionality</span>
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w">   </span><span class="c1">// the bit-width of DATA vectors</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">rotated_query</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// The flag use_hacc controls the precision of FastScan.</span>
+<span class="w">    </span><span class="c1">// `use_hacc = false` - each number in LUTs is quantized into 8 bits.</span>
+<span class="w">    </span><span class="c1">// `use_hacc = true` - each number in LUTs is quantized into 16 bits.</span>
+<span class="w">    </span><span class="c1">// By default, `use_hacc = true` as it works for all settings of `bits`,</span>
+<span class="w">    </span><span class="c1">// i.e., the bit-width of queries is significantly larger than that for data.</span>
+<span class="w">    </span><span class="c1">// When the bit-width of data &lt;= 2, `use_hacc = false` does not harm accuracy.</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">SplitBatchQuery</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">processed_query</span><span class="p">(</span>
+<span class="w">        </span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// The factors should be set according to the centroid vector.</span>
+<span class="w">    </span><span class="c1">// For ANN, this is preprocessed for every center vector when a query comes.</span>
+<span class="w">    </span><span class="n">processed_query</span><span class="p">.</span><span class="n">set_g_add</span><span class="p">(</span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">euclidean_sqr</span><span class="p">(</span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">)),</span>
+<span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">dot_product</span><span class="p">(</span><span class="n">rotated_query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroid</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">)</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">batch_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">32</span><span class="p">;</span>
+
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">est_distance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">);</span><span class="w">  </span><span class="c1">// store the estimated distances</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">low_distance</span><span class="p">(</span><span class="n">batch_size</span><span class="p">);</span><span class="w">  </span><span class="c1">// store the lower bound</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">ip_x0_qr</span><span class="p">(</span><span class="n">batch_size</span>
+<span class="w">    </span><span class="p">);</span><span class="w">  </span><span class="c1">// store the intermediate result of inner product</span>
+
+<span class="w">    </span><span class="c1">// We suggest users to customize the kernel if some outputs are not needed.</span>
+<span class="w">    </span><span class="c1">// For example, QG does not need error bounds, see `qg_batch_estdist` in</span>
+<span class="w">    </span><span class="c1">// `rabitqlib/index/estimator.hpp` for details.</span>
+
+<span class="w">    </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">split_batch_estdist</span><span class="p">(</span>
+<span class="w">        </span><span class="n">batch_data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">processed_query</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">est_distance</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">low_distance</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">ip_x0_qr</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
+<span class="w">        </span><span class="nb">true</span>
+<span class="w">    </span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// the kernel of computing inner product between compact codes and query vectors</span>
+<span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="n">ip_func</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">select_excode_ipfunc</span><span class="p">(</span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+
+<span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span><span class="p">;</span>
+<span class="w">    </span><span class="n">split_distance_boosting</span><span class="p">(</span>
+<span class="w">        </span><span class="n">ex_data</span><span class="p">.</span><span class="n">data</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">ExDataMap</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;::</span><span class="n">data_bytes</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)),</span>
+<span class="w">        </span><span class="n">ip_func</span><span class="p">,</span>
+<span class="w">        </span><span class="n">processed_query</span><span class="p">,</span>
+<span class="w">        </span><span class="n">dim</span><span class="p">,</span>
+<span class="w">        </span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="n">ip_x0_qr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+<span class="w">    </span><span class="p">);</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+      
+    
+  </body>
+</html>
