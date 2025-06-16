@@ -184,7 +184,7 @@ inline void accumulate(
 
     for (size_t i = 0; i < code_length; i += 64) {
         c = _mm256_loadu_si256((__m256i*)&codes[i]);
-        lut = _mm256_loadu_si256((__m256i*)&LUT[i]);
+        lut = _mm256_loadu_si256((__m256i*)&lp_table[i]);
         lo = _mm256_and_si256(c, low_mask);
         hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
@@ -197,7 +197,7 @@ inline void accumulate(
         accu3 = _mm256_add_epi16(accu3, _mm256_srli_epi16(res_hi, 8));
 
         c = _mm256_loadu_si256((__m256i*)&codes[i + 32]);
-        lut = _mm256_loadu_si256((__m256i*)&LUT[i + 32]);
+        lut = _mm256_loadu_si256((__m256i*)&lp_table[i + 32]);
         lo = _mm256_and_si256(c, low_mask);
         hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
