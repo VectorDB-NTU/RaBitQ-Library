@@ -42,3 +42,6 @@ data/
 
 # macOS garbages
 .DS_Store
+
+rabitq-sys/target/*
+.vscode/*
