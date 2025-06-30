@@ -44,4 +44,5 @@ data/
 .DS_Store
 
 rabitq-sys/target/*
+rabitq-rs/target/*
 .vscode/*

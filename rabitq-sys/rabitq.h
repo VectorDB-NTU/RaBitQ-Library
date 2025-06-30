@@ -22,6 +22,10 @@ Rotator* rabitq_rotator_new(size_t dim, size_t padded_dim);
 void rabitq_rotator_free(Rotator* rotator);
 void rabitq_rotator_rotate(const Rotator* rotator, const float* x, float* y);
 
+int rabitq_rotator_load(Rotator* rotator, const char* file_path);
+int rabitq_rotator_save(const Rotator* rotator, const char* file_path);
+size_t rabitq_rotator_size(const Rotator* rotator);
+
 #ifdef __cplusplus
 }
 #endif

@@ -28,4 +28,25 @@ void rabitq_rotator_rotate(const Rotator* rotator, const float* x, float* y) {
     reinterpret_cast<const rabitqlib::Rotator<float>*>(rotator)->rotate(x, y);
 }
 
+int rabitq_rotator_load(Rotator* rotator, const char* file_path) {
+    std::ifstream input(file_path, std::ios::binary);
+    if (!input.is_open()) {
+        return -1;
+    }
+    reinterpret_cast<rabitqlib::Rotator<float>*>(rotator)->load(input);
+    return 0;
+}
+
+int rabitq_rotator_save(const Rotator* rotator, const char* file_path) {
+    std::ofstream output(file_path, std::ios::binary);
+    if (!output.is_open()) {
+        return -1;
+    }
+    reinterpret_cast<const rabitqlib::Rotator<float>*>(rotator)->save(output);
+    return 0;
+}
+
+size_t rabitq_rotator_size(const Rotator* rotator) {
+    return reinterpret_cast<const rabitqlib::Rotator<float>*>(rotator)->size();
+}
 }
