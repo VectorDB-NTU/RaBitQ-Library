@@ -33,6 +33,7 @@ class Rotator {
     virtual void load(std::ifstream&) = 0;
     virtual void save(std::ofstream&) const = 0;
     [[nodiscard]] size_t size() const { return this->padded_dim_; }
+    size_t dim() const { return this->dim_; }
 };
 
 namespace rotator_impl {

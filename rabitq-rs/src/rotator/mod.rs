@@ -77,7 +77,6 @@ unsafe impl Sync for Rotator {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -100,7 +99,7 @@ mod tests {
 
     #[test]
     fn test_rotator_save_load() {
-        let mut rotator = Rotator::new(128, 128).unwrap();
+        let rotator = Rotator::new(128, 128).unwrap();
         let temp_file = NamedTempFile::new().unwrap();
         let path = temp_file.path();
 
