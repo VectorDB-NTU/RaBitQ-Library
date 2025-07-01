@@ -98,6 +98,10 @@ float rabitq_split_distance_boosting_with_batch_query(
     float ip_x0_qr
 );
 
+typedef float (*ex_ipfunc)(const float*, const uint8_t*, size_t);
+
+ex_ipfunc rabitq_select_excode_ipfunc(size_t ex_bits);
+
 #ifdef __cplusplus
 }
 #endif

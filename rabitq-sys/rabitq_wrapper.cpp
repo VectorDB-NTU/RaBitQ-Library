@@ -3,7 +3,7 @@
 #include "../rabitqlib/utils/rotator.hpp"
 #include "../rabitqlib/index/estimator.hpp"
 #include "../rabitqlib/index/query.hpp"
-
+#include "../rabitqlib/utils/space.hpp"
 // 在 C++ 文件中，我们知道 Rotator 是 rabitqlib::Rotator<float> 的别名
 // 但这个细节对 C 和 Rust 是隐藏的
 
@@ -161,4 +161,7 @@ float rabitq_split_distance_boosting_with_batch_query(
         ex_data, ip_func_, *cpp_q_obj, padded_dim, ex_bits, ip_x0_qr);
 }
 
+ex_ipfunc rabitq_select_excode_ipfunc(size_t ex_bits) {
+    return rabitqlib::select_excode_ipfunc(ex_bits);
+}
 }

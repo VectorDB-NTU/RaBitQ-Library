@@ -61,6 +61,11 @@ impl Rotator {
     pub fn padded_dim(&self) -> usize {
         unsafe { ffi::rabitq_rotator_size(self.ptr) }
     }
+
+    /// Get the dimension
+    pub fn dim(&self) -> usize {
+        unsafe { ffi::rabitq_rotator_dim(self.ptr) }
+    }
 }
 
 impl Drop for Rotator {
