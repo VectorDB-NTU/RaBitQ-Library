@@ -135,7 +135,7 @@ impl SingleEstimator {
         unsafe { rabitq_split_single_query_vl(self.ptr) }
     }
 
-    pub fn set_g_add(&mut self, norm: f32, ip: f32) {
+    pub fn set_g_add(&self, norm: f32, ip: f32) {
         unsafe { rabitq_split_single_query_set_g_add(self.ptr, norm, ip) };
     }
 

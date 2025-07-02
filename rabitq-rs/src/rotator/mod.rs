@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::path::Path;
 
+pub const ALIGNED_DIM: usize = 16;
 /// A wrapper Rotator
 pub struct Rotator {
     ptr: *mut ffi::Rotator,

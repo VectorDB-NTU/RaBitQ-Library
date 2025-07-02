@@ -7,8 +7,8 @@ use rand::distr::{Distribution, Uniform};
 
 #[test]
 fn test_quantization_and_estimation() {
-    const DIM: usize = 256;
-    const PADDED_DIM: usize = 256;
+    const DIM: usize = 1024;
+    const PADDED_DIM: usize = 1024;
     const NUM_VECTORS: usize = 100;
     const EX_BITS: usize = 4;
 
@@ -59,11 +59,11 @@ fn test_quantization_and_estimation() {
     let g_add = rotated_query.pow2().sum();
     let g_err = rotated_query.pow2().sum().sqrt();
     let (dist, low_dist, ip) = query.estdist(&bin_codes, g_add, g_err);
-    // 计算查询与第一个向量的l2距离
+    // Calculate the exact distance
     let l2_dist = (query_vec - rotated_vectors.row(0)).pow2().sum().sqrt();
     println!("acc dist: {:}", l2_dist);
     println!(
-        "dist: {:?}, low_dist: {:?}, ip: {:?}",
+        "1-bit dist: {:?}, low_dist: {:?}, ip: {:?}",
         dist.sqrt(),
         low_dist.sqrt(),
         ip
@@ -74,5 +74,5 @@ fn test_quantization_and_estimation() {
     query.set_g_add(rotated_query.pow2().sum().sqrt(), 0.0);
     let estimated_dist = query.distance_boosting(&ex_codes, Some(ip_func), ip);
 
-    println!("estimated dist: {:}", estimated_dist.sqrt());
+    println!("5-bit estimated dist: {:}", estimated_dist.sqrt());
 }
