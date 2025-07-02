@@ -164,4 +164,78 @@ float rabitq_split_distance_boosting_with_batch_query(
 ex_ipfunc rabitq_select_excode_ipfunc(size_t ex_bits) {
     return rabitqlib::select_excode_ipfunc(ex_bits);
 }
+
+SplitSingleQuery* rabitq_split_single_query_new(
+    const float* rotated_query,
+    size_t padded_dim,
+    size_t ex_bits,
+    const RabitqConfig* config,
+    MetricType metric_type
+) {
+    auto q = new rabitqlib::SplitSingleQuery<float>(
+        rotated_query,
+        padded_dim,
+        ex_bits,
+        *reinterpret_cast<const rabitqlib::quant::RabitqConfig*>(config),
+        static_cast<rabitqlib::MetricType>(metric_type)
+    );
+    return reinterpret_cast<SplitSingleQuery*>(q);
+}
+
+void rabitq_split_single_query_free(SplitSingleQuery* q_obj) {
+    delete reinterpret_cast<rabitqlib::SplitSingleQuery<float>*>(q_obj);
+}
+
+const uint64_t* rabitq_split_single_query_query_bin(const SplitSingleQuery* q_obj) {
+    return reinterpret_cast<const rabitqlib::SplitSingleQuery<float>*>(q_obj)->query_bin();
+}
+
+float rabitq_split_single_query_delta(const SplitSingleQuery* q_obj) {
+    return reinterpret_cast<const rabitqlib::SplitSingleQuery<float>*>(q_obj)->delta();
+}
+
+float rabitq_split_single_query_vl(const SplitSingleQuery* q_obj) {
+    return reinterpret_cast<const rabitqlib::SplitSingleQuery<float>*>(q_obj)->vl();
+}
+
+void rabitq_split_single_query_set_g_add(SplitSingleQuery* q_obj, float norm, float ip) {
+    reinterpret_cast<rabitqlib::SplitSingleQuery<float>*>(q_obj)->set_g_add(norm, ip);
+}
+
+void rabitq_split_single_estdist(
+    const char* bin_data,
+    const SplitSingleQuery* q_obj,
+    size_t padded_dim,
+    float* ip_x0_qr,
+    float* est_dist,
+    float* low_dist,
+    float g_add,
+    float g_error
+) {
+    const auto* cpp_q_obj = reinterpret_cast<const rabitqlib::SplitSingleQuery<float>*>(q_obj);
+    rabitqlib::split_single_estdist(
+        bin_data,
+        *cpp_q_obj,
+        padded_dim,
+        *ip_x0_qr,
+        *est_dist,
+        *low_dist,
+        g_add,
+        g_error
+    );
+}
+
+float rabitq_split_distance_boosting_with_single_query(
+    const char* ex_data,
+    ex_ipfunc ip_func,
+    const SplitSingleQuery* q_obj,
+    size_t padded_dim,
+    size_t ex_bits,
+    float ip_x0_qr
+) {
+    const auto* cpp_q_obj = reinterpret_cast<const rabitqlib::SplitSingleQuery<float>*>(q_obj);
+    return rabitqlib::split_distance_boosting(
+        ex_data, ip_func, *cpp_q_obj, padded_dim, ex_bits, ip_x0_qr);
+}
+
 }

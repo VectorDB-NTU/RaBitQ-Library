@@ -6,4 +6,4 @@ pub mod estimator;
 
 pub use quantizer::{MetricType, RabitqConfig, quantize_full_single, reconstruct_vec};
 pub use rotator::Rotator;
-pub use estimator::Estimator;
+pub use estimator::{BatchEstimator, SingleEstimator};

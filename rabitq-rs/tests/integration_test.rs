@@ -2,7 +2,7 @@ use rabitq_rs::quantizer::{quantize_split_single, MetricType};
 use rabitq_rs::rotator::Rotator;
 use rabitq_rs::estimator::{select_excode_ipfunc};
 use ndarray::{Array, Array1, Array2};
-use rabitq_rs::{Estimator, RabitqConfig};
+use rabitq_rs::{SingleEstimator, RabitqConfig};
 use rand::distr::{Distribution, Uniform};
 
 #[test]
@@ -40,22 +40,26 @@ fn test_quantization_and_estimation() {
     );
 
     // 4. Query
-    // let mut query = Estimator::new(rotated_query.as_slice().unwrap(), PADDED_DIM, EX_BITS, 0, true);
-    // query.set_g_add(rotated_query.pow2().sum(), 0.0);
+    let mut query = SingleEstimator::new(rotated_query.as_slice().unwrap(), rotator.padded_dim(), EX_BITS, &RabitqConfig::new(), 0);
 
     // 4.1 estimate using 1-bit encoding
-    // let lower_est = query.estdist(&bin_codes, PADDED_DIM, false);
+    println!("rotator dim: {:?}", bin_codes.len());
+    let g_add = rotated_query.pow2().sum();
+    let g_err = rotated_query.pow2().sum().sqrt();
+    let (dist, low_dist, ip) = query.estdist(&bin_codes, g_add, g_err);
+    // 计算查询与第一个向量的l2距离
+    let l2_dist = (query_vec - rotated_vectors.row(0)).pow2().sum().sqrt();
+    println!("acc dist: {:}", l2_dist);
+    println!("dist: {:?}, low_dist: {:?}, ip: {:?}", dist.sqrt(), low_dist.sqrt(), ip);
 
-    // let ip_func = select_excode_ipfunc(EX_BITS).expect("Failed to get ip function");
+    let ip_func = select_excode_ipfunc(EX_BITS).expect("Failed to get ip function");
 
-    // let estimated_dist = query.distance_boosting(
-    //     &ex_codes,
-    //     Some(ip_func),
-    //     4,
-    //     0., // ip_x0_qr, assuming 0 for simplicity
-    // );
+    query.set_g_add(rotated_query.pow2().sum().sqrt(), 0.0);
+    let estimated_dist = query.distance_boosting(
+        &ex_codes,
+        Some(ip_func),
+        ip,
+    );
 
-    // assert!(estimated_dist.is_finite());
-
-    // println!("Estimated distance: {}", estimated_dist);
+    println!("estimated dist: {:}", estimated_dist.sqrt());
 }

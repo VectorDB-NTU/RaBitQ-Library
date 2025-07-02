@@ -21,6 +21,7 @@ enum MetricType {
 };
 
 typedef struct SplitBatchQuery SplitBatchQuery;
+typedef struct SplitSingleQuery SplitSingleQuery;
 
 RabitqConfig* rabitq_config_new();
 void rabitq_config_free(RabitqConfig* config);
@@ -101,6 +102,44 @@ float rabitq_split_distance_boosting_with_batch_query(
 typedef float (*ex_ipfunc)(const float*, const uint8_t*, size_t);
 
 ex_ipfunc rabitq_select_excode_ipfunc(size_t ex_bits);
+
+SplitSingleQuery* rabitq_split_single_query_new(
+    const float* rotated_query,
+    size_t padded_dim,
+    size_t ex_bits,
+    const RabitqConfig* config,
+    enum MetricType metric_type
+);
+
+void rabitq_split_single_query_free(SplitSingleQuery* q_obj);
+
+const uint64_t* rabitq_split_single_query_query_bin(const SplitSingleQuery* q_obj);
+
+float rabitq_split_single_query_delta(const SplitSingleQuery* q_obj);
+
+float rabitq_split_single_query_vl(const SplitSingleQuery* q_obj);
+
+void rabitq_split_single_query_set_g_add(SplitSingleQuery* q_obj, float norm, float ip);
+
+void rabitq_split_single_estdist(
+    const char* bin_data,
+    const SplitSingleQuery* q_obj,
+    size_t padded_dim,
+    float* ip_x0_qr,
+    float* est_dist,
+    float* low_dist,
+    float g_add,
+    float g_error
+);
+
+float rabitq_split_distance_boosting_with_single_query(
+    const char* ex_data,
+    ex_ipfunc ip_func,
+    const SplitSingleQuery* q_obj,
+    size_t padded_dim,
+    size_t ex_bits,
+    float ip_x0_qr
+);
 
 #ifdef __cplusplus
 }

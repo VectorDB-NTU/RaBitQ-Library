@@ -8,7 +8,7 @@ pub enum MetricType {
 }
 
 pub struct RabitqConfig {
-    ptr: *mut ffi::RabitqConfig,
+    pub ptr: *mut ffi::RabitqConfig,
 }
 
 impl RabitqConfig {
