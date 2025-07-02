@@ -57,6 +57,32 @@ pub fn quantize_full_single(
     (total_code, f_add, f_rescale, f_error)
 }
 
+pub fn quantize_split_single(
+    data: &[f32],
+    centroid: &[f32],
+    ex_bits: usize,
+    metric_type: MetricType,
+    config: &RabitqConfig,
+) -> (Vec<u8>, Vec<u8>) {
+    let padded_dim = data.len();
+    let mut bin_codes = vec![0u8; padded_dim / 8 + 12];
+    let mut ex_codes = vec![0u8; padded_dim * ex_bits / 8 + 8];
+
+    unsafe {
+        ffi::rabitq_quantize_split_single(
+            data.as_ptr(),
+            centroid.as_ptr(),
+            padded_dim,
+            ex_bits,
+            bin_codes.as_mut_ptr() as *mut i8,
+            ex_codes.as_mut_ptr() as *mut i8,
+            metric_type as u32,
+            config.ptr,
+        );
+    }
+    (bin_codes, ex_codes)
+}
+
 pub fn reconstruct_vec(quantized_vec: &[u8], delta: f32, vl: f32) -> Vec<f32> {
     let dim = quantized_vec.len();
     let mut results = vec![0.0f32; dim];
