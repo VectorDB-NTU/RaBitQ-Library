@@ -1,4 +1,12 @@
-use rabitq_sys::{ex_ipfunc, rabitq_select_excode_ipfunc, rabitq_split_batch_estdist, rabitq_split_batch_query_free, rabitq_split_batch_query_new, rabitq_split_batch_query_set_g_add, rabitq_split_distance_boosting_with_batch_query, rabitq_split_distance_boosting_with_single_query, rabitq_split_single_estdist, rabitq_split_single_query_delta, rabitq_split_single_query_free, rabitq_split_single_query_new, rabitq_split_single_query_query_bin, rabitq_split_single_query_set_g_add, rabitq_split_single_query_vl, MetricType, SplitBatchQuery, SplitSingleQuery};
+use rabitq_sys::{
+    MetricType, SplitBatchQuery, SplitSingleQuery, ex_ipfunc, rabitq_select_excode_ipfunc,
+    rabitq_split_batch_estdist, rabitq_split_batch_query_free, rabitq_split_batch_query_new,
+    rabitq_split_batch_query_set_g_add, rabitq_split_distance_boosting_with_batch_query,
+    rabitq_split_distance_boosting_with_single_query, rabitq_split_single_estdist,
+    rabitq_split_single_query_delta, rabitq_split_single_query_free, rabitq_split_single_query_new,
+    rabitq_split_single_query_query_bin, rabitq_split_single_query_set_g_add,
+    rabitq_split_single_query_vl,
+};
 
 use crate::RabitqConfig;
 
@@ -12,9 +20,21 @@ pub struct BatchEstimator {
 }
 
 impl BatchEstimator {
-    pub fn new(rotated_query: &[f32], padded_dim: usize, ex_bits: usize, metric_type: MetricType, use_hacc: bool) -> Self {
+    pub fn new(
+        rotated_query: &[f32],
+        padded_dim: usize,
+        ex_bits: usize,
+        metric_type: MetricType,
+        use_hacc: bool,
+    ) -> Self {
         let ptr = unsafe {
-            rabitq_split_batch_query_new(rotated_query.as_ptr(), padded_dim, ex_bits, metric_type, use_hacc)
+            rabitq_split_batch_query_new(
+                rotated_query.as_ptr(),
+                padded_dim,
+                ex_bits,
+                metric_type,
+                use_hacc,
+            )
         };
         Self { ptr, padded_dim }
     }
@@ -94,7 +114,11 @@ impl SingleEstimator {
                 metric_type,
             )
         };
-        Self { ptr, padded_dim, ex_bits }
+        Self {
+            ptr,
+            padded_dim,
+            ex_bits,
+        }
     }
 
     pub fn query_bin(&self) -> &[u64] {
