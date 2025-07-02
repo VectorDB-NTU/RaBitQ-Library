@@ -23,7 +23,7 @@ inline void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
 #if defined(__AVX512F__)
         constexpr size_t kRegBits = 512;
 #elif defined(__AVX2__)
-        constexpr size_t B_regi = 256;
+        constexpr size_t kRegBits = 256;
 #else
         static_assert(false, "At least requried AVX2 for using fastscan\n");
         exit(1);
