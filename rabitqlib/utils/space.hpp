@@ -1,7 +1,8 @@
 #pragma once
 
-#include <emmintrin.h>
-#include <immintrin.h>
+#include <simde/x86/avx512.h>
+#include <simde/x86/sse2.h>
+#include "simde-utils.hpp"
 #include <omp.h>
 
 #include <cassert>
@@ -51,24 +52,20 @@ inline void scalar_quantize_optimized<uint8_t>(
     float lo,
     float delta
 ) {
-#if defined(__AVX512F__)
     size_t mul16 = dim - (dim & 0b1111);
     size_t i = 0;
     float one_over_delta = 1 / delta;
-    auto lo512 = _mm512_set1_ps(lo);
-    auto od512 = _mm512_set1_ps(one_over_delta);
+    auto lo512 = simde_mm512_set1_ps(lo);
+    auto od512 = simde_mm512_set1_ps(one_over_delta);
     for (; i < mul16; i += 16) {
-        auto cur = _mm512_loadu_ps(&vec0[i]);
-        cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), od512);
-        auto i8 = _mm512_cvtepi32_epi8(_mm512_cvtps_epi32(cur));
-        _mm_storeu_epi8(&result[i], i8);
+        auto cur = simde_mm512_loadu_ps(&vec0[i]);
+        cur = simde_mm512_mul_ps(simde_mm512_sub_ps(cur, lo512), od512);
+        auto i8 = simde_mm512_cvtepi32_epi8(simde_mm512_cvtps_epi32(cur));
+        simde_mm_storeu_si128(reinterpret_cast<simde__m128i*>(&result[i]), i8);
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
-#else
-    scalar_quantize_normal(result, vec0, dim, lo, delta);
-#endif
 }
 
 template <>
@@ -79,39 +76,20 @@ inline void scalar_quantize_optimized<uint16_t>(
     float lo,
     float delta
 ) {
-#if defined(__AVX512F__)
     size_t mul16 = dim - (dim & 0b1111);
     size_t i = 0;
     float one_over_delta = 1 / delta;
-    auto lo512 = _mm512_set1_ps(lo);
-    auto ow512 = _mm512_set1_ps(one_over_delta);
+    auto lo512 = simde_mm512_set1_ps(lo);
+    auto ow512 = simde_mm512_set1_ps(one_over_delta);
     for (; i < mul16; i += 16) {
-        auto cur = _mm512_loadu_ps(&vec0[i]);
-        cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), ow512);
-        auto i16 = _mm512_cvtepi32_epi16(_mm512_cvtps_epi32(cur));
-        _mm256_storeu_epi16(&result[i], i16);
+        auto cur = simde_mm512_loadu_ps(&vec0[i]);
+        cur = simde_mm512_mul_ps(simde_mm512_sub_ps(cur, lo512), ow512);
+        auto i16 = simde_mm512_cvtepi32_epi16(simde_mm512_cvtps_epi32(cur));
+        simde_mm256_storeu_si256(reinterpret_cast<simde__m256i*>(&result[i]), i16);
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
-#elif defined(__AVX2__)
-    size_t mul8 = dim - (dim & 0b111);
-    size_t i = 0;
-    float one_over_delta = 1 / delta;
-    auto lo256 = _mm256_set1_ps(lo);
-    auto ow256 = _mm256_set1_ps(one_over_delta);
-    for (; i < mul8; i += 8) {
-        auto cur = _mm256_loadu_ps(&vec0[i]);
-        cur = _mm256_mul_ps(_mm256_sub_ps(cur, lo256), ow256);
-        auto i16 = _mm256_cvtepi32_epi16(_mm256_cvtps_epi32(cur));
-        _mm_storeu_epi16(&result[i], i16);
-    }
-    for (; i < dim; ++i) {
-        result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
-    }
-#else
-    scalar_quantize_normal(result, vec0, dim, lo, delta);
-#endif
 }
 }  // namespace scalar_impl
 
@@ -275,280 +253,280 @@ inline float ip16_fxu1_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     float result = 0;
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
 
     for (size_t i = 0; i < dim; i += 16) {
-        __mmask16 mask = *reinterpret_cast<const __mmask16*>(compact_code);
-        __m512 q = _mm512_loadu_ps(query);
+        simde__mmask16 mask = *reinterpret_cast<const simde__mmask16*>(compact_code);
+        simde__m512 q = simde_mm512_loadu_ps(query);
 
-        sum = _mm512_add_ps(_mm512_maskz_mov_ps(mask, q), sum);
+        sum = simde_mm512_add_ps(simde_mm512_maskz_mov_ps(mask, q), sum);
 
         compact_code += 2;
         query += 16;
     }
-    result = _mm512_reduce_add_ps(sum);
+    result = simde_mm512_reduce_add_ps(sum);
     return result;
 }
 
 inline float ip16_fxu2_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
     float result = 0;
 
-    const __m128i mask = _mm_set1_epi8(0b00000011);
+    const simde__m128i mask = simde_mm_set1_epi8(0b00000011);
 
     for (size_t i = 0; i < dim; i += 16) {
         int32_t compact = *reinterpret_cast<const int32_t*>(compact_code);
 
-        __m128i code = _mm_set_epi32(compact >> 6, compact >> 4, compact >> 2, compact);
-        code = _mm_and_si128(code, mask);
+        simde__m128i code = simde_mm_set_epi32(compact >> 6, compact >> 4, compact >> 2, compact);
+        code = simde_mm_and_si128(code, mask);
 
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(code));
+        simde__m512 cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepi8_epi32(code));
 
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        sum = _mm512_fmadd_ps(cf, q, sum);
+        simde__m512 q = simde_mm512_loadu_ps(&query[i]);
+        sum = simde_mm512_fmadd_ps(cf, q, sum);
 
         compact_code += 4;
     }
-    result = _mm512_reduce_add_ps(sum);
+    result = simde_mm512_reduce_add_ps(sum);
     return result;
 }
 
 inline float ip64_fxu3_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
 
-    const __m128i mask = _mm_set1_epi8(0b11);
-    const __m128i top_mask = _mm_set1_epi8(0b100);
+    const simde__m128i mask = simde_mm_set1_epi8(0b11);
+    const simde__m128i top_mask = simde_mm_set1_epi8(0b100);
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i compact2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
+        simde__m128i compact2 = simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(compact_code));
         compact_code += 16;
 
         int64_t top_bit = *reinterpret_cast<const int64_t*>(compact_code);
         compact_code += 8;
 
-        __m128i vec_00_to_15 = _mm_and_si128(compact2, mask);
-        __m128i vec_16_to_31 = _mm_and_si128(_mm_srli_epi16(compact2, 2), mask);
-        __m128i vec_32_to_47 = _mm_and_si128(_mm_srli_epi16(compact2, 4), mask);
-        __m128i vec_48_to_63 = _mm_and_si128(_mm_srli_epi16(compact2, 6), mask);
+        simde__m128i vec_00_to_15 = simde_mm_and_si128(compact2, mask);
+        simde__m128i vec_16_to_31 = simde_mm_and_si128(simde_mm_srli_epi16(compact2, 2), mask);
+        simde__m128i vec_32_to_47 = simde_mm_and_si128(simde_mm_srli_epi16(compact2, 4), mask);
+        simde__m128i vec_48_to_63 = simde_mm_and_si128(simde_mm_srli_epi16(compact2, 6), mask);
 
-        __m128i top_00_to_15 =
-            _mm_and_si128(_mm_set_epi64x(top_bit << 1, top_bit << 2), top_mask);
-        __m128i top_16_to_31 =
-            _mm_and_si128(_mm_set_epi64x(top_bit >> 1, top_bit >> 0), top_mask);
-        __m128i top_32_to_47 =
-            _mm_and_si128(_mm_set_epi64x(top_bit >> 3, top_bit >> 2), top_mask);
-        __m128i top_48_to_63 =
-            _mm_and_si128(_mm_set_epi64x(top_bit >> 5, top_bit >> 4), top_mask);
+        simde__m128i top_00_to_15 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit << 1, top_bit << 2), top_mask);
+        simde__m128i top_16_to_31 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit >> 1, top_bit >> 0), top_mask);
+        simde__m128i top_32_to_47 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit >> 3, top_bit >> 2), top_mask);
+        simde__m128i top_48_to_63 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit >> 5, top_bit >> 4), top_mask);
 
-        vec_00_to_15 = _mm_or_si128(top_00_to_15, vec_00_to_15);
-        vec_16_to_31 = _mm_or_si128(top_16_to_31, vec_16_to_31);
-        vec_32_to_47 = _mm_or_si128(top_32_to_47, vec_32_to_47);
-        vec_48_to_63 = _mm_or_si128(top_48_to_63, vec_48_to_63);
+        vec_00_to_15 = simde_mm_or_si128(top_00_to_15, vec_00_to_15);
+        vec_16_to_31 = simde_mm_or_si128(top_16_to_31, vec_16_to_31);
+        vec_32_to_47 = simde_mm_or_si128(top_32_to_47, vec_32_to_47);
+        vec_48_to_63 = simde_mm_or_si128(top_48_to_63, vec_48_to_63);
 
-        __m512 q;
-        __m512 cf;
+        simde__m512 q;
+        simde__m512 cf;
 
-        q = _mm512_loadu_ps(&query[i]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_00_to_15));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 16]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 16]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_16_to_31));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 32]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 32]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_32_to_47));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 48]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 48]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_48_to_63));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
     }
 
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 inline float ip16_fxu4_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     constexpr int64_t kMask = 0x0f0f0f0f0f0f0f0f;
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
     for (size_t i = 0; i < dim; i += 16) {
         int64_t compact = *reinterpret_cast<const int64_t*>(compact_code);
         int64_t code0 = compact & kMask;
         int64_t code1 = (compact >> 4) & kMask;
 
-        __m128i c8 = _mm_set_epi64x(code1, code0);
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c8));
+        simde__m128i c8 = simde_mm_set_epi64x(code1, code0);
+        simde__m512 cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepi8_epi32(c8));
 
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        sum = _mm512_fmadd_ps(cf, q, sum);
+        simde__m512 q = simde_mm512_loadu_ps(&query[i]);
+        sum = simde_mm512_fmadd_ps(cf, q, sum);
 
         compact_code += 8;
     }
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 inline float ip64_fxu5_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
 
-    const __m128i mask = _mm_set1_epi8(0b1111);
-    const __m128i top_mask = _mm_set1_epi8(0b10000);
+    const simde__m128i mask = simde_mm_set1_epi8(0b1111);
+    const simde__m128i top_mask = simde_mm_set1_epi8(0b10000);
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i compact4_1 =
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
-        __m128i compact4_2 =
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
+        simde__m128i compact4_1 =
+            simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(compact_code));
+        simde__m128i compact4_2 =
+            simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(compact_code + 16));
         compact_code += 32;
 
         int64_t top_bit = *reinterpret_cast<const int64_t*>(compact_code);
         compact_code += 8;
 
-        __m128i vec_00_to_15 = _mm_and_si128(compact4_1, mask);
-        __m128i vec_16_to_31 = _mm_and_si128(_mm_srli_epi16(compact4_1, 4), mask);
-        __m128i vec_32_to_47 = _mm_and_si128(compact4_2, mask);
-        __m128i vec_48_to_63 = _mm_and_si128(_mm_srli_epi16(compact4_2, 4), mask);
+        simde__m128i vec_00_to_15 = simde_mm_and_si128(compact4_1, mask);
+        simde__m128i vec_16_to_31 = simde_mm_and_si128(simde_mm_srli_epi16(compact4_1, 4), mask);
+        simde__m128i vec_32_to_47 = simde_mm_and_si128(compact4_2, mask);
+        simde__m128i vec_48_to_63 = simde_mm_and_si128(simde_mm_srli_epi16(compact4_2, 4), mask);
 
-        __m128i top_00_to_15 =
-            _mm_and_si128(_mm_set_epi64x(top_bit << 3, top_bit << 4), top_mask);
-        __m128i top_16_to_31 =
-            _mm_and_si128(_mm_set_epi64x(top_bit << 1, top_bit << 2), top_mask);
-        __m128i top_32_to_47 =
-            _mm_and_si128(_mm_set_epi64x(top_bit >> 1, top_bit >> 0), top_mask);
-        __m128i top_48_to_63 =
-            _mm_and_si128(_mm_set_epi64x(top_bit >> 3, top_bit >> 2), top_mask);
+        simde__m128i top_00_to_15 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit << 3, top_bit << 4), top_mask);
+        simde__m128i top_16_to_31 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit << 1, top_bit << 2), top_mask);
+        simde__m128i top_32_to_47 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit >> 1, top_bit >> 0), top_mask);
+        simde__m128i top_48_to_63 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit >> 3, top_bit >> 2), top_mask);
 
-        vec_00_to_15 = _mm_or_si128(top_00_to_15, vec_00_to_15);
-        vec_16_to_31 = _mm_or_si128(top_16_to_31, vec_16_to_31);
-        vec_32_to_47 = _mm_or_si128(top_32_to_47, vec_32_to_47);
-        vec_48_to_63 = _mm_or_si128(top_48_to_63, vec_48_to_63);
+        vec_00_to_15 = simde_mm_or_si128(top_00_to_15, vec_00_to_15);
+        vec_16_to_31 = simde_mm_or_si128(top_16_to_31, vec_16_to_31);
+        vec_32_to_47 = simde_mm_or_si128(top_32_to_47, vec_32_to_47);
+        vec_48_to_63 = simde_mm_or_si128(top_48_to_63, vec_48_to_63);
 
-        __m512 q;
-        __m512 cf;
+        simde__m512 q;
+        simde__m512 cf;
 
-        q = _mm512_loadu_ps(&query[i]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_00_to_15));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 16]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 16]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_16_to_31));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 32]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 32]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_32_to_47));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 48]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 48]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_48_to_63));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
     }
 
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 inline float ip16_fxu6_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     constexpr int64_t kMask4 = 0x0f0f0f0f0f0f0f0f;
-    __m512 sum = _mm512_setzero_ps();
-    const __m128i mask2 = _mm_set1_epi8(0b00110000);
+    simde__m512 sum = simde_mm512_setzero_ps();
+    const simde__m128i mask2 = simde_mm_set1_epi8(0b00110000);
 
     for (size_t i = 0; i < dim; i += 16) {
         int64_t compact4 = *reinterpret_cast<const int64_t*>(compact_code);
         int64_t code4_0 = compact4 & kMask4;
         int64_t code4_1 = (compact4 >> 4) & kMask4;
 
-        __m128i c4 = _mm_set_epi64x(code4_1, code4_0);  // lower 4
+        simde__m128i c4 = simde_mm_set_epi64x(code4_1, code4_0);  // lower 4
         compact_code += 8;
 
         int32_t compact2 = *reinterpret_cast<const int32_t*>(compact_code);
 
-        __m128i c2 = _mm_set_epi32(compact2 >> 2, compact2, compact2 << 2, compact2 << 4);
-        c2 = _mm_and_si128(c2, mask2);
+        simde__m128i c2 = simde_mm_set_epi32(compact2 >> 2, compact2, compact2 << 2, compact2 << 4);
+        c2 = simde_mm_and_si128(c2, mask2);
 
-        __m128i c6 = _mm_or_si128(c2, c4);
+        simde__m128i c6 = simde_mm_or_si128(c2, c4);
 
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c6));
+        simde__m512 cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepi8_epi32(c6));
 
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        sum = _mm512_fmadd_ps(cf, q, sum);
+        simde__m512 q = simde_mm512_loadu_ps(&query[i]);
+        sum = simde_mm512_fmadd_ps(cf, q, sum);
 
         compact_code += 4;
     }
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 inline float ip64_fxu7_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
 
-    const __m128i mask6 = _mm_set1_epi8(0b00111111);
-    const __m128i mask2 = _mm_set1_epi8(0b11000000);
-    const __m128i top_mask = _mm_set1_epi8(0b1000000);
+    const simde__m128i mask6 = simde_mm_set1_epi8(0b00111111);
+    const simde__m128i mask2 = simde_mm_set1_epi8(0b11000000);
+    const simde__m128i top_mask = simde_mm_set1_epi8(0b1000000);
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
-        __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
-        __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
+        simde__m128i cpt1 = simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(compact_code));
+        simde__m128i cpt2 = simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(compact_code + 16));
+        simde__m128i cpt3 = simde_mm_loadu_si128(reinterpret_cast<const simde__m128i*>(compact_code + 32));
         compact_code += 48;
 
-        __m128i vec_00_to_15 = _mm_and_si128(cpt1, mask6);
-        __m128i vec_16_to_31 = _mm_and_si128(cpt2, mask6);
-        __m128i vec_32_to_47 = _mm_and_si128(cpt3, mask6);
-        __m128i vec_48_to_63 = _mm_or_si128(
-            _mm_or_si128(
-                _mm_srli_epi16(_mm_and_si128(cpt1, mask2), 6),
-                _mm_srli_epi16(_mm_and_si128(cpt2, mask2), 4)
+        simde__m128i vec_00_to_15 = simde_mm_and_si128(cpt1, mask6);
+        simde__m128i vec_16_to_31 = simde_mm_and_si128(cpt2, mask6);
+        simde__m128i vec_32_to_47 = simde_mm_and_si128(cpt3, mask6);
+        simde__m128i vec_48_to_63 = simde_mm_or_si128(
+            simde_mm_or_si128(
+                simde_mm_srli_epi16(simde_mm_and_si128(cpt1, mask2), 6),
+                simde_mm_srli_epi16(simde_mm_and_si128(cpt2, mask2), 4)
             ),
-            _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2)
+            simde_mm_srli_epi16(simde_mm_and_si128(cpt3, mask2), 2)
         );
 
         int64_t top_bit = *reinterpret_cast<const int64_t*>(compact_code);
         compact_code += 8;
 
-        __m128i top_00_to_15 =
-            _mm_and_si128(_mm_set_epi64x(top_bit << 5, top_bit << 6), top_mask);
-        __m128i top_16_to_31 =
-            _mm_and_si128(_mm_set_epi64x(top_bit << 3, top_bit << 4), top_mask);
-        __m128i top_32_to_47 =
-            _mm_and_si128(_mm_set_epi64x(top_bit << 1, top_bit << 2), top_mask);
-        __m128i top_48_to_63 =
-            _mm_and_si128(_mm_set_epi64x(top_bit >> 1, top_bit << 0), top_mask);
+        simde__m128i top_00_to_15 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit << 5, top_bit << 6), top_mask);
+        simde__m128i top_16_to_31 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit << 3, top_bit << 4), top_mask);
+        simde__m128i top_32_to_47 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit << 1, top_bit << 2), top_mask);
+        simde__m128i top_48_to_63 =
+            simde_mm_and_si128(simde_mm_set_epi64x(top_bit >> 1, top_bit << 0), top_mask);
 
-        vec_00_to_15 = _mm_or_si128(top_00_to_15, vec_00_to_15);
-        vec_16_to_31 = _mm_or_si128(top_16_to_31, vec_16_to_31);
-        vec_32_to_47 = _mm_or_si128(top_32_to_47, vec_32_to_47);
-        vec_48_to_63 = _mm_or_si128(top_48_to_63, vec_48_to_63);
+        vec_00_to_15 = simde_mm_or_si128(top_00_to_15, vec_00_to_15);
+        vec_16_to_31 = simde_mm_or_si128(top_16_to_31, vec_16_to_31);
+        vec_32_to_47 = simde_mm_or_si128(top_32_to_47, vec_32_to_47);
+        vec_48_to_63 = simde_mm_or_si128(top_48_to_63, vec_48_to_63);
 
-        __m512 q;
-        __m512 cf;
+        simde__m512 q;
+        simde__m512 cf;
 
-        q = _mm512_loadu_ps(&query[i]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_00_to_15));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 16]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 16]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_16_to_31));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 32]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 32]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_32_to_47));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
 
-        q = _mm512_loadu_ps(&query[i + 48]);
-        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        q = simde_mm512_loadu_ps(&query[i + 48]);
+        cf = simde_mm512_cvtepi32_ps(simde_mm512_cvtepu8_epi32(vec_48_to_63));
+        sum = simde_mm512_fmadd_ps(q, cf, sum);
     }
 
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 // inner product between float type and int type vectors
@@ -620,14 +598,14 @@ inline void transpose_bin(
 ) {
     // 512 / 16 = 32
     for (size_t i = 0; i < padded_dim; i += 32) {
-        __m512i v = _mm512_loadu_si512(q);
-        v = _mm512_slli_epi32(v, (16 - b_query));
+        simde__m512i v = simde_mm512_loadu_si512(q);
+        v = simde_mm512_slli_epi32(v, (16 - b_query));
         for (size_t j = 0; j < b_query; ++j) {
-            uint32_t v1 = _mm512_movepi16_mask(v);  // get most significant bit
+            uint32_t v1 = simde_mm512_movepi16_mask(v);  // get most significant bit
             v1 = reverse_bits(v1);
             tq[((b_query - j - 1) * (padded_dim / 64)) + (i / 64)] |=
                 (static_cast<uint64_t>(v1) << ((i / 32 % 2 == 0) ? 32 : 0));
-            v = _mm512_add_epi32(v, v);
+            v = simde_mm512_add_epi32(v, v);
         }
         q += 32;
     }
@@ -638,16 +616,16 @@ static inline void new_transpose_bin(
 ) {
     // 512 / 16 = 32
     for (size_t i = 0; i < padded_dim; i += 64) {
-        __m512i vec_00_to_31 = _mm512_loadu_si512(q);
-        __m512i vec_32_to_63 = _mm512_loadu_si512(q + 32);
+        simde__m512i vec_00_to_31 = simde_mm512_loadu_si512(q);
+        simde__m512i vec_32_to_63 = simde_mm512_loadu_si512(q + 32);
 
         // the first (16 - b_query) bits are empty
-        vec_00_to_31 = _mm512_slli_epi32(vec_00_to_31, (16 - b_query));
-        vec_32_to_63 = _mm512_slli_epi32(vec_32_to_63, (16 - b_query));
+        vec_00_to_31 = simde_mm512_slli_epi32(vec_00_to_31, (16 - b_query));
+        vec_32_to_63 = simde_mm512_slli_epi32(vec_32_to_63, (16 - b_query));
 
         for (size_t j = 0; j < b_query; ++j) {
-            uint32_t v0 = _mm512_movepi16_mask(vec_00_to_31);  // get most significant bit
-            uint32_t v1 = _mm512_movepi16_mask(vec_32_to_63);  // get most significant bit
+            uint32_t v0 = simde_mm512_movepi16_mask(vec_00_to_31);  // get most significant bit
+            uint32_t v1 = simde_mm512_movepi16_mask(vec_32_to_63);  // get most significant bit
             // [TODO: remove all reverse_bits]
             v0 = reverse_bits(v0);
             v1 = reverse_bits(v1);
@@ -655,8 +633,8 @@ static inline void new_transpose_bin(
 
             tq[b_query - j - 1] = v;
 
-            vec_00_to_31 = _mm512_slli_epi16(vec_00_to_31, 1);
-            vec_32_to_63 = _mm512_slli_epi16(vec_32_to_63, 1);
+            vec_00_to_31 = simde_mm512_slli_epi16(vec_00_to_31, 1);
+            vec_32_to_63 = simde_mm512_slli_epi16(vec_32_to_63, 1);
         }
         tq += b_query;
         q += 64;
@@ -668,33 +646,33 @@ inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t p
     const auto* it_data = data;
     const auto* it_query = query;
 
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t bits = reverse_bits_u64(*it_data);
-        __mmask16 mask0 = static_cast<__mmask16>(bits >> 00);  // for q[0..15]
-        __mmask16 mask1 = static_cast<__mmask16>(bits >> 16);  // for q[16..31]
-        __mmask16 mask2 = static_cast<__mmask16>(bits >> 32);  // for q[32..47]
-        __mmask16 mask3 = static_cast<__mmask16>(bits >> 48);  // for q[48..63]
+        simde__mmask16 mask0 = static_cast<simde__mmask16>(bits >> 00);  // for q[0..15]
+        simde__mmask16 mask1 = static_cast<simde__mmask16>(bits >> 16);  // for q[16..31]
+        simde__mmask16 mask2 = static_cast<simde__mmask16>(bits >> 32);  // for q[32..47]
+        simde__mmask16 mask3 = static_cast<simde__mmask16>(bits >> 48);  // for q[48..63]
 
-        __m512 q0 = _mm512_loadu_ps(it_query);
-        __m512 q1 = _mm512_loadu_ps(it_query + 16);
-        __m512 q2 = _mm512_loadu_ps(it_query + 32);
-        __m512 q3 = _mm512_loadu_ps(it_query + 48);
+        simde__m512 q0 = simde_mm512_loadu_ps(it_query);
+        simde__m512 q1 = simde_mm512_loadu_ps(it_query + 16);
+        simde__m512 q2 = simde_mm512_loadu_ps(it_query + 32);
+        simde__m512 q3 = simde_mm512_loadu_ps(it_query + 48);
 
-        __m512 masked0 = _mm512_maskz_mov_ps(mask0, q0);
-        __m512 masked1 = _mm512_maskz_mov_ps(mask1, q1);
-        __m512 masked2 = _mm512_maskz_mov_ps(mask2, q2);
-        __m512 masked3 = _mm512_maskz_mov_ps(mask3, q3);
+        simde__m512 masked0 = simde_mm512_maskz_mov_ps(mask0, q0);
+        simde__m512 masked1 = simde_mm512_maskz_mov_ps(mask1, q1);
+        simde__m512 masked2 = simde_mm512_maskz_mov_ps(mask2, q2);
+        simde__m512 masked3 = simde_mm512_maskz_mov_ps(mask3, q3);
 
-        sum = _mm512_add_ps(sum, masked0);
-        sum = _mm512_add_ps(sum, masked1);
-        sum = _mm512_add_ps(sum, masked2);
-        sum = _mm512_add_ps(sum, masked3);
+        sum = simde_mm512_add_ps(sum, masked0);
+        sum = simde_mm512_add_ps(sum, masked1);
+        sum = simde_mm512_add_ps(sum, masked2);
+        sum = simde_mm512_add_ps(sum, masked3);
 
         it_data++;
         it_query += 64;
     }
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) {
@@ -707,24 +685,24 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
     //    __m512 sum2 = _mm512_setzero_ps();
     //    __m512 sum3 = _mm512_setzero_ps();
 
-    __m512 sum = _mm512_setzero_ps();
+    simde__m512 sum = simde_mm512_setzero_ps();
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t bits = reverse_bits_u64(*it_data);
 
-        __mmask16 mask0 = static_cast<__mmask16>(bits);
-        __mmask16 mask1 = static_cast<__mmask16>(bits >> 16);
-        __mmask16 mask2 = static_cast<__mmask16>(bits >> 32);
-        __mmask16 mask3 = static_cast<__mmask16>(bits >> 48);
+        simde__mmask16 mask0 = static_cast<simde__mmask16>(bits);
+        simde__mmask16 mask1 = static_cast<simde__mmask16>(bits >> 16);
+        simde__mmask16 mask2 = static_cast<simde__mmask16>(bits >> 32);
+        simde__mmask16 mask3 = static_cast<simde__mmask16>(bits >> 48);
 
-        __m512 masked0 = _mm512_maskz_loadu_ps(mask0, it_query);
-        __m512 masked1 = _mm512_maskz_loadu_ps(mask1, it_query + 16);
-        __m512 masked2 = _mm512_maskz_loadu_ps(mask2, it_query + 32);
-        __m512 masked3 = _mm512_maskz_loadu_ps(mask3, it_query + 48);
+        simde__m512 masked0 = simde_mm512_maskz_loadu_ps(mask0, it_query);
+        simde__m512 masked1 = simde_mm512_maskz_loadu_ps(mask1, it_query + 16);
+        simde__m512 masked2 = simde_mm512_maskz_loadu_ps(mask2, it_query + 32);
+        simde__m512 masked3 = simde_mm512_maskz_loadu_ps(mask3, it_query + 48);
 
-        sum = _mm512_add_ps(sum, masked0);
-        sum = _mm512_add_ps(sum, masked1);
-        sum = _mm512_add_ps(sum, masked2);
-        sum = _mm512_add_ps(sum, masked3);
+        sum = simde_mm512_add_ps(sum, masked0);
+        sum = simde_mm512_add_ps(sum, masked1);
+        sum = simde_mm512_add_ps(sum, masked2);
+        sum = simde_mm512_add_ps(sum, masked3);
 
         //         _mm_prefetch(reinterpret_cast<const char*>(it_query + 128), _MM_HINT_T1);
 
@@ -733,7 +711,7 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
     }
 
     //    __m512 sum = _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3));
-    return _mm512_reduce_add_ps(sum);
+    return simde_mm512_reduce_add_ps(sum);
 }
 
 inline float ip_x0_q(

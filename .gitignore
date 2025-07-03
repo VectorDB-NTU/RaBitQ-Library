@@ -39,6 +39,7 @@ data/
 
 *.pyc
 .clang-*
+.vscode/
 
 # macOS garbages
 .DS_Store

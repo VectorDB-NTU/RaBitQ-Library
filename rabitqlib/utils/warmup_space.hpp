@@ -1,6 +1,6 @@
 #pragma once
 
-#include <immintrin.h>
+#include <simde/x86/avx512.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -24,22 +24,22 @@ inline float warmup_ip_x0_q(
     size_t vec_end = (num_blk / vec_width) * vec_width;
 
     // Vector accumulators (each holds 8 64-bit lanes)
-    __m512i ip_vec = _mm512_setzero_si512(
+    simde__m512i ip_vec = simde_mm512_setzero_si512(
     );  // will accumulate weighted popcount intersections per block
-    __m512i ppc_vec = _mm512_setzero_si512();  // will accumulate popcounts of data blocks
+    simde__m512i ppc_vec = simde_mm512_setzero_si512();  // will accumulate popcounts of data blocks
 
     // Loop over blocks in batches of 8
     for (size_t i = 0; i < vec_end; i += vec_width) {
         // Load eight 64-bit data blocks into x_vec.
-        __m512i x_vec = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(data + i));
+        simde__m512i x_vec = simde_mm512_loadu_si512(reinterpret_cast<const simde__m512i*>(data + i));
 
         // Compute popcount for each 64-bit block in x_vec using the AVX512 VPOPCNTDQ
         // instruction. (Ensure you compile with the proper flags for VPOPCNTDQ.)
-        __m512i popcnt_x_vec = _mm512_popcnt_epi64(x_vec);
-        ppc_vec = _mm512_add_epi64(ppc_vec, popcnt_x_vec);
+        simde__m512i popcnt_x_vec = simde_mm512_popcnt_epi64(x_vec);
+        ppc_vec = simde_mm512_add_epi64(ppc_vec, popcnt_x_vec);
 
         // For accumulating the weighted popcounts per block.
-        __m512i block_ip = _mm512_setzero_si512();
+        simde__m512i block_ip = simde_mm512_setzero_si512();
 
         // Process each query component (b_query is a compile-time constant, and is small).
         for (uint32_t j = 0; j < b_query; j++) {
@@ -51,33 +51,33 @@ inline float warmup_ip_x0_q(
                 indices[k] = ((i + k) * b_query + j);
             }
             // Load indices from memory.
-            __m512i index_vec = _mm512_loadu_si512(indices);
+            simde__m512i index_vec = simde_mm512_loadu_si512(indices);
             // Gather 8 query words with a scale of 8 (since query is an array of 64-bit
             // integers).
-            __m512i q_vec = _mm512_i64gather_epi64(index_vec, query, 8);
+            simde__m512i q_vec = simde_mm512_i64gather_epi64(index_vec, static_cast<const void*>(query), 8);
 
             // Compute bitwise AND of data blocks and corresponding query words.
-            __m512i and_vec = _mm512_and_si512(x_vec, q_vec);
+            simde__m512i and_vec = simde_mm512_and_si512(x_vec, q_vec);
             // Compute popcount on each lane.
-            __m512i popcnt_and = _mm512_popcnt_epi64(and_vec);
+            simde__m512i popcnt_and = simde_mm512_popcnt_epi64(and_vec);
 
             // Multiply by the weighting factor (1 << j) for this query position.
             const uint64_t shift = 1ULL << j;
-            __m512i shift_vec = _mm512_set1_epi64(shift);
-            __m512i weighted = _mm512_mullo_epi64(popcnt_and, shift_vec);
+            simde__m512i shift_vec = simde_mm512_set1_epi64(shift);
+            simde__m512i weighted = simde_mm512_mullo_epi64(popcnt_and, shift_vec);
 
             // Accumulate weighted popcounts for these blocks.
-            block_ip = _mm512_add_epi64(block_ip, weighted);
+            block_ip = simde_mm512_add_epi64(block_ip, weighted);
         }
         // Add the block's query-weighted popcount to the overall ip vector.
-        ip_vec = _mm512_add_epi64(ip_vec, block_ip);
+        ip_vec = simde_mm512_add_epi64(ip_vec, block_ip);
     }
 
     // Horizontally reduce the vector accumulators.
     uint64_t ip_arr[vec_width];
     uint64_t ppc_arr[vec_width];
-    _mm512_storeu_si512(reinterpret_cast<__m512i*>(ip_arr), ip_vec);
-    _mm512_storeu_si512(reinterpret_cast<__m512i*>(ppc_arr), ppc_vec);
+    simde_mm512_storeu_si512(reinterpret_cast<simde__m512i*>(ip_arr), ip_vec);
+    simde_mm512_storeu_si512(reinterpret_cast<simde__m512i*>(ppc_arr), ppc_vec);
 
     for (size_t k = 0; k < vec_width; k++) {
         ip_scalar += ip_arr[k];

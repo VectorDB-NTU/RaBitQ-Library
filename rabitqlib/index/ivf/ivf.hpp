@@ -377,7 +377,7 @@ inline void IVF::search(
     std::vector<float> rotated_query(padded_dim_);
     this->rotator_->rotate(query, rotated_query.data());
 
-    std::cout << l2norm_sqr(query, dim_) << '\t' << l2norm_sqr(rotated_query.data(), padded_dim_) << '\n';
+    // std::cout << l2norm_sqr(query, dim_) << '\t' << l2norm_sqr(rotated_query.data(), padded_dim_) << '\n';
 
     // use initer to get closest nprobe centroids
     std::vector<AnnCandidate<float>> centroid_dist(nprobe);

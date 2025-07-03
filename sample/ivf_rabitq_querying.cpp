@@ -16,11 +16,12 @@ static std::vector<size_t> get_nprobes(
     const index_type& ivf,
     const std::vector<size_t>& all_nprobes,
     data_type& query,
-    gt_type& gt
+    gt_type& gt,
+    bool use_hacc
 );
 
 static size_t topk = 100;
-static size_t test_round = 5;
+static size_t test_round = 3;
 
 int main(int argc, char** argv) {
     if (argc < 4) {
@@ -56,6 +57,7 @@ int main(int argc, char** argv) {
     index_type ivf;
     ivf.load(index_file);
 
+    std::cout << "Load index done" << std::endl;
     std::vector<size_t> all_nprobes;
     all_nprobes.push_back(5);
     for (size_t i = 10; i < 200; i += 10) {
@@ -74,18 +76,20 @@ int main(int argc, char** argv) {
     all_nprobes.push_back(6000);
     all_nprobes.push_back(10000);
     all_nprobes.push_back(15000);
-
+    std::cout << "all_nprobes size: " << all_nprobes.size() << std::endl;
     rabitqlib::StopW stopw;
 
-    auto nprobes = get_nprobes(ivf, all_nprobes, query, gt);
+    auto nprobes = get_nprobes(ivf, all_nprobes, query, gt, use_hacc);
     size_t length = nprobes.size();
 
     std::vector<std::vector<float>> all_qps(test_round, std::vector<float>(length));
     std::vector<std::vector<float>> all_recall(test_round, std::vector<float>(length));
-
+    std::cout << "all_qps size: " << all_qps.size() << std::endl;
+    std::cout << "all_recall size: " << all_recall.size() << std::endl;
     for (size_t r = 0; r < test_round; r++) {
         for (size_t l = 0; l < length; ++l) {
             size_t nprobe = nprobes[l];
+            std::cout << "Current nprobe: " << nprobe << std::endl;
             if (nprobe > ivf.num_clusters()) {
                 std::cout << "nprobe " << nprobe << " is larger than number of clusters, ";
                 std::cout << "will use nprobe = num_cluster (" << ivf.num_clusters() << ").\n";
@@ -135,7 +139,8 @@ static std::vector<size_t> get_nprobes(
     const index_type& ivf,
     const std::vector<size_t>& all_nprobes,
     data_type& query,
-    gt_type& gt
+    gt_type& gt,
+    bool use_hacc
 ) {
     size_t nq = query.rows();
     size_t total_count = topk * nq;
@@ -148,7 +153,7 @@ static std::vector<size_t> get_nprobes(
         size_t total_correct = 0;
         std::vector<PID> results(topk);
         for (size_t i = 0; i < nq; i++) {
-            ivf.search(&query(i, 0), topk, nprobe, results.data());
+            ivf.search(&query(i, 0), topk, nprobe, results.data(), use_hacc);
             for (size_t j = 0; j < topk; j++) {
                 for (size_t k = 0; k < topk; k++) {
                     if (gt(i, k) == results[j]) {
@@ -159,6 +164,7 @@ static std::vector<size_t> get_nprobes(
             }
         }
         float recall = static_cast<float>(total_correct) / static_cast<float>(total_count);
+        std::cout << "nprobe: " << nprobe << " recall: " << recall << " old_recall: " << old_recall << std::endl;
         if (recall > 0.997 || recall - old_recall < 1e-5) {
             break;
         }
