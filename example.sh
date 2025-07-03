@@ -2,11 +2,18 @@
 mkdir build bin 
 cd build 
 cmake ..
-make 
+make -j 10
+cd ..
 
-# Download the dataset
-wget -P ./data/gist ftp://ftp.irisa.fr/local/texmex/corpus/gist.tar.gz
-tar -xzvf ./data/gist/gist.tar.gz -C ./data/gist
+if [ ! -d ./data/gist ]; then
+    mkdir -p ./data/gist
+fi
+
+if [ ! -f ./data/gist/gist_base.fvecs ]; then
+    # download the dataset
+    wget -P ./data/gist ftp://ftp.irisa.fr/local/texmex/corpus/gist.tar.gz
+    tar -xzvf ./data/gist/gist.tar.gz -C ./data/gist
+fi
 
 # indexing and querying for symqg
 ./bin/symqg_indexing ./data/gist/gist_base.fvecs 32 400 ./data/gist/symqg_32.index

@@ -1,0 +1,3 @@
+[submodule "rabitqlib/third/simde"]
+	path = rabitqlib/third/simde
+	url = https://github.com/simd-everywhere/simde.git
