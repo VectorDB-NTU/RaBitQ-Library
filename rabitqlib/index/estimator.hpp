@@ -128,31 +128,6 @@ inline void qg_batch_estdist(
 }
 
 /**
- * @brief Batch distance estimation for qg. Here, we do not need intermediate results and
- * lower bound
- */
-template <typename TA = uint16_t>
-inline void batch_bin_estdist(
-    const char* batch_data, const BatchQuery<float>& q_obj, size_t padded_dim, float* est_distance
-) {
-    std::vector<TA> accu_res(fastscan::kBatchSize);
-
-    ConstQGBatchDataMap<float> cur_batch(batch_data, padded_dim);
-
-    fastscan::accumulate(cur_batch.bin_code(), q_obj.lut(), accu_res.data(), padded_dim);
-
-    ConstRowMajorArrayMap<TA> ip_arr(accu_res.data(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<float> f_add_arr(cur_batch.f_add(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<float> f_rescale_arr(cur_batch.f_rescale(), 1, fastscan::kBatchSize);
-
-    RowMajorArrayMap<float> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
-
-    est_dist_arr = f_add_arr + q_obj.g_add() +
-                   f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<float>()) +
-                                    q_obj.sum_vl_lut() + q_obj.k1xsumq());
-}
-
-/**
  * @brief Full bits distance estimation for a single vector.
  */
 inline void split_single_fulldist(
@@ -210,29 +185,5 @@ inline void split_single_estdist(
     est_dist = cur_bin.f_add() + g_add + cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq());
 
     low_dist = est_dist - cur_bin.f_error() * g_error;
-};
-
-/**
- * @brief 1-bit distance estimation for a single vector (no FastScan)
- */
-inline void split_single_estdist(
-    const char* bin_data,
-    const SplitSingleQuery<float>& q_obj,
-    size_t padded_dim,
-    float& est_dist,
-    float g_add = 0
-) {
-    ConstBinDataMap<float> cur_bin(bin_data, padded_dim);
-
-    float ip_x0_qr = warmup_ip_x0_q<SplitSingleQuery<float>::kNumBits>(
-        cur_bin.bin_code(),
-        q_obj.query_bin(),
-        q_obj.delta(),
-        q_obj.vl(),
-        padded_dim,
-        SplitSingleQuery<float>::kNumBits
-    );
-
-    est_dist = cur_bin.f_add() + g_add + cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq());
 };
 }  // namespace rabitqlib
