@@ -141,6 +141,20 @@ float rabitq_split_distance_boosting_with_single_query(
     float ip_x0_qr
 );
 
+void rabitq_split_single_fulldist(
+    const char* bin_data,
+    const char* ex_data,
+    float (*ip_func_)(const float*, const uint8_t*, size_t),
+    const SplitSingleQuery* q_obj,
+    size_t padded_dim,
+    size_t ex_bits,
+    float* est_dist,
+    float* low_dist,
+    float* ip_x0_qr,
+    float g_add,
+    float g_error
+);
+
 #ifdef __cplusplus
 }
 #endif

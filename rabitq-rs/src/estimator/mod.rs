@@ -1,11 +1,5 @@
 use rabitq_sys::{
-    MetricType, SplitBatchQuery, SplitSingleQuery, ex_ipfunc, rabitq_select_excode_ipfunc,
-    rabitq_split_batch_estdist, rabitq_split_batch_query_free, rabitq_split_batch_query_new,
-    rabitq_split_batch_query_set_g_add, rabitq_split_distance_boosting_with_batch_query,
-    rabitq_split_distance_boosting_with_single_query, rabitq_split_single_estdist,
-    rabitq_split_single_query_delta, rabitq_split_single_query_free, rabitq_split_single_query_new,
-    rabitq_split_single_query_query_bin, rabitq_split_single_query_set_g_add,
-    rabitq_split_single_query_vl,
+    ex_ipfunc, rabitq_select_excode_ipfunc, rabitq_split_batch_estdist, rabitq_split_batch_query_free, rabitq_split_batch_query_new, rabitq_split_batch_query_set_g_add, rabitq_split_distance_boosting_with_batch_query, rabitq_split_distance_boosting_with_single_query, rabitq_split_single_estdist, rabitq_split_single_fulldist, rabitq_split_single_query_delta, rabitq_split_single_query_free, rabitq_split_single_query_new, rabitq_split_single_query_query_bin, rabitq_split_single_query_set_g_add, rabitq_split_single_query_vl, MetricType, SplitBatchQuery, SplitSingleQuery
 };
 
 use crate::RabitqConfig;
@@ -95,6 +89,7 @@ pub struct SingleEstimator {
     ptr: *mut SplitSingleQuery,
     padded_dim: usize,
     ex_bits: usize,
+    ip_func: Option<unsafe extern "C" fn(*const f32, *const u8, usize) -> f32>,
 }
 
 impl SingleEstimator {
@@ -118,6 +113,7 @@ impl SingleEstimator {
             ptr,
             padded_dim,
             ex_bits,
+            ip_func: select_excode_ipfunc(ex_bits),
         }
     }
 
@@ -139,7 +135,7 @@ impl SingleEstimator {
         unsafe { rabitq_split_single_query_set_g_add(self.ptr, norm, ip) };
     }
 
-    pub fn estdist(&self, bin_data: &[u8], g_add: f32, g_error: f32) -> (f32, f32, f32) {
+    pub fn est_dist(&self, bin_data: &[u8], g_add: f32, g_error: f32) -> (f32, f32, f32) {
         let mut est_dist = 0.0;
         let mut ip_x0_qr: f32 = 0.0;
         let mut low_dist: f32 = 0.0;
@@ -161,13 +157,12 @@ impl SingleEstimator {
     pub fn distance_boosting(
         &self,
         ex_data: &[u8],
-        ip_func: Option<unsafe extern "C" fn(*const f32, *const u8, usize) -> f32>,
         ip_x0_qr: f32,
     ) -> f32 {
         unsafe {
             rabitq_split_distance_boosting_with_single_query(
                 ex_data.as_ptr() as *const i8,
-                ip_func,
+                self.ip_func,
                 self.ptr,
                 self.padded_dim,
                 self.ex_bits,
@@ -175,12 +170,32 @@ impl SingleEstimator {
             )
         }
     }
-}
 
-impl Drop for SingleEstimator {
-    fn drop(&mut self) {
+    pub fn full_dist(
+        &self,
+        bin_data: &[u8],
+        ex_data: &[u8],
+        g_add: f32,
+        g_error: f32,
+    ) -> (f32, f32, f32) {
+        let mut est_dist = 0.0;
+        let mut ip_x0_qr: f32 = 0.0;
+        let mut low_dist: f32 = 0.0;
         unsafe {
-            rabitq_split_single_query_free(self.ptr);
+            rabitq_split_single_fulldist(
+                bin_data.as_ptr() as *const i8,
+                ex_data.as_ptr() as *const i8,
+                self.ip_func,
+                self.ptr,
+                self.padded_dim,
+                self.ex_bits,
+                &mut est_dist,
+                &mut low_dist,
+                &mut ip_x0_qr,
+                g_add,
+                g_error,
+            );
         }
+        (est_dist, low_dist, ip_x0_qr)
     }
 }

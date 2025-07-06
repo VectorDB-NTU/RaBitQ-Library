@@ -238,4 +238,33 @@ float rabitq_split_distance_boosting_with_single_query(
         ex_data, ip_func, *cpp_q_obj, padded_dim, ex_bits, ip_x0_qr);
 }
 
+void rabitq_split_single_fulldist(
+    const char* bin_data,
+    const char* ex_data,
+    float (*ip_func_)(const float*, const uint8_t*, size_t),
+    const SplitSingleQuery* q_obj,
+    size_t padded_dim,
+    size_t ex_bits,
+    float* est_dist,
+    float* low_dist,
+    float* ip_x0_qr,
+    float g_add,
+    float g_error
+) {
+    const auto* cpp_q_obj = reinterpret_cast<const rabitqlib::SplitSingleQuery<float>*>(q_obj);
+    rabitqlib::split_single_fulldist(
+        bin_data,
+        ex_data,
+        ip_func_,
+        *cpp_q_obj,
+        padded_dim,
+        ex_bits,
+        *est_dist,
+        *low_dist,
+        *ip_x0_qr,
+        g_add,
+        g_error
+    );
+}
+
 }

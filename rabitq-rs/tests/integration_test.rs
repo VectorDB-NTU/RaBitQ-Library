@@ -61,7 +61,7 @@ fn test_quantization_and_estimation() {
     println!("rotator dim: {:?}", bin_codes.len());
     let g_add = (&rotated_query - &Array1::from(centroid.clone())).pow2().sum();
     let g_err = (&rotated_query - &Array1::from(centroid)).pow2().sum().sqrt();
-    let (dist, low_dist, ip) = query.estdist(&bin_codes, g_add, g_err);
+    let (dist, low_dist, ip) = query.est_dist(&bin_codes, g_add, g_err);
     // Calculate the exact distance
     let l2_dist = (query_vec - rotated_vectors.row(0)).pow2().sum().sqrt();
     println!("acc dist: {:}", l2_dist);
@@ -75,7 +75,7 @@ fn test_quantization_and_estimation() {
     let ip_func = select_excode_ipfunc(EX_BITS).expect("Failed to get ip function");
 
     query.set_g_add(g_err, 0f32);
-    let estimated_dist = query.distance_boosting(&ex_codes, Some(ip_func), ip);
+    let estimated_dist = query.distance_boosting(&ex_codes,ip);
 
     println!("5-bit estimated dist: {:}", estimated_dist.sqrt());
 }
