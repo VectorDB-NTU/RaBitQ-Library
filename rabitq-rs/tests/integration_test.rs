@@ -35,7 +35,10 @@ fn test_quantization_and_estimation() {
     );
 
     // 3. Quantize with centroid at origin
-    let centroid = vec![0.0f32; rotator.padded_dim()];
+    let mut centroid = vec![0.0f32; rotator.padded_dim()];
+    for i in 0..rotator.padded_dim() {
+        centroid[i] = unif.sample(&mut rng);
+    }
 
     let (bin_codes, ex_codes) = quantize_split_single(
         rotated_vectors.row(0).as_slice().unwrap(),
@@ -56,8 +59,8 @@ fn test_quantization_and_estimation() {
 
     // 4.1 estimate using 1-bit encoding
     println!("rotator dim: {:?}", bin_codes.len());
-    let g_add = rotated_query.pow2().sum();
-    let g_err = rotated_query.pow2().sum().sqrt();
+    let g_add = (&rotated_query - &Array1::from(centroid.clone())).pow2().sum();
+    let g_err = (&rotated_query - &Array1::from(centroid)).pow2().sum().sqrt();
     let (dist, low_dist, ip) = query.estdist(&bin_codes, g_add, g_err);
     // Calculate the exact distance
     let l2_dist = (query_vec - rotated_vectors.row(0)).pow2().sum().sqrt();
@@ -71,7 +74,7 @@ fn test_quantization_and_estimation() {
 
     let ip_func = select_excode_ipfunc(EX_BITS).expect("Failed to get ip function");
 
-    query.set_g_add(rotated_query.pow2().sum().sqrt(), 0.0);
+    query.set_g_add(g_err, 0f32);
     let estimated_dist = query.distance_boosting(&ex_codes, Some(ip_func), ip);
 
     println!("5-bit estimated dist: {:}", estimated_dist.sqrt());
