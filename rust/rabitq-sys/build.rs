@@ -9,7 +9,7 @@ fn main() {
     // Compile the C++ wrapper.
     cc::Build::new()
         .file("rabitq_wrapper.cpp")
-        .include("../rabitqlib") // <-- 添加这一行来指定头文件搜索路径
+        .include("../../rabitqlib") 
         .cpp(true)
         .flag("-std=c++17")
         .flag("-march=native")

@@ -43,6 +43,9 @@ data/
 # macOS garbages
 .DS_Store
 
-rabitq-sys/target/*
-rabitq-rs/target/*
+# VS Code
 .vscode/*
+
+# Rust build
+rust/rabitq-sys/target/*
+rust/rabitq-rs/target/*

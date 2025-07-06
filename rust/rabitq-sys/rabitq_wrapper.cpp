@@ -1,11 +1,9 @@
 #include "rabitq.h"
-#include "../rabitqlib/quantization/rabitq.hpp"
-#include "../rabitqlib/utils/rotator.hpp"
-#include "../rabitqlib/index/estimator.hpp"
-#include "../rabitqlib/index/query.hpp"
-#include "../rabitqlib/utils/space.hpp"
-// 在 C++ 文件中，我们知道 Rotator 是 rabitqlib::Rotator<float> 的别名
-// 但这个细节对 C 和 Rust 是隐藏的
+#include "../../rabitqlib/quantization/rabitq.hpp"
+#include "../../rabitqlib/utils/rotator.hpp"
+#include "../../rabitqlib/index/estimator.hpp"
+#include "../../rabitqlib/index/query.hpp"
+#include "../../rabitqlib/utils/space.hpp"
 
 extern "C" {
 
