@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
                   << "arg5: ef for indexing \n"
                   << "arg6: total number of bits for quantization\n"
                   << "arg7: path for saving index\n"
-                  << "arg8: metric type (\"l2\" or \"ip\")\n"
+                  << "arg8: metric type (\"l2\" or \"ip\"), l2 by default\n"
                   << "arg9: if use faster quantization (\"true\" or \"false\"), false by "
                      "default\n";
         exit(1);
