@@ -41,9 +41,10 @@ int main() {
         vector.data(), dim, bits, code.data(), delta, vl, config
     );
 
-    // reconstruct  
+    // reconstruct
+    size_t padded_dim = dim;
     float * reconstructed_data = new float [padded_dim];
-    rabitqlib::quant::reconstruct_vec(code, delta, vl, padded_dim, reconstructed_data);
+    rabitqlib::quant::reconstruct_vec(code.data(), delta, vl, padded_dim, reconstructed_data);
 
     return 0;
 }
