@@ -43,8 +43,8 @@ int main() {
 
     // reconstruct
     size_t padded_dim = dim;
-    float * reconstructed_data = new float [padded_dim];
-    rabitqlib::quant::reconstruct_vec(code.data(), delta, vl, padded_dim, reconstructed_data);
+    std::vector<float> reconstructed_data(padded_dim);
+    rabitqlib::quant::reconstruct_vec(code.data(), delta, vl, padded_dim, reconstructed_data.data());
 
     return 0;
 }
