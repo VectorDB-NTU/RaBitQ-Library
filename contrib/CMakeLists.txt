@@ -1,0 +1,6 @@
+if (BUILD_TESTS)
+    add_executable(dataset_example dataset_example.cpp)
+    # target_link_libraries(dataset_example PRIVATE rabitqlib)
+    target_include_directories(dataset_example PRIVATE ${PROJECT_SOURCE_DIR}/contrib)
+    target_include_directories(dataset_example PRIVATE ${PROJECT_SOURCE_DIR}/)
+endif()
