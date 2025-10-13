@@ -4,42 +4,30 @@
 
 namespace rabitqlib {
 class StopW {
-    std::chrono::steady_clock::time_point time_begin_;
+    using clock = std::chrono::steady_clock;
+    clock::time_point time_begin_;
+
+    [[nodiscard]] clock::duration elapsed() const { return clock::now() - time_begin_; }
 
    public:
-    StopW() { time_begin_ = std::chrono::steady_clock::now(); }
+    StopW() : time_begin_(clock::now()) {}
+
+    void reset() { time_begin_ = clock::now(); }
 
     [[nodiscard]] float get_elapsed_sec() const {
-        std::chrono::steady_clock::time_point time_end = std::chrono::steady_clock::now();
-        return static_cast<float>(
-            std::chrono::duration_cast<std::chrono::seconds>(time_end - time_begin_).count()
-        );
+        return std::chrono::duration<float>(elapsed()).count();
     }
 
     [[nodiscard]] float get_elapsed_mili() const {
-        std::chrono::steady_clock::time_point time_end = std::chrono::steady_clock::now();
-        return static_cast<float>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin_)
-                .count()
-        );
+        return std::chrono::duration<float, std::milli>(elapsed()).count();
     }
 
     [[nodiscard]] float get_elapsed_micro() const {
-        std::chrono::steady_clock::time_point time_end = std::chrono::steady_clock::now();
-        return static_cast<float>(
-            std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_begin_)
-                .count()
-        );
+        return std::chrono::duration<float, std::micro>(elapsed()).count();
     }
 
     [[nodiscard]] float get_elapsed_nano() const {
-        std::chrono::steady_clock::time_point time_end = std::chrono::steady_clock::now();
-        return static_cast<float>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(time_end - time_begin_)
-                .count()
-        );
+        return std::chrono::duration<float, std::nano>(elapsed()).count();
     }
-
-    void reset() { time_begin_ = std::chrono::steady_clock::now(); }
 };
 }  // namespace rabitqlib

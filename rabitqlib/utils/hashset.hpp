@@ -42,26 +42,11 @@ class HashBasedBooleanSet {
 
    public:
     HashBasedBooleanSet() = default;
+    ~HashBasedBooleanSet() = default;
 
-    HashBasedBooleanSet(const HashBasedBooleanSet& other)
-        : table_size_(other.table_size_)
-        , mask_(other.mask_)
-        , table_(other.table_)
-        , stl_hash_(other.stl_hash_) {}
-
-    HashBasedBooleanSet(HashBasedBooleanSet&& other) noexcept
-        : table_size_(other.table_size_)
-        , mask_(other.mask_)
-        , table_(std::move(other.table_))
-        , stl_hash_(std::move(other.stl_hash_)) {}
-    HashBasedBooleanSet& operator=(HashBasedBooleanSet&& other) noexcept {
-        table_size_ = other.table_size_;
-        mask_ = other.mask_;
-        table_ = std::move(other.table_);
-        stl_hash_ = std::move(other.stl_hash_);
-
-        return *this;
-    }
+    HashBasedBooleanSet(const HashBasedBooleanSet&) = default;
+    HashBasedBooleanSet(HashBasedBooleanSet&&) noexcept = default;
+    HashBasedBooleanSet& operator=(HashBasedBooleanSet&&) noexcept = default;
 
     explicit HashBasedBooleanSet(size_t size) {
         size_t bit_size = 0;

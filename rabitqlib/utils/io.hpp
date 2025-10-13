@@ -10,10 +10,15 @@
 
 namespace rabitqlib {
 // get num of bytes
-inline size_t get_filesize(const char* filename) {
-    struct stat64 stat_buf;
-    int tmp = stat64(filename, &stat_buf);
-    return tmp == 0 ? stat_buf.st_size : -1;
+inline size_t get_filesize(const char* filename) noexcept {
+    try {
+        return std::filesystem::file_size(filename);
+    } catch (const std::filesystem::filesystem_error& e) {
+        // Log the error and return -1 to maintain original behavior on error.
+        std::cerr << "Error getting file size for '" << filename << "': " << e.what()
+                  << '\n';
+        return static_cast<size_t>(-1);
+    }
 }
 
 inline bool file_exists(const char* filename) { return std::filesystem::exists(filename); }
