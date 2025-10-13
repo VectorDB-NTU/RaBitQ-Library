@@ -1,10 +1,10 @@
 #include <cstdint>
 #include <iostream>
 
-#include "defines.hpp"
-#include "index/ivf/ivf.hpp"
-#include "utils/io.hpp"
-#include "utils/stopw.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/stopw.hpp"
 
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::ivf::IVF;

@@ -1,11 +1,11 @@
 #include <iostream>
 #include <vector>
 
-#include "defines.hpp"
-#include "index/ivf/ivf.hpp"
-#include "utils/io.hpp"
-#include "utils/stopw.hpp"
-#include "utils/tools.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/stopw.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::ivf::IVF;

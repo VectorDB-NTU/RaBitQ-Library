@@ -6,10 +6,10 @@
 #include <cstddef>
 #include <vector>
 
-#include "defines.hpp"
-#include "fastscan/fastscan.hpp"
-#include "quantization/data_layout.hpp"
-#include "quantization/rabitq_impl.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/quantization/rabitq_impl.hpp"
 
 namespace rabitqlib::quant {
 

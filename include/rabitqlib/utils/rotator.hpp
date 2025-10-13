@@ -9,10 +9,10 @@
 #include <iostream>
 #include <random>
 
-#include "defines.hpp"
-#include "utils/fht_avx.hpp"
-#include "utils/space.hpp"
-#include "utils/tools.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/utils/fht_avx.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib {
 

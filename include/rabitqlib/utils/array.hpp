@@ -23,7 +23,7 @@
 #include <fstream>
 #include <utility>
 
-#include "utils/memory.hpp"
+#include "rabitqlib/utils/memory.hpp"
 
 namespace rabitqlib {
 namespace array_impl {

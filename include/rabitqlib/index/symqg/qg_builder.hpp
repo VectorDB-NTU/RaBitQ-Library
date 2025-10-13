@@ -9,11 +9,11 @@
 #include <unordered_set>
 #include <vector>
 
-#include "defines.hpp"
-#include "index/symqg/qg.hpp"
-#include "utils/hashset.hpp"
-#include "utils/space.hpp"
-#include "utils/tools.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/symqg/qg.hpp"
+#include "rabitqlib/utils/hashset.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::symqg {
 constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar

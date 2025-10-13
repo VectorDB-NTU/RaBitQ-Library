@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <vector>
 
-#include "defines.hpp"
-#include "utils/memory.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/utils/memory.hpp"
 
 namespace rabitqlib::buffer {
 /**

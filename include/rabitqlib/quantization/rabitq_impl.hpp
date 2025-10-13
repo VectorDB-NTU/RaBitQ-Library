@@ -8,10 +8,10 @@
 #include <cstdint>
 #include <vector>
 
-#include "defines.hpp"
-#include "fastscan/fastscan.hpp"
-#include "quantization/pack_excode.hpp"
-#include "utils/space.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/quantization/pack_excode.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::quant::rabitq_impl {
 

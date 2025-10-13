@@ -1,9 +1,9 @@
 #include <iostream>
 #include <vector>
 
-#include "index/hnsw/hnsw.hpp"
-#include "utils/io.hpp"
-#include "utils/stopw.hpp"
+#include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/stopw.hpp"
 
 std::vector<size_t> efs = {10,  20,  40,  50,  60,  80,  100, 150,  170,  190, 200,
                            250, 300, 400, 500, 600, 700, 800, 1000, 1500, 2000};

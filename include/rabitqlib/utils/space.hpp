@@ -10,8 +10,8 @@
 #include <limits>
 #include <type_traits>
 
-#include "defines.hpp"
-#include "utils/tools.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib {
 namespace scalar_impl {

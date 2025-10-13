@@ -23,8 +23,8 @@
 #include <iostream>
 #include <unordered_set>
 
-#include "defines.hpp"
-#include "utils/memory.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/utils/memory.hpp"
 
 namespace rabitqlib {
 /**

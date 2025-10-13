@@ -5,10 +5,10 @@
 #include <numeric>
 #include <utility>
 
-#include "defines.hpp"
-#include "index/lut.hpp"
-#include "quantization/rabitq.hpp"
-#include "utils/space.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/lut.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib {
 /**

@@ -2,7 +2,7 @@
 
 #include <limits>
 
-#include "third/Eigen/Dense"
+#include "rabitqlib/third/Eigen/Dense"
 
 #define BIT_ID(x) (__builtin_popcount((x) - 1))
 #define LOWBIT(x) ((x) & (-(x)))
@@ -63,5 +63,5 @@ struct AnnCandidate {
 };
 
 enum MetricType : std::uint8_t { METRIC_L2, METRIC_IP };
-enum ScalarQuantizerType : std::uint8_t {RECONSTRUCTION, UNBIASED_ESTIMATION, PLAIN};
+enum ScalarQuantizerType : std::uint8_t { RECONSTRUCTION, UNBIASED_ESTIMATION, PLAIN };
 }  // namespace rabitqlib

@@ -1,9 +1,9 @@
 #include <cstdint>
 #include <iostream>
 
-#include "index/hnsw/hnsw.hpp"
-#include "utils/io.hpp"
-#include "utils/stopw.hpp"
+#include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/stopw.hpp"
 
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::hnsw::HierarchicalNSW;

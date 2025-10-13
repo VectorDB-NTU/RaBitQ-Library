@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-#include "defines.hpp"
+#include "rabitqlib/defines.hpp"
 
 namespace rabitqlib::ivf {
 

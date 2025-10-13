@@ -12,20 +12,20 @@
 #include <ostream>
 #include <vector>
 
-#include "defines.hpp"
-#include "fastscan/fastscan.hpp"
-#include "index/estimator.hpp"
-#include "index/query.hpp"
-#include "quantization/data_layout.hpp"
-#include "quantization/rabitq.hpp"
-#include "utils/array.hpp"
-#include "utils/buffer.hpp"
-#include "utils/hashset.hpp"
-#include "utils/io.hpp"
-#include "utils/memory.hpp"
-#include "utils/rotator.hpp"
-#include "utils/space.hpp"
-#include "utils/visited_pool.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/index/estimator.hpp"
+#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/utils/array.hpp"
+#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/utils/hashset.hpp"
+#include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/visited_pool.hpp"
 
 namespace rabitqlib::symqg {
 

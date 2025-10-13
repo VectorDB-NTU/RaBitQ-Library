@@ -8,9 +8,9 @@
 #include <thread>
 #include <vector>
 
-#include "defines.hpp"
-#include "third/hnswlib/hnswlib.h"
-#include "utils/space.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/third/hnswlib/hnswlib.h"
 
 namespace rabitqlib::ivf {
 template <class Function>
@@ -81,8 +81,9 @@ class Initializer {
     virtual ~Initializer() = 0;
     [[nodiscard]] virtual const float* centroid(PID) const = 0;
     virtual void add_vectors(const float*) = 0;
-    virtual void
-    centroids_distances(const float*, size_t, std::vector<AnnCandidate<float>>&) const = 0;
+    virtual void centroids_distances(
+        const float*, size_t, std::vector<AnnCandidate<float>>&
+    ) const = 0;
     virtual void load(std::ifstream&, const char*) = 0;
     virtual void save(std::ofstream&, const char*) const = 0;
 };

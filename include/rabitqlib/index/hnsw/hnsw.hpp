@@ -15,17 +15,17 @@
 #include <unordered_map>
 #include <vector>
 
-#include "defines.hpp"
-#include "index/estimator.hpp"
-#include "index/ivf/initializer.hpp"
-#include "index/query.hpp"
-#include "quantization/data_layout.hpp"
-#include "quantization/rabitq.hpp"
-#include "utils/buffer.hpp"
-#include "utils/rotator.hpp"
-#include "utils/space.hpp"
-#include "utils/tools.hpp"
-#include "utils/visited_pool.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/estimator.hpp"
+#include "rabitqlib/index/ivf/initializer.hpp"
+#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
+#include "rabitqlib/utils/visited_pool.hpp"
 
 namespace rabitqlib::hnsw {
 

@@ -11,18 +11,18 @@
 #include <iostream>
 #include <vector>
 
-#include "defines.hpp"
-#include "fastscan/fastscan.hpp"
-#include "index/estimator.hpp"
-#include "index/ivf/cluster.hpp"
-#include "index/ivf/initializer.hpp"
-#include "index/query.hpp"
-#include "quantization/data_layout.hpp"
-#include "quantization/rabitq.hpp"
-#include "utils/buffer.hpp"
-#include "utils/memory.hpp"
-#include "utils/rotator.hpp"
-#include "utils/space.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/index/estimator.hpp"
+#include "rabitqlib/index/ivf/cluster.hpp"
+#include "rabitqlib/index/ivf/initializer.hpp"
+#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::ivf {
 class IVF {

@@ -1,5 +1,5 @@
-#include "quantization/rabitq.hpp"
-#include "utils/rotator.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/utils/rotator.hpp"
 
 int main() {
     // generate random data

@@ -1,9 +1,9 @@
 #include <iostream>
 
-#include "defines.hpp"
-#include "index/symqg/qg.hpp"
-#include "utils/io.hpp"
-#include "utils/stopw.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/symqg/qg.hpp"
+#include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/stopw.hpp"
 
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::symqg::QuantizedGraph<float>;

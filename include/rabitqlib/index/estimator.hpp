@@ -2,13 +2,13 @@
 
 #include <cstdint>
 
-#include "defines.hpp"
-#include "fastscan/fastscan.hpp"
-#include "fastscan/highacc_fastscan.hpp"
-#include "index/query.hpp"
-#include "quantization/data_layout.hpp"
-#include "utils/space.hpp"
-#include "utils/warmup_space.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/warmup_space.hpp"
 
 namespace rabitqlib {
 /**

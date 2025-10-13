@@ -12,7 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "defines.hpp"
+#include "rabitqlib/defines.hpp"
 
 namespace rabitqlib::fastscan {
 
