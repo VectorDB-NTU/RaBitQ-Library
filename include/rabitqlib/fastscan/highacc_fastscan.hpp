@@ -64,6 +64,7 @@ inline void accumulate_hacc(
     int32_t* accu_res,
     size_t dim
 ) {
+#if defined(__AVX512F__)
     __m512i low_mask = _mm512_set1_epi8(0xf);
     __m512i accu[2][4];
 
@@ -142,5 +143,93 @@ inline void accumulate_hacc(
 
     _mm512_storeu_epi32(accu_res, res[0]);
     _mm512_storeu_epi32(accu_res + 16, res[1]);
+#elif defined(__AVX2__)
+    __m256i low_mask = _mm256_set1_epi8(0xf);
+    __m256i accu[2][4];
+
+    for (auto& a : accu) {
+        for (auto& reg : a) {
+            reg = _mm256_setzero_si256();
+        }
+    }
+
+    size_t num_codebook = dim >> 2;
+
+    for (size_t m = 0; m < num_codebook; m += 4) {
+        __m256i c0 = _mm256_loadu_si256((__m256i*)codes);
+        __m256i c1 = _mm256_loadu_si256((__m256i*)(codes + 32));
+        codes += 64;
+
+        __m256i lo0 = _mm256_and_si256(c0, low_mask);
+        __m256i hi0 = _mm256_and_si256(_mm256_srli_epi16(c0, 4), low_mask);
+        
+        __m256i lo1 = _mm256_and_si256(c1, low_mask);
+        __m256i hi1 = _mm256_and_si256(_mm256_srli_epi16(c1, 4), low_mask);
+
+        for (int q = 0; q < 2; ++q) {
+            __m256i lut0 = _mm256_loadu_si256((__m256i*)hc_lut); 
+            __m256i lut1 = _mm256_loadu_si256((__m256i*)(hc_lut + 32));
+            hc_lut += 64;
+
+            __m256i res_lo0 = _mm256_shuffle_epi8(lut0, lo0);
+            __m256i res_lo1 = _mm256_shuffle_epi8(lut1, lo1);
+
+            __m256i res_hi0 = _mm256_shuffle_epi8(lut0, hi0);
+            __m256i res_hi1 = _mm256_shuffle_epi8(lut1, hi1);
+
+            accu[q][0] = _mm256_add_epi16(accu[q][0], res_lo0);
+            accu[q][0] = _mm256_add_epi16(accu[q][0], res_lo1);
+            
+            accu[q][1] = _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo0, 8));
+            accu[q][1] = _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo1, 8));
+
+            accu[q][2] = _mm256_add_epi16(accu[q][2], res_hi0);
+            accu[q][2] = _mm256_add_epi16(accu[q][2], res_hi1);
+
+            accu[q][3] = _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi0, 8));
+            accu[q][3] = _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi1, 8));
+        }
+    }
+
+    __m256i res[4];
+    __m256i dis0[2];
+    __m256i dis1[2];
+
+    // lamda function to horizontal sum and combine low/high bytes
+    auto combine2x2 = [&] (__m256i a, __m256i b) -> __m256i {
+        __m256i a1b0 = _mm256_permute2f128_si256(a, b, 0x21);
+        __m256i a0b1 = _mm256_blend_epi32(a, b, 0xF0);
+        return _mm256_add_epi16(a1b0, a0b1);
+    };
+
+    for (size_t i = 0; i < 2; i++) {
+        accu[i][0] = _mm256_sub_epi16(accu[i][0], _mm256_slli_epi16(accu[i][1], 8));
+        dis0[i] = combine2x2(accu[i][0], accu[i][1]);
+
+        accu[i][2] = _mm256_sub_epi16(accu[i][2], _mm256_slli_epi16(accu[i][3], 8));
+        dis1[i] = combine2x2(accu[i][2], accu[i][3]);
+    }
+
+    auto addShiftLeft8 = [&](__m256i a, __m256i b, __m256i &r0, __m256i &r1) {
+        __m256i a0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(a));
+        __m256i a1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(a, 1));
+        __m256i b0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(b));
+        __m256i b1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(b, 1));
+        r0 = _mm256_add_epi32(a0, _mm256_slli_epi32(b0, 8));
+        r1 = _mm256_add_epi32(a1, _mm256_slli_epi32(b1, 8));
+    };
+        
+    // shift res of high, add res of low
+    addShiftLeft8(dis0[0], dis0[1], res[0], res[1]);  // res for vec 0 to 15
+    addShiftLeft8(dis1[0], dis1[1], res[2], res[3]);  // res for vec 16 to 31
+
+    _mm256_storeu_si256((__m256i*)(accu_res), res[0]);
+    _mm256_storeu_si256((__m256i*)(accu_res + 8), res[1]);
+    _mm256_storeu_si256((__m256i*)(accu_res + 16), res[2]);
+    _mm256_storeu_si256((__m256i*)(accu_res + 24), res[3]);
+#else
+    std::cerr << "AVX512 or AVX2 required for using fastscan\n";
+    exit(1);
+#endif
 }
 }  // namespace rabitqlib::fastscan

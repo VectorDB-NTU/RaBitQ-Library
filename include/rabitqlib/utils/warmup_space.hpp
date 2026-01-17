@@ -5,6 +5,35 @@
 #include <cstddef>
 #include <cstdint>
 
+// Helper: AVX2 64-bit Popcount; Mula's method
+inline __m256i popcount_avx2(__m256i v) {
+#if defined(__AVX2__)
+    // Lookup table for population count of 0-15
+    const __m256i lookup = _mm256_setr_epi8(
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+    );
+    const __m256i low_mask = _mm256_set1_epi8(0x0f);
+
+    // Count low nibbles
+    __m256i lo = _mm256_and_si256(v, low_mask);
+    __m256i cnt_lo = _mm256_shuffle_epi8(lookup, lo);
+
+    // Count high nibbles
+    __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), low_mask);
+    __m256i cnt_hi = _mm256_shuffle_epi8(lookup, hi);
+
+    // Add counts (bytes)
+    __m256i cnt_bytes = _mm256_add_epi8(cnt_lo, cnt_hi);
+
+    // Sum bytes horizontally into 64-bit integers (SAD against 0)
+    return _mm256_sad_epu8(cnt_bytes, _mm256_setzero_si256());
+#else
+    std::cerr << "AVX2 is required for popcount_avx2\n";
+    exit(1);
+#endif
+}
+
 template <uint32_t b_query>
 inline float warmup_ip_x0_q(
     const uint64_t* data,   // pointer to data blocks (each 64 bits)
@@ -15,6 +44,7 @@ inline float warmup_ip_x0_q(
     size_t padded_dim,
     [[maybe_unused]] size_t _b_query = 0  // not used
 ) {
+#if defined(__AVX512F__)
     const size_t num_blk = padded_dim / 64;
     size_t ip_scalar = 0;
     size_t ppc_scalar = 0;
@@ -94,6 +124,82 @@ inline float warmup_ip_x0_q(
     }
 
     return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
+#elif defined(__AVX2__)
+    const size_t num_blk = padded_dim / 64;
+    size_t ip_scalar = 0;
+    size_t ppc_scalar = 0;
+
+    // Process blocks in chunks of 4
+    const size_t vec_width = 4;
+    size_t vec_end = (num_blk / vec_width) * vec_width;
+    
+    // Accumulators
+    __m256i ip_vec = _mm256_setzero_si256();
+    __m256i ppc_vec = _mm256_setzero_si256();
+
+    for (size_t i = 0; i < vec_end; i += 4) {
+        // Load four 64-bit data blocks into x_vec.
+        __m256i x_vec = _mm256_loadu_si256((const __m256i*)&data[i]);
+        
+        ppc_vec = _mm256_add_epi64(ppc_vec, popcount_avx2(x_vec));
+
+        // Process each query component (b_query is a compile-time constant, and is small).
+        for (uint32_t j = 0; j < b_query; j++) {
+            // Calculate Gather Indices: [idx, idx+b, idx+2b, idx+3b]
+            // Base index for this batch: i * b_query + j
+            long long base_idx = i * b_query + j;
+            
+            // Offsets for the 4 lanes: 0, b, 2b, 3b
+            __m256i index_vec = _mm256_setr_epi64x(
+                base_idx, 
+                base_idx + b_query, 
+                base_idx + 2 * b_query, 
+                base_idx + 3 * b_query
+            );
+
+            // Gather query data: query[idx]
+            __m256i q_vec = _mm256_i64gather_epi64((const long long*)query, index_vec, 8);
+
+            // Compute bitwise AND of data blocks and corresponding query words.
+            __m256i and_vec = _mm256_and_si256(x_vec, q_vec);
+            // Compute popcount on each lane.
+            __m256i popcnt_and = popcount_avx2(and_vec);
+
+            // Multiply by the weighting factor (1 << j) for this query position.
+            __m256i weighted = _mm256_slli_epi64(popcnt_and, j);
+            
+            // Accumulate weighted popcounts for these blocks.
+            ip_vec = _mm256_add_epi64(ip_vec, weighted);
+        }
+    }
+
+    // Horizontally reduce the vector accumulators.
+    uint64_t ip_arr[vec_width];
+    uint64_t ppc_arr[vec_width];
+    
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(ppc_arr), ppc_vec);
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(ip_arr), ip_vec);
+
+    for (size_t k = 0; k < vec_width; k++) {
+        ppc_scalar += ppc_arr[k];
+        ip_scalar += ip_arr[k];
+    }
+
+    // Process remaining blocks that did not fit in the vectorized loop.
+    for (size_t i = vec_end; i < num_blk; i++) {
+        const uint64_t x = data[i];
+        ppc_scalar += __builtin_popcountll(x);
+        for (uint32_t j = 0; j < b_query; j++) {
+            ip_scalar += __builtin_popcountll(x & query[i * b_query + j]) << j;
+        }
+    }
+
+    return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
+#else
+    std::cerr << "AVX512 or AVX2 is required for warmup_ip_x0_q\n";
+    exit(1);
+#endif
+    return 0.0f;
 }
 
 template <uint32_t b_query, uint32_t padded_dim>
