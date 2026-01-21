@@ -155,39 +155,24 @@ inline void accumulate_hacc(
 
     size_t num_codebook = dim >> 2;
 
-    for (size_t m = 0; m < num_codebook; m += 4) {
-        __m256i c0 = _mm256_loadu_si256((__m256i*)codes);
-        __m256i c1 = _mm256_loadu_si256((__m256i*)(codes + 32));
-        codes += 64;
+    for (size_t m = 0; m < num_codebook; m += 2) {
+        __m256i c = _mm256_loadu_si256((__m256i*)codes);
+        codes += 32;
 
-        __m256i lo0 = _mm256_and_si256(c0, low_mask);
-        __m256i hi0 = _mm256_and_si256(_mm256_srli_epi16(c0, 4), low_mask);
-        
-        __m256i lo1 = _mm256_and_si256(c1, low_mask);
-        __m256i hi1 = _mm256_and_si256(_mm256_srli_epi16(c1, 4), low_mask);
+        __m256i lo = _mm256_and_si256(c, low_mask);
+        __m256i hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
         for (int q = 0; q < 2; ++q) {
-            __m256i lut0 = _mm256_loadu_si256((__m256i*)hc_lut); 
-            __m256i lut1 = _mm256_loadu_si256((__m256i*)(hc_lut + 32));
-            hc_lut += 64;
+            __m256i lut = _mm256_loadu_si256((__m256i*)hc_lut);
+            hc_lut += 32;
 
-            __m256i res_lo0 = _mm256_shuffle_epi8(lut0, lo0);
-            __m256i res_lo1 = _mm256_shuffle_epi8(lut1, lo1);
+            __m256i res_lo = _mm256_shuffle_epi8(lut, lo);
+            __m256i res_hi = _mm256_shuffle_epi8(lut, hi);
 
-            __m256i res_hi0 = _mm256_shuffle_epi8(lut0, hi0);
-            __m256i res_hi1 = _mm256_shuffle_epi8(lut1, hi1);
-
-            accu[q][0] = _mm256_add_epi16(accu[q][0], res_lo0);
-            accu[q][0] = _mm256_add_epi16(accu[q][0], res_lo1);
-            
-            accu[q][1] = _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo0, 8));
-            accu[q][1] = _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo1, 8));
-
-            accu[q][2] = _mm256_add_epi16(accu[q][2], res_hi0);
-            accu[q][2] = _mm256_add_epi16(accu[q][2], res_hi1);
-
-            accu[q][3] = _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi0, 8));
-            accu[q][3] = _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi1, 8));
+            accu[q][0] = _mm256_add_epi16(accu[q][0], res_lo);
+            accu[q][1] = _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo, 8));
+            accu[q][2] = _mm256_add_epi16(accu[q][2], res_hi);
+            accu[q][3] = _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi, 8));
         }
     }
 
@@ -196,7 +181,7 @@ inline void accumulate_hacc(
     __m256i dis1[2];
 
     // lamda function to horizontal sum and combine low/high bytes
-    auto combine2x2 = [&] (__m256i a, __m256i b) -> __m256i {
+    auto combine2x2 = [&](__m256i a, __m256i b) -> __m256i {
         __m256i a1b0 = _mm256_permute2f128_si256(a, b, 0x21);
         __m256i a0b1 = _mm256_blend_epi32(a, b, 0xF0);
         return _mm256_add_epi16(a1b0, a0b1);
@@ -210,7 +195,7 @@ inline void accumulate_hacc(
         dis1[i] = combine2x2(accu[i][2], accu[i][3]);
     }
 
-    auto addShiftLeft8 = [&](__m256i a, __m256i b, __m256i &r0, __m256i &r1) {
+    auto add_shiftl8 = [&](__m256i a, __m256i b, __m256i& r0, __m256i& r1) {
         __m256i a0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(a));
         __m256i a1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(a, 1));
         __m256i b0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(b));
@@ -218,10 +203,10 @@ inline void accumulate_hacc(
         r0 = _mm256_add_epi32(a0, _mm256_slli_epi32(b0, 8));
         r1 = _mm256_add_epi32(a1, _mm256_slli_epi32(b1, 8));
     };
-        
+
     // shift res of high, add res of low
-    addShiftLeft8(dis0[0], dis0[1], res[0], res[1]);  // res for vec 0 to 15
-    addShiftLeft8(dis1[0], dis1[1], res[2], res[3]);  // res for vec 16 to 31
+    add_shiftl8(dis0[0], dis0[1], res[0], res[1]);  // res for vec 0 to 15
+    add_shiftl8(dis1[0], dis1[1], res[2], res[3]);  // res for vec 16 to 31
 
     _mm256_storeu_si256((__m256i*)(accu_res), res[0]);
     _mm256_storeu_si256((__m256i*)(accu_res + 8), res[1]);

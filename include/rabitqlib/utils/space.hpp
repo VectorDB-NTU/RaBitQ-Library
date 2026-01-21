@@ -106,7 +106,7 @@ inline void scalar_quantize_optimized<uint16_t>(
         auto i32 = _mm256_cvtps_epi32(cur);
         __m128i lo32 = _mm256_castsi256_si128(i32);
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
-        __m128i i16 = _mm_packs_epi32(lo32, hi32);
+        __m128i i16 = _mm_packus_epi32(lo32, hi32);
         _mm_storeu_si128(reinterpret_cast<__m128i*>(result+i), i16);
     }
     for (; i < dim; ++i) {
