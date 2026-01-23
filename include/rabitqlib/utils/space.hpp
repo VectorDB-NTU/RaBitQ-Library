@@ -355,7 +355,7 @@ inline float ip16_fxu1_avx(
         query += 8;
         ++compact_code;
     }
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -412,7 +412,7 @@ inline float ip64_fxu2_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -487,7 +487,7 @@ inline float ip64_fxu3_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -523,7 +523,7 @@ inline float ip16_fxu4_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -602,7 +602,7 @@ inline float ip64_fxu5_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -651,7 +651,7 @@ inline float ip16_fxu6_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -737,7 +737,7 @@ inline float ip64_fxu7_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
