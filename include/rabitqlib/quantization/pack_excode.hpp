@@ -32,20 +32,24 @@ inline void packing_1bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t
 inline void packing_2bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
 #if defined(__AVX512F__) || defined(__AVX2__)
     // ! require dim % 16 == 0
-    for (size_t j = 0; j < dim; j += 16) {
-        // pack 16 2-bit codes into int32
+    for (size_t j = 0; j < dim; j += 64) {
+        // pack 64 2-bit codes into 128 bits (16 bytes)
         // the lower 2 bits of each byte represent vec00 to vec04...
-        int32_t code0 = *reinterpret_cast<const int32_t*>(o_raw);
-        int32_t code1 = *reinterpret_cast<const int32_t*>(o_raw + 4);
-        int32_t code2 = *reinterpret_cast<const int32_t*>(o_raw + 8);
-        int32_t code3 = *reinterpret_cast<const int32_t*>(o_raw + 12);
 
-        int32_t compact = (code3 << 6) | (code2 << 4) | (code1 << 2) | code0;
+        __m128i vec_00_to_15 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw));
+        __m128i vec_16_to_31 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw + 16));
+        __m128i vec_32_to_47 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw + 32));
+        __m128i vec_48_to_63 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw + 48));
 
-        *reinterpret_cast<int32_t*>(o_compact) = compact;
+        __m128i compact = _mm_or_si128(
+            _mm_or_si128(vec_00_to_15, _mm_slli_epi16(vec_16_to_31, 2)),
+            _mm_or_si128(_mm_slli_epi16(vec_32_to_47, 4), _mm_slli_epi16(vec_48_to_63, 6))
+        );
 
-        o_raw += 16;
-        o_compact += 4;
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(o_compact), compact);
+        
+        o_raw += 64;
+        o_compact += 16;
     }
 #else
     std::cerr << "Current only support AVX512F and AVX2 for packing excode\n" << std::flush;
