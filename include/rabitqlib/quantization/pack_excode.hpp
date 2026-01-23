@@ -208,7 +208,7 @@ inline void packing_7bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t
 #if defined(__AVX512F__) || defined(__AVX2__)
     // for vec00 to vec47, split code into 6 + 1
     // for vec48 to vec63, split code into 2 + 2 + 2 + 1
-    const __m128i mask2 = _mm_set1_epi8(0b11000000);
+    const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
     const __m128i mask6 = _mm_set1_epi8(0b00111111);
     for (size_t d = 0; d < dim; d += 64) {
         __m128i vec_00_to_15 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw));

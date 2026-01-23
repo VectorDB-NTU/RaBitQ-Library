@@ -122,12 +122,12 @@ inline void one_bit_code_with_factor(
     // For (ip_cent_xucb / ip_resi_xucb), the norm of xucb does not matter since it is also
     // in numerator.
     if (metric_type == METRIC_L2) {
-        f_add = l2_sqr + 2 * l2_sqr * ip_cent_xucb / ip_resi_xucb;
+        f_add = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
         f_rescale = -2 * l2_sqr / ip_resi_xucb;
         f_error = 2 * tmp_error;
     } else if (metric_type == METRIC_IP) {
         f_add = 1 - dot_product<T>(residual_arr.data(), centroid, dim) +
-                l2_sqr * ip_cent_xucb / ip_resi_xucb;
+                (l2_sqr * ip_cent_xucb / ip_resi_xucb);
         f_rescale = -l2_sqr / ip_resi_xucb;
         f_error = 1 * tmp_error;
     } else {
@@ -288,7 +288,7 @@ inline double best_rescale_factor(const T* o_abs, size_t dim, size_t ex_bits) {
     for (size_t i = 0; i < dim; ++i) {
         int cur = static_cast<int>((t_start * o_abs[i]) + kEps);
         cur_o_bar[i] = cur;
-        sqr_denominator += cur * cur + cur;
+        sqr_denominator += (cur * cur) + cur;
         numerator += (cur + 0.5) * o_abs[i];
     }
 
@@ -456,7 +456,8 @@ inline void ex_bits_code_with_factor(
     RowMajorArray<int> total_code =
         RowMajorArrayMap<TP>(ex_code, 1, dim).template cast<int>();
     for (size_t i = 0; i < dim; ++i) {
-        total_code(0, i) += static_cast<int>(residual_arr.data()[i] >= 0) << ex_bits;
+        total_code(0, static_cast<long>(i)) += static_cast<int>(residual_arr.data()[i] >= 0)
+                                               << ex_bits;
     }
 
     // Factors are similar to those in one_bit_code_with_factor(), please refer to document
@@ -484,12 +485,12 @@ inline void ex_bits_code_with_factor(
         );
 
     if (metric_type == METRIC_L2) {
-        f_add_ex = l2_sqr + 2 * l2_sqr * ip_cent_xucb / ip_resi_xucb;
+        f_add_ex = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
         f_rescale_ex = ipnorm_inv * -2 * l2_norm;
         f_error_ex = 2 * tmp_error;
     } else if (metric_type == METRIC_IP) {
         f_add_ex = 1 - dot_product<T>(residual_arr.data(), centroid, dim) +
-                   l2_sqr * ip_cent_xucb / ip_resi_xucb;
+                   (l2_sqr * ip_cent_xucb / ip_resi_xucb);
         f_rescale_ex = ipnorm_inv * -l2_norm;
         f_error_ex = 1 * tmp_error;
     } else {

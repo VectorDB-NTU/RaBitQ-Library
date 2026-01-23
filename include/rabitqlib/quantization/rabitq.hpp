@@ -332,7 +332,15 @@ inline void quantize_scalar(
 ) {
     std::vector<T> centroid(dim, 0);
     rabitq_impl::total_bits::rabitq_scalar_impl<T, TP>(
-        data, centroid.data(), dim, total_bits, total_code, delta, vl, config.t_const, scalar_quantizer_type
+        data,
+        centroid.data(),
+        dim,
+        total_bits,
+        total_code,
+        delta,
+        vl,
+        config.t_const,
+        scalar_quantizer_type
     );
 }
 
@@ -358,7 +366,7 @@ inline void reconstruct_vec(
 ) {
     RowMajorArrayMap<T> result_arr(results, 1, dim);
     result_arr =
-        ConstRowMajorArrayMap<TP>(quantized_vec, 1, dim).template cast<T>() * delta + vl;
+        (ConstRowMajorArrayMap<TP>(quantized_vec, 1, dim).template cast<T>() * delta) + vl;
 }
 
 template <typename TF, typename TI>

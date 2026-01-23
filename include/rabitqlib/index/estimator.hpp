@@ -123,8 +123,8 @@ inline void qg_batch_estdist(
     RowMajorArrayMap<T> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
 
     est_dist_arr = f_add_arr + q_obj.g_add() +
-                   f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<T>()) +
-                                    q_obj.sum_vl_lut() + q_obj.k1xsumq());
+                   (f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<T>()) +
+                                     q_obj.sum_vl_lut() + q_obj.k1xsumq()));
 }
 
 /**
@@ -155,7 +155,7 @@ inline void split_single_fulldist(
          (static_cast<float>(1 << ex_bits) * ip_x0_qr +
           ip_func_(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) + q_obj.kbxsumq()));
 
-    low_dist = est_dist - cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits);
+    low_dist = est_dist - (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
 }
 
 /**
@@ -182,9 +182,10 @@ inline void split_single_estdist(
         SplitSingleQuery<float>::kNumBits
     );
 
-    est_dist = cur_bin.f_add() + g_add + cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq());
+    est_dist =
+        cur_bin.f_add() + g_add + (cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq()));
 
-    low_dist = est_dist - cur_bin.f_error() * g_error;
+    low_dist = est_dist - (cur_bin.f_error() * g_error);
 };
 
 }  // namespace rabitqlib

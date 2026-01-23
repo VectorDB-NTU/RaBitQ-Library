@@ -366,9 +366,9 @@ inline void QuantizedGraph<T>::initialize() {
 
     this->batch_data_offset_ = dim_ * sizeof(T);  // pos of packed code (aligned)
     this->neighbor_offset_ =
-        batch_data_offset_ +
-        QGBatchDataMap<T>::data_bytes(padded_dim_) * (degree_bound_ / fastscan::kBatchSize);
-    this->row_offset_ = neighbor_offset_ + degree_bound_ * sizeof(PID);
+        batch_data_offset_ + (QGBatchDataMap<T>::data_bytes(padded_dim_) *
+                              (degree_bound_ / fastscan::kBatchSize));
+    this->row_offset_ = neighbor_offset_ + (degree_bound_ * sizeof(PID));
 
     data_ = Array<char, std::vector<size_t>, memory::AlignedAllocator<char, 1 << 22, true>>(
         std::vector<size_t>{num_points_, row_offset_}

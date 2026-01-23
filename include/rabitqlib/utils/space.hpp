@@ -4,6 +4,7 @@
 #include <immintrin.h>
 #include <omp.h>
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <iostream>
@@ -107,7 +108,7 @@ inline void scalar_quantize_optimized<uint16_t>(
         __m128i lo32 = _mm256_castsi256_si128(i32);
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
         __m128i i16 = _mm_packus_epi32(lo32, hi32);
-        _mm_storeu_si128(reinterpret_cast<__m128i*>(result+i), i16);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(result + i), i16);
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
@@ -272,42 +273,44 @@ namespace excode_ipimpl {
 
 #if defined(__AVX2__)
 // helper function for AVX2 inner product
-inline void contribute_ip(__m128i vec, const float* __restrict__ query, __m256 &sum) {
-/* // Equivalent AVX512 code:
-    __m512 q = _mm512_loadu_ps(&query[i]);
-    __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
-    sum = _mm512_fmadd_ps(q, cf, sum);
-*/
+inline void contribute_ip(__m128i vec, const float* __restrict__ query, __m256& sum) {
+    /* // Equivalent AVX512 code:
+        __m512 q = _mm512_loadu_ps(&query[i]);
+        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+    */
     __m256 q = _mm256_loadu_ps(query);
     __m256 cf = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(vec));
     sum = _mm256_fmadd_ps(q, cf, sum);
 
-    q = _mm256_loadu_ps(query+8);
+    q = _mm256_loadu_ps(query + 8);
     cf = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_srli_si128(vec, 8)));
     sum = _mm256_fmadd_ps(q, cf, sum);
 };
 
-inline void contribute_ip_signed(__m128i vec, const float* __restrict__ query, __m256 &sum) {
-/* // Equivalent AVX512 code:
-    __m512 q = _mm512_loadu_ps(&query[i]);        
-    __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c8));
-    sum = _mm512_fmadd_ps(cf, q, sum);
-*/
+inline void contribute_ip_signed(
+    __m128i vec, const float* __restrict__ query, __m256& sum
+) {
+    /* // Equivalent AVX512 code:
+        __m512 q = _mm512_loadu_ps(&query[i]);
+        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c8));
+        sum = _mm512_fmadd_ps(cf, q, sum);
+    */
     __m256 q = _mm256_loadu_ps(query);
     __m256 cf = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(vec));
     sum = _mm256_fmadd_ps(cf, q, sum);
 
-    q = _mm256_loadu_ps(query+8);
+    q = _mm256_loadu_ps(query + 8);
     cf = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(_mm_srli_si128(vec, 8)));
     sum = _mm256_fmadd_ps(cf, q, sum);
 };
 
-inline float _mm256_reduce_add_ps(__m256 v) {
-    float accumulator[8];
-    _mm256_storeu_ps(accumulator, v);
-    float result = 0.0f;
-    for (int i = 0; i < 8; ++i) {
-        result += accumulator[i];
+inline float mm256_reduce_add_ps(__m256 v) {
+    std::array<float, 8> accumulator{};
+    _mm256_storeu_ps(accumulator.data(), v);
+    float result = 0.0F;
+    for (const auto& i : accumulator) {
+        result += i;
     }
     return result;
 }
@@ -338,18 +341,16 @@ inline float ip16_fxu1_avx(
 #elif defined(__AVX2__)
     __m256 sum = _mm256_setzero_ps();
 
-    const __m256i bitmask = _mm256_setr_epi32(
-        1, 2, 4, 8, 16, 32, 64, 128
-    );
+    const __m256i bitmask = _mm256_setr_epi32(1, 2, 4, 8, 16, 32, 64, 128);
 
     for (size_t i = 0; i < dim; i += 8) {
         __m256 q = _mm256_loadu_ps(query);
-        
+
         __m256i byte_v = _mm256_set1_epi32(*compact_code);
         __m256i isolated = _mm256_and_si256(byte_v, bitmask);
         __m256i mask = _mm256_cmpeq_epi32(isolated, bitmask);
         __m256 masked = _mm256_and_ps(q, _mm256_castsi256_ps(mask));
-        
+
         sum = _mm256_add_ps(sum, masked);
         query += 8;
         ++compact_code;
@@ -399,12 +400,11 @@ inline float ip16_fxu2_avx(
 inline float ip64_fxu3_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
     __m256 sum = _mm256_setzero_ps();
-#else 
+#else
     std::cerr << "AVX2 or AVX512 is required for excode ip functions\n";
     exit(1);
 #endif
@@ -472,7 +472,6 @@ inline float ip64_fxu3_avx(
     return result;
 }
 
-
 inline float ip16_fxu4_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
@@ -484,7 +483,7 @@ inline float ip16_fxu4_avx(
     std::cerr << "AVX2 or AVX512 is required for excode ip functions\n";
     exit(1);
 #endif
-    float result = 0.0f;
+    float result = 0.0F;
     constexpr int64_t kMask = 0x0f0f0f0f0f0f0f0f;
     for (size_t i = 0; i < dim; i += 16) {
         int64_t compact = *reinterpret_cast<const int64_t*>(compact_code);
@@ -493,7 +492,7 @@ inline float ip16_fxu4_avx(
 
         __m128i c8 = _mm_set_epi64x(code1, code0);
 #if defined(__AVX512F__)
-        __m512 q = _mm512_loadu_ps(&query[i]);        
+        __m512 q = _mm512_loadu_ps(&query[i]);
         __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c8));
         sum = _mm512_fmadd_ps(cf, q, sum);
 #elif defined(__AVX2__)
@@ -504,11 +503,10 @@ inline float ip16_fxu4_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum); 
+    result = _mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
-
 
 inline float ip64_fxu5_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
@@ -522,7 +520,7 @@ inline float ip64_fxu5_avx(
     exit(1);
 #endif
 
-    float result = 0.0f;
+    float result = 0.0F;
     const __m128i mask = _mm_set1_epi8(0b1111);
     const __m128i top_mask = _mm_set1_epi8(0b10000);
 
@@ -600,9 +598,9 @@ inline float ip16_fxu6_avx(
     std::cerr << "AVX2 or AVX512 is required for excode ip functions\n";
     exit(1);
 #endif
-    float result = 0.0f;
+    float result = 0.0F;
     constexpr int64_t kMask4 = 0x0f0f0f0f0f0f0f0f;
-    
+
     const __m128i mask2 = _mm_set1_epi8(0b00110000);
 
     for (size_t i = 0; i < dim; i += 16) {
@@ -650,9 +648,9 @@ inline float ip64_fxu7_avx(
     exit(1);
 #endif
 
-    float result = 0.0f;
+    float result = 0.0F;
     const __m128i mask6 = _mm_set1_epi8(0b00111111);
-    const __m128i mask2 = _mm_set1_epi8(0b11000000);
+    const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
     const __m128i top_mask = _mm_set1_epi8(0b1000000);
 
     for (size_t i = 0; i < dim; i += 64) {
@@ -724,7 +722,6 @@ inline float ip64_fxu7_avx(
     return result;
 }
 
-
 // inner product between float type and int type vectors
 template <typename TF, typename TI>
 inline TF ip_fxi(const TF* __restrict__ vec0, const TI* __restrict__ vec1, size_t dim) {
@@ -740,7 +737,6 @@ inline TF ip_fxi(const TF* __restrict__ vec0, const TI* __restrict__ vec1, size_
 using ex_ipfunc = float (*)(const float*, const uint8_t*, size_t);
 
 inline ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
-
     if (ex_bits <= 1) {
         // when ex_bits = 0, we do not use it
         return excode_ipimpl::ip16_fxu1_avx;
@@ -769,7 +765,6 @@ inline ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
 
     std::cerr << "Bad IP function for IVF\n";
     exit(1);
-
 }
 
 static inline uint32_t reverse_bits(uint32_t n) {
@@ -845,7 +840,7 @@ static inline void new_transpose_bin(
         __m256i vec_16_to_31 = _mm256_loadu_si256((__m256i const*)(q + 16));
         __m256i vec_32_to_47 = _mm256_loadu_si256((__m256i const*)(q + 32));
         __m256i vec_48_to_63 = _mm256_loadu_si256((__m256i const*)(q + 48));
-        
+
         // the first (16 - b_query) bits are empty
         vec_00_to_15 = _mm256_slli_epi32(vec_00_to_15, (16 - b_query));
         vec_16_to_31 = _mm256_slli_epi32(vec_16_to_31, (16 - b_query));
@@ -854,17 +849,15 @@ static inline void new_transpose_bin(
 
         for (size_t j = 0; j < b_query; ++j) {
             // pack two 16-bit vectors to 8-bit interleaved vectors
-            __m256i p0 = _mm256_packs_epi16(vec_00_to_15, vec_16_to_31); 
-            __m256i p1 = _mm256_packs_epi16(vec_32_to_47, vec_48_to_63); 
+            __m256i p0 = _mm256_packs_epi16(vec_00_to_15, vec_16_to_31);
+            __m256i p1 = _mm256_packs_epi16(vec_32_to_47, vec_48_to_63);
 
             uint32_t m0 = _mm256_movemask_epi8(p0);
             uint32_t m1 = _mm256_movemask_epi8(p1);
 
             // Fix AVX2 Lane Ordering of the interleaved mask
             auto fix_avx2_mask = [](uint32_t m) {
-                return (m & 0xFF0000FF) | 
-                       ((m & 0x00FF0000) >> 8) | 
-                       ((m & 0x0000FF00) << 8);
+                return (m & 0xFF0000FF) | ((m & 0x00FF0000) >> 8) | ((m & 0x0000FF00) << 8);
             };
 
             m0 = fix_avx2_mask(m0);
@@ -874,7 +867,7 @@ static inline void new_transpose_bin(
             m1 = reverse_bits(m1);
 
             uint64_t v = (static_cast<uint64_t>(m0) << 32) | m1;
-            
+
             tq[b_query - j - 1] = v;
 
             vec_00_to_15 = _mm256_slli_epi16(vec_00_to_15, 1);
@@ -887,7 +880,7 @@ static inline void new_transpose_bin(
     }
 #else
     std::cerr << "AVX512 or AVX2 is required for new transpose bin\n";
-    exit(1);  
+    exit(1);
 #endif
 }
 
@@ -899,10 +892,10 @@ inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t p
     __m512 sum = _mm512_setzero_ps();
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t bits = reverse_bits_u64(*it_data);
-        __mmask16 mask0 = static_cast<__mmask16>(bits >> 00);  // for q[0..15]
-        __mmask16 mask1 = static_cast<__mmask16>(bits >> 16);  // for q[16..31]
-        __mmask16 mask2 = static_cast<__mmask16>(bits >> 32);  // for q[32..47]
-        __mmask16 mask3 = static_cast<__mmask16>(bits >> 48);  // for q[48..63]
+        auto mask0 = static_cast<__mmask16>(bits >> 00);  // for q[0..15]
+        auto mask1 = static_cast<__mmask16>(bits >> 16);  // for q[16..31]
+        auto mask2 = static_cast<__mmask16>(bits >> 32);  // for q[32..47]
+        auto mask3 = static_cast<__mmask16>(bits >> 48);  // for q[48..63]
 
         __m512 q0 = _mm512_loadu_ps(it_query);
         __m512 q1 = _mm512_loadu_ps(it_query + 16);
@@ -941,10 +934,10 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t bits = reverse_bits_u64(*it_data);
 
-        __mmask16 mask0 = static_cast<__mmask16>(bits);
-        __mmask16 mask1 = static_cast<__mmask16>(bits >> 16);
-        __mmask16 mask2 = static_cast<__mmask16>(bits >> 32);
-        __mmask16 mask3 = static_cast<__mmask16>(bits >> 48);
+        auto mask0 = static_cast<__mmask16>(bits);
+        auto mask1 = static_cast<__mmask16>(bits >> 16);
+        auto mask2 = static_cast<__mmask16>(bits >> 32);
+        auto mask3 = static_cast<__mmask16>(bits >> 48);
 
         __m512 masked0 = _mm512_maskz_loadu_ps(mask0, it_query);
         __m512 masked1 = _mm512_maskz_loadu_ps(mask1, it_query + 16);
@@ -968,9 +961,7 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
 
     __m256 sum = _mm256_setzero_ps();
 
-    __m256i bit_checker = _mm256_set_epi32(
-        0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01
-    );
+    __m256i bit_checker = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
 
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t bits = reverse_bits_u64(*it_data);
@@ -1001,7 +992,7 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
     std::cerr << "AVX512 or AVX2 is required for mask ip x0 q\n";
     exit(1);
 #endif
-    return 0.0f;
+    return 0.0F;
 }
 
 inline float ip_x0_q(
