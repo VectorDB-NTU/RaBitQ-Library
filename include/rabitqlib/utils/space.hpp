@@ -355,12 +355,12 @@ inline float ip16_fxu1_avx(
         query += 8;
         ++compact_code;
     }
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
 
-inline float ip16_fxu2_avx(
+inline float ip64_fxu2_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
 #if defined(__AVX512F__)
@@ -374,25 +374,45 @@ inline float ip16_fxu2_avx(
     float result = 0;
     const __m128i mask = _mm_set1_epi8(0b00000011);
 
-    for (size_t i = 0; i < dim; i += 16) {
-        int32_t compact = *reinterpret_cast<const int32_t*>(compact_code);
+    for (size_t i = 0; i < dim; i += 64) {
+        __m128i compact = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
 
-        __m128i code = _mm_set_epi32(compact >> 6, compact >> 4, compact >> 2, compact);
-        code = _mm_and_si128(code, mask);
+        __m128i vec_00_to_15 = _mm_and_si128(compact, mask);
+        __m128i vec_16_to_31 = _mm_and_si128(_mm_srli_epi16(compact, 2), mask);
+        __m128i vec_32_to_47 = _mm_and_si128(_mm_srli_epi16(compact, 4), mask);
+        __m128i vec_48_to_63 = _mm_and_si128(_mm_srli_epi16(compact, 6), mask);
 #if defined(__AVX512F__)
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(code));
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        sum = _mm512_fmadd_ps(cf, q, sum);
+        __m512 q;
+        __m512 cf;
+
+        q = _mm512_loadu_ps(&query[i]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+
+        q = _mm512_loadu_ps(&query[i + 16]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+
+        q = _mm512_loadu_ps(&query[i + 32]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+
+        q = _mm512_loadu_ps(&query[i + 48]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
+        sum = _mm512_fmadd_ps(q, cf, sum);
 #elif defined(__AVX2__)
-        contribute_ip_signed(code, &query[i], sum);
+        contribute_ip(vec_00_to_15, &query[i], sum);
+        contribute_ip(vec_16_to_31, &query[i + 16], sum);
+        contribute_ip(vec_32_to_47, &query[i + 32], sum);
+        contribute_ip(vec_48_to_63, &query[i + 48], sum);
 #endif
-        compact_code += 4;
+        compact_code += 16;
     }
 
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -467,7 +487,7 @@ inline float ip64_fxu3_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -503,7 +523,7 @@ inline float ip16_fxu4_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -582,7 +602,7 @@ inline float ip64_fxu5_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -631,7 +651,7 @@ inline float ip16_fxu6_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -717,7 +737,7 @@ inline float ip64_fxu7_avx(
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
-    result = _mm256_reduce_add_ps(sum);
+    result = mm256_reduce_add_ps(sum);
 #endif
     return result;
 }
@@ -742,7 +762,7 @@ inline ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
         return excode_ipimpl::ip16_fxu1_avx;
     }
     if (ex_bits == 2) {
-        return excode_ipimpl::ip16_fxu2_avx;
+        return excode_ipimpl::ip64_fxu2_avx;
     }
     if (ex_bits == 3) {
         return excode_ipimpl::ip64_fxu3_avx;
