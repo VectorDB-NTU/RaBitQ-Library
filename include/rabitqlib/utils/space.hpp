@@ -607,7 +607,7 @@ inline float ip64_fxu5_avx(
     return result;
 }
 
-inline float ip16_fxu6_avx(
+inline float ip64_fxu6_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
 #if defined(__AVX512F__)
@@ -619,34 +619,52 @@ inline float ip16_fxu6_avx(
     exit(1);
 #endif
     float result = 0.0F;
-    constexpr int64_t kMask4 = 0x0f0f0f0f0f0f0f0f;
+    const __m128i mask6 = _mm_set1_epi8(0b00111111);
+    const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
 
-    const __m128i mask2 = _mm_set1_epi8(0b00110000);
+    for (size_t i = 0; i < dim; i += 64) {
+        __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
+        __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
+        __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
+        
+        compact_code += 48;
 
-    for (size_t i = 0; i < dim; i += 16) {
-        int64_t compact4 = *reinterpret_cast<const int64_t*>(compact_code);
-        int64_t code4_0 = compact4 & kMask4;
-        int64_t code4_1 = (compact4 >> 4) & kMask4;
-
-        __m128i c4 = _mm_set_epi64x(code4_1, code4_0);  // lower 4
-        compact_code += 8;
-
-        int32_t compact2 = *reinterpret_cast<const int32_t*>(compact_code);
-
-        __m128i c2 = _mm_set_epi32(compact2 >> 2, compact2, compact2 << 2, compact2 << 4);
-        c2 = _mm_and_si128(c2, mask2);
-
-        __m128i c6 = _mm_or_si128(c2, c4);
+        __m128i vec_00_to_15 = _mm_and_si128(cpt1, mask6);
+        __m128i vec_16_to_31 = _mm_and_si128(cpt2, mask6);
+        __m128i vec_32_to_47 = _mm_and_si128(cpt3, mask6);
+        __m128i vec_48_to_63 = _mm_or_si128(
+            _mm_or_si128(
+                _mm_srli_epi16(_mm_and_si128(cpt1, mask2), 6),
+                _mm_srli_epi16(_mm_and_si128(cpt2, mask2), 4)
+            ),
+            _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2)
+        );
 
 #if defined(__AVX512F__)
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c6));
+        __m512 q;
+        __m512 cf;
 
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        sum = _mm512_fmadd_ps(cf, q, sum);
+        q = _mm512_loadu_ps(&query[i]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+
+        q = _mm512_loadu_ps(&query[i + 16]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+
+        q = _mm512_loadu_ps(&query[i + 32]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
+        sum = _mm512_fmadd_ps(q, cf, sum);
+
+        q = _mm512_loadu_ps(&query[i + 48]);
+        cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
+        sum = _mm512_fmadd_ps(q, cf, sum);
 #elif defined(__AVX2__)
-        contribute_ip_signed(c6, &query[i], sum);
+        contribute_ip(vec_00_to_15, &query[i], sum);
+        contribute_ip(vec_16_to_31, &query[i + 16], sum);
+        contribute_ip(vec_32_to_47, &query[i + 32], sum);
+        contribute_ip(vec_48_to_63, &query[i + 48], sum);
 #endif
-        compact_code += 4;
     }
 #if defined(__AVX512F__)
     result = _mm512_reduce_add_ps(sum);
@@ -774,7 +792,7 @@ inline ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
         return excode_ipimpl::ip64_fxu5_avx;
     }
     if (ex_bits == 6) {
-        return excode_ipimpl::ip16_fxu6_avx;
+        return excode_ipimpl::ip64_fxu6_avx;
     }
     if (ex_bits == 7) {
         return excode_ipimpl::ip64_fxu7_avx;
