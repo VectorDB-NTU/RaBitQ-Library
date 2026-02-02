@@ -20,7 +20,7 @@ inline void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
 
     for (size_t i = 0; i < num_codebook; i++) {
         // avx2 - 256, avx512 - 512
-#if defined(__AVX512F__)
+#if defined(__AVX512BW__)
         constexpr size_t kRegBits = 512;
 #elif defined(__AVX2__)
         constexpr size_t kRegBits = 256;
@@ -39,7 +39,7 @@ inline void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
             hc_lut + (i / kLutPerIter * kCodePerIter) + ((i % kLutPerIter) * kCodePerLine);
         uint8_t* fill_hi = fill_lo + (kRegBits / kByteBits);
 
-#if defined(__AVX512F__)
+#if defined(__AVX512BW__)
         __m512i tmp = _mm512_cvtepi16_epi32(
             _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lut))
         );
@@ -66,7 +66,7 @@ inline void accumulate_hacc(
     int32_t* accu_res,
     size_t dim
 ) {
-#if defined(__AVX512F__)
+#if defined(__AVX512BW__)
     __m512i low_mask = _mm512_set1_epi8(0xf);
     __m512i accu[2][4];
 

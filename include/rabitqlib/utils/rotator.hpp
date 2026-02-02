@@ -97,7 +97,7 @@ class MatrixRotator : public Rotator<T> {
 };
 
 static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
-#if defined(__AVX512F__)
+#if defined(__AVX512F__) && defined(__AVX512DQ__)
     constexpr size_t kFloatsPerChunk = 64;  // Process 64 floats per iteration
     // constexpr size_t bits_per_chunk = floats_per_chunk;  // 64 bits = 8 bytes
 

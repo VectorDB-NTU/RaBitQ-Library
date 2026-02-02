@@ -113,7 +113,7 @@ inline void accumulate(
     size_t dim
 ) {
     size_t code_length = dim << 2;
-#if defined(__AVX512F__)
+#if defined(__AVX512BW__)
     __m512i c;
     __m512i lo;
     __m512i hi;

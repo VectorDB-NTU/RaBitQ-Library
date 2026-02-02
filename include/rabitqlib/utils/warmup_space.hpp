@@ -44,7 +44,7 @@ inline float warmup_ip_x0_q(
     size_t padded_dim,
     [[maybe_unused]] size_t _b_query = 0  // not used
 ) {
-#if defined(__AVX512F__)
+#if defined(__AVX512VPOPCNTDQ__) && defined(__AVX512DQ__)
     const size_t num_blk = padded_dim / 64;
     size_t ip_scalar = 0;
     size_t ppc_scalar = 0;

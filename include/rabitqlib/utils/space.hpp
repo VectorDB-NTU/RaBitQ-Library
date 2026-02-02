@@ -824,29 +824,11 @@ static inline uint64_t reverse_bits_u64(uint64_t n) {
     return n;
 }
 
-inline void transpose_bin(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
-) {
-    // 512 / 16 = 32
-    for (size_t i = 0; i < padded_dim; i += 32) {
-        __m512i v = _mm512_loadu_si512(q);
-        v = _mm512_slli_epi32(v, (16 - b_query));
-        for (size_t j = 0; j < b_query; ++j) {
-            uint32_t v1 = _mm512_movepi16_mask(v);  // get most significant bit
-            v1 = reverse_bits(v1);
-            tq[((b_query - j - 1) * (padded_dim / 64)) + (i / 64)] |=
-                (static_cast<uint64_t>(v1) << ((i / 32 % 2 == 0) ? 32 : 0));
-            v = _mm512_add_epi32(v, v);
-        }
-        q += 32;
-    }
-}
-
 static inline void new_transpose_bin(
     const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 ) {
     // Easy
-#if defined(__AVX512F__)
+#if defined(__AVX512BW__)
     // 512 / 16 = 32
     for (size_t i = 0; i < padded_dim; i += 64) {
         __m512i vec_00_to_31 = _mm512_loadu_si512(q);
