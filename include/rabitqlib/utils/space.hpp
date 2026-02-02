@@ -62,7 +62,7 @@ inline void scalar_quantize_optimized<uint8_t>(
         auto cur = _mm512_loadu_ps(&vec0[i]);
         cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), od512);
         auto i8 = _mm512_cvtepi32_epi8(_mm512_cvtps_epi32(cur));
-        _mm_storeu_epi8(&result[i], i8);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(&result[i]), i8);
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
@@ -90,7 +90,7 @@ inline void scalar_quantize_optimized<uint16_t>(
         auto cur = _mm512_loadu_ps(&vec0[i]);
         cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), ow512);
         auto i16 = _mm512_cvtepi32_epi16(_mm512_cvtps_epi32(cur));
-        _mm256_storeu_epi16(&result[i], i16);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(&result[i]), i16);
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
@@ -626,7 +626,7 @@ inline float ip64_fxu6_avx(
         __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
         __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
-        
+
         compact_code += 48;
 
         __m128i vec_00_to_15 = _mm_and_si128(cpt1, mask6);
