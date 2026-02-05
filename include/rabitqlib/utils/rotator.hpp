@@ -32,6 +32,10 @@ class Rotator {
     virtual void rotate(const T* src, T* dst) const = 0;
     virtual void load(std::ifstream&) = 0;
     virtual void save(std::ofstream&) const = 0;
+    // Buffer I/O
+    virtual void load(const char *data) = 0;
+    virtual void save(char *data) const = 0; // dump to buffer
+    virtual size_t dump_bytes() const = 0;
     [[nodiscard]] size_t size() const { return this->padded_dim_; }
 };
 
@@ -88,6 +92,18 @@ class MatrixRotator : public Rotator<T> {
             (sizeof(float) * this->dim_ * this->padded_dim_)
         );
     }
+
+    void load(const char *data) override {
+        std::memcpy(rand_mat_.data(), data, sizeof(float) * this->dim_ * this->padded_dim_);
+    }
+
+    void save(char *data) const override {
+        std::memcpy(data, rand_mat_.data(), sizeof(float) * this->dim_ * this->padded_dim_);
+    }
+
+    size_t dump_bytes() const override {
+        return sizeof(float) * this->dim_ * this->padded_dim_;
+  }
 
     void rotate(const T* vec, T* rotated_vec) const override {
         ConstRowMajorMatrixMap<T> v(vec, 1, this->dim_);
@@ -242,6 +258,18 @@ class FhtKacRotator : public Rotator<float> {
             reinterpret_cast<const char*>(flip_.data()),
             static_cast<long>(sizeof(uint8_t) * flip_.size())
         );
+    }
+
+    void load(const char *data) override {
+        std::memcpy(flip_.data(), data, sizeof(uint8_t) * flip_.size());
+    }
+
+    void save(char *data) const override {
+        std::memcpy(data, flip_.data(), sizeof(uint8_t) * flip_.size());
+    }
+
+    size_t dump_bytes() const override {
+        return sizeof(uint8_t) * flip_.size();
     }
 
     FhtKacRotator& operator=(const FhtKacRotator& other) {
