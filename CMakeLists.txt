@@ -17,3 +17,11 @@ add_subdirectory(sample)
 add_library(rabitq_headers INTERFACE)
 
 target_include_directories(rabitq_headers INTERFACE ${PROJECT_SOURCE_DIR}/include)
+
+# Testing
+option(RABITQ_BUILD_TESTS "Build tests" OFF)
+
+if(RABITQ_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
