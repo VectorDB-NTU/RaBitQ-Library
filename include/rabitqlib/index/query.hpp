@@ -12,7 +12,8 @@
 
 namespace rabitqlib {
 /**
- * @brief use an object to store data used for searching on symphonyqg for a given query
+ * @brief use an object to store data used for searching on symphonyqg for a
+ * given query
  */
 template <typename T>
 class BatchQuery {
@@ -27,8 +28,8 @@ class BatchQuery {
 
         float c_1 = -((1 << 1) - 1) / 2.F;
 
-        T sumq =
-            std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
+        T sumq = std::accumulate(rotated_query, rotated_query + padded_dim,
+                                 static_cast<T>(0));
 
         G_k1xSumq_ = sumq * c_1;
     }
@@ -43,7 +44,8 @@ class BatchQuery {
 
     void set_g_add(T dist) {
         // For L2, dist is the compute by euclidean_sqr()
-        // For IP, dist is computed by dot_product_dist() i.e., 1 - dot_product()
+        // For IP, dist is computed by dot_product_dist() i.e., 1 -
+        // dot_product()
         G_add_ = dist;
     }
 
@@ -62,13 +64,9 @@ class SplitBatchQuery {
     MetricType metric_type_ = METRIC_L2;
 
    public:
-    explicit SplitBatchQuery(
-        const T* rotated_query,
-        size_t padded_dim,
-        size_t ex_bits,
-        MetricType metric_type = METRIC_L2,
-        bool use_hacc = true
-    )
+    explicit SplitBatchQuery(const T* rotated_query, size_t padded_dim,
+                             size_t ex_bits, MetricType metric_type = METRIC_L2,
+                             bool use_hacc = true)
         : rotated_query_(rotated_query) {
         lookup_table_ = std::move(Lut<T>(rotated_query, padded_dim, use_hacc));
 
@@ -76,8 +74,8 @@ class SplitBatchQuery {
 
         float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
         float c_b = -static_cast<float>((1 << (ex_bits + 1)) - 1) / 2.F;
-        T sumq =
-            std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
+        T sumq = std::accumulate(rotated_query, rotated_query + padded_dim,
+                                 static_cast<T>(0));
 
         G_k1xSumq_ = sumq * c_1;
         G_kbxSumq_ = sumq * c_b;
@@ -124,18 +122,15 @@ class SplitSingleQuery {
 
    public:
     static constexpr size_t kNumBits = 4;
-    explicit SplitSingleQuery(
-        const T* rotated_query,
-        size_t padded_dim,
-        size_t ex_bits,
-        quant::RabitqConfig config,
-        size_t metric_type = METRIC_L2
-    )
-        : rotated_query_(rotated_query), QueryBin_(padded_dim * kNumBits / 64, 0) {
+    explicit SplitSingleQuery(const T* rotated_query, size_t padded_dim,
+                              size_t ex_bits, quant::RabitqConfig config,
+                              size_t metric_type = METRIC_L2)
+        : rotated_query_(rotated_query),
+          QueryBin_(padded_dim * kNumBits / 64, 0) {
         float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
         float c_b = -static_cast<float>((1 << (ex_bits + 1)) - 1) / 2.F;
-        T sumq =
-            std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
+        T sumq = std::accumulate(rotated_query, rotated_query + padded_dim,
+                                 static_cast<T>(0));
 
         G_k1xSumq_ = sumq * c_1;
         G_kbxSumq_ = sumq * c_b;
@@ -145,14 +140,13 @@ class SplitSingleQuery {
         std::vector<uint16_t> quant_query = std::vector<uint16_t>(padded_dim);
 
         // quantize query by rabitq
-        quant::quantize_scalar<float, uint16_t>(
-            rotated_query, padded_dim, kNumBits, quant_query.data(), delta_, vl_, config
-        );
+        quant::quantize_scalar<float, uint16_t>(rotated_query, padded_dim,
+                                                kNumBits, quant_query.data(),
+                                                delta_, vl_, config);
 
         // represent quantized query as u64
-        rabitqlib::new_transpose_bin(
-            quant_query.data(), QueryBin_.data(), padded_dim, kNumBits
-        );
+        rabitqlib::new_transpose_bin(quant_query.data(), QueryBin_.data(),
+                                     padded_dim, kNumBits);
     }
 
     [[nodiscard]] const uint64_t* query_bin() const { return QueryBin_.data(); }

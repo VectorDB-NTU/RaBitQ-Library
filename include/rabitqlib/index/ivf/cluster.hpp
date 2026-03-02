@@ -7,8 +7,8 @@
 namespace rabitqlib::ivf {
 
 /**
- * @brief Cluster is used for ivf index with rabitq+. Components are only used for record
- * the addresses for different part of data.
+ * @brief Cluster is used for ivf index with rabitq+. Components are only used
+ * for record the addresses for different part of data.
  *
  */
 class Cluster {
@@ -37,14 +37,14 @@ inline Cluster::Cluster(size_t num, char* batch_data, char* ex_data, PID* ids)
     : num_(num), batch_data_(batch_data), ex_data_(ex_data), ids_(ids) {}
 
 inline Cluster::Cluster(const Cluster& other)
-    : num_(other.num_)
-    , batch_data_(other.batch_data_)
-    , ex_data_(other.ex_data_)
-    , ids_(other.ids_) {}
+    : num_(other.num_),
+      batch_data_(other.batch_data_),
+      ex_data_(other.ex_data_),
+      ids_(other.ids_) {}
 
 inline Cluster::Cluster(Cluster&& other) noexcept
-    : num_(other.num_)
-    , batch_data_(other.batch_data_)
-    , ex_data_(other.ex_data_)
-    , ids_(other.ids_) {}
+    : num_(other.num_),
+      batch_data_(other.batch_data_),
+      ex_data_(other.ex_data_),
+      ids_(other.ids_) {}
 }  // namespace rabitqlib::ivf

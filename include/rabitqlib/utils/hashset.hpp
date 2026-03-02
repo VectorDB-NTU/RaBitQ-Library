@@ -64,7 +64,8 @@ class HashBasedBooleanSet {
         mask_ = static_cast<PID>(table_size_ - 1);
         const PID check_val = hash1(static_cast<PID>(table_size));
         if (check_val != 0) {
-            std::cerr << "[WARN] table size is not 2^N :  " << table_size << '\n';
+            std::cerr << "[WARN] table size is not 2^N :  " << table_size
+                      << '\n';
         }
 
         table_ = std::vector<PID, memory::AlignedAllocator<PID>>(table_size);

@@ -40,19 +40,21 @@ template <typename Dims>
 }
 }  // namespace array_impl
 
-template <
-    typename T,
-    typename Dims = std::vector<size_t>,
-    typename Alloc = memory::Allocator<T>>
+template <typename T, typename Dims = std::vector<size_t>,
+          typename Alloc = memory::Allocator<T>>
 class Array {
    private:
     static_assert(std::is_trivial_v<T>);  // only handle trivial types
 
     /// @brief num of data objects
-    [[nodiscard]] constexpr auto size() const -> size_t { return array_impl::size(dims_); }
+    [[nodiscard]] constexpr auto size() const -> size_t {
+        return array_impl::size(dims_);
+    }
 
     /// @brief num of bytes for all data objects
-    [[nodiscard]] constexpr auto bytes() const -> size_t { return sizeof(T) * size(); }
+    [[nodiscard]] constexpr auto bytes() const -> size_t {
+        return sizeof(T) * size();
+    }
 
     void destroy() {
         size_t num_elements = size();
@@ -88,9 +90,9 @@ class Array {
 
     /// @brief move constructor
     Array(Array&& other) noexcept
-        : pointer_{std::exchange(other.pointer_, nullptr)}
-        , dims_{std::move(other.dims_)}
-        , allocator_{std::move(other.allocator_)} {}
+        : pointer_{std::exchange(other.pointer_, nullptr)},
+          dims_{std::move(other.dims_)},
+          allocator_{std::move(other.allocator_)} {}
 
     Array& operator=(Array&& other) noexcept {
         if (pointer_ != nullptr) {

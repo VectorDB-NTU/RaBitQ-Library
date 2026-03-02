@@ -7,7 +7,9 @@ class StopW {
     using clock = std::chrono::steady_clock;
     clock::time_point time_begin_;
 
-    [[nodiscard]] clock::duration elapsed() const { return clock::now() - time_begin_; }
+    [[nodiscard]] clock::duration elapsed() const {
+        return clock::now() - time_begin_;
+    }
 
    public:
     StopW() : time_begin_(clock::now()) {}

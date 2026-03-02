@@ -17,13 +17,9 @@
 namespace rabitqlib {
 namespace scalar_impl {
 template <typename T>
-void scalar_quantize_normal(
-    T* __restrict__ result,
-    const float* __restrict__ vec0,
-    size_t dim,
-    float lo,
-    float delta
-) {
+void scalar_quantize_normal(T* __restrict__ result,
+                            const float* __restrict__ vec0, size_t dim,
+                            float lo, float delta) {
     float one_over_delta = 1.0F / delta;
 
     ConstRowMajorArrayMap<float> v0(vec0, 1, static_cast<long>(dim));
@@ -34,24 +30,17 @@ void scalar_quantize_normal(
 }
 
 template <typename T>
-void scalar_quantize_optimized(
-    T* __restrict__ result,
-    const float* __restrict__ vec0,
-    size_t dim,
-    float lo,
-    float delta
-) {
+void scalar_quantize_optimized(T* __restrict__ result,
+                               const float* __restrict__ vec0, size_t dim,
+                               float lo, float delta) {
     scalar_quantize_normal(result, vec0, dim, lo, delta);
 }
 
 template <>
-inline void scalar_quantize_optimized<uint8_t>(
-    uint8_t* __restrict__ result,
-    const float* __restrict__ vec0,
-    size_t dim,
-    float lo,
-    float delta
-) {
+inline void scalar_quantize_optimized<uint8_t>(uint8_t* __restrict__ result,
+                                               const float* __restrict__ vec0,
+                                               size_t dim, float lo,
+                                               float delta) {
 #if defined(__AVX512F__)
     size_t mul16 = dim - (dim & 0b1111);
     size_t i = 0;
@@ -65,7 +54,8 @@ inline void scalar_quantize_optimized<uint8_t>(
         _mm_storeu_si128(reinterpret_cast<__m128i*>(&result[i]), i8);
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] =
+            static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
 #else
     scalar_quantize_normal(result, vec0, dim, lo, delta);
@@ -73,13 +63,10 @@ inline void scalar_quantize_optimized<uint8_t>(
 }
 
 template <>
-inline void scalar_quantize_optimized<uint16_t>(
-    uint16_t* __restrict__ result,
-    const float* __restrict__ vec0,
-    size_t dim,
-    float lo,
-    float delta
-) {
+inline void scalar_quantize_optimized<uint16_t>(uint16_t* __restrict__ result,
+                                                const float* __restrict__ vec0,
+                                                size_t dim, float lo,
+                                                float delta) {
 #if defined(__AVX512F__)
     size_t mul16 = dim - (dim & 0b1111);
     size_t i = 0;
@@ -93,7 +80,8 @@ inline void scalar_quantize_optimized<uint16_t>(
         _mm256_storeu_si256(reinterpret_cast<__m256i*>(&result[i]), i16);
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] =
+            static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
 #elif defined(__AVX2__)
     size_t mul8 = dim - (dim & 0b111);
@@ -111,7 +99,8 @@ inline void scalar_quantize_optimized<uint16_t>(
         _mm_storeu_si128(reinterpret_cast<__m128i*>(result + i), i16);
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] =
+            static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
 #else
     scalar_quantize_normal(result, vec0, dim, lo, delta);
@@ -126,16 +115,16 @@ inline void vec_rescale(T* data, size_t dim, T val) {
 }
 
 template <typename T>
-inline T euclidean_sqr(const T* __restrict__ vec0, const T* __restrict__ vec1, size_t dim) {
+inline T euclidean_sqr(const T* __restrict__ vec0, const T* __restrict__ vec1,
+                       size_t dim) {
     ConstVectorMap<T> v0(vec0, dim);
     ConstVectorMap<T> v1(vec1, dim);
     return (v0 - v1).dot(v0 - v1);
 }
 
 template <typename T>
-inline T dot_product_dis(
-    const T* __restrict__ vec0, const T* __restrict__ vec1, size_t dim
-) {
+inline T dot_product_dis(const T* __restrict__ vec0, const T* __restrict__ vec1,
+                         size_t dim) {
     ConstVectorMap<T> v0(vec0, dim);
     ConstVectorMap<T> v1(vec1, dim);
     return 1 - v0.dot(v1);
@@ -148,16 +137,17 @@ inline T l2norm_sqr(const T* __restrict__ vec0, size_t dim) {
 }
 
 template <typename T>
-inline T dot_product(const T* __restrict__ vec0, const T* __restrict__ vec1, size_t dim) {
+inline T dot_product(const T* __restrict__ vec0, const T* __restrict__ vec1,
+                     size_t dim) {
     ConstVectorMap<T> v0(vec0, dim);
     ConstVectorMap<T> v1(vec1, dim);
     return v0.dot(v1);
 }
 
 template <typename T>
-inline T normalize_vec(
-    const T* __restrict__ vec, const T* __restrict__ centroid, T* res, T dist2c, size_t dim
-) {
+inline T normalize_vec(const T* __restrict__ vec,
+                       const T* __restrict__ centroid, T* res, T dist2c,
+                       size_t dim) {
     RowMajorArrayMap<T> r(res, 1, dim);
     if (dist2c > 1e-5) {
         ConstRowMajorArrayMap<T> v(vec, 1, dim);
@@ -172,9 +162,8 @@ inline T normalize_vec(
 
 // pack 0/1 data to usigned integer
 template <typename T>
-inline void pack_binary(
-    const int* __restrict__ binary_code, T* __restrict__ compact_code, size_t length
-) {
+inline void pack_binary(const int* __restrict__ binary_code,
+                        T* __restrict__ compact_code, size_t length) {
     constexpr size_t kTypeBits = sizeof(T) * 8;
 
     for (size_t i = 0; i < length; i += kTypeBits) {
@@ -195,19 +184,18 @@ inline void data_range(const T* __restrict__ vec0, size_t dim, T& lo, T& hi) {
 }
 
 template <typename T, typename TD>
-void scalar_quantize(
-    T* __restrict__ result, const TD* __restrict__ vec0, size_t dim, TD lo, TD delta
-) {
+void scalar_quantize(T* __restrict__ result, const TD* __restrict__ vec0,
+                     size_t dim, TD lo, TD delta) {
     assert_integral<T>();
     scalar_impl::scalar_quantize_optimized(result, vec0, dim, lo, delta);
 }
 
 template <typename T>
-inline std::vector<T> compute_centroid(
-    const T* data, size_t num_points, size_t dim, size_t num_threads
-) {
+inline std::vector<T> compute_centroid(const T* data, size_t num_points,
+                                       size_t dim, size_t num_threads) {
     omp_set_num_threads(static_cast<int>(num_threads));
-    std::vector<std::vector<T>> all_results(num_threads, std::vector<T>(dim, 0));
+    std::vector<std::vector<T>> all_results(num_threads,
+                                            std::vector<T>(dim, 0));
 
 #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < num_points; ++i) {
@@ -235,14 +223,9 @@ inline std::vector<T> compute_centroid(
 }
 
 template <typename T>
-inline PID exact_nn(
-    const T* data,
-    const T* query,
-    size_t num_points,
-    size_t dim,
-    size_t num_threads,
-    T (*dist_func)(const T*, const T*, size_t)
-) {
+inline PID exact_nn(const T* data, const T* query, size_t num_points,
+                    size_t dim, size_t num_threads,
+                    T (*dist_func)(const T*, const T*, size_t)) {
     std::vector<AnnCandidate<T, PID>> best_entries(num_threads);
 
 #pragma omp parallel for schedule(dynamic)
@@ -273,7 +256,8 @@ namespace excode_ipimpl {
 
 #if defined(__AVX2__)
 // helper function for AVX2 inner product
-inline void contribute_ip(__m128i vec, const float* __restrict__ query, __m256& sum) {
+inline void contribute_ip(__m128i vec, const float* __restrict__ query,
+                          __m256& sum) {
     /* // Equivalent AVX512 code:
         __m512 q = _mm512_loadu_ps(&query[i]);
         __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
@@ -288,9 +272,8 @@ inline void contribute_ip(__m128i vec, const float* __restrict__ query, __m256& 
     sum = _mm256_fmadd_ps(q, cf, sum);
 };
 
-inline void contribute_ip_signed(
-    __m128i vec, const float* __restrict__ query, __m256& sum
-) {
+inline void contribute_ip_signed(__m128i vec, const float* __restrict__ query,
+                                 __m256& sum) {
     /* // Equivalent AVX512 code:
         __m512 q = _mm512_loadu_ps(&query[i]);
         __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c8));
@@ -318,12 +301,11 @@ inline float mm256_reduce_add_ps(__m256 v) {
 
 // ip16: this function is used to compute inner product of
 // vectors padded to multiple of 16
-// fxu1: the inner product is computed between float and 1-bit unsigned int (lay out can be
-// found rabitq_impl.hpp)
-// avx512: only applicable for avx512
-inline float ip16_fxu1_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+// fxu1: the inner product is computed between float and 1-bit unsigned int (lay
+// out can be found rabitq_impl.hpp) avx512: only applicable for avx512
+inline float ip16_fxu1_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
     float result = 0;
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
@@ -360,9 +342,9 @@ inline float ip16_fxu1_avx(
     return result;
 }
 
-inline float ip64_fxu2_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+inline float ip64_fxu2_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
@@ -375,7 +357,8 @@ inline float ip64_fxu2_avx(
     const __m128i mask = _mm_set1_epi8(0b00000011);
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i compact = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
+        __m128i compact =
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
 
         __m128i vec_00_to_15 = _mm_and_si128(compact, mask);
         __m128i vec_16_to_31 = _mm_and_si128(_mm_srli_epi16(compact, 2), mask);
@@ -417,9 +400,9 @@ inline float ip64_fxu2_avx(
     return result;
 }
 
-inline float ip64_fxu3_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+inline float ip64_fxu3_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
@@ -433,7 +416,8 @@ inline float ip64_fxu3_avx(
     const __m128i top_mask = _mm_set1_epi8(0b100);
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i compact2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
+        __m128i compact2 =
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         compact_code += 16;
 
         int64_t top_bit = *reinterpret_cast<const int64_t*>(compact_code);
@@ -492,9 +476,9 @@ inline float ip64_fxu3_avx(
     return result;
 }
 
-inline float ip16_fxu4_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+inline float ip16_fxu4_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
@@ -528,9 +512,9 @@ inline float ip16_fxu4_avx(
     return result;
 }
 
-inline float ip64_fxu5_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+inline float ip64_fxu5_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
@@ -547,17 +531,19 @@ inline float ip64_fxu5_avx(
     for (size_t i = 0; i < dim; i += 64) {
         __m128i compact4_1 =
             _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
-        __m128i compact4_2 =
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
+        __m128i compact4_2 = _mm_loadu_si128(
+            reinterpret_cast<const __m128i*>(compact_code + 16));
         compact_code += 32;
 
         int64_t top_bit = *reinterpret_cast<const int64_t*>(compact_code);
         compact_code += 8;
 
         __m128i vec_00_to_15 = _mm_and_si128(compact4_1, mask);
-        __m128i vec_16_to_31 = _mm_and_si128(_mm_srli_epi16(compact4_1, 4), mask);
+        __m128i vec_16_to_31 =
+            _mm_and_si128(_mm_srli_epi16(compact4_1, 4), mask);
         __m128i vec_32_to_47 = _mm_and_si128(compact4_2, mask);
-        __m128i vec_48_to_63 = _mm_and_si128(_mm_srli_epi16(compact4_2, 4), mask);
+        __m128i vec_48_to_63 =
+            _mm_and_si128(_mm_srli_epi16(compact4_2, 4), mask);
 
         __m128i top_00_to_15 =
             _mm_and_si128(_mm_set_epi64x(top_bit << 3, top_bit << 4), top_mask);
@@ -607,9 +593,9 @@ inline float ip64_fxu5_avx(
     return result;
 }
 
-inline float ip64_fxu6_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+inline float ip64_fxu6_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
@@ -623,9 +609,12 @@ inline float ip64_fxu6_avx(
     const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
-        __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
-        __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
+        __m128i cpt1 =
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
+        __m128i cpt2 = _mm_loadu_si128(
+            reinterpret_cast<const __m128i*>(compact_code + 16));
+        __m128i cpt3 = _mm_loadu_si128(
+            reinterpret_cast<const __m128i*>(compact_code + 32));
 
         compact_code += 48;
 
@@ -633,12 +622,9 @@ inline float ip64_fxu6_avx(
         __m128i vec_16_to_31 = _mm_and_si128(cpt2, mask6);
         __m128i vec_32_to_47 = _mm_and_si128(cpt3, mask6);
         __m128i vec_48_to_63 = _mm_or_si128(
-            _mm_or_si128(
-                _mm_srli_epi16(_mm_and_si128(cpt1, mask2), 6),
-                _mm_srli_epi16(_mm_and_si128(cpt2, mask2), 4)
-            ),
-            _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2)
-        );
+            _mm_or_si128(_mm_srli_epi16(_mm_and_si128(cpt1, mask2), 6),
+                         _mm_srli_epi16(_mm_and_si128(cpt2, mask2), 4)),
+            _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2));
 
 #if defined(__AVX512F__)
         __m512 q;
@@ -674,9 +660,9 @@ inline float ip64_fxu6_avx(
     return result;
 }
 
-inline float ip64_fxu7_avx(
-    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
-) {
+inline float ip64_fxu7_avx(const float* __restrict__ query,
+                           const uint8_t* __restrict__ compact_code,
+                           size_t dim) {
 #if defined(__AVX512F__)
     __m512 sum = _mm512_setzero_ps();
 #elif defined(__AVX2__)
@@ -692,21 +678,21 @@ inline float ip64_fxu7_avx(
     const __m128i top_mask = _mm_set1_epi8(0b1000000);
 
     for (size_t i = 0; i < dim; i += 64) {
-        __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
-        __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
-        __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
+        __m128i cpt1 =
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
+        __m128i cpt2 = _mm_loadu_si128(
+            reinterpret_cast<const __m128i*>(compact_code + 16));
+        __m128i cpt3 = _mm_loadu_si128(
+            reinterpret_cast<const __m128i*>(compact_code + 32));
         compact_code += 48;
 
         __m128i vec_00_to_15 = _mm_and_si128(cpt1, mask6);
         __m128i vec_16_to_31 = _mm_and_si128(cpt2, mask6);
         __m128i vec_32_to_47 = _mm_and_si128(cpt3, mask6);
         __m128i vec_48_to_63 = _mm_or_si128(
-            _mm_or_si128(
-                _mm_srli_epi16(_mm_and_si128(cpt1, mask2), 6),
-                _mm_srli_epi16(_mm_and_si128(cpt2, mask2), 4)
-            ),
-            _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2)
-        );
+            _mm_or_si128(_mm_srli_epi16(_mm_and_si128(cpt1, mask2), 6),
+                         _mm_srli_epi16(_mm_and_si128(cpt2, mask2), 4)),
+            _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2));
 
         int64_t top_bit = *reinterpret_cast<const int64_t*>(compact_code);
         compact_code += 8;
@@ -762,7 +748,8 @@ inline float ip64_fxu7_avx(
 
 // inner product between float type and int type vectors
 template <typename TF, typename TI>
-inline TF ip_fxi(const TF* __restrict__ vec0, const TI* __restrict__ vec1, size_t dim) {
+inline TF ip_fxi(const TF* __restrict__ vec0, const TI* __restrict__ vec1,
+                 size_t dim) {
     static_assert(std::is_floating_point_v<TF>, "TF must be an floating type");
     static_assert(std::is_integral_v<TI>, "TI must be an integeral type");
 
@@ -824,9 +811,8 @@ static inline uint64_t reverse_bits_u64(uint64_t n) {
     return n;
 }
 
-static inline void new_transpose_bin(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
-) {
+static inline void new_transpose_bin(const uint16_t* q, uint64_t* tq,
+                                     size_t padded_dim, size_t b_query) {
     // Easy
 #if defined(__AVX512BW__)
     // 512 / 16 = 32
@@ -839,8 +825,10 @@ static inline void new_transpose_bin(
         vec_32_to_63 = _mm512_slli_epi32(vec_32_to_63, (16 - b_query));
 
         for (size_t j = 0; j < b_query; ++j) {
-            uint32_t v0 = _mm512_movepi16_mask(vec_00_to_31);  // get most significant bit
-            uint32_t v1 = _mm512_movepi16_mask(vec_32_to_63);  // get most significant bit
+            uint32_t v0 =
+                _mm512_movepi16_mask(vec_00_to_31);  // get most significant bit
+            uint32_t v1 =
+                _mm512_movepi16_mask(vec_32_to_63);  // get most significant bit
             // [TODO: remove all reverse_bits]
             v0 = reverse_bits(v0);
             v1 = reverse_bits(v1);
@@ -877,7 +865,8 @@ static inline void new_transpose_bin(
 
             // Fix AVX2 Lane Ordering of the interleaved mask
             auto fix_avx2_mask = [](uint32_t m) {
-                return (m & 0xFF0000FF) | ((m & 0x00FF0000) >> 8) | ((m & 0x0000FF00) << 8);
+                return (m & 0xFF0000FF) | ((m & 0x00FF0000) >> 8) |
+                       ((m & 0x0000FF00) << 8);
             };
 
             m0 = fix_avx2_mask(m0);
@@ -904,7 +893,8 @@ static inline void new_transpose_bin(
 #endif
 }
 
-inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t padded_dim) {
+inline float mask_ip_x0_q_old(const float* query, const uint64_t* data,
+                              size_t padded_dim) {
     auto num_blk = padded_dim / 64;
     const auto* it_data = data;
     const auto* it_query = query;
@@ -938,7 +928,8 @@ inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t p
     return _mm512_reduce_add_ps(sum);
 }
 
-inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) {
+inline float mask_ip_x0_q(const float* query, const uint64_t* data,
+                          size_t padded_dim) {
     const size_t num_blk = padded_dim / 64;
     const uint64_t* it_data = data;
     const float* it_query = query;
@@ -969,19 +960,22 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
         sum = _mm512_add_ps(sum, masked2);
         sum = _mm512_add_ps(sum, masked3);
 
-        //         _mm_prefetch(reinterpret_cast<const char*>(it_query + 128), _MM_HINT_T1);
+        //         _mm_prefetch(reinterpret_cast<const char*>(it_query + 128),
+        //         _MM_HINT_T1);
 
         ++it_data;
         it_query += 64;
     }
 
-    //    __m512 sum = _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3));
+    //    __m512 sum = _mm512_add_ps(_mm512_add_ps(sum0, sum1),
+    //    _mm512_add_ps(sum2, sum3));
     return _mm512_reduce_add_ps(sum);
 #elif defined(__AVX2__)
 
     __m256 sum = _mm256_setzero_ps();
 
-    __m256i bit_checker = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
+    __m256i bit_checker =
+        _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
 
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t bits = reverse_bits_u64(*it_data);
@@ -991,7 +985,8 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
             uint8_t current_byte = static_cast<uint8_t>(bits >> (j * 8));
             __m256i v_byte = _mm256_set1_epi32(current_byte);
             __m256i masked_bits = _mm256_and_si256(v_byte, bit_checker);
-            __m256i mask = _mm256_cmpgt_epi32(masked_bits, _mm256_setzero_si256());
+            __m256i mask =
+                _mm256_cmpgt_epi32(masked_bits, _mm256_setzero_si256());
 
             __m256 q_vals = _mm256_loadu_ps(it_query);
             __m256 masked = _mm256_and_ps(q_vals, _mm256_castsi256_ps(mask));
@@ -1015,14 +1010,8 @@ inline float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padde
     return 0.0F;
 }
 
-inline float ip_x0_q(
-    const uint64_t* data,
-    const uint64_t* query,
-    float delta,
-    float vl,
-    size_t padded_dim,
-    size_t b_query
-) {
+inline float ip_x0_q(const uint64_t* data, const uint64_t* query, float delta,
+                     float vl, size_t padded_dim, size_t b_query) {
     auto num_blk = padded_dim / 64;
     const auto* it_data = data;
     const auto* it_query = query;
@@ -1045,7 +1034,8 @@ inline float ip_x0_q(
     return (delta * static_cast<float>(ip)) + (vl * static_cast<float>(ppc));
 }
 
-static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d, size_t padded_dim) {
+static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d,
+                                  size_t padded_dim) {
     uint64_t ret = 0;
     size_t iter = padded_dim / 64;
     for (size_t i = 0; i < iter; ++i) {
@@ -1056,9 +1046,8 @@ static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d, size_t p
     return ret;
 }
 
-inline uint32_t ip_byte_bin(
-    const uint64_t* q, const uint64_t* d, size_t padded_dim, size_t b_query
-) {
+inline uint32_t ip_byte_bin(const uint64_t* q, const uint64_t* d,
+                            size_t padded_dim, size_t b_query) {
     uint32_t ret = 0;
     size_t offset = (padded_dim / 64);
     for (size_t i = 0; i < b_query; i++) {

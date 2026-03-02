@@ -10,12 +10,13 @@
 
 namespace rabitqlib::fastscan {
 /**
- * @brief Change u16 lookup table to u8. Since we use more bits (higher accuracy)
- * to quantize data vector by rabitq+, we also needs to increase the accuracy of data in
- * lut.
- * We split the higher & lower 8 bits of a u16 into two sub luts.
+ * @brief Change u16 lookup table to u8. Since we use more bits (higher
+ *accuracy) to quantize data vector by rabitq+, we also needs to increase the
+ *accuracy of data in lut. We split the higher & lower 8 bits of a u16 into two
+ *sub luts.
  **/
-inline void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
+inline void transfer_lut_hacc(const uint16_t* lut, size_t dim,
+                              uint8_t* hc_lut) {
     size_t num_codebook = dim >> 2;
 
     for (size_t i = 0; i < num_codebook; i++) {
@@ -35,14 +36,13 @@ inline void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
         constexpr size_t kCodePerIter = 2 * kRegBits / kByteBits;
         constexpr size_t kCodePerLine = kLaneBits / kByteBits;
 
-        uint8_t* fill_lo =
-            hc_lut + (i / kLutPerIter * kCodePerIter) + ((i % kLutPerIter) * kCodePerLine);
+        uint8_t* fill_lo = hc_lut + (i / kLutPerIter * kCodePerIter) +
+                           ((i % kLutPerIter) * kCodePerLine);
         uint8_t* fill_hi = fill_lo + (kRegBits / kByteBits);
 
 #if defined(__AVX512BW__)
         __m512i tmp = _mm512_cvtepi16_epi32(
-            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lut))
-        );
+            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lut)));
         __m128i lo = _mm512_cvtepi32_epi8(tmp);
         __m128i hi = _mm512_cvtepi32_epi8(_mm512_srli_epi32(tmp, 8));
         _mm_store_si128(reinterpret_cast<__m128i*>(fill_lo), lo);
@@ -60,12 +60,9 @@ inline void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
     }
 }
 
-inline void accumulate_hacc(
-    const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
-    size_t dim
-) {
+inline void accumulate_hacc(const uint8_t* __restrict__ codes,
+                            const uint8_t* __restrict__ hc_lut,
+                            int32_t* accu_res, size_t dim) {
 #if defined(__AVX512BW__)
     __m512i low_mask = _mm512_set1_epi8(0xf);
     __m512i accu[2][4];
@@ -111,37 +108,35 @@ inline void accumulate_hacc(
     __m512i dis1[2];
 
     for (size_t i = 0; i < 2; ++i) {
-        __m256i tmp0 = _mm256_add_epi16(
-            _mm512_castsi512_si256(accu[i][0]), _mm512_extracti64x4_epi64(accu[i][0], 1)
-        );
-        __m256i tmp1 = _mm256_add_epi16(
-            _mm512_castsi512_si256(accu[i][1]), _mm512_extracti64x4_epi64(accu[i][1], 1)
-        );
+        __m256i tmp0 =
+            _mm256_add_epi16(_mm512_castsi512_si256(accu[i][0]),
+                             _mm512_extracti64x4_epi64(accu[i][0], 1));
+        __m256i tmp1 =
+            _mm256_add_epi16(_mm512_castsi512_si256(accu[i][1]),
+                             _mm512_extracti64x4_epi64(accu[i][1], 1));
         tmp0 = _mm256_sub_epi16(tmp0, _mm256_slli_epi16(tmp1, 8));
 
         dis0[i] = _mm512_add_epi32(
             _mm512_cvtepu16_epi32(_mm256_permute2f128_si256(tmp0, tmp1, 0x21)),
-            _mm512_cvtepu16_epi32(_mm256_blend_epi32(tmp0, tmp1, 0xF0))
-        );
+            _mm512_cvtepu16_epi32(_mm256_blend_epi32(tmp0, tmp1, 0xF0)));
 
-        __m256i tmp2 = _mm256_add_epi16(
-            _mm512_castsi512_si256(accu[i][2]), _mm512_extracti64x4_epi64(accu[i][2], 1)
-        );
-        __m256i tmp3 = _mm256_add_epi16(
-            _mm512_castsi512_si256(accu[i][3]), _mm512_extracti64x4_epi64(accu[i][3], 1)
-        );
+        __m256i tmp2 =
+            _mm256_add_epi16(_mm512_castsi512_si256(accu[i][2]),
+                             _mm512_extracti64x4_epi64(accu[i][2], 1));
+        __m256i tmp3 =
+            _mm256_add_epi16(_mm512_castsi512_si256(accu[i][3]),
+                             _mm512_extracti64x4_epi64(accu[i][3], 1));
         tmp2 = _mm256_sub_epi16(tmp2, _mm256_slli_epi16(tmp3, 8));
 
         dis1[i] = _mm512_add_epi32(
             _mm512_cvtepu16_epi32(_mm256_permute2f128_si256(tmp2, tmp3, 0x21)),
-            _mm512_cvtepu16_epi32(_mm256_blend_epi32(tmp2, tmp3, 0xF0))
-        );
+            _mm512_cvtepu16_epi32(_mm256_blend_epi32(tmp2, tmp3, 0xF0)));
     }
     // shift res of high, add res of low
-    res[0] =
-        _mm512_add_epi32(dis0[0], _mm512_slli_epi32(dis0[1], 8));  // res for vec 0 to 15
-    res[1] =
-        _mm512_add_epi32(dis1[0], _mm512_slli_epi32(dis1[1], 8));  // res for vec 16 to 31
+    res[0] = _mm512_add_epi32(
+        dis0[0], _mm512_slli_epi32(dis0[1], 8));  // res for vec 0 to 15
+    res[1] = _mm512_add_epi32(
+        dis1[0], _mm512_slli_epi32(dis1[1], 8));  // res for vec 16 to 31
 
     _mm512_storeu_epi32(accu_res, res[0]);
     _mm512_storeu_epi32(accu_res + 16, res[1]);
@@ -172,9 +167,11 @@ inline void accumulate_hacc(
             __m256i res_hi = _mm256_shuffle_epi8(lut, hi);
 
             accu[q][0] = _mm256_add_epi16(accu[q][0], res_lo);
-            accu[q][1] = _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo, 8));
+            accu[q][1] =
+                _mm256_add_epi16(accu[q][1], _mm256_srli_epi16(res_lo, 8));
             accu[q][2] = _mm256_add_epi16(accu[q][2], res_hi);
-            accu[q][3] = _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi, 8));
+            accu[q][3] =
+                _mm256_add_epi16(accu[q][3], _mm256_srli_epi16(res_hi, 8));
         }
     }
 
@@ -190,10 +187,12 @@ inline void accumulate_hacc(
     };
 
     for (size_t i = 0; i < 2; i++) {
-        accu[i][0] = _mm256_sub_epi16(accu[i][0], _mm256_slli_epi16(accu[i][1], 8));
+        accu[i][0] =
+            _mm256_sub_epi16(accu[i][0], _mm256_slli_epi16(accu[i][1], 8));
         dis0[i] = combine2x2(accu[i][0], accu[i][1]);
 
-        accu[i][2] = _mm256_sub_epi16(accu[i][2], _mm256_slli_epi16(accu[i][3], 8));
+        accu[i][2] =
+            _mm256_sub_epi16(accu[i][2], _mm256_slli_epi16(accu[i][3], 8));
         dis1[i] = combine2x2(accu[i][2], accu[i][3]);
     }
 

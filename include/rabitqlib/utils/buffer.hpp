@@ -8,14 +8,16 @@
 
 namespace rabitqlib::buffer {
 /**
- * @brief sorted linear buffer, used as beam set for graph-based ANN search. In symphonyqg,
- * the search buffer may contain duplicate id with different distances
+ * @brief sorted linear buffer, used as beam set for graph-based ANN search. In
+ * symphonyqg, the search buffer may contain duplicate id with different
+ * distances
  *
  */
 template <typename T = float>
 class SearchBuffer {
    private:
-    std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>> data_;
+    std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>
+        data_;
     size_t size_ = 0, cur_ = 0, capacity_;
 
     [[nodiscard]] auto binary_search(T dist) const {
@@ -25,7 +27,8 @@ class SearchBuffer {
         while (len > 1) {
             half = len >> 1;
             len -= half;
-            lo += static_cast<size_t>(data_[lo + half - 1].distance < dist) * half;
+            lo += static_cast<size_t>(data_[lo + half - 1].distance < dist) *
+                  half;
         }
         return (lo < size_ && data_[lo].distance < dist) ? lo + 1 : lo;
     }
@@ -40,7 +43,8 @@ class SearchBuffer {
    public:
     SearchBuffer() = default;
 
-    explicit SearchBuffer(size_t capacity) : data_(capacity + 1), capacity_(capacity) {}
+    explicit SearchBuffer(size_t capacity)
+        : data_(capacity + 1), capacity_(capacity) {}
 
     // insert a data point into buffer
     void insert(PID data_id, T dist) {
@@ -49,7 +53,8 @@ class SearchBuffer {
         }
 
         size_t lo = binary_search(dist);
-        std::memmove(&data_[lo + 1], &data_[lo], (size_ - lo) * sizeof(AnnCandidate<T>));
+        std::memmove(&data_[lo + 1], &data_[lo],
+                     (size_ - lo) * sizeof(AnnCandidate<T>));
         data_[lo] = AnnCandidate<T>(data_id, dist);
         size_ += static_cast<size_t>(size_ < capacity_);
         cur_ = lo < cur_ ? lo : cur_;
@@ -78,9 +83,9 @@ class SearchBuffer {
 
     void resize(size_t new_size) {
         this->capacity_ = new_size;
-        data_ = std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>(
-            capacity_ + 1
-        );
+        data_ = std::vector<AnnCandidate<T>,
+                            memory::AlignedAllocator<AnnCandidate<T>>>(
+            capacity_ + 1);
     }
 
     void copy_results(PID* knn) const {
@@ -90,15 +95,20 @@ class SearchBuffer {
     }
 
     T top_dist() const {
-        return is_full() ? data_[size_ - 1].distance : std::numeric_limits<T>::max();
+        return is_full() ? data_[size_ - 1].distance
+                         : std::numeric_limits<T>::max();
     }
 
     [[nodiscard]] auto is_full() const -> bool { return size_ == capacity_; }
 
     // judge if dist can be inserted into buffer
-    [[nodiscard]] auto is_full(T dist) const -> bool { return dist > top_dist(); }
+    [[nodiscard]] auto is_full(T dist) const -> bool {
+        return dist > top_dist();
+    }
 
-    const std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>& data() {
+    const std::vector<AnnCandidate<T>,
+                      memory::AlignedAllocator<AnnCandidate<T>>>&
+    data() {
         return data_;
     }
 };

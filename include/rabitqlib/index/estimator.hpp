@@ -22,50 +22,46 @@ namespace rabitqlib {
  * @param ip_x0_qr  intermediate result for re-ranking
  * @param use_hacc  if use high accuracy fastscan
  */
-inline void split_batch_estdist(
-    const char* batch_data,
-    const SplitBatchQuery<float>& q_obj,
-    size_t padded_dim,
-    float* est_distance,
-    float* low_distance,
-    float* ip_x0_qr,
-    bool use_hacc
-) {
+inline void split_batch_estdist(const char* batch_data,
+                                const SplitBatchQuery<float>& q_obj,
+                                size_t padded_dim, float* est_distance,
+                                float* low_distance, float* ip_x0_qr,
+                                bool use_hacc) {
     ConstBatchDataMap<float> cur_batch(batch_data, padded_dim);
     RowMajorArray<int32_t> accu_arr(1, fastscan::kBatchSize);
 
     if (use_hacc) {
         std::array<int32_t, fastscan::kBatchSize> accu_res;
-        fastscan::accumulate_hacc(
-            cur_batch.bin_code(), q_obj.lut(), accu_res.data(), padded_dim
-        );
+        fastscan::accumulate_hacc(cur_batch.bin_code(), q_obj.lut(),
+                                  accu_res.data(), padded_dim);
         for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
             accu_arr.data()[i] = accu_res[i];
         }
     } else {
         std::array<uint16_t, fastscan::kBatchSize> accu_res;
-        fastscan::accumulate(
-            cur_batch.bin_code(), q_obj.lut(), accu_res.data(), padded_dim
-        );
+        fastscan::accumulate(cur_batch.bin_code(), q_obj.lut(), accu_res.data(),
+                             padded_dim);
         for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
             accu_arr.data()[i] = accu_res[i];
         }
     }
 
-    ConstRowMajorArrayMap<float> f_add_arr(cur_batch.f_add(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<float> f_rescale_arr(
-        cur_batch.f_rescale(), 1, fastscan::kBatchSize
-    );
-    ConstRowMajorArrayMap<float> f_error_arr(cur_batch.f_error(), 1, fastscan::kBatchSize);
+    ConstRowMajorArrayMap<float> f_add_arr(cur_batch.f_add(), 1,
+                                           fastscan::kBatchSize);
+    ConstRowMajorArrayMap<float> f_rescale_arr(cur_batch.f_rescale(), 1,
+                                               fastscan::kBatchSize);
+    ConstRowMajorArrayMap<float> f_error_arr(cur_batch.f_error(), 1,
+                                             fastscan::kBatchSize);
 
     RowMajorArrayMap<float> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
     RowMajorArrayMap<float> ip_x0_qr_arr(ip_x0_qr, 1, fastscan::kBatchSize);
     RowMajorArrayMap<float> low_dist_arr(low_distance, 1, fastscan::kBatchSize);
 
-    ip_x0_qr_arr = q_obj.delta() * (accu_arr.template cast<float>()) + q_obj.sum_vl_lut();
+    ip_x0_qr_arr =
+        q_obj.delta() * (accu_arr.template cast<float>()) + q_obj.sum_vl_lut();
 
-    est_dist_arr =
-        f_add_arr + q_obj.g_add() + f_rescale_arr * (ip_x0_qr_arr + q_obj.k1xsumq());
+    est_dist_arr = f_add_arr + q_obj.g_add() +
+                   f_rescale_arr * (ip_x0_qr_arr + q_obj.k1xsumq());
 
     low_dist_arr = est_dist_arr - f_error_arr * q_obj.g_error();
 }
@@ -83,107 +79,94 @@ inline void split_batch_estdist(
  * @return float
  */
 template <class Query>
-inline float split_distance_boosting(
-    const char* ex_data,
-    float (*ip_func_)(const float*, const uint8_t*, size_t),
-    const Query& q_obj,
-    size_t padded_dim,
-    size_t ex_bits,
-    float ip_x0_qr
-) {
+inline float split_distance_boosting(const char* ex_data,
+                                     float (*ip_func_)(const float*,
+                                                       const uint8_t*, size_t),
+                                     const Query& q_obj, size_t padded_dim,
+                                     size_t ex_bits, float ip_x0_qr) {
     ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
 
     float ex_dist =
         cur_ex.f_add_ex() + q_obj.g_add() +
         (cur_ex.f_rescale_ex() *
          (static_cast<float>(1 << ex_bits) * ip_x0_qr +
-          ip_func_(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) + q_obj.kbxsumq()));
+          ip_func_(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) +
+          q_obj.kbxsumq()));
 
     return ex_dist;
 }
 
 /**
- * @brief Batch distance estimation for qg. Here, we do not need intermediate results and
- * lower bound
+ * @brief Batch distance estimation for qg. Here, we do not need intermediate
+ * results and lower bound
  */
 template <typename T, typename TA = uint16_t>
-inline void qg_batch_estdist(
-    const char* batch_data, const BatchQuery<T>& q_obj, size_t padded_dim, T* est_distance
-) {
+inline void qg_batch_estdist(const char* batch_data, const BatchQuery<T>& q_obj,
+                             size_t padded_dim, T* est_distance) {
     std::vector<TA> accu_res(fastscan::kBatchSize);
 
     ConstQGBatchDataMap<T> cur_batch(batch_data, padded_dim);
 
-    fastscan::accumulate(cur_batch.bin_code(), q_obj.lut(), accu_res.data(), padded_dim);
+    fastscan::accumulate(cur_batch.bin_code(), q_obj.lut(), accu_res.data(),
+                         padded_dim);
 
     ConstRowMajorArrayMap<TA> ip_arr(accu_res.data(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<T> f_add_arr(cur_batch.f_add(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<T> f_rescale_arr(cur_batch.f_rescale(), 1, fastscan::kBatchSize);
+    ConstRowMajorArrayMap<T> f_add_arr(cur_batch.f_add(), 1,
+                                       fastscan::kBatchSize);
+    ConstRowMajorArrayMap<T> f_rescale_arr(cur_batch.f_rescale(), 1,
+                                           fastscan::kBatchSize);
 
     RowMajorArrayMap<T> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
 
-    est_dist_arr = f_add_arr + q_obj.g_add() +
-                   (f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<T>()) +
-                                     q_obj.sum_vl_lut() + q_obj.k1xsumq()));
+    est_dist_arr =
+        f_add_arr + q_obj.g_add() +
+        (f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<T>()) +
+                          q_obj.sum_vl_lut() + q_obj.k1xsumq()));
 }
 
 /**
  * @brief Full bits distance estimation for a single vector.
  */
-inline void split_single_fulldist(
-    const char* bin_data,
-    const char* ex_data,
-    float (*ip_func_)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
-    size_t padded_dim,
-    size_t ex_bits,
-    float& est_dist,
-    float& low_dist,
-    float& ip_x0_qr,
-    float g_add,
-    float g_error
-) {
+inline void split_single_fulldist(const char* bin_data, const char* ex_data,
+                                  float (*ip_func_)(const float*,
+                                                    const uint8_t*, size_t),
+                                  const SplitSingleQuery<float>& q_obj,
+                                  size_t padded_dim, size_t ex_bits,
+                                  float& est_dist, float& low_dist,
+                                  float& ip_x0_qr, float g_add, float g_error) {
     ConstBinDataMap<float> cur_bin(bin_data, padded_dim);
     ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
 
     // [TODO: optimize this function]
-    ip_x0_qr = mask_ip_x0_q(q_obj.rotated_query(), cur_bin.bin_code(), padded_dim);
+    ip_x0_qr =
+        mask_ip_x0_q(q_obj.rotated_query(), cur_bin.bin_code(), padded_dim);
 
-    est_dist =
-        cur_ex.f_add_ex() + g_add +
-        (cur_ex.f_rescale_ex() *
-         (static_cast<float>(1 << ex_bits) * ip_x0_qr +
-          ip_func_(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) + q_obj.kbxsumq()));
+    est_dist = cur_ex.f_add_ex() + g_add +
+               (cur_ex.f_rescale_ex() *
+                (static_cast<float>(1 << ex_bits) * ip_x0_qr +
+                 ip_func_(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) +
+                 q_obj.kbxsumq()));
 
-    low_dist = est_dist - (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
+    low_dist = est_dist -
+               (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
 }
 
 /**
  * @brief 1-bit distance estimation for a single vector (no FastScan)
  */
-inline void split_single_estdist(
-    const char* bin_data,
-    const SplitSingleQuery<float>& q_obj,
-    size_t padded_dim,
-    float& ip_x0_qr,
-    float& est_dist,
-    float& low_dist,
-    float g_add = 0,
-    float g_error = 0
-) {
+inline void split_single_estdist(const char* bin_data,
+                                 const SplitSingleQuery<float>& q_obj,
+                                 size_t padded_dim, float& ip_x0_qr,
+                                 float& est_dist, float& low_dist,
+                                 float g_add = 0, float g_error = 0) {
     ConstBinDataMap<float> cur_bin(bin_data, padded_dim);
 
     ip_x0_qr = warmup_ip_x0_q<SplitSingleQuery<float>::kNumBits>(
-        cur_bin.bin_code(),
-        q_obj.query_bin(),
-        q_obj.delta(),
-        q_obj.vl(),
-        padded_dim,
-        SplitSingleQuery<float>::kNumBits
-    );
+        cur_bin.bin_code(), q_obj.query_bin(), q_obj.delta(), q_obj.vl(),
+        padded_dim, SplitSingleQuery<float>::kNumBits);
 
-    est_dist =
-        cur_bin.f_add() + g_add + (cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq()));
+    est_dist = cur_bin.f_add() + g_add +
+               (cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq()));
 
     low_dist = est_dist - (cur_bin.f_error() * g_error);
 };

@@ -38,7 +38,6 @@ build/
 data/
 
 *.pyc
-.clang-*
 
 # macOS garbages
 .DS_Store

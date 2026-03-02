@@ -20,8 +20,9 @@ constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
 using CandidateList = std::vector<AnnCandidate<float>>;
 
 /**
- * @brief Builder of qg. Since we need to build the symphonyqg iteratively, which requires
- * to record a lot of temp data, we use a separate class as a builder for this purpose.
+ * @brief Builder of qg. Since we need to build the symphonyqg iteratively,
+ * which requires to record a lot of temp data, we use a separate class as a
+ * builder for this purpose.
  *
  */
 class QGBuilder {
@@ -35,51 +36,47 @@ class QGBuilder {
     static constexpr size_t kMaxCandidatePoolSize =
         750;  // max num of candidates for indexing
     static constexpr size_t kMaxPrunedSize =
-        300;                                    // max number of recorded pruned candidates
-    std::vector<CandidateList> new_neighbors_;  // new neighbors for current iteration
-    std::vector<CandidateList> pruned_neighbors_;    // recorded pruned neighbors
+        300;  // max number of recorded pruned candidates
+    std::vector<CandidateList>
+        new_neighbors_;  // new neighbors for current iteration
+    std::vector<CandidateList> pruned_neighbors_;  // recorded pruned neighbors
     std::vector<HashBasedBooleanSet> visited_list_;  // list of visited hash set
     std::vector<uint32_t> degrees_;                  // record degree of qg
     void random_init();
     void search_new_neighbors(bool refine);
     void heuristic_prune(PID, CandidateList&, CandidateList&, bool);
     void add_reverse_edges(bool);
-    void add_pruned_edges(
-        const CandidateList&, const CandidateList&, CandidateList&, float
-    );
+    void add_pruned_edges(const CandidateList&, const CandidateList&,
+                          CandidateList&, float);
     void graph_refine();
     void iter(bool);
 
    public:
-    explicit QGBuilder(
-        QuantizedGraph<float>& index,
-        uint32_t ef_build,
-        const float* data,
-        size_t num_threads = std::numeric_limits<size_t>::max()
-    )
-        : qg_{index}
-        , ef_build_{ef_build}
-        , num_threads_{std::min(num_threads, total_threads())}
-        , num_nodes_{qg_.num_vertices()}
-        , dim_{qg_.dimension()}
-        , degree_bound_(qg_.degree_bound())
-        , new_neighbors_(qg_.num_vertices())
-        , pruned_neighbors_(qg_.num_vertices())
-        , visited_list_(
-              num_threads_,
-              HashBasedBooleanSet(std::min(ef_build_ * ef_build_, num_nodes_ / 10))
-          )
-        , degrees_(qg_.num_vertices(), degree_bound_) {
+    explicit QGBuilder(QuantizedGraph<float>& index, uint32_t ef_build,
+                       const float* data,
+                       size_t num_threads = std::numeric_limits<size_t>::max())
+        : qg_{index},
+          ef_build_{ef_build},
+          num_threads_{std::min(num_threads, total_threads())},
+          num_nodes_{qg_.num_vertices()},
+          dim_{qg_.dimension()},
+          degree_bound_(qg_.degree_bound()),
+          new_neighbors_(qg_.num_vertices()),
+          pruned_neighbors_(qg_.num_vertices()),
+          visited_list_(num_threads_,
+                        HashBasedBooleanSet(
+                            std::min(ef_build_ * ef_build_, num_nodes_ / 10))),
+          degrees_(qg_.num_vertices(), degree_bound_) {
         omp_set_num_threads(static_cast<int>(num_threads_));
 
         std::vector<float> centroid =
             compute_centroid(data, num_nodes_, dim_, num_threads_);
 
-        PID entry_point = exact_nn(
-            data, centroid.data(), num_nodes_, dim_, num_threads_, euclidean_sqr<float>
-        );
+        PID entry_point = exact_nn(data, centroid.data(), num_nodes_, dim_,
+                                   num_threads_, euclidean_sqr<float>);
 
-        std::cout << "Setting entry_point to " << entry_point << '\n' << std::flush;
+        std::cout << "Setting entry_point to " << entry_point << '\n'
+                  << std::flush;
 
         qg_.set_ep(entry_point);
         qg_.copy_vectors(data);
@@ -120,12 +117,10 @@ class QGBuilder {
     }
 };
 
-inline void QGBuilder::add_pruned_edges(
-    const CandidateList& result,
-    const CandidateList& pruned_list,
-    CandidateList& new_result,
-    float threshold
-) {
+inline void QGBuilder::add_pruned_edges(const CandidateList& result,
+                                        const CandidateList& pruned_list,
+                                        CandidateList& new_result,
+                                        float threshold) {
     size_t start = 0;
     new_result.clear();
     new_result = result;
@@ -152,9 +147,10 @@ inline void QGBuilder::add_pruned_edges(
             if (dij_sqr > dik_sqr) {
                 break;
             }
-            float djk_sqr = qg_.raw_dist_func_(qg_.get_vector(nei.id), cur_data, dim_);
-            float cosine =
-                (dik_sqr + dij_sqr - djk_sqr) / (2 * std::sqrt(dij_sqr * dik_sqr));
+            float djk_sqr =
+                qg_.raw_dist_func_(qg_.get_vector(nei.id), cur_data, dim_);
+            float cosine = (dik_sqr + dij_sqr - djk_sqr) /
+                           (2 * std::sqrt(dij_sqr * dik_sqr));
             if (cosine > threshold) {
                 occlude = true;
                 break;
@@ -171,9 +167,9 @@ inline void QGBuilder::add_pruned_edges(
     }
 }
 
-inline void QGBuilder::heuristic_prune(
-    PID cur_id, CandidateList& pool, CandidateList& pruned_results, bool refine
-) {
+inline void QGBuilder::heuristic_prune(PID cur_id, CandidateList& pool,
+                                       CandidateList& pruned_results,
+                                       bool refine) {
     if (pool.empty()) {
         return;
     }
@@ -187,9 +183,8 @@ inline void QGBuilder::heuristic_prune(
     }
 
     std::vector<bool> pruned(
-        poolsize, false
-    );                 // bool vector to record if this neighbor is pruned
-    size_t start = 0;  // start position
+        poolsize, false);  // bool vector to record if this neighbor is pruned
+    size_t start = 0;      // start position
 
     while (pruned_results.size() < degree_bound_ && start < poolsize) {
         auto candidate_id = pool[start].id;
@@ -200,7 +195,8 @@ inline void QGBuilder::heuristic_prune(
             continue;
         }
 
-        pruned_results.emplace_back(pool[start]);  // add current candidate to result
+        pruned_results.emplace_back(
+            pool[start]);  // add current candidate to result
         const float* data_j = qg_.get_vector(candidate_id);
 
         // i : current vertex
@@ -211,10 +207,12 @@ inline void QGBuilder::heuristic_prune(
                 continue;
             }
             float dik = pool[k].distance;
-            auto djk = qg_.raw_dist_func_(data_j, qg_.get_vector(pool[k].id), dim_);
+            auto djk =
+                qg_.raw_dist_func_(data_j, qg_.get_vector(pool[k].id), dim_);
 
             if (djk < dik) {
-                if (refine && pruned_neighbors_[cur_id].size() < kMaxPrunedSize) {
+                if (refine &&
+                    pruned_neighbors_[cur_id].size() < kMaxPrunedSize) {
                     pruned_neighbors_[cur_id].emplace_back(pool[k]);
                 }
                 pruned[k] = true;
@@ -250,11 +248,9 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
         }
 
         size_t min_size = std::min(candidates.size(), kMaxCandidatePoolSize);
-        std::partial_sort(
-            candidates.begin(),
-            candidates.begin() + static_cast<long>(min_size),
-            candidates.end()
-        );
+        std::partial_sort(candidates.begin(),
+                          candidates.begin() + static_cast<long>(min_size),
+                          candidates.end());
         candidates.resize(min_size);
 
         // prune and update qg
@@ -297,9 +293,8 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
     for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
         CandidateList& tmp_pool = reverse_buffer[data_id];
         tmp_pool.reserve(tmp_pool.size() + degree_bound_);
-        tmp_pool.insert(
-            tmp_pool.end(), new_neighbors_[data_id].begin(), new_neighbors_[data_id].end()
-        );
+        tmp_pool.insert(tmp_pool.end(), new_neighbors_[data_id].begin(),
+                        new_neighbors_[data_id].end());
         std::sort(tmp_pool.begin(), tmp_pool.end());
         heuristic_prune(data_id, tmp_pool, new_neighbors_[data_id], refine);
     }
@@ -323,8 +318,8 @@ inline void QGBuilder::random_init() {
         new_neighbors_[i].reserve(degree_bound_);
         for (PID cur_neigh : neighbor_set) {
             new_neighbors_[i].emplace_back(
-                cur_neigh, qg_.raw_dist_func_(cur_data, qg_.get_vector(cur_neigh), dim_)
-            );
+                cur_neigh,
+                qg_.raw_dist_func_(cur_data, qg_.get_vector(cur_neigh), dim_));
         }
 
         degrees_[i] = new_neighbors_[i].size();
@@ -333,8 +328,8 @@ inline void QGBuilder::random_init() {
 }
 
 /**
- * @brief refine the graph structure, make sure the degree for each vertex in qg equals the
- * degree bound (multiple of 32)
+ * @brief refine the graph structure, make sure the degree for each vertex in qg
+ * equals the degree bound (multiple of 32)
  *
  */
 inline void QGBuilder::graph_refine() {
@@ -370,10 +365,12 @@ inline void QGBuilder::graph_refine() {
             }
         }
 
-        // update neighbors with larger cosine value since we want to retain more edges
+        // update neighbors with larger cosine value since we want to retain
+        // more edges
         add_pruned_edges(cur_neighbors, pruned_list, new_result, right);
 
-        // if the vertex still doesn't have enough neighbors, use random vertices
+        // if the vertex still doesn't have enough neighbors, use random
+        // vertices
         if (new_result.size() < degree_bound_) {
             std::unordered_set<PID> ids;
             ids.reserve(degree_bound_);
@@ -381,12 +378,13 @@ inline void QGBuilder::graph_refine() {
                 ids.emplace(neighbor.id);
             }
             while (new_result.size() < degree_bound_) {
-                PID rand_id = rand_integer<PID>(0, static_cast<PID>(num_nodes_) - 1);
-                if (rand_id != static_cast<PID>(i) && ids.find(rand_id) == ids.end()) {
+                PID rand_id =
+                    rand_integer<PID>(0, static_cast<PID>(num_nodes_) - 1);
+                if (rand_id != static_cast<PID>(i) &&
+                    ids.find(rand_id) == ids.end()) {
                     new_result.emplace_back(
-                        rand_id,
-                        qg_.raw_dist_func_(qg_.get_vector(rand_id), qg_.get_vector(i), dim_)
-                    );
+                        rand_id, qg_.raw_dist_func_(qg_.get_vector(rand_id),
+                                                    qg_.get_vector(i), dim_));
                     ids.emplace(rand_id);
                 }
             }

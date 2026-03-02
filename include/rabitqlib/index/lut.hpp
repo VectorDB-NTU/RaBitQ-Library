@@ -14,7 +14,8 @@ template <typename T>
 class Lut {
     static constexpr size_t kNumBits = 8;
     static constexpr size_t kNumBitsHacc = 16;
-    static_assert(std::is_floating_point_v<T>, "T must be an floating type in Lut");
+    static_assert(std::is_floating_point_v<T>,
+                  "T must be an floating type in Lut");
 
    private:
     size_t table_length_ = 0;
@@ -24,9 +25,10 @@ class Lut {
 
    public:
     explicit Lut() = default;
-    explicit Lut(const T* rotated_query, size_t padded_dim, bool use_hacc = false)
-        : table_length_(padded_dim << 2)
-        , lut_(table_length_ * (static_cast<int>(use_hacc) + 1)) {
+    explicit Lut(const T* rotated_query, size_t padded_dim,
+                 bool use_hacc = false)
+        : table_length_(padded_dim << 2),
+          lut_(table_length_ * (static_cast<int>(use_hacc) + 1)) {
         // quantize float lut
         std::vector<float> lut_float(table_length_);
         fastscan::pack_lut(padded_dim, rotated_query, lut_float.data());
@@ -39,13 +41,14 @@ class Lut {
 
             // quantize float lut into uint16 then change to split table
             std::vector<uint16_t> lut_u16(table_length_);
-            scalar_quantize(
-                lut_u16.data(), lut_float.data(), table_length_, vl_lut, delta_
-            );
-            fastscan::transfer_lut_hacc(lut_u16.data(), padded_dim, lut_.data());
+            scalar_quantize(lut_u16.data(), lut_float.data(), table_length_,
+                            vl_lut, delta_);
+            fastscan::transfer_lut_hacc(lut_u16.data(), padded_dim,
+                                        lut_.data());
         } else {
             delta_ = (vr_lut - vl_lut) / ((1 << kNumBits) - 1);
-            scalar_quantize(lut_.data(), lut_float.data(), table_length_, vl_lut, delta_);
+            scalar_quantize(lut_.data(), lut_float.data(), table_length_,
+                            vl_lut, delta_);
         }
 
         size_t num_table = table_length_ / 16;

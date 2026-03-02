@@ -9,26 +9,24 @@
 namespace rabitqlib {
 template <typename T>
 inline void assert_integral() {
-    static_assert(
-        std::is_integral_v<T>,
-        "Template type T must be an integral type (int, long, unsigned, etc.)."
-    );
+    static_assert(std::is_integral_v<T>,
+                  "Template type T must be an integral type (int, long, "
+                  "unsigned, etc.).");
 }
 
 template <typename T>
 inline void assert_floating() {
-    static_assert(
-        std::is_floating_point_v<T>,
-        "Template type T must be a floating-point type (float, double, long double)."
-    );
+    static_assert(std::is_floating_point_v<T>,
+                  "Template type T must be a floating-point type (float, "
+                  "double, long double).");
 }
 
 // thread save rand int
 template <typename T>
 inline T rand_integer(T min, T max) {
     static thread_local std::mt19937 generator(
-        std::random_device{}() + std::hash<std::thread::id>()(std::this_thread::get_id())
-    );
+        std::random_device{}() +
+        std::hash<std::thread::id>()(std::this_thread::get_id()));
     std::uniform_int_distribution<T> distribution(min, max);
     return distribution(generator);
 }
@@ -75,15 +73,9 @@ inline size_t total_threads() {
 }
 
 template <typename T, typename TP>
-float distance_ratio(
-    const T* data,
-    const T* query,
-    const TP* gt,
-    const TP* ann_results,
-    size_t k,
-    size_t dim,
-    T (*dist_func)(const T*, const T*, size_t)
-) {
+float distance_ratio(const T* data, const T* query, const TP* gt,
+                     const TP* ann_results, size_t k, size_t dim,
+                     T (*dist_func)(const T*, const T*, size_t)) {
     std::priority_queue<float> gt_distances;
     std::priority_queue<float> ann_distances;
 

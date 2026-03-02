@@ -27,14 +27,15 @@ class Rotator {
 
    public:
     explicit Rotator() = default;
-    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim) {};
+    explicit Rotator(size_t dim, size_t padded_dim)
+        : dim_(dim), padded_dim_(padded_dim){};
     virtual ~Rotator() = default;
     virtual void rotate(const T* src, T* dst) const = 0;
     virtual void load(std::ifstream&) = 0;
     virtual void save(std::ofstream&) const = 0;
     // Buffer I/O
-    virtual void load(const char *data) = 0;
-    virtual void save(char *data) const = 0; // dump to buffer
+    virtual void load(const char* data) = 0;
+    virtual void save(char* data) const = 0;  // dump to buffer
     virtual size_t dump_bytes() const = 0;
     [[nodiscard]] size_t size() const { return this->padded_dim_; }
 };
@@ -49,7 +50,8 @@ inline size_t padding_requirement(size_t dim, RotatorType type) {
     if (type == RotatorType::FhtKacRotator) {
         return round_up_to_multiple(dim, 64);
     }
-    std::cerr << "Invalid rotator type in padding_requirement()\n" << std::flush;
+    std::cerr << "Invalid rotator type in padding_requirement()\n"
+              << std::flush;
     exit(1);
 }
 
@@ -60,14 +62,17 @@ class MatrixRotator : public Rotator<T> {
    public:
     explicit MatrixRotator(size_t dim, size_t padded_dim)
         : Rotator<T>(dim, padded_dim), rand_mat_(dim, padded_dim) {
-        RowMajorMatrix<T> rand = random_gaussian_matrix<T>(padded_dim, padded_dim);
+        RowMajorMatrix<T> rand =
+            random_gaussian_matrix<T>(padded_dim, padded_dim);
         Eigen::HouseholderQR<RowMajorMatrix<T>> qr(rand);
         RowMajorMatrix<T> q_inv =
-            qr.householderQ().transpose();  // inverse of orthogonal mat is its inverse
+            qr.householderQ()
+                .transpose();  // inverse of orthogonal mat is its inverse
 
-        // the random matrix only need the first dim rows, since we just pad zeros for
-        // the vector to be rotated to padded dimension
-        std::memcpy(&rand_mat_(0, 0), &q_inv(0, 0), sizeof(T) * dim * padded_dim);
+        // the random matrix only need the first dim rows, since we just pad
+        // zeros for the vector to be rotated to padded dimension
+        std::memcpy(&rand_mat_(0, 0), &q_inv(0, 0),
+                    sizeof(T) * dim * padded_dim);
     }
     MatrixRotator() = default;
     ~MatrixRotator() = default;
@@ -82,28 +87,27 @@ class MatrixRotator : public Rotator<T> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(rand_mat_.data()),
-            static_cast<long>(sizeof(float) * this->dim_ * this->padded_dim_)
-        );
+            static_cast<long>(sizeof(float) * this->dim_ * this->padded_dim_));
     }
 
     void save(std::ofstream& output) const override {
-        output.write(
-            reinterpret_cast<const char*>(rand_mat_.data()),
-            (sizeof(float) * this->dim_ * this->padded_dim_)
-        );
+        output.write(reinterpret_cast<const char*>(rand_mat_.data()),
+                     (sizeof(float) * this->dim_ * this->padded_dim_));
     }
 
-    void load(const char *data) override {
-        std::memcpy(rand_mat_.data(), data, sizeof(float) * this->dim_ * this->padded_dim_);
+    void load(const char* data) override {
+        std::memcpy(rand_mat_.data(), data,
+                    sizeof(float) * this->dim_ * this->padded_dim_);
     }
 
-    void save(char *data) const override {
-        std::memcpy(data, rand_mat_.data(), sizeof(float) * this->dim_ * this->padded_dim_);
+    void save(char* data) const override {
+        std::memcpy(data, rand_mat_.data(),
+                    sizeof(float) * this->dim_ * this->padded_dim_);
     }
 
     size_t dump_bytes() const override {
         return sizeof(float) * this->dim_ * this->padded_dim_;
-  }
+    }
 
     void rotate(const T* vec, T* rotated_vec) const override {
         ConstRowMajorMatrixMap<T> v(vec, 1, this->dim_);
@@ -119,8 +123,7 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
 
     static_assert(
         kFloatsPerChunk % 16 == 0,
-        "floats_per_chunk must be divisible by AVX512 register width"
-    );
+        "floats_per_chunk must be divisible by AVX512 register width");
 
     for (size_t i = 0; i < dim; i += kFloatsPerChunk) {
         // Load 64 bits (8 bytes) from the bit sequence
@@ -128,7 +131,8 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
         std::memcpy(&mask_bits, &flip[i / 8], sizeof(mask_bits));
 
         // Split into four 16-bit mask segments
-        const __mmask16 mask0 = _cvtu32_mask16(static_cast<uint32_t>(mask_bits & 0xFFFF));
+        const __mmask16 mask0 =
+            _cvtu32_mask16(static_cast<uint32_t>(mask_bits & 0xFFFF));
         const __mmask16 mask1 =
             _cvtu32_mask16(static_cast<uint32_t>((mask_bits >> 16) & 0xFFFF));
         const __mmask16 mask2 =
@@ -137,7 +141,8 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
             _cvtu32_mask16(static_cast<uint32_t>((mask_bits >> 48) & 0xFFFF));
 
         // Prepare sign-flip constant
-        const __m512 sign_flip = _mm512_castsi512_ps(_mm512_set1_epi32(0x80000000));
+        const __m512 sign_flip =
+            _mm512_castsi512_ps(_mm512_set1_epi32(0x80000000));
 
         // Process 16 floats at a time with each mask segment
         __m512 vec0 = _mm512_loadu_ps(&data[i]);
@@ -157,12 +162,11 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
         _mm512_storeu_ps(&data[i + 48], vec3);
     }
 #elif defined(__AVX2__)
-   // Process 32 floats (4 AVX2 registers) per iteration
-    constexpr size_t kFloatsPerChunk = 32; 
-    
-    const __m256i bit_select = _mm256_setr_epi32(
-        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
-    );
+    // Process 32 floats (4 AVX2 registers) per iteration
+    constexpr size_t kFloatsPerChunk = 32;
+
+    const __m256i bit_select =
+        _mm256_setr_epi32(0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80);
     const __m256 sign_flip = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
 
     // utility lambda to create a mask for flipping signs
@@ -171,7 +175,7 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
         __m256i test = _mm256_and_si256(mask_bits, bit_select);
         __m256i cmp = _mm256_cmpeq_epi32(test, bit_select);
         return _mm256_and_ps(_mm256_castsi256_ps(cmp), sign_flip);
-    } ;
+    };
 
     for (size_t i = 0; i < dim; i += kFloatsPerChunk) {
         uint32_t mask_bits;
@@ -185,7 +189,7 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
         }
     }
 #else
-    std:: cerr << "Sign flip requires AVX512 or AVX2 support!\n";
+    std::cerr << "Sign flip requires AVX512 or AVX2 support!\n";
     exit(1);
 #endif
 }
@@ -247,24 +251,20 @@ class FhtKacRotator : public Rotator<float> {
     ~FhtKacRotator() override = default;
 
     void load(std::ifstream& input) override {
-        input.read(
-            reinterpret_cast<char*>(flip_.data()),
-            static_cast<long>(sizeof(uint8_t) * flip_.size())
-        );
+        input.read(reinterpret_cast<char*>(flip_.data()),
+                   static_cast<long>(sizeof(uint8_t) * flip_.size()));
     }
 
     void save(std::ofstream& output) const override {
-        output.write(
-            reinterpret_cast<const char*>(flip_.data()),
-            static_cast<long>(sizeof(uint8_t) * flip_.size())
-        );
+        output.write(reinterpret_cast<const char*>(flip_.data()),
+                     static_cast<long>(sizeof(uint8_t) * flip_.size()));
     }
 
-    void load(const char *data) override {
+    void load(const char* data) override {
         std::memcpy(flip_.data(), data, sizeof(uint8_t) * flip_.size());
     }
 
-    void save(char *data) const override {
+    void save(char* data) const override {
         std::memcpy(data, flip_.data(), sizeof(uint8_t) * flip_.size());
     }
 
@@ -283,7 +283,7 @@ class FhtKacRotator : public Rotator<float> {
     }
 
     static void kacs_walk(float* data, size_t len) {
-    #if defined(__AVX512F__)
+#if defined(__AVX512F__)
         // ! len % 32 == 0;
         for (size_t i = 0; i < len / 2; i += 16) {
             __m512 x = _mm512_loadu_ps(&data[i]);
@@ -295,7 +295,7 @@ class FhtKacRotator : public Rotator<float> {
             _mm512_storeu_ps(&data[i], new_x);
             _mm512_storeu_ps(&data[i + (len / 2)], new_y);
         }
-    #elif defined(__AVX2__)
+#elif defined(__AVX2__)
         // ! len % 16 == 0;
         for (size_t i = 0; i < len / 2; i += 8) {
             __m256 x = _mm256_loadu_ps(&data[i]);
@@ -307,10 +307,10 @@ class FhtKacRotator : public Rotator<float> {
             _mm256_storeu_ps(&data[i], new_x);
             _mm256_storeu_ps(&data[i + (len / 2)], new_y);
         }
-    #else
-        std:: cerr << "FhtKacRotator requires AVX512 or AVX2 support!\n";
+#else
+        std::cerr << "FhtKacRotator requires AVX512 or AVX2 support!\n";
         exit(1);
-    #endif
+#endif
     }
 
     void rotate(const float* data, float* rotated_vec) const override {
@@ -322,19 +322,18 @@ class FhtKacRotator : public Rotator<float> {
             fht_float_(rotated_vec);
             vec_rescale(rotated_vec, trunc_dim_, fac_);
 
-            flip_sign(flip_.data() + (padded_dim_ / kByteLen), rotated_vec, padded_dim_);
+            flip_sign(flip_.data() + (padded_dim_ / kByteLen), rotated_vec,
+                      padded_dim_);
             fht_float_(rotated_vec);
             vec_rescale(rotated_vec, trunc_dim_, fac_);
 
-            flip_sign(
-                flip_.data() + (2 * padded_dim_ / kByteLen), rotated_vec, padded_dim_
-            );
+            flip_sign(flip_.data() + (2 * padded_dim_ / kByteLen), rotated_vec,
+                      padded_dim_);
             fht_float_(rotated_vec);
             vec_rescale(rotated_vec, trunc_dim_, fac_);
 
-            flip_sign(
-                flip_.data() + (3 * padded_dim_ / kByteLen), rotated_vec, padded_dim_
-            );
+            flip_sign(flip_.data() + (3 * padded_dim_ / kByteLen), rotated_vec,
+                      padded_dim_);
             fht_float_(rotated_vec);
             vec_rescale(rotated_vec, trunc_dim_, fac_);
 
@@ -348,17 +347,20 @@ class FhtKacRotator : public Rotator<float> {
         vec_rescale(rotated_vec, trunc_dim_, fac_);
         kacs_walk(rotated_vec, padded_dim_);
 
-        flip_sign(flip_.data() + (padded_dim_ / kByteLen), rotated_vec, padded_dim_);
+        flip_sign(flip_.data() + (padded_dim_ / kByteLen), rotated_vec,
+                  padded_dim_);
         fht_float_(rotated_vec + start);
         vec_rescale(rotated_vec + start, trunc_dim_, fac_);
         kacs_walk(rotated_vec, padded_dim_);
 
-        flip_sign(flip_.data() + (2 * padded_dim_ / kByteLen), rotated_vec, padded_dim_);
+        flip_sign(flip_.data() + (2 * padded_dim_ / kByteLen), rotated_vec,
+                  padded_dim_);
         fht_float_(rotated_vec);
         vec_rescale(rotated_vec, trunc_dim_, fac_);
         kacs_walk(rotated_vec, padded_dim_);
 
-        flip_sign(flip_.data() + (3 * padded_dim_ / kByteLen), rotated_vec, padded_dim_);
+        flip_sign(flip_.data() + (3 * padded_dim_ / kByteLen), rotated_vec,
+                  padded_dim_);
         fht_float_(rotated_vec + start);
         vec_rescale(rotated_vec + start, trunc_dim_, fac_);
         kacs_walk(rotated_vec, padded_dim_);
@@ -372,21 +374,23 @@ class FhtKacRotator : public Rotator<float> {
 
 // for given dim & type, set rotator, return padded dimension
 template <typename T>
-Rotator<T>* choose_rotator(
-    size_t dim, RotatorType type = RotatorType::FhtKacRotator, size_t padded_dim = 0
-) {
+Rotator<T>* choose_rotator(size_t dim,
+                           RotatorType type = RotatorType::FhtKacRotator,
+                           size_t padded_dim = 0) {
     if (padded_dim == 0) {
         padded_dim = rotator_impl::padding_requirement(dim, type);
         if (padded_dim != dim) {
             std::cerr << "vectors are padded to " << padded_dim
                       << " dimensions for aligned computation\n";
-            std::cerr << "check rabitqlib/utils/rotator.hpp in case that users want to "
+            std::cerr << "check rabitqlib/utils/rotator.hpp in case that users "
+                         "want to "
                          "remove padding\n";
         }
     }
 
     if (padded_dim != rotator_impl::padding_requirement(padded_dim, type)) {
-        std::cerr << "Invalid padded dim for the given rotator type\n" << std::flush;
+        std::cerr << "Invalid padded dim for the given rotator type\n"
+                  << std::flush;
         exit(1);
     }
 

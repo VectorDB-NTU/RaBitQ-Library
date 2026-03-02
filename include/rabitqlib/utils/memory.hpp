@@ -33,7 +33,8 @@ class AlignedAllocator {
     constexpr AlignedAllocator(const AlignedAllocator&) noexcept = default;
 
     template <typename U>
-    constexpr explicit AlignedAllocator(AlignedAllocator<U, Alignment> const&) noexcept {}
+    constexpr explicit AlignedAllocator(
+        AlignedAllocator<U, Alignment> const&) noexcept {}
 
     [[nodiscard]] T* allocate(std::size_t n) {
         if (n > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
@@ -69,7 +70,8 @@ struct Allocator {
 
     // Intercept zero-argument construction to do default initialization.
     template <typename U>
-    void construct(U* ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
+    void construct(U* ptr) noexcept(
+        std::is_nothrow_default_constructible_v<U>) {
         ::new (static_cast<void*>(ptr)) U;
     }
 };
