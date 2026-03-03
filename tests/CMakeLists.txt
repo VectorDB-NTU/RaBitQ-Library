@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.10)
-
 # Fetch Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -31,13 +30,22 @@ add_executable(rabitq_tests
     ${INTEG_TESTS}
 )
 
-# Link google test and rabitqlib headers
+# Link google test, rabitqlib headers, and OpenMP if available
 target_link_libraries(rabitq_tests
     gtest
-    gtest_main           
+    gtest_main
     rabitq_headers
     pthread
 )
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  message(STATUS "Tests: OpenMP found, linking OpenMP::OpenMP_CXX")
+endif()
+
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(rabitq_tests PRIVATE OpenMP::OpenMP_CXX)
+endif()
 
 # Discover tests for CTest
 include(GoogleTest)
@@ -45,7 +53,7 @@ gtest_discover_tests(rabitq_tests)
 
 # Message to verify files are found
 message(STATUS "Discovered test files:")
-foreach(TEST_SRC ${ALL_TEST_SRCS})
-    file(RELATIVE_PATH REL_PATH ${CMAKE_CURRENT_SOURCE_DIR} ${TEST_SRC})
-    message(STATUS "  - ${REL_PATH}")
+foreach(TEST_SRC ${UNIT_TESTS} ${INTEG_TESTS})
+  file(RELATIVE_PATH REL_PATH ${CMAKE_CURRENT_SOURCE_DIR} ${TEST_SRC})
+  message(STATUS "  - ${REL_PATH}")
 endforeach()

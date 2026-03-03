@@ -1,0 +1,135 @@
+# CI: Build and test on Windows, Ubuntu, macOS
+# Matrix: os × build_type (Debug/Release) × use_asan (no ASAN / ASAN)
+# ASAN disabled on Windows (MSVC ASAN requires extra setup).
+name: Test
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build_type: Debug
+            use_asan: false
+          - os: ubuntu-latest
+            build_type: Debug
+            use_asan: true
+          - os: ubuntu-latest
+            build_type: Release
+            use_asan: false
+          - os: ubuntu-latest
+            build_type: Release
+            use_asan: true
+          - os: macos-latest
+            build_type: Debug
+            use_asan: false
+          - os: macos-latest
+            build_type: Debug
+            use_asan: true
+          - os: macos-latest
+            build_type: Release
+            use_asan: false
+          - os: macos-latest
+            build_type: Release
+            use_asan: true
+          - os: windows-latest
+            build_type: Debug
+            use_asan: false
+          - os: windows-latest
+            build_type: Release
+            use_asan: false
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libomp-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install cmake libomp
+
+      - name: Configure (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          ASAN_FLAGS=""
+          ASAN_LINK=""
+          if [ "${{ matrix.use_asan }}" = "true" ]; then
+            ASAN_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+            ASAN_LINK="-fsanitize=address"
+          fi
+          OPT="-O2"
+          [ "${{ matrix.build_type }}" = "Debug" ] && OPT="-O0 -g"
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DRABITQ_BUILD_TESTS=ON \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra $OPT -mavx2 -mfma -mno-avx512f -fpic -fopenmp -ftree-vectorize -fexceptions -lrt $ASAN_FLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$ASAN_LINK"
+
+      - name: Configure (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          ASAN_FLAGS=""
+          ASAN_LINK=""
+          if [ "${{ matrix.use_asan }}" = "true" ]; then
+            ASAN_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g"
+            ASAN_LINK="-fsanitize=address"
+          fi
+          OPT="-O2"
+          [ "${{ matrix.build_type }}" = "Debug" ] && OPT="-O0 -g"
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DRABITQ_BUILD_TESTS=ON \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra $OPT -mavx2 -mfma -mno-avx512f -fpic -fopenmp -ftree-vectorize -fexceptions $ASAN_FLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$ASAN_LINK"
+
+      - name: Configure (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Override CXX flags for MSVC (root CMakeLists uses Unix flags by default)
+          cmake -B build `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DRABITQ_BUILD_TESTS=ON `
+            -DCMAKE_CXX_FLAGS="/W4 /openmp /EHsc"
+
+      - name: Build (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake --build build --config ${{ matrix.build_type }} -- -j$(nproc)
+
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        run: cmake --build build --config ${{ matrix.build_type }} -- -j$(sysctl -n hw.ncpu)
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cmake --build build --config ${{ matrix.build_type }} -- /m
+
+      - name: Test (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd build
+          ctest --output-on-failure -C ${{ matrix.build_type }}
+
+      - name: Test (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd build
+          ctest --output-on-failure -C ${{ matrix.build_type }}
+
+      - name: Test (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd build
+          ctest --output-on-failure -C ${{ matrix.build_type }}
