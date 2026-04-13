@@ -34,22 +34,18 @@ inline void split_batch_estdist(
     constexpr size_t kSafeChunkDim = 1024;
     ConstBatchDataMap<float> cur_batch(batch_data, padded_dim);
     RowMajorArray<int32_t> accu_arr(1, fastscan::kBatchSize);
+    const auto* codes_ptr = cur_batch.bin_code();
+    const auto* lut_ptr = q_obj.lut();
+    for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
+        accu_arr.data()[i] = 0;
+    }
 
     if (use_hacc) {
         std::array<int32_t, fastscan::kBatchSize> accu_res;
-        for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-            accu_arr.data()[i] = 0;
-        }
-
-        const uint8_t* codes_ptr =
-            reinterpret_cast<const uint8_t*>(cur_batch.bin_code());
-        const uint8_t* lut_ptr = reinterpret_cast<const uint8_t*>(q_obj.lut());
         size_t remaining_dim = padded_dim;
 
         while (remaining_dim > kSafeChunkDim) {
-            fastscan::accumulate_hacc(
-                codes_ptr, lut_ptr, accu_res.data(), kSafeChunkDim
-            );
+            fastscan::accumulate_hacc(codes_ptr, lut_ptr, accu_res.data(), kSafeChunkDim);
             codes_ptr += kSafeChunkDim << 2;
             lut_ptr += kSafeChunkDim << 3;
             for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
@@ -64,14 +60,8 @@ inline void split_batch_estdist(
         }
     } else {
         std::array<uint16_t, fastscan::kBatchSize> accu_res;
-        const uint8_t* codes_ptr =
-            reinterpret_cast<const uint8_t*>(cur_batch.bin_code());
-        const uint8_t* lut_ptr = reinterpret_cast<const uint8_t*>(q_obj.lut());
-        for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-            accu_arr.data()[i] = 0;
-        }
-
         size_t remaining_dim = padded_dim;
+
         while (remaining_dim > kSafeChunkDim) {
             fastscan::accumulate(codes_ptr, lut_ptr, accu_res.data(), kSafeChunkDim);
             codes_ptr += kSafeChunkDim << 2;
@@ -105,7 +95,6 @@ inline void split_batch_estdist(
 
     low_dist_arr = est_dist_arr - f_error_arr * q_obj.g_error();
 }
-
 
 /**
  * @brief Use ex-data bits to get more accurate distance
