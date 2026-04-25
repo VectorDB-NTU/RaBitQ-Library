@@ -175,7 +175,7 @@ inline void split_single_estdist(
 
     ip_x0_qr = warmup_ip_x0_q<SplitSingleQuery<float>::kNumBits>(
         cur_bin.bin_code(),
-        q_obj.query_bin(),
+        q_obj.transposed_query_bin(),
         q_obj.delta(),
         q_obj.vl(),
         padded_dim,
