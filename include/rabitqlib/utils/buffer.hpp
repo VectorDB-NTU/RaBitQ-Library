@@ -89,6 +89,13 @@ class SearchBuffer {
         }
     }
 
+    void copy_results(PID* knn, T* dist) const {
+        for (size_t i = 0; i < size_; ++i) {
+            knn[i] = data_[i].id;
+            dist[i] = data_[i].distance;
+        }
+    }
+
     T top_dist() const {
         return is_full() ? data_[size_ - 1].distance : std::numeric_limits<T>::max();
     }
