@@ -37,8 +37,8 @@ inline __m256i popcount_avx2(__m256i v) {
 template <uint32_t b_query>
 inline float warmup_ip_x0_q(
     const uint64_t* data,   // pointer to data blocks (each 64 bits)
-    const uint64_t* query,  // pointer to query words (each 64 bits), arranged so that for
-                            // each data block the corresponding b_query query words follow
+    const uint64_t* query,  // pointer to transposed query words (each 64 bits), arranged so that 
+                            // for each data block the corresponding b_query query words follow
     float delta,
     float vl,
     size_t padded_dim,
@@ -68,23 +68,10 @@ inline float warmup_ip_x0_q(
         __m512i popcnt_x_vec = _mm512_popcnt_epi64(x_vec);
         ppc_vec = _mm512_add_epi64(ppc_vec, popcnt_x_vec);
 
-        // For accumulating the weighted popcounts per block.
-        __m512i block_ip = _mm512_setzero_si512();
-
         // Process each query component (b_query is a compile-time constant, and is small).
         for (uint32_t j = 0; j < b_query; j++) {
-            // We need to gather from query array the j-th query for each of the eight
-            // blocks. For block (i + k) the index is: ( (i + k) * b_query + j ). We
-            // construct an index vector of eight 64-bit indices.
-            uint64_t indices[vec_width];
-            for (size_t k = 0; k < vec_width; k++) {
-                indices[k] = ((i + k) * b_query + j);
-            }
-            // Load indices from memory.
-            __m512i index_vec = _mm512_loadu_si512(indices);
-            // Gather 8 query words with a scale of 8 (since query is an array of 64-bit
-            // integers).
-            __m512i q_vec = _mm512_i64gather_epi64(index_vec, query, 8);
+            // the query words are transposed, thus can be loaded with a single load
+            __m512i q_vec = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(query + j * num_blk + i));
 
             // Compute bitwise AND of data blocks and corresponding query words.
             __m512i and_vec = _mm512_and_si512(x_vec, q_vec);
@@ -92,34 +79,23 @@ inline float warmup_ip_x0_q(
             __m512i popcnt_and = _mm512_popcnt_epi64(and_vec);
 
             // Multiply by the weighting factor (1 << j) for this query position.
-            const uint64_t shift = 1ULL << j;
-            __m512i shift_vec = _mm512_set1_epi64(shift);
-            __m512i weighted = _mm512_mullo_epi64(popcnt_and, shift_vec);
+            __m512i weighted = _mm512_slli_epi64(popcnt_and, j);
 
             // Accumulate weighted popcounts for these blocks.
-            block_ip = _mm512_add_epi64(block_ip, weighted);
+            ip_vec = _mm512_add_epi64(ip_vec, weighted);
         }
-        // Add the block's query-weighted popcount to the overall ip vector.
-        ip_vec = _mm512_add_epi64(ip_vec, block_ip);
     }
 
     // Horizontally reduce the vector accumulators.
-    uint64_t ip_arr[vec_width];
-    uint64_t ppc_arr[vec_width];
-    _mm512_storeu_si512(reinterpret_cast<__m512i*>(ip_arr), ip_vec);
-    _mm512_storeu_si512(reinterpret_cast<__m512i*>(ppc_arr), ppc_vec);
-
-    for (size_t k = 0; k < vec_width; k++) {
-        ip_scalar += ip_arr[k];
-        ppc_scalar += ppc_arr[k];
-    }
+    ip_scalar  += _mm512_reduce_add_epi64(ip_vec);
+    ppc_scalar += _mm512_reduce_add_epi64(ppc_vec);
 
     // Process remaining blocks that did not fit in the vectorized loop.
     for (size_t i = vec_end; i < num_blk; i++) {
         const uint64_t x = data[i];
         ppc_scalar += __builtin_popcountll(x);
         for (uint32_t j = 0; j < b_query; j++) {
-            ip_scalar += __builtin_popcountll(x & query[i * b_query + j]) << j;
+            ip_scalar += __builtin_popcountll(x & query[j * num_blk + i]) << j;
         }
     }
 
@@ -145,20 +121,9 @@ inline float warmup_ip_x0_q(
 
         // Process each query component (b_query is a compile-time constant, and is small).
         for (uint32_t j = 0; j < b_query; j++) {
-            // Calculate Gather Indices: [idx, idx+b, idx+2b, idx+3b]
-            // Base index for this batch: i * b_query + j
-            long long base_idx = i * b_query + j;
-            
-            // Offsets for the 4 lanes: 0, b, 2b, 3b
-            __m256i index_vec = _mm256_setr_epi64x(
-                base_idx, 
-                base_idx + b_query, 
-                base_idx + 2 * b_query, 
-                base_idx + 3 * b_query
-            );
 
             // Gather query data: query[idx]
-            __m256i q_vec = _mm256_i64gather_epi64((const long long*)query, index_vec, 8);
+            __m256i q_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + j * num_blk + i));
 
             // Compute bitwise AND of data blocks and corresponding query words.
             __m256i and_vec = _mm256_and_si256(x_vec, q_vec);
@@ -173,24 +138,22 @@ inline float warmup_ip_x0_q(
         }
     }
 
+    auto mm256_reduce_add_epi64 = [](__m256i v) {
+        __m128i low = _mm256_castsi256_si128(v);
+        __m128i high = _mm256_extracti128_si256(v, 1);
+        __m128i sum = _mm_add_epi64(low, high);
+        return _mm_extract_epi64(sum, 0) + _mm_extract_epi64(sum, 1);
+    };
     // Horizontally reduce the vector accumulators.
-    uint64_t ip_arr[vec_width];
-    uint64_t ppc_arr[vec_width];
-    
-    _mm256_storeu_si256(reinterpret_cast<__m256i*>(ppc_arr), ppc_vec);
-    _mm256_storeu_si256(reinterpret_cast<__m256i*>(ip_arr), ip_vec);
-
-    for (size_t k = 0; k < vec_width; k++) {
-        ppc_scalar += ppc_arr[k];
-        ip_scalar += ip_arr[k];
-    }
+    ppc_scalar += mm256_reduce_add_epi64(ppc_vec);
+    ip_scalar += mm256_reduce_add_epi64(ip_vec);
 
     // Process remaining blocks that did not fit in the vectorized loop.
     for (size_t i = vec_end; i < num_blk; i++) {
         const uint64_t x = data[i];
         ppc_scalar += __builtin_popcountll(x);
         for (uint32_t j = 0; j < b_query; j++) {
-            ip_scalar += __builtin_popcountll(x & query[i * b_query + j]) << j;
+            ip_scalar += __builtin_popcountll(x & query[j * num_blk + i]) << j;
         }
     }
 

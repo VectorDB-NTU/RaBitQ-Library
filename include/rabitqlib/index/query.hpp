@@ -114,6 +114,7 @@ class SplitSingleQuery {
    private:
     const T* rotated_query_;
     std::vector<uint64_t> QueryBin_;
+    std::vector<uint64_t> TransposedQueryBin_;
     T G_add_;
     T G_k1xSumq_;
     T G_kbxSumq_;
@@ -121,6 +122,17 @@ class SplitSingleQuery {
     T delta_;
     T vl_;
     MetricType metric_type_ = METRIC_L2;
+
+    void transpose_query_bin(size_t num_blk, size_t b_query) {
+        TransposedQueryBin_.resize(num_blk * b_query);
+
+        for (size_t i = 0; i < num_blk; ++i) {
+            for (size_t j = 0; j < b_query; ++j) {
+                TransposedQueryBin_[j * num_blk + i] =
+                    QueryBin_[i * b_query + j];
+            }
+        }
+    }
 
    public:
     static constexpr size_t kNumBits = 4;
@@ -153,9 +165,14 @@ class SplitSingleQuery {
         rabitqlib::new_transpose_bin(
             quant_query.data(), QueryBin_.data(), padded_dim, kNumBits
         );
+
+        size_t num_blk = padded_dim / 64;
+        transpose_query_bin(num_blk, kNumBits);
     }
 
     [[nodiscard]] const uint64_t* query_bin() const { return QueryBin_.data(); }
+
+    [[nodiscard]] const uint64_t* transposed_query_bin() const { return TransposedQueryBin_.data(); }
 
     [[nodiscard]] const T* rotated_query() const { return rotated_query_; }
 
