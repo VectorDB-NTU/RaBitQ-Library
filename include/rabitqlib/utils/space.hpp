@@ -904,6 +904,39 @@ static inline void new_transpose_bin(
 #endif
 }
 
+static inline void new_transpose_bin_512(
+    const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+) {
+#if defined(__AVX512BW__)
+    // Keep full 512-dim blocks as 8 chunks, but store the tail as compact
+    // [b_query x num_chunks] so runtime can use maskz loads without query padding.
+    for (size_t i = 0; i < padded_dim;) {
+        size_t block_size = 512;
+        if (i + 512 > padded_dim) {
+            block_size = padded_dim - i;
+        }
+        size_t num_chunks = block_size / 64;
+
+        for (size_t k = 0; k < num_chunks; ++k) {
+            const uint8_t* current_q = q + i + k * 64;
+            __m512i vec = _mm512_loadu_si512(current_q);
+
+            for (size_t j = 0; j < b_query; ++j) {
+                int bit_idx = b_query - 1 - j;
+                __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(1 << bit_idx));
+                tq[(b_query - j - 1) * num_chunks + k] = static_cast<uint64_t>(m);
+            }
+        }
+
+        i += block_size;
+        tq += num_chunks * b_query;
+    }
+#else
+    std::cerr << "AVX512BW is required for new_transpose_bin_512\n";
+    exit(1);
+#endif
+}
+
 inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t padded_dim) {
     auto num_blk = padded_dim / 64;
     const auto* it_data = data;

@@ -142,18 +142,20 @@ class SplitSingleQuery {
 
         metric_type_ = (metric_type == METRIC_IP) ? METRIC_IP : METRIC_L2;
 
-        std::vector<uint16_t> quant_query = std::vector<uint16_t>(padded_dim);
+        std::vector<uint8_t> quant_query(padded_dim);
 
         // quantize query by rabitq
-        quant::quantize_scalar<float, uint16_t>(
+        quant::quantize_scalar<float, uint8_t>(
             rotated_query, padded_dim, kNumBits, quant_query.data(), delta_, vl_, config
         );
 
         // represent quantized query as u64
-        rabitqlib::new_transpose_bin(
+        rabitqlib::new_transpose_bin_512(
             quant_query.data(), QueryBin_.data(), padded_dim, kNumBits
         );
     }
+
+    [[nodiscard]] size_t num_bits() const { return kNumBits; }
 
     [[nodiscard]] const uint64_t* query_bin() const { return QueryBin_.data(); }
 
