@@ -925,7 +925,8 @@ static inline void new_transpose_bin_512(
             for (size_t j = 0; j < b_query; ++j) {
                 int bit_idx = b_query - 1 - j;
                 __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(1 << bit_idx));
-                tq[(b_query - j - 1) * num_chunks + k] = static_cast<uint64_t>(m);
+                tq[(b_query - j - 1) * num_chunks + k] =
+                    reverse_bits_u64(static_cast<uint64_t>(m));
             }
         }
 
