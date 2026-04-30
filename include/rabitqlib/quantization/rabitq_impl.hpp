@@ -363,7 +363,8 @@ inline T quantize_ex(const T* o_abs, TP* code, size_t dim, size_t ex_bits) {
 inline double get_const_scaling_factors(size_t dim, size_t ex_bits) {
     constexpr long kConstNum = 100;
 
-    RowMajorArray<double> rand = random_gaussian_matrix<double>(kConstNum, dim);
+    RowMajorArray<double> rand = random_gaussian_matrix<double>(kConstNum, dim, 42);
+
     rand = rand.rowwise().normalized().abs();
 
     double sum = 0;

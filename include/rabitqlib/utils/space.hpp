@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <type_traits>
 
 #include "rabitqlib/defines.hpp"
@@ -1078,10 +1079,11 @@ inline size_t popcount(const uint64_t* __restrict__ d, size_t length) {
 }
 
 template <typename T>
-RowMajorMatrix<T> random_gaussian_matrix(size_t rows, size_t cols) {
+RowMajorMatrix<T> random_gaussian_matrix(
+    size_t rows, size_t cols, std::optional<unsigned> seed = std::nullopt
+) {
     RowMajorMatrix<T> rand(rows, cols);
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
+    std::mt19937 gen(seed.has_value() ? *seed : std::random_device{}());
     std::normal_distribution<T> dist(0, 1);
 
     for (size_t i = 0; i < rows; ++i) {
