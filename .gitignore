@@ -33,11 +33,9 @@
 
 
 .cache/
-.vscode/
 bin/
 build/
 data/
-results/
 
 *.pyc
 .clang-*
