@@ -1209,57 +1209,56 @@ void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOpt(
 
     vl->set(ep_id);
 
+    const size_t prefetch_size = (((padded_dim_ / 8) + 63) / 64) + 1;
+    const size_t prefetch_lookahead = 4;  // Number of neighbors to prefetch in advance.
+
     while (candidate_set.has_next()) {
         // Step 1 - get the next node to explore.
         PID current_node_id = candidate_set.pop();
         int* data = (int*)get_linklist0(current_node_id);
         size_t size = get_list_count((PID*)data);
 
-        rabitqlib::memory::mem_prefetch_l1(get_bindata_by_internalid(*(data + 1)), 2);
+        for (size_t p = 0; p < prefetch_lookahead; ++p) {
+            rabitqlib::memory::mem_prefetch_l1(get_bindata_by_internalid(*(data + 1 + p)), prefetch_size);
+        }
         // Iterate over neighbors. (List starts at index 1.)
         for (size_t j = 1; j <= size; j++) {
             int candidate_id = *(data + j);
 
-            rabitqlib::memory::mem_prefetch_l1(
-                get_bindata_by_internalid(*(data + j + 1)), 2
-            );
-
-            if (!vl->get(candidate_id)) {
-                vl->set(candidate_id);
-                EstimateRecord candest;
-                get_bin_est(q_to_centroids, query_wrapper, candidate_id, candest);
-
-                if (ex_bits_ > 0) {
-                    // Check preliminary score against current worst full estimate.
-                    bool flag_update_KNNs =
-                        boundedKNN.size() < TOPK || candest.low_dist < distk;
-
-                    if (flag_update_KNNs) {
-                        // Compute the full estimate if promising.
-                        get_full_est(q_to_centroids, query_wrapper, candidate_id, candest);
-                        Candidate cand{
-                            ResultRecord(candest.est_dist, candest.low_dist),
-                            static_cast<PID>(candidate_id)
-                        };
-                        boundedKNN.insert(cand);
-                        distk = boundedKNN.worst().record.est_dist;
-                    }
-                } else {
-                    Candidate cand{
-                        ResultRecord(candest.est_dist, candest.low_dist),
-                        static_cast<PID>(candidate_id)
-                    };
-                    boundedKNN.insert(cand);
-                }
-
-                if (!candidate_set.is_full(candest.est_dist)) {
-                    candidate_set.insert(candidate_id, candest.est_dist);
-                }
-
-                rabitqlib::memory::mem_prefetch_l2(
-                    (char*)get_linklist0(candidate_set.next_id()), 2
-                );
+            if (j + prefetch_lookahead <= size) {
+                rabitqlib::memory::mem_prefetch_l1(get_bindata_by_internalid(*(data + j + prefetch_lookahead)), prefetch_size);
             }
+
+            if(vl->get(candidate_id)) {
+                continue;
+            }
+            vl->set(candidate_id);
+
+            EstimateRecord candest;
+            get_bin_est(q_to_centroids, query_wrapper, candidate_id, candest);
+
+            bool flag_update_KNNs = boundedKNN.size() < TOPK || candest.low_dist < distk;
+
+            if (flag_update_KNNs) {
+                // Compute the full estimate if promising.
+                if (ex_bits_ > 0) {
+                    get_full_est(q_to_centroids, query_wrapper, candidate_id, candest);
+                }
+                Candidate cand{
+                    ResultRecord(candest.est_dist, candest.low_dist),
+                    static_cast<PID>(candidate_id)
+                };
+                boundedKNN.insert(cand);
+                distk = boundedKNN.worst().record.est_dist;
+            }
+
+            if (!candidate_set.is_full(candest.est_dist)) {
+                candidate_set.insert(candidate_id, candest.est_dist);
+            }
+
+            rabitqlib::memory::mem_prefetch_l2(
+                (char*)get_linklist0(candidate_set.next_id()), 2
+            );
         }
     }
 
