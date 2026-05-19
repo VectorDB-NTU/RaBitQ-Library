@@ -1,11 +1,15 @@
-# compiling 
-mkdir build bin 
-cd build 
+# compiling
+mkdir -p build bin
+pushd build
 cmake ..
-make 
+make
+popd
 
 # Download the dataset
-wget -P ./data/gist ftp://ftp.irisa.fr/local/texmex/corpus/gist.tar.gz
+mkdir -p ./data/gist
+if [ ! -f ./data/gist/gist.tar.gz ]; then
+    wget -P ./data/gist ftp://ftp.irisa.fr/local/texmex/corpus/gist.tar.gz
+fi
 tar -xzvf ./data/gist/gist.tar.gz -C ./data/gist
 
 # indexing and querying for symqg
