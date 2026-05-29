@@ -43,6 +43,14 @@ class HierarchicalNSW {
     );
     ~HierarchicalNSW();
 
+    [[nodiscard]] size_t dimension() const { return dim_; }
+    [[nodiscard]] size_t num_clusters() const { return num_cluster_; }
+    [[nodiscard]] size_t nbits() const { return ex_bits_ + 1; }
+    [[nodiscard]] size_t M() const { return M_; }
+    [[nodiscard]] size_t ef_construction() const { return ef_construction_; }
+    [[nodiscard]] MetricType metric_type() const { return metric_type_; }
+    [[nodiscard]] size_t max_elements() const { return max_elements_; }
+
     void save(const char*) const;
     void load(const char*, MetricType metric_type_input);
 
