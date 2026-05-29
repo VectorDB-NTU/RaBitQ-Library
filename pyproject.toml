@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pybind11>=2.12", "numpy"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rabitqlib"
+version = "0.1.0"
+description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
+readme = "README.md"
+requires-python = ">=3.9"

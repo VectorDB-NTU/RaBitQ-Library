@@ -14,6 +14,12 @@ SET(CMAKE_CXX_FLAGS  "-Wall -Ofast -Wextra -lrt -march=native -fpic -fopenmp -ft
 
 add_subdirectory(sample)
 
+option(RABITQ_BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
+
+if(RABITQ_BUILD_PYTHON_BINDINGS)
+    add_subdirectory(python_bindings)
+endif()
+
 add_library(rabitq_headers INTERFACE)
 
 target_include_directories(rabitq_headers INTERFACE ${PROJECT_SOURCE_DIR}/include)
