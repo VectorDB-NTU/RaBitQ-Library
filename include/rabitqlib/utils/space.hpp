@@ -925,8 +925,49 @@ static inline void new_transpose_bin_512(
             for (size_t j = 0; j < b_query; ++j) {
                 int bit_idx = b_query - 1 - j;
                 __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(1 << bit_idx));
-                tq[(b_query - j - 1) * num_chunks + k] =
-                    reverse_bits_u64(static_cast<uint64_t>(m));
+                tq[(b_query - j - 1) * num_chunks + k] = reverse_bits_u64(static_cast<uint64_t>(m));
+            }
+        }
+
+        i += block_size;
+        tq += num_chunks * b_query;
+    }
+#elif defined(__AVX2__)
+    for (size_t i = 0; i < padded_dim;) {
+        size_t block_size = 512;
+        if (i + 512 > padded_dim) {
+            block_size = padded_dim - i;
+        }
+        // Each chunk represents 64 bytes (512 bits) of dimensions
+        size_t num_chunks = block_size / 64;
+
+        for (size_t k = 0; k < num_chunks; ++k) {
+            // Load 64 bytes using two sequential 32-byte AVX2 registers
+            const uint8_t* current_q_lo = q + i + k * 64;
+            const uint8_t* current_q_hi = q + i + k * 64 + 32;
+
+            __m256i vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_lo));
+            __m256i vec_hi = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_hi));
+
+            for (size_t j = 0; j < b_query; ++j) {
+                int bit_idx = b_query - 1 - j;
+                __m256i mask_vec = _mm256_set1_epi8(static_cast<char>(1 << bit_idx));
+
+                // Process lower 32 bytes
+                __m256i res_lo = _mm256_and_si256(vec_lo, mask_vec);
+                __m256i eq_lo = _mm256_cmpeq_epi8(res_lo, _mm256_setzero_si256());
+                uint32_t m_lo = ~static_cast<uint32_t>(_mm256_movemask_epi8(eq_lo));
+
+                // Process upper 32 bytes
+                __m256i res_hi = _mm256_and_si256(vec_hi, mask_vec);
+                __m256i eq_hi = _mm256_cmpeq_epi8(res_hi, _mm256_setzero_si256());
+                uint32_t m_hi = ~static_cast<uint32_t>(_mm256_movemask_epi8(eq_hi));
+
+                // Combine both 32-bit masks into a single 64-bit mask
+                uint64_t m = (static_cast<uint64_t>(m_hi) << 32) | m_lo;
+
+                // Write into the 64-bit structured macro-layout
+                tq[(b_query - j - 1) * num_chunks + k] = reverse_bits_u64(m);
             }
         }
 
@@ -934,7 +975,7 @@ static inline void new_transpose_bin_512(
         tq += num_chunks * b_query;
     }
 #else
-    std::cerr << "AVX512BW is required for new_transpose_bin_512\n";
+    std::cerr << "AVX512BW or AVX2 is required for new_transpose_bin_512\n";
     exit(1);
 #endif
 }
