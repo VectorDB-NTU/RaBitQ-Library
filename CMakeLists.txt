@@ -12,7 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 SET(CMAKE_CXX_FLAGS  "-Wall -Ofast -Wextra -lrt -march=native -fpic -fopenmp -ftree-vectorize -fexceptions")
 
-add_subdirectory(sample)
+add_subdirectory(sample/cpp)
 
 option(RABITQ_BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
 
