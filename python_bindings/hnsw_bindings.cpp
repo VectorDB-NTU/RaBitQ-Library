@@ -97,15 +97,18 @@ class HnswIndex {
         auto dists = py::array_t<float>(shape);
         auto ids_buf = ids.mutable_unchecked<2>();
         auto dists_buf = dists.mutable_unchecked<2>();
+        std::vector<std::vector<std::pair<float, rabitqlib::PID>>> results;
+        {
+            py::gil_scoped_release release;
+            results = index_->search(
+                query_array.data(),
+                static_cast<size_t>(query_array.shape(0)),
+                k,
+                ef,
+                num_threads
+            );
+        }
 
-        py::gil_scoped_release release;
-        auto results = index_->search(
-            query_array.data(),
-            static_cast<size_t>(query_array.shape(0)),
-            k,
-            ef,
-            num_threads
-        );
 
         for (ssize_t i = 0; i < static_cast<ssize_t>(results.size()); ++i) {
             for (
