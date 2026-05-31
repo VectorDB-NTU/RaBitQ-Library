@@ -17,12 +17,11 @@ using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
 int main(int argc, char* argv[]) {
-    if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3> <arg4>\n"
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3>\n"
                   << "arg1: path for index \n"
                   << "arg2: path for query file, format .fvecs\n"
-                  << "arg3: path for groundtruth file format .ivecs\n"
-                  << "arg4: metric type (\"l2\" or \"ip\")\n";
+                  << "arg3: path for groundtruth file format .ivecs\n";
         exit(1);
     }
 
@@ -38,20 +37,8 @@ int main(int argc, char* argv[]) {
     size_t total_count = nq * topk;
 
     index_type hnsw;
-    rabitqlib::MetricType metric_type = rabitqlib::METRIC_L2;
-    if (argc > 4) {
-        std::string metric_str(argv[4]);
-        if (metric_str == "ip" || metric_str == "IP") {
-            metric_type = rabitqlib::METRIC_IP;
-        }
-    }
-    if (metric_type == rabitqlib::METRIC_IP) {
-        std::cout << "Metric Type: IP\n";
-    } else if (metric_type == rabitqlib::METRIC_L2) {
-        std::cout << "Metric Type: L2\n";
-    }
 
-    hnsw.load(index_file, metric_type);
+    hnsw.load(index_file);
 
     rabitqlib::StopW stopw;
 

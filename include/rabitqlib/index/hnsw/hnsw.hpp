@@ -52,7 +52,7 @@ class HierarchicalNSW {
     [[nodiscard]] size_t max_elements() const { return max_elements_; }
 
     void save(const char*) const;
-    void load(const char*, MetricType metric_type_input);
+    void load(const char*);
 
     void construct(size_t, const float*, size_t, const float*, PID*, size_t, bool);
     std::vector<std::vector<std::pair<float, PID>>> search(
@@ -438,6 +438,7 @@ inline void HierarchicalNSW::save(const char* filename) const {
     output.write(reinterpret_cast<const char*>(&padded_dim_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&num_cluster_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&ex_bits_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&metric_type_), sizeof(metric_type_));
 
     output.write(reinterpret_cast<const char*>(&size_bin_data_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&size_ex_data_), sizeof(size_t));
@@ -482,7 +483,7 @@ inline void HierarchicalNSW::save(const char* filename) const {
     output.close();
 }
 
-inline void HierarchicalNSW::load(const char* filename, MetricType metric_type_input) {
+inline void HierarchicalNSW::load(const char* filename) {
     std::ifstream input(filename, std::ios::binary);
 
     if (!input.is_open()) {
@@ -491,10 +492,6 @@ inline void HierarchicalNSW::load(const char* filename, MetricType metric_type_i
 
     free_memory();
 
-    raw_dist_func_ =
-        (metric_type_input == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
-    metric_type_ = (metric_type_input == METRIC_IP) ? METRIC_IP : METRIC_L2;
-
     input.read(reinterpret_cast<char*>(&max_elements_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&cur_element_count_), sizeof(size_t));
 
@@ -502,6 +499,9 @@ inline void HierarchicalNSW::load(const char* filename, MetricType metric_type_i
     input.read(reinterpret_cast<char*>(&padded_dim_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&num_cluster_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&ex_bits_), sizeof(size_t));
+    input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
+    raw_dist_func_ =
+        (metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
 
     ip_func_ = select_excode_ipfunc(ex_bits_);
 
