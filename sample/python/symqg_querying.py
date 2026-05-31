@@ -18,9 +18,6 @@ TEST_ROUNDS = 3
 # ──────────────────────────────────────────────
 
 
-
-
-
 def main() -> None:
     # 1. Load queries and ground truth
     queries = read_fvecs(QUERY_FILE)

@@ -9,16 +9,12 @@ from utils import read_fvecs, read_ivecs, compute_recall
 INDEX_FILE  = "hnsw.index"    # arg1: path for index
 QUERY_FILE  = "siftsmall/query.fvecs"   # arg2: path for query file
 GT_FILE     = "siftsmall/groundtruth.ivecs"      # arg3: path for groundtruth file
-METRIC      = "l2"            # arg4: "l2" or "ip"
-TOPK        = 10              # arg5: top-k results
-NUM_THREADS = 1               # arg6: number of threads
+TOPK        = 10              # arg4: top-k results
+NUM_THREADS = 1               # arg5: number of threads
 
 EFS         = [10, 20, 40, 80, 120, 200, 400, 600, 800, 1000, 1500, 2000]
 TEST_ROUNDS = 3
 # ──────────────────────────────────────────────
-
-
-
 
 
 def main() -> None:
@@ -29,8 +25,8 @@ def main() -> None:
     print(f"Queries: {queries.shape}, GT: {gt.shape}")
 
     # 2. Load index
-    idx = HnswIndex.load(INDEX_FILE, metric=METRIC)
-    print(f"Index loaded — dim={idx.dim}, metric={METRIC}")
+    idx = HnswIndex.load(INDEX_FILE)
+    print(f"Index loaded — dim={idx.dim}")
     print(f"TopK: {TOPK}")
 
     print("\nsearch start >.....\n")

@@ -128,11 +128,11 @@ class HnswIndex {
         index_->save(path.c_str());
     }
 
-    static HnswIndex load(const std::string& path, const std::string& metric = "l2") {
+    static HnswIndex load(const std::string& path) {
         HnswIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::hnsw::HierarchicalNSW>();
         py::gil_scoped_release release;
-        wrapper.index_->load(path.c_str(), metric_from_string(metric));
+        wrapper.index_->load(path.c_str());
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_elements_ = wrapper.index_->max_elements();
         wrapper.M_ = wrapper.index_->M();
@@ -192,7 +192,7 @@ void register_hnsw(py::module_ &m) {
              py::arg("ef") = 0,
              py::arg("num_threads") = 1)
         .def("save", &HnswIndex::save, py::arg("path"))
-        .def_static("load", &HnswIndex::load, py::arg("path"), py::arg("metric") = "l2")
+        .def_static("load", &HnswIndex::load, py::arg("path"))
         .def_property_readonly("dim", &HnswIndex::dim)
         .def_property_readonly("max_elements", &HnswIndex::max_elements)
         .def_property_readonly("nbits", &HnswIndex::nbits)
