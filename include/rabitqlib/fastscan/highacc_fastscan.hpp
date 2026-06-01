@@ -198,10 +198,10 @@ inline void accumulate_hacc(
     }
 
     auto add_shiftl8 = [&](__m256i a, __m256i b, __m256i& r0, __m256i& r1) {
-        __m256i a0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(a));
-        __m256i a1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(a, 1));
-        __m256i b0 = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(b));
-        __m256i b1 = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(b, 1));
+        __m256i a0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(a));
+        __m256i a1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(a, 1));
+        __m256i b0 = _mm256_cvtepu16_epi32(_mm256_castsi256_si128(b));
+        __m256i b1 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(b, 1));
         r0 = _mm256_add_epi32(a0, _mm256_slli_epi32(b0, 8));
         r1 = _mm256_add_epi32(a1, _mm256_slli_epi32(b1, 8));
     };
