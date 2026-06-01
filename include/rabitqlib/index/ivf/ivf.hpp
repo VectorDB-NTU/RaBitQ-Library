@@ -105,6 +105,12 @@ class IVF {
 
     ~IVF();
 
+    [[nodiscard]] size_t max_elements() const { return num_; }
+    [[nodiscard]] size_t dimension() const { return dim_; }
+    [[nodiscard]] size_t nbits() const { return ex_bits_ + 1; }
+    [[nodiscard]] MetricType metric_type() const { return metric_type_; }
+    [[nodiscard]] RotatorType rotator_type() const { return type_; }
+
     void construct(const float*, const float*, const PID*, bool);
 
     void save(const char*) const;
@@ -112,6 +118,8 @@ class IVF {
     void load(const char*);
 
     void search(const float*, size_t, size_t, PID*, bool) const;
+
+    void search(const float*, size_t, size_t, PID*, float*, bool) const;
 
     [[nodiscard]] size_t padded_dim() const { return this->padded_dim_; }
 
@@ -395,6 +403,17 @@ inline void IVF::search(
     PID* __restrict__ results,
     bool use_hacc = true
 ) const {
+    this->search(query, k, nprobe, results, nullptr, use_hacc);
+}
+
+inline void IVF::search(
+    const float* __restrict__ query,
+    size_t k,
+    size_t nprobe,
+    PID* __restrict__ results,
+    float* __restrict__ dists,
+    bool use_hacc
+) const {
     nprobe = std::min(nprobe, num_cluster_);  // corner case
     std::vector<float> rotated_query(padded_dim_);
     this->rotator_->rotate(query, rotated_query.data());
@@ -431,7 +450,11 @@ inline void IVF::search(
         search_cluster(cur_cluster, q_obj, knns, use_hacc);
     }
 
-    knns.copy_results(results);
+    if (dists != nullptr) {
+        knns.copy_results(results, dists);
+    } else {
+        knns.copy_results(results);
+    }
 }
 
 inline void IVF::search_cluster(
