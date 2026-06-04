@@ -124,6 +124,9 @@ class HnswIndex {
     }
 
     void save(const std::string& path) const {
+        if (!built_) {
+            throw std::runtime_error("HnswIndex must be built or loaded before save");
+        }
         py::gil_scoped_release release;
         index_->save(path.c_str());
     }
@@ -149,6 +152,7 @@ class HnswIndex {
     [[nodiscard]] size_t nbits() const { return nbits_; }
     [[nodiscard]] bool is_built() const { return built_; }
     [[nodiscard]] size_t num_clusters() const { return num_clusters_; }
+    [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
 
    private:
     HnswIndex() = default;
@@ -197,5 +201,6 @@ void register_hnsw(py::module_ &m) {
         .def_property_readonly("max_elements", &HnswIndex::max_elements)
         .def_property_readonly("nbits", &HnswIndex::nbits)
         .def_property_readonly("num_clusters", &HnswIndex::num_clusters)
-        .def_property_readonly("is_built", &HnswIndex::is_built);
+        .def_property_readonly("is_built", &HnswIndex::is_built)
+        .def_property_readonly("metric", &HnswIndex::metric);
 }

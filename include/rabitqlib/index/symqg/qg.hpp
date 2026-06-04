@@ -136,6 +136,8 @@ class QuantizedGraph {
 
     [[nodiscard]] auto entry_point() const { return this->entry_point_; }
 
+    [[nodiscard]] auto metric_type() const { return this->metric_type_; }
+
     void set_ep(PID entry) { this->entry_point_ = entry; };
 
     void save(const char*) const;

@@ -111,6 +111,9 @@ class IvfIndex {
     }
 
     void save(const std::string& path) const {
+        if (!built_) {
+            throw std::runtime_error("IvfIndex must be built or loaded before save");
+        }
         py::gil_scoped_release release;
         index_->save(path.c_str());
     }
@@ -134,6 +137,7 @@ class IvfIndex {
     [[nodiscard]] size_t num_clusters() const { return num_clusters_; }
     [[nodiscard]] size_t nbits() const { return nbits_; }
     [[nodiscard]] bool is_built() const { return built_; }
+    [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
 
    private:
     IvfIndex() = default;
@@ -177,5 +181,6 @@ void register_ivf(py::module_ &m) {
        .def_property_readonly("max_elements", &IvfIndex::max_elements)
        .def_property_readonly("num_clusters", &IvfIndex::num_clusters)
        .def_property_readonly("nbits", &IvfIndex::nbits)
-       .def_property_readonly("is_built", &IvfIndex::is_built);
+       .def_property_readonly("is_built", &IvfIndex::is_built)
+       .def_property_readonly("metric", &IvfIndex::metric);
 }

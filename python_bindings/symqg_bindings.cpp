@@ -40,7 +40,7 @@ class SymqgIndex {
 
     py::tuple search(py::handle queries, size_t k, size_t ef, size_t num_threads = 1) {
         auto query_array = ensure_2d_array<float>(queries, "queries");
-        if (index_ == nullptr) {
+        if (!built_) {
             throw std::runtime_error("SymqgIndex must be built or loaded before search");
         }
         if (static_cast<size_t>(query_array.shape(1)) != dim_) {
@@ -78,7 +78,7 @@ class SymqgIndex {
     }
 
     void save(const std::string& path) const {
-        if (index_ == nullptr) {
+        if (!built_) {
             throw std::runtime_error("SymqgIndex must be built before save");
         }
         py::gil_scoped_release release;
@@ -93,6 +93,7 @@ class SymqgIndex {
         wrapper.num_points_ = wrapper.index_->num_vertices();
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_degree_ = wrapper.index_->degree_bound();
+        wrapper.metric_ = wrapper.index_->metric_type();
         wrapper.built_ = true;
         return wrapper;
     }
@@ -101,6 +102,7 @@ class SymqgIndex {
     [[nodiscard]] size_t max_degree() const { return max_degree_; }
     [[nodiscard]] size_t num_points() const { return num_points_; }
     [[nodiscard]] bool is_built() const { return built_; }
+    [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
 
    private:
     SymqgIndex() = default;
@@ -138,5 +140,6 @@ void register_symqg(py::module_ &m) {
        .def_property_readonly("dim", &SymqgIndex::dim)
        .def_property_readonly("max_degree", &SymqgIndex::max_degree)
        .def_property_readonly("num_points", &SymqgIndex::num_points)
-       .def_property_readonly("is_built", &SymqgIndex::is_built);
+       .def_property_readonly("is_built", &SymqgIndex::is_built)
+       .def_property_readonly("metric", &SymqgIndex::metric);
 }

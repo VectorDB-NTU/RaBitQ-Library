@@ -41,6 +41,7 @@ results/
 
 *.pyc
 .clang-*
+.clangd*
 
 # macOS garbages
 .DS_Store
