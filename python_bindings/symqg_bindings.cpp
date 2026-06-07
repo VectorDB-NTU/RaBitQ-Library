@@ -32,7 +32,6 @@ class SymqgIndex {
             num_points_, dim_, max_degree_, metric_, rabitqlib::RotatorType::FhtKacRotator
         );
 
-        py::gil_scoped_release release;
         rabitqlib::symqg::QGBuilder builder(*index_, ef_construction, data_array.data(), num_threads);
         builder.build();
         built_ = true;
@@ -47,32 +46,29 @@ class SymqgIndex {
             throw std::invalid_argument("query dimension does not match index dim");
         }
 
+        index_->set_ef(ef);
+
         const size_t nq = static_cast<size_t>(query_array.shape(0));
         const auto shape = std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
-        index_->set_ef(ef);
-
-        {    
-            py::gil_scoped_release release;
-            auto ids_buf = ids.mutable_unchecked<2>();
-            auto dists_buf = dists.mutable_unchecked<2>();
-        
-            rabitqlib::ivf::parallel_for(
-                0,
-                nq,
-                num_threads,
-                [&](size_t idx, size_t /*threadId*/) {
-                    std::vector<rabitqlib::PID> row_ids(k, 0);
-                    std::vector<float> row_dists(k, 0.0F);
-                    index_->search(query_array.data() + (idx * dim_), static_cast<uint32_t>(k), row_ids.data(), row_dists.data());
-                    for (size_t j = 0; j < k; ++j) {
-                        ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_ids[j];
-                        dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_dists[j];
-                    }
+        auto ids_buf = ids.mutable_unchecked<2>();
+        auto dists_buf = dists.mutable_unchecked<2>();
+    
+        rabitqlib::ivf::parallel_for(
+            0,
+            nq,
+            num_threads,
+            [&](size_t idx, size_t /*threadId*/) {
+                std::vector<rabitqlib::PID> row_ids(k, 0);
+                std::vector<float> row_dists(k, 0.0F);
+                index_->search(query_array.data() + (idx * dim_), static_cast<uint32_t>(k), row_ids.data(), row_dists.data());
+                for (size_t j = 0; j < k; ++j) {
+                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_ids[j];
+                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_dists[j];
                 }
-            );
-        }
+            }
+        );
 
         return py::make_tuple(ids, dists);
     }
@@ -81,14 +77,12 @@ class SymqgIndex {
         if (!built_) {
             throw std::runtime_error("SymqgIndex must be built before save");
         }
-        py::gil_scoped_release release;
         index_->save(path.c_str());
     }
 
     static SymqgIndex load(const std::string& path) {
         SymqgIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>();
-        py::gil_scoped_release release;
         wrapper.index_->load(path.c_str());
         wrapper.num_points_ = wrapper.index_->num_vertices();
         wrapper.dim_ = wrapper.index_->dimension();

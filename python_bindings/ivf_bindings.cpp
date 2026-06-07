@@ -55,7 +55,6 @@ class IvfIndex {
             throw std::invalid_argument("cluster_ids length must match number of rows in data");
         }
 
-        py::gil_scoped_release release;
         index_->construct(data_array.data(), centroids_array.data(), cluster_ids_array.data(), fast_quantization);
         built_ = true;
     }
@@ -76,36 +75,32 @@ class IvfIndex {
         const auto shape = std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
+        auto ids_buf = ids.mutable_unchecked<2>();
+        auto dists_buf = dists.mutable_unchecked<2>();
 
-        {
-            py::gil_scoped_release release;
-            auto ids_buf = ids.mutable_unchecked<2>();
-            auto dists_buf = dists.mutable_unchecked<2>();
-
-            rabitqlib::ivf::parallel_for(
-                0,
-                nq,
-                num_threads,
-                [&](size_t idx, size_t /*threadId*/) {
-                    std::vector<rabitqlib::PID> row_ids(k, 0);
-                    std::vector<float> row_dists(k, 0.0F);
-                    
-                    index_->search(
-                        query_array.data() + (idx * dim_),
-                        k,
-                        nprobe,
-                        row_ids.data(),
-                        row_dists.data(),
-                        high_accuracy
-                    );
-                    
-                    for (size_t j = 0; j < k; ++j) {
-                        ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_ids[j];
-                        dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_dists[j];
-                    }
+        rabitqlib::ivf::parallel_for(
+            0,
+            nq,
+            num_threads,
+            [&](size_t idx, size_t /*threadId*/) {
+                std::vector<rabitqlib::PID> row_ids(k, 0);
+                std::vector<float> row_dists(k, 0.0F);
+                
+                index_->search(
+                    query_array.data() + (idx * dim_),
+                    k,
+                    nprobe,
+                    row_ids.data(),
+                    row_dists.data(),
+                    high_accuracy
+                );
+                
+                for (size_t j = 0; j < k; ++j) {
+                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_ids[j];
+                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_dists[j];
                 }
-            );
-        }
+            }
+        );
 
         return py::make_tuple(ids, dists);
     }
@@ -114,14 +109,12 @@ class IvfIndex {
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before save");
         }
-        py::gil_scoped_release release;
         index_->save(path.c_str());
     }
 
     static IvfIndex load(const std::string& path) {
         IvfIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::ivf::IVF>();
-        py::gil_scoped_release release;
         wrapper.index_->load(path.c_str());
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_elements_ = wrapper.index_->max_elements();
