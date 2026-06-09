@@ -1,0 +1,20 @@
+[build-system]
+requires = ["scikit-build-core>=0.10.0", "pybind11>=2.12", "numpy"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "rabitqlib"
+version = "0.1.0"
+description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
+readme = "README.md"
+requires-python = ">=3.9"
+
+[tool.scikit-build]
+# Disable directory auto-discovery so we can map it via CMake's install target
+wheel.packages = []
+
+# Pass the toggle to your root CMake file automatically on pip install
+cmake.args = [
+    "-DRABITQ_BUILD_PYTHON_BINDINGS=ON",
+    "-DCMAKE_BUILD_TYPE=Release"
+]
