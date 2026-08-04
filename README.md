@@ -44,6 +44,7 @@ The RaBitQ algorithm has been implemented in many real-world systems in industry
 - [ElasticSearch](https://github.com/elastic/elasticsearch) - HNSW + RaBitQ (Java - the algorithm is adopted with some minor modifications and renamed as "BBQ")
 - [Lucene](https://github.com/apache/lucene) - HNSW + RaBitQ (Java - the algorithm is adopted with some minor modifications and renamed as "BBQ")
 - [turbopuffer](https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ) -  SPFresh + RaBitQ
+- [Zvec](https://github.com/alibaba/zvec) - HNSW/IVF + RaBitQ (C++)
 
 ## Acknowledgement
 
