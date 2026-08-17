@@ -178,7 +178,7 @@ inline void IVF::construct(
     std::vector<std::vector<PID>> id_lists(num_cluster_);
     for (size_t i = 0; i < num_; ++i) {
         PID cid = cluster_ids[i];
-        if (cid > num_cluster_) {
+        if (cid >= num_cluster_) {
             std::cerr << "Bad cluster id\n";
             exit(1);
         }
