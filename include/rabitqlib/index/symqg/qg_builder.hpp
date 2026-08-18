@@ -67,7 +67,7 @@ class QGBuilder {
         , pruned_neighbors_(qg_.num_vertices())
         , visited_list_(
               num_threads_,
-              HashBasedBooleanSet(std::min(ef_build_ * ef_build_, num_nodes_ / 10))
+              HashBasedBooleanSet(num_nodes_)
           )
         , degrees_(qg_.num_vertices(), degree_bound_) {
         omp_set_num_threads(static_cast<int>(num_threads_));
