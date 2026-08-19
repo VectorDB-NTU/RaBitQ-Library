@@ -18,9 +18,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <climits>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <unordered_set>
 #include <vector>
 
@@ -28,27 +30,11 @@
 #include "rabitqlib/utils/memory.hpp"
 
 namespace rabitqlib {
-/**
- * @brief Set of visited vertices, backed by a direct-mapped table plus an
- * std::unordered_set for collisions.
- *
- * Memory is sublinear in the id space, so this is the choice when the id space
- * is far larger than the number of vertices one search touches. The price is a
- * heap allocation per colliding visit and an O(table) clear().
- *
- * See EpochBasedVisitedSet in visited_set_epoch.hpp for the constant-time-clear
- * alternative, and visited_set.hpp for how one of the two is selected.
- *
- * The constructor argument is the ID SPACE (number of vertices); the table is
- * sized down from it internally, so callers pass the same number they would
- * pass to any other visited set.
- */
 class HashBasedVisitedSet {
-   private:
-    // The id space is divided by this before the table is sized, since only a
-    // small fraction of the vertices is visited by a single search.
-    static constexpr size_t kSizeDivisor = 10;
+   public:
+    static constexpr size_t kNoSizeHint = std::numeric_limits<size_t>::max();
 
+   private:
     size_t table_size_ = 0;
     PID mask_ = 0;
     std::vector<PID, memory::AlignedAllocator<PID>> table_;
@@ -78,10 +64,12 @@ class HashBasedVisitedSet {
     HashBasedVisitedSet(HashBasedVisitedSet&&) noexcept = default;
     HashBasedVisitedSet& operator=(HashBasedVisitedSet&&) noexcept = default;
 
-    explicit HashBasedVisitedSet(size_t num_elements) { initialize(num_elements); }
+    explicit HashBasedVisitedSet(size_t num_elements, size_t size_hint = kNoSizeHint) {
+        initialize(num_elements, size_hint);
+    }
 
-    void initialize(size_t num_elements) {
-        size_t size = num_elements / kSizeDivisor;
+    void initialize(size_t num_elements, size_t size_hint = kNoSizeHint) {
+        size_t size = std::min(num_elements, size_hint);
         size_t bit_size = 0;
         size_t bit = size;
         while (bit != 0) {
@@ -97,7 +85,6 @@ class HashBasedVisitedSet {
         stl_hash_.clear();
     }
 
-    // get if data_id is in the visited set
     [[nodiscard]] bool get(PID data_id) const {
         PID val = this->table_[hash1(data_id)];
         if (val == data_id) {

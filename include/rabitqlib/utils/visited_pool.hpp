@@ -11,11 +11,10 @@ class VisitedListPool {
     size_t numelements_;
 
    public:
-    // max_elements is the id space; each implementation sizes itself from it.
     VisitedListPool(size_t initpoolsize, size_t max_elements) {
         numelements_ = max_elements;
         for (size_t i = 0; i < initpoolsize; i++) {
-            pool_.push_front(new VisitedSet(numelements_));
+            pool_.push_front(new VisitedSet(numelements_, numelements_ / 10));
         }
     }
 
@@ -27,7 +26,7 @@ class VisitedListPool {
                 rez = pool_.front();
                 pool_.pop_front();
             } else {
-                rez = new VisitedSet(numelements_);
+                rez = new VisitedSet(numelements_, numelements_ / 10);
             }
         }
         rez->clear();
