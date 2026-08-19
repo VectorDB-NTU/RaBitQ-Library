@@ -1,21 +1,3 @@
-// This code is modified based on NGT from Yahoo Japan
-// https://github.com/yahoojapan/NGT
-//
-// Copyright (C) 2015 Yahoo Japan Corporation
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//    http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-
 #pragma once
 
 #include <algorithm>
@@ -34,31 +16,32 @@ namespace rabitqlib {
  * clear() therefore just bumps the generation -- O(1), and only the rare
  * 16-bit wraparound pays for an actual refill.
  *
- * This replaces a direct-mapped table with an std::unordered_set overflow. That
+ * This replaces HashBasedVisitedSet (visited_set_hash.hpp), whose direct-mapped
  * table was sized at max_elements/10 rounded down to a power of two, so a
  * single ef=100 search collided on nearly every visit and allocated an
  * unordered_set node each time: measured at ~1200 mallocs per query, 98% of all
  * allocation on the search path. Removing them was worth ~1.6x on HNSW search.
+ * The trade is memory: two bytes per id in the whole id space, resident for the
+ * lifetime of the set. See visited_set.hpp for how one of the two is selected.
  *
- * The constructor argument is now the ID SPACE (number of vertices), not a
- * bucket-count hint -- ids are used to index directly, so it must cover every
- * id that will be passed to get()/set().
+ * The constructor argument is the ID SPACE (number of vertices) -- ids are used
+ * to index directly, so it must cover every id passed to get()/set().
  */
-class HashBasedBooleanSet {
+class EpochBasedVisitedSet {
    private:
     std::vector<uint16_t, memory::AlignedAllocator<uint16_t>> stamp_;
     uint16_t cur_ = 0;
 
    public:
-    HashBasedBooleanSet() = default;
-    ~HashBasedBooleanSet() = default;
+    EpochBasedVisitedSet() = default;
+    ~EpochBasedVisitedSet() = default;
 
-    HashBasedBooleanSet(const HashBasedBooleanSet&) = default;
-    HashBasedBooleanSet& operator=(const HashBasedBooleanSet&) = default;
-    HashBasedBooleanSet(HashBasedBooleanSet&&) noexcept = default;
-    HashBasedBooleanSet& operator=(HashBasedBooleanSet&&) noexcept = default;
+    EpochBasedVisitedSet(const EpochBasedVisitedSet&) = default;
+    EpochBasedVisitedSet& operator=(const EpochBasedVisitedSet&) = default;
+    EpochBasedVisitedSet(EpochBasedVisitedSet&&) noexcept = default;
+    EpochBasedVisitedSet& operator=(EpochBasedVisitedSet&&) noexcept = default;
 
-    explicit HashBasedBooleanSet(size_t num_elements) { initialize(num_elements); }
+    explicit EpochBasedVisitedSet(size_t num_elements) { initialize(num_elements); }
 
     void initialize(size_t num_elements) {
         stamp_.assign(num_elements, 0);
@@ -75,7 +58,7 @@ class HashBasedBooleanSet {
         }
     }
 
-    // get if data_id is in the hashset
+    // get if data_id is in the visited set
     [[nodiscard]] bool get(PID data_id) const { return stamp_[data_id] == cur_; }
 
     void set(PID data_id) { stamp_[data_id] = cur_; }
