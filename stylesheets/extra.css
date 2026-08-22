@@ -1,0 +1,74 @@
+:root {
+  --rabitq-gradient-start: #4051b5;
+  --rabitq-gradient-end: #7e57c2;
+}
+
+.hero {
+  margin: 0 0 2rem;
+  padding: 2.5rem;
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--rabitq-gradient-start),
+    var(--rabitq-gradient-end)
+  );
+  border-radius: 0.8rem;
+  box-shadow: 0 0.5rem 1.5rem rgb(32 45 94 / 20%);
+}
+
+.hero > :first-child {
+  margin-top: 0;
+}
+
+.hero .md-button {
+  margin-top: 0.5rem;
+  margin-right: 0.35rem;
+  color: #fff;
+  border-color: rgb(255 255 255 / 70%);
+}
+
+.hero .md-button:hover,
+.hero .md-button:focus {
+  color: var(--md-primary-fg-color);
+  background-color: #fff;
+  border-color: #fff;
+}
+
+.hero .md-button--primary {
+  color: var(--md-primary-fg-color);
+  background-color: #fff;
+  border-color: #fff;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.feature-card {
+  padding: 1.2rem;
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.6rem;
+}
+
+.feature-card h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.feature-card p {
+  margin-bottom: 0;
+  color: var(--md-default-fg-color--light);
+}
+
+@media screen and (max-width: 44.9844em) {
+  .hero {
+    padding: 1.5rem;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}
