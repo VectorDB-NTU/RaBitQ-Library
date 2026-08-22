@@ -45,7 +45,7 @@ gtest_discover_tests(rabitq_tests)
 
 # Message to verify files are found
 message(STATUS "Discovered test files:")
-foreach(TEST_SRC ${ALL_TEST_SRCS})
+foreach(TEST_SRC ${UNIT_TESTS} ${INTEG_TESTS})
     file(RELATIVE_PATH REL_PATH ${CMAKE_CURRENT_SOURCE_DIR} ${TEST_SRC})
     message(STATUS "  - ${REL_PATH}")
 endforeach()
