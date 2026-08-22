@@ -1,25 +1,24 @@
-# RaBitQ Testing Framework
+# RaBitQ Tests
 
-This directory contains the comprehensive testing framework for the RaBitQ library 
+This directory contains the C++ unit and integration tests and the Python
+binding tests for RaBitQ Library.
 
 ## Prerequisites
 
-- CMake 3.10 or higher
-- C++17 compatible compiler (GCC, Clang, or MSVC)
-- Google Test (automatically downloaded via CMake FetchContent)
+- CMake 3.10 or newer
+- A GCC- or Clang-compatible C++17 compiler with OpenMP support
+- An x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 runtime dispatch
+- Network access during the first configuration so CMake can download
+  GoogleTest 1.14.0
 
-### Installing CMake 
+The current CMake configuration uses GCC/Clang command-line options and does
+not provide a supported MSVC build path.
 
-For macos
-```bash
-brew install cmake
-```
-
-for (Ubuntu/Debian)
+On Ubuntu or Debian, install the required build tools with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install cmake
+sudo apt-get install -y build-essential cmake libomp-dev
 ```
 
 ## Building and Running Tests
@@ -29,29 +28,20 @@ sudo apt-get install cmake
 From the project root directory:
 
 ```bash
-# Create build directory
-mkdir build bin
-cd build
-
-# Configure with tests enabled (tests are OFF by default)
-cmake .. -DRABITQ_BUILD_TESTS=ON
-
-# Build the tests
-make -j$(nproc)
-
-# Run all tests
-./tests/rabitq_tests
-
-# Or use CTest for detailed output
-ctest --output-on-failure
+cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
+
+The combined test executable is also available as `build/tests/rabitq_tests`.
 
 ### Building without Tests
 
 By default, tests are **not built**. If you want to build only the library:
 
 ```bash
-cmake ..
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
 
 
@@ -59,16 +49,27 @@ cmake ..
 
 ```
 tests/
-├── CMakeLists.txt              # Automatic test discovery & suite configuration
-├── main.cpp                    # Test runner entry point
-├── common/                     # Test utilities and helpers
-│   ├── test_data.hpp           # Test data generation utilities
+├── .gitignore
+├── CMakeLists.txt                 # C++ targets and CTest discovery
+├── README.md
+├── common/                        # Shared C++ test utilities
+│   ├── test_data.hpp
 │   ├── test_data.cpp
-│   └── test_helpers.hpp       # Custom assertions and helpers
-├── unit/                       # Unit tests (auto-discovered)
-├── integration/                # Integration tests (auto-discovered)
-└── benchmark/                  # Performance benchmarks (to be added)
+│   └── test_helpers.hpp
+├── integration/
+│   └── bit_pack_unpack_test.cpp
+├── python/
+│   ├── conftest.py
+│   ├── test_hnsw.py
+│   ├── test_import.py
+│   ├── test_ivf.py
+│   └── test_symqg.py
+└── unit/rabitqlib/utils/
+    ├── cpu_features_test.cpp
+    ├── rotator_test.cpp
+    ├── space_test.cpp
+    └── visited_set_test.cpp
 ```
 
-## Test Coverage
-
+CMake discovers C++ files matching `*_test.cpp` under `unit/` and
+`integration/`. The Python tests are run separately with `python -m pytest`.

@@ -1,9 +1,17 @@
 # QG + RaBitQ (SymphonyQG)
 
-[QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0) is a graph-based index originated from the [NGT library](https://github.com/yahoojapan/NGT). Different from HNSW, it creates multiple quantization codes for every vector and carefully re-organizes their layout to minimize random memory accesses in querying. RaBitQ + QG in developped from our research project [SymphonyQG](https://dl.acm.org/doi/10.1145/3709730). Unlike IVF + RaBitQ and HNSW + RaBitQ, which consumes less memory than the raw datasets, RaBitQ + QG consumes more memory to pursue the best time-accuracy trade-off.
-Here, we offer a toy example for the indexing and querying of QG.
-To test QG on real-world datasets, please refer to `sample/symqg_indexing.cpp` and `sample/symqg_querying.cpp` for
-detailed information
+[QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0)
+is a graph-based index originating from the
+[NGT library](https://github.com/yahoojapan/NGT). This implementation comes
+from the [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) project. For
+each vertex it stores the raw vector, a fixed-size neighbor list, and batched
+one-bit RaBitQ data for those neighbors. This layout uses more memory than the
+raw vectors alone, but lets graph traversal estimate a group of neighbor
+distances with FastScan while computing exact distances for visited vertices.
+
+Memory and performance depend on the dimension, degree, build window, and
+search window. See `sample/cpp/symqg_indexing.cpp` and
+`sample/cpp/symqg_querying.cpp` for complete programs.
 
 ## Index Construction
 
@@ -16,7 +24,8 @@ QuantizedGraph::QuantizedGraph(
         size_t num,
         size_t dim,
         size_t max_deg,
-        RotatorType type = RotatorType::FhtKacRotator
+        MetricType metric_type = METRIC_L2,
+        RotatorType rotator_type = RotatorType::FhtKacRotator
     );
 
 QGBuilder::QGBuilder(
@@ -37,20 +46,20 @@ QGBuilder::QGBuilder(
 size_t rows = 1000000;
 size_t cols = 128;
 size_t degree = 32;
-size_t ef = 200
+size_t ef = 200;
 
-float* data = new float[rows * cols]; // only for illustration
+std::vector<float> data(rows * cols); // populate with the dataset
 
-QuantizedGraph qg(rows, cols, degree); // init qg
+QuantizedGraph<float> qg(rows, cols, degree);
 
-QGBuilder builder(qg, ef, data.data()); // init builder
+QGBuilder builder(qg, ef, data.data());
 ```
 
 Then, we can use the builder to construct the index. Then we can save the index.
 ```cpp
 builder.build();    // build index interatively
 
-const char* index_file = "./qg_example.index"
+const char* index_file = "./qg_example.index";
 qg.save(index_file);    // save index
 ```
 
@@ -62,6 +71,10 @@ Each indexed element is stored in the following layout.
 [Batch data for QG]
 [Edges]
 ```
+
+`Batch data for QG` contains one-bit codes and estimator factors for the
+element's neighbors, organized in FastScan batches of 32. Consequently,
+`max_deg` must be a multiple of 32.
 
 ## Querying
 
@@ -84,8 +97,8 @@ qg.load("./qg_example.index"); // load pre-constructed index
 size_t ef = 100;
 size_t topk = 10;
 std::vector<PID> results(topk); // result buffer
-float* query = new float[cols]; // query vector (only for illustration)
+std::vector<float> query(cols); // populate with a query vector
 
 qg.set_ef(ef);  // set search window size
-qg.search(query, topk, results.data()); // search knn, result will be stored in results
+qg.search(query.data(), topk, results.data());
 ```

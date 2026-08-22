@@ -1,54 +1,130 @@
-# Welcome to The RaBitQ Library
+# Compact vector search with RaBitQ
 
-The RaBitQ Library provides efficient and lightweight implementations of the RaBitQ quantization algorithm ([1-bit version](https://arxiv.org/abs/2405.12497) and [multi-bit version](https://arxiv.org/abs/2409.09913)) and its applications in high-dimensional vector search. The core algorithm RaBitQ is based on the research from [VectorDB group](https://vectordb-ntu.github.io/) at Nanyang Technological University, Singapore. 
+<div class="hero" markdown>
 
-The library provides the following key features:
+**RaBitQ Library** is a C++17 library with Python bindings for compact,
+accurate vector quantization and approximate nearest-neighbor search.
 
-* **RaBitQ** - a vector quantization algorithm as a drop-in replacement of binary and scalar quantization, offering an optimal theoretical error bound
-* **RaBitQ for Vector Search** - a reference implementation of RaBitQ's combination with popular vector search indexes
+Build with the low-level quantizer or use complete IVF, HNSW, and SymphonyQG
+indexes backed by optimized AVX2 and AVX-512 kernels.
 
-The RaBitQ Library supports estimating similarity metrics including Euclidean distance, inner product and cosine similarity.
+[Get started](quick_start.md){ .md-button .md-button--primary }
+[View on GitHub](https://github.com/VectorDB-NTU/RaBitQ-Library){ .md-button }
+[Install from PyPI](https://pypi.org/project/rabitqlib/){ .md-button }
 
-## RaBitQ 
+</div>
 
-RaBitQ is a vector quantization algorithm as a drop-in replacement of binary and scalar quantization. The key advantages of RaBitQ include
+<div class="feature-grid">
+  <div class="feature-card">
+    <h2>Compact by design</h2>
+    <p>Use RaBitQ as an alternative to binary or scalar quantization, with
+    useful estimates from a one-bit code per padded dimension plus a small
+    set of per-vector factors.</p>
+  </div>
+  <div class="feature-card">
+    <h2>Fast on modern CPUs</h2>
+    <p>Runtime dispatch selects optimized AVX2 or AVX-512 kernels. IVF and
+    SymphonyQG use FastScan for batched distance estimation.</p>
+  </div>
+  <div class="feature-card">
+    <h2>Ready for vector search</h2>
+    <p>Choose IVF, HNSW, or SymphonyQG to balance memory, indexing cost,
+    latency, and recall for your workload.</p>
+  </div>
+</div>
 
-- **High Accuracy with Tiny Space** - RaBitQ achieves the state-of-the-art accuracy under diverse bit-width for the estimation of similarity metrics. It produces promising accuracy with even **1-bit per dimension**.
-- **Fast Distance Estimation** - RaBitQ supports to estimate the similarity metrics with high efficiency based on bitwise operations or [FastScan](https://arxiv.org/abs/1704.07355).
-- **Theoretical Error Bound** - RaBitQ provides an asymptotically optimal error bound for the estimation of distances and inner product. The error bound can be used for reliable ordering and reranking.
+## Start with Python
 
-In this library, we provide simple interfaces to support advanced features of RaBitQ. The details are presented in [RaBitQ](rabitq/rabitq.md).
+Install the latest release from PyPI:
 
-## RaBitQ for Vector Search
- In the library, RaBitQ is combined with [IVF](index/ivf.md), [HNSW](index/hnsw.md) and [QG](index/qg.md) to deliever different trade-offs among time, space and accuracy. 
+```bash
+python -m pip install rabitqlib
+```
 
-Using RaBitQ with IVF and HNSW targets a balance between memory consumption and query performance. Only the quantization codes produced by RaBitQ are stored and the raw data vectors are not accessed during querying. Thus, these methods consume less memory than the raw dataset. 
-Using **4-bit, 5-bit and 7-bit** quantization usually suffices to produce **90%, 95% and 99% recall** respectively without reranking. 
+Build an IVF index and search a batch of queries:
 
-Using RaBitQ with QG targets the best query performance by using more memory. It creates multiple quantization codes for every vector to optimize the data access pattern. Thus, QG usually consumes 2x memory of the raw dataset. 
+```python
+import numpy as np
+from rabitqlib import IvfIndex
 
+rng = np.random.default_rng(42)
+data = rng.standard_normal((500, 64)).astype(np.float32)
+queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-## RaBitQ in Industry
+cluster_ids = (np.arange(len(data)) % 5).astype(np.uint32)
+centroids = np.stack(
+    [data[cluster_ids == cluster].mean(axis=0) for cluster in range(5)]
+).astype(np.float32)
 
-The RaBitQ algorithm has been implemented in many real-world systems in industry including 
+index = IvfIndex(
+    dim=64,
+    max_elements=len(data),
+    num_clusters=5,
+    nbits=4,
+    metric="l2",
+)
+index.build(data, centroids, cluster_ids)
 
-- [Milvus](https://github.com/milvus-io/milvus) - IVF + RaBitQ (C++)
-- [Faiss](https://github.com/facebookresearch/faiss) - IVF + RaBitQ (C++)
-- [VSAG](https://github.com/antgroup/vsag) - HGraph + RaBitQ (C++)
-- [VectorChord](https://github.com/tensorchord/VectorChord) - IVF + RaBitQ (Rust)
-- [Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) - DiskANN + RaBitQ
-- [CockroachDB](https://github.com/cockroachdb/cockroach) - CSPANN + RaBitQ (Golang)
-- [ElasticSearch](https://github.com/elastic/elasticsearch) - HNSW + RaBitQ (Java - the algorithm is adopted with some minor modifications and renamed as "BBQ")
-- [Lucene](https://github.com/apache/lucene) - HNSW + RaBitQ (Java - the algorithm is adopted with some minor modifications and renamed as "BBQ")
+ids, distances = index.search(queries, k=10, nprobe=5)
+print(ids.shape, distances.shape)  # (5, 10) (5, 10)
+```
 
-## Acknowledgement
+[Continue to the complete quick start](quick_start.md){ .md-button .md-button--primary }
 
-We acknowledge Alexandr Guzhva, Li Liu, Chao Gao, Silu Huang, Jiabao Jin, Xiaoyao Zhong and Jinjing Zhou for valuable feedbacks. 
+## Choose an index
 
+| Index | Best fit | Typical relative memory | Main search control |
+| --- | --- | --- | --- |
+| [IVF + RaBitQ](index/ivf.md) | Large datasets and predictable memory use | Lowest | Number of probed clusters |
+| [HNSW + RaBitQ](index/hnsw.md) | General-purpose graph search | Moderate | Search candidate list size |
+| [SymphonyQG](index/qg.md) | Latency-focused graph search | Highest | Search window size |
 
-## Reference 
-Please provide a reference of our paper if it helps in your systems or research projects.
+IVF and HNSW store quantized vectors instead of accessing raw vectors during
+search. SymphonyQG uses additional memory and multiple codes per vector to
+optimize its access pattern.
 
-<pre style="white-space: pre-wrap; word-break: break-word; font-family: monospace; background: #f5f5f5; padding: 1em; border-radius: 5px; font-size: 0.85em;">
-Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, Raymond Chi-Wing Wong, "Practical and Asymptotically Optimal Quantization of High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor Search", SIGMOD 2025, available at https://arxiv.org/abs/2409.09913
-</pre>
+These are typical relative profiles, not fixed guarantees. Actual memory,
+latency, and recall depend on vector dimension, quantization width, graph
+degree, and search parameters.
+
+## Why RaBitQ?
+
+- **High accuracy with tiny codes.** RaBitQ provides strong similarity
+  estimates across different bit widths and remains effective with a one-bit
+  code per padded dimension plus per-vector factors.
+- **Fast distance estimation.** IVF and SymphonyQG use
+  [FastScan](https://arxiv.org/abs/1704.07355) for batched estimates; HNSW
+  uses single-code AVX kernels.
+- **Theoretical error bounds.** An asymptotically optimal error bound supports
+  reliable ordering and reranking.
+- **Multiple integration points.** Use the quantizer directly or select a
+  complete vector-search index.
+
+The library supports Euclidean distance and inner product. Cosine similarity
+can be implemented by normalizing vectors and using inner product.
+It implements the [1-bit RaBitQ](https://arxiv.org/abs/2405.12497) and
+[multi-bit RaBitQ](https://arxiv.org/abs/2409.09913) research from the
+[VectorDB Group](https://vectordb-ntu.github.io/) at Nanyang Technological
+University.
+
+## Used across the vector-search ecosystem
+
+RaBitQ has been adopted by projects including
+[Milvus](https://github.com/milvus-io/milvus),
+[Faiss](https://github.com/facebookresearch/faiss),
+[VSAG](https://github.com/antgroup/vsag),
+[VectorChord](https://github.com/tensorchord/VectorChord),
+[CockroachDB](https://github.com/cockroachdb/cockroach),
+[Elasticsearch](https://github.com/elastic/elasticsearch),
+[Lucene](https://github.com/apache/lucene),
+[turbopuffer](https://turbopuffer.com/blog/ann-v3), and
+[Zvec](https://github.com/alibaba/zvec).
+
+## Citation
+
+If RaBitQ helps your research or system, please cite:
+
+> Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, and Raymond
+> Chi-Wing Wong. “Practical and Asymptotically Optimal Quantization of
+> High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
+> Search.” SIGMOD 2025. [arXiv:2409.09913](https://arxiv.org/abs/2409.09913).

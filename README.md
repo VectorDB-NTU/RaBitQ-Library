@@ -11,7 +11,8 @@ vector quantization and approximate nearest-neighbor search. It provides:
   [multi-bit](https://arxiv.org/abs/2409.09913) RaBitQ quantizers;
 - IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730)
   indexes powered by RaBitQ;
-- Euclidean distance, inner product, and cosine similarity estimation; and
+- Euclidean distance and inner-product search (cosine search is
+  available by normalizing vectors before using inner product); and
 - optimized AVX2 and AVX-512 kernels with runtime CPU dispatch.
 
 RaBitQ is developed by the
@@ -29,11 +30,14 @@ University, Singapore. A GPU implementation is also available in
 - a C++17 compiler
 - CMake 3.15 or newer
 - OpenMP
-- an x86-64 CPU with AVX2 and FMA support
+- an x86-64 CPU supported by the selected kernels: most paths accept either
+  AVX2 with FMA or AVX-512F/BW/DQ with FMA
 
-AVX2 and FMA are the baseline SIMD requirements. On CPUs that also support
-AVX-512F, AVX-512BW, and AVX-512DQ, RaBitQ selects its AVX-512 kernels at
-runtime. AVX-512 VPOPCNTDQ provides additional acceleration when available.
+Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
+AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
+available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
+AVX-512 core path also checks for AVX2 and FMA, and otherwise uses its AVX2
+path when available. AVX-512 translation units are compiled with FMA enabled.
 
 On Ubuntu or Debian, install the system build tools and then install RaBitQ
 from the repository:
@@ -88,11 +92,14 @@ persistence.
 
 - CMake 3.10 or newer
 - a C++17 compiler with OpenMP support
-- an x86-64 CPU with AVX2 and FMA support
+- an x86-64 CPU supported by the selected kernels: most paths accept either
+  AVX2 with FMA or AVX-512F/BW/DQ with FMA
 
-AVX2 and FMA are the baseline SIMD requirements. On CPUs that also support
-AVX-512F, AVX-512BW, and AVX-512DQ, RaBitQ selects its AVX-512 kernels at
-runtime. AVX-512 VPOPCNTDQ provides additional acceleration when available.
+Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
+AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
+available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
+AVX-512 core path also checks for AVX2 and FMA, and otherwise uses its AVX2
+path when available. AVX-512 translation units are compiled with FMA enabled.
 
 Clone and build the library and example programs:
 
@@ -134,15 +141,18 @@ the build, formatting, pre-commit, and static-analysis workflows.
 
 ## Why RaBitQ?
 
-- **High accuracy with tiny codes.** RaBitQ provides state-of-the-art
-  similarity estimation across different bit widths and remains effective at
-  one bit per dimension.
-- **Fast distance estimation.** Its kernels use bitwise operations and
-  [FastScan](https://arxiv.org/abs/1704.07355) for efficient search.
+- **High accuracy with tiny codes.** RaBitQ provides state-of-the-art similarity
+  estimation across different bit widths and remains effective with a
+  one-bit code per padded dimension plus per-vector factors.
+- **Fast distance estimation.** IVF and SymphonyQG use
+  [FastScan](https://arxiv.org/abs/1704.07355) for batched estimates, while
+  HNSW uses single-code AVX2 or AVX-512 kernels.
 - **Theoretical error bounds.** RaBitQ provides an asymptotically optimal error
   bound that can support reliable ordering and reranking.
-- **Multiple index trade-offs.** IVF and HNSW prioritize memory efficiency,
-  while SymphonyQG uses additional memory to optimize query performance.
+- **Multiple index trade-offs.** IVF stores quantized codes without the raw
+  dataset. HNSW adds graph links but also searches from quantized codes.
+  SymphonyQG retains raw vectors and stores per-neighborhood quantization data
+  to improve its access pattern.
 
 In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
 90%, 95%, and 99% recall, respectively, without reranking. Actual results

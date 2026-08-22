@@ -1,10 +1,18 @@
 # HNSW + RaBitQ
-[HNSW](https://arxiv.org/abs/1603.09320) is a popular graph-based index. HNSW + RaBitQ consumes the more memory than IVF + RaBitQ because it needs to store the edges of every vertex in a graph (e.g., 32 edges = 1,024 bits). In terms of the time-accuracy trade-off, HNSW + RaBitQ and IVF + RaBitQ perform differently across datasets—sometimes the former works better, and sometimes the latter does.
+[HNSW](https://arxiv.org/abs/1603.09320) is a popular graph-based index. Under
+comparable quantization settings, HNSW + RaBitQ typically uses more memory
+than IVF + RaBitQ because it stores graph structures in addition to quantized
+vectors. The actual comparison depends on vector dimension, bit width, graph
+degree, and index parameters.
 This document describes how the library integrates HNSW with RaBitQ to support efficient vector search.
 
 ## Index Construction
 
-We build the HNSW graph by incrementally inserting new elements following the standard HNSW routine. Currently, we support building the index using raw data vectors and storing the corresponding quantization codes.
+The graph is built by incrementally inserting raw data vectors. Raw vectors
+are used to construct and prune graph links, but the completed index stores
+the links, centroids, cluster IDs, labels, RaBitQ codes, and factors rather
+than a copy of the raw dataset. Total bit widths from 1 through 9 are
+supported.
 
 Users can invoke:
 
@@ -21,9 +29,9 @@ HierarchicalNSW::construct(size_t cluster_num,
 - **data**: Pointer to the raw data vectors.
 - **data_num**: The number of data vectors.
 - **centroids**: Centroids computed by K-means clustering on the raw data vectors (we recommend `cluster_num = 16`).  
-- **cluster_ids**: Array of length `data_num` where each entry indicates the centroid ID (0–15) for the corresponding data vector.  
+- **cluster_ids**: Array of length `data_num`; every entry must be in the range `[0, cluster_num)`.
 - **num_threads**: Number of threads to use (default: 0, which auto-selects).
-- **faster**: If `true`, enales fast quantizer.
+- **faster**: If `true`, enables the faster quantizer.
 
 
 During construction, we first rotate the centroids and then insert each element one by one. For each element:
@@ -90,4 +98,3 @@ Repeat until `candidate_set` is empty:
    - Insert the neighbor into `candidate_set` with its (possibly refined) estimated distance.  
 
 The search terminates when `candidate_set` is empty.
-
