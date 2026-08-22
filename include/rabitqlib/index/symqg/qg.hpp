@@ -20,12 +20,12 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/array.hpp"
 #include "rabitqlib/utils/buffer.hpp"
-#include "rabitqlib/utils/hashset.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/visited_pool.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 
@@ -94,25 +94,16 @@ class QuantizedGraph {
         );
     }
 
-    void find_candidates(
-        PID,
-        size_t,
-        std::vector<AnnCandidate<T>>&,
-        HashBasedBooleanSet&,
-        const std::vector<uint32_t>&
-    ) const;
+    void
+    find_candidates(PID, size_t, std::vector<AnnCandidate<T>>&, VisitedSet&, const std::vector<uint32_t>&)
+        const;
 
     void update_qg(PID, const std::vector<AnnCandidate<T>>&);
 
-    void update_results(buffer::SearchBuffer<T>&, HashBasedBooleanSet&, const T*);
+    void update_results(buffer::SearchBuffer<T>&, VisitedSet&, const T*);
 
     void scan_neighbors(
-        const BatchQuery<T>&,
-        PID,
-        T*,
-        buffer::SearchBuffer<T>&,
-        HashBasedBooleanSet&,
-        size_t
+        const BatchQuery<T>&, PID, T*, buffer::SearchBuffer<T>&, VisitedSet&, size_t
     ) const;
 
    public:
@@ -352,7 +343,7 @@ void QuantizedGraph<T>::scan_neighbors(
     PID data_id,
     T* est_dist,
     buffer::SearchBuffer<T>& search_pool,
-    HashBasedBooleanSet& vis,
+    VisitedSet& vis,
     size_t cur_degree
 ) const {
     const auto* batch_data = get_batch_data(data_id);
@@ -378,7 +369,7 @@ void QuantizedGraph<T>::scan_neighbors(
 
 template <typename T>
 inline void QuantizedGraph<T>::update_results(
-    buffer::SearchBuffer<T>& result_pool, HashBasedBooleanSet& vis, const T* query
+    buffer::SearchBuffer<T>& result_pool, VisitedSet& vis, const T* query
 ) {
     if (result_pool.is_full()) {
         return;
@@ -433,7 +424,7 @@ inline void QuantizedGraph<T>::find_candidates(
     PID cur_id,
     size_t search_ef,
     std::vector<AnnCandidate<T>>& results,
-    HashBasedBooleanSet& vis,
+    VisitedSet& vis,
     const std::vector<uint32_t>& degrees
 ) const {
     const T* query = get_vector(cur_id);

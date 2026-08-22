@@ -777,7 +777,7 @@ inline void HierarchicalNSW::add_point(
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
     PID ep_id, PID cur_c, int layer
 ) {
-    HashBasedBooleanSet* vl = visited_list_pool_->get_free_vislist();
+    VisitedSet* vl = visited_list_pool_->get_free_vislist();
 
     maxheap<std::pair<float, PID>> top_candidates;
     minheap<std::pair<float, PID>> candidate_set;
@@ -1225,7 +1225,7 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
     [[maybe_unused]] const float* query,
     BoundedKNN& boundedKNN
 ) {
-    HashBasedBooleanSet* vl = visited_list_pool_->get_free_vislist();
+    VisitedSet* vl = visited_list_pool_->get_free_vislist();
 
     // Use our bounded priority queue instead of the maxheap.
     buffer::SearchBuffer<float> candidate_set(ef);

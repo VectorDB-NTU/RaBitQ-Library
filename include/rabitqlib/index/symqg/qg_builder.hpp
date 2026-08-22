@@ -11,9 +11,9 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
-#include "rabitqlib/utils/hashset.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
@@ -37,9 +37,9 @@ class QGBuilder {
     static constexpr size_t kMaxPrunedSize =
         300;                                    // max number of recorded pruned candidates
     std::vector<CandidateList> new_neighbors_;  // new neighbors for current iteration
-    std::vector<CandidateList> pruned_neighbors_;    // recorded pruned neighbors
-    std::vector<HashBasedBooleanSet> visited_list_;  // list of visited hash set
-    std::vector<uint32_t> degrees_;                  // record degree of qg
+    std::vector<CandidateList> pruned_neighbors_;  // recorded pruned neighbors
+    std::vector<VisitedSet> visited_list_;         // per-thread visited sets
+    std::vector<uint32_t> degrees_;                // record degree of qg
     void random_init();
     void search_new_neighbors(bool refine);
     void heuristic_prune(PID, CandidateList&, CandidateList&, bool);
@@ -67,7 +67,7 @@ class QGBuilder {
         , pruned_neighbors_(qg_.num_vertices())
         , visited_list_(
               num_threads_,
-              HashBasedBooleanSet(std::min(ef_build_ * ef_build_, num_nodes_ / 10))
+              VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
           )
         , degrees_(qg_.num_vertices(), degree_bound_) {
         omp_set_num_threads(static_cast<int>(num_threads_));
@@ -236,7 +236,7 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
         PID cur_id = i;
         auto tid = omp_get_thread_num();
         CandidateList candidates;
-        HashBasedBooleanSet& vis = visited_list_[tid];
+        VisitedSet& vis = visited_list_[tid];
         candidates.reserve(2 * kMaxCandidatePoolSize);
         vis.clear();
         qg_.find_candidates(cur_id, ef_build_, candidates, vis, degrees_);
