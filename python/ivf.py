@@ -1,7 +1,8 @@
-import faiss
 import sys
 from time import time
-from utils.io import read_fvecs, write_fvecs, write_ivecs, read_fbin
+
+import faiss
+from utils.io import read_fvecs, write_fvecs, write_ivecs
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
@@ -12,7 +13,6 @@ if __name__ == "__main__":
         print("arg4: path for cluster ids")
         print("arg5: distance metric")
         exit(1)
-    
 
     # path
     data_path = sys.argv[1]
@@ -28,9 +28,9 @@ if __name__ == "__main__":
             metric = faiss.METRIC_INNER_PRODUCT
             print("Using InnerProduct metric")
         else:
-             raise ValueError("Unsupported distance metric. Use 'l2' or 'ip'.")
+            raise ValueError("Unsupported distance metric. Use 'l2' or 'ip'.")
     else:
-        metric = faiss.METRIC_L2 # by default, L2 metric
+        metric = faiss.METRIC_L2  # by default, L2 metric
         print("Using L2 metric by default")
 
     X = read_fvecs(data_path)
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     index.train(X)
 
     t2 = time()
-    print(f"Time for training ivf {t2-t1} secs")
+    print(f"Time for training ivf {t2 - t1} secs")
 
     centroids = index.quantizer.reconstruct_n(0, index.nlist)
     _, cluster_id = index.quantizer.search(X, 1)

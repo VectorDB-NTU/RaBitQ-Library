@@ -1,27 +1,21 @@
 #ifndef RABITQ_TEST_DATA_HPP
 #define RABITQ_TEST_DATA_HPP
 
-#include <vector>
-#include <random>
 #include <cstddef>
+#include <random>
+#include <vector>
 
 namespace rabitq_test {
 
 class TestDataGenerator {
-public:
+   public:
     // Generate random float vector with values in [min, max]
     static std::vector<float> GenerateRandomVector(
-        size_t dim,
-        float min = -1.0f,
-        float max = 1.0f,
-        unsigned int seed = 42
+        size_t dim, float min = -1.0f, float max = 1.0f, unsigned int seed = 42
     );
 
     // Generate random normalized vector (unit length)
-    static std::vector<float> GenerateNormalizedVector(
-        size_t dim,
-        unsigned int seed = 42
-    );
+    static std::vector<float> GenerateNormalizedVector(size_t dim, unsigned int seed = 42);
 
     // Generate multiple random vectors
     static std::vector<std::vector<float>> GenerateRandomVectors(
@@ -34,10 +28,7 @@ public:
 
     // Generate Gaussian distributed vector
     static std::vector<float> GenerateGaussianVector(
-        size_t dim,
-        float mean = 0.0f,
-        float stddev = 1.0f,
-        unsigned int seed = 42
+        size_t dim, float mean = 0.0f, float stddev = 1.0f, unsigned int seed = 42
     );
 
     // Generate a simple test vector with known values
@@ -53,6 +44,6 @@ public:
     static std::vector<float> GenerateIncrementalVector(size_t dim);
 };
 
-} // namespace rabitq_test
+}  // namespace rabitq_test
 
-#endif // RABITQ_TEST_DATA_HPP
+#endif  // RABITQ_TEST_DATA_HPP

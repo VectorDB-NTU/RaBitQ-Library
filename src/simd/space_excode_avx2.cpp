@@ -138,7 +138,6 @@ float ip64_fxu3_avx2(
         contribute_ip(vec_16_to_31, &query[i + 16], sum);
         contribute_ip(vec_32_to_47, &query[i + 32], sum);
         contribute_ip(vec_48_to_63, &query[i + 48], sum);
-
     }
 
     result = mm256_reduce_add_ps(sum);
@@ -172,7 +171,6 @@ float ip64_fxu5_avx2(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     __m256 sum = _mm256_setzero_ps();
-
 
     float result = 0.0F;
     const __m128i mask = _mm_set1_epi8(0b1111);
@@ -211,7 +209,6 @@ float ip64_fxu5_avx2(
         contribute_ip(vec_16_to_31, &query[i + 16], sum);
         contribute_ip(vec_32_to_47, &query[i + 32], sum);
         contribute_ip(vec_48_to_63, &query[i + 48], sum);
-
     }
     result = mm256_reduce_add_ps(sum);
 
@@ -249,7 +246,6 @@ float ip64_fxu6_avx2(
         contribute_ip(vec_16_to_31, &query[i + 16], sum);
         contribute_ip(vec_32_to_47, &query[i + 32], sum);
         contribute_ip(vec_48_to_63, &query[i + 48], sum);
-
     }
     result = mm256_reduce_add_ps(sum);
 
@@ -260,7 +256,6 @@ float ip64_fxu7_avx2(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     __m256 sum = _mm256_setzero_ps();
-
 
     float result = 0.0F;
     const __m128i mask6 = _mm_set1_epi8(0b00111111);
@@ -305,7 +300,6 @@ float ip64_fxu7_avx2(
         contribute_ip(vec_16_to_31, &query[i + 16], sum);
         contribute_ip(vec_32_to_47, &query[i + 32], sum);
         contribute_ip(vec_48_to_63, &query[i + 48], sum);
-
     }
 
     result = mm256_reduce_add_ps(sum);

@@ -39,9 +39,7 @@ class HierarchicalNSW;
 
 namespace detail {
 
-maxheap<std::pair<float, PID>> search_knn_avx2(
-    HierarchicalNSW&, const float*, size_t
-);
+maxheap<std::pair<float, PID>> search_knn_avx2(HierarchicalNSW&, const float*, size_t);
 
 maxheap<std::pair<float, PID>> search_knn_avx512_core(
     HierarchicalNSW&, const float*, size_t
@@ -55,7 +53,7 @@ maxheap<std::pair<float, PID>> search_knn_avx512_popcnt(
 
 class HierarchicalNSW {
    public:
-    explicit HierarchicalNSW() {};
+    explicit HierarchicalNSW(){};
     explicit HierarchicalNSW(
         size_t, size_t, size_t, size_t, size_t, size_t = 100, MetricType = METRIC_L2
     );
@@ -318,14 +316,13 @@ class HierarchicalNSW {
 
     // ANN Search
     template <class Kernel>
-    void get_bin_est_direct(
-        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
-    );
+    void
+    get_bin_est_direct(std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&);
 
     template <class Kernel>
-    void get_full_est_direct(
-        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
-    ) const;
+    void
+    get_full_est_direct(std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&)
+        const;
 
     maxheap<std::pair<float, PID>> search_knn(const float*, size_t);
 
@@ -375,9 +372,7 @@ inline HierarchicalNSW::HierarchicalNSW(
     , label_op_locks_(kMaxLabelOperationLock)
     , link_list_locks_(max_elements)
     , element_levels_(max_elements)
-    , raw_dist_func_(
-          (metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
-      ) {
+    , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>) {
     max_elements_ = max_elements;
     dim_ = dim;
     rotator_ = choose_rotator<float>(
@@ -492,12 +487,12 @@ inline void HierarchicalNSW::save(const char* filename) const {
 
     output.write(
         reinterpret_cast<const char*>(centroids_memory_),
-        num_cluster_ * padded_dim_ * sizeof(float)
+        static_cast<std::streamsize>(num_cluster_ * padded_dim_ * sizeof(float))
     );
 
     output.write(
         reinterpret_cast<const char*>(data_level0_memory_),
-        cur_element_count_ * size_data_per_element_
+        static_cast<std::streamsize>(cur_element_count_ * size_data_per_element_)
     );
 
     for (size_t i = 0; i < cur_element_count_; i++) {
@@ -553,15 +548,25 @@ inline void HierarchicalNSW::load(const char* filename) {
     input.read(reinterpret_cast<char*>(&mult_), sizeof(double));
     input.read(reinterpret_cast<char*>(&ef_construction_), sizeof(size_t));
 
-    centroids_memory_ =
-        reinterpret_cast<char*>(malloc(num_cluster_ * padded_dim_ * sizeof(float)));
+    const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
+    centroids_memory_ = reinterpret_cast<char*>(malloc(centroids_bytes));
+    if (centroids_memory_ == nullptr) {
+        throw std::runtime_error("Not enough memory: loadIndex failed to allocate centroids"
+        );
+    }
 
-    input.read(centroids_memory_, num_cluster_ * padded_dim_ * sizeof(float));
+    input.read(
+        centroids_memory_,
+        static_cast<std::streamsize>(num_cluster_ * padded_dim_ * sizeof(float))
+    );
 
     data_level0_memory_ =
         reinterpret_cast<char*>(malloc(max_elements_ * size_data_per_element_));
 
-    input.read(data_level0_memory_, cur_element_count_ * size_data_per_element_);
+    input.read(
+        data_level0_memory_,
+        static_cast<std::streamsize>(cur_element_count_ * size_data_per_element_)
+    );
 
     std::cout << "cur_element_count = " << cur_element_count_ << '\n';
 
@@ -570,8 +575,7 @@ inline void HierarchicalNSW::load(const char* filename) {
 
     linkLists_ = reinterpret_cast<char**>(malloc(sizeof(void*) * max_elements_));
     if (linkLists_ == nullptr) {
-        throw std::runtime_error(
-            "Not enough memory: loadIndex failed to allocate linklists"
+        throw std::runtime_error("Not enough memory: loadIndex failed to allocate linklists"
         );
     }
 
@@ -624,8 +628,8 @@ inline void HierarchicalNSW::construct(
     bool faster = false
 ) {
     num_cluster_ = cluster_num;
-    centroids_memory_ =
-        reinterpret_cast<char*>(malloc(num_cluster_ * padded_dim_ * sizeof(float)));
+    const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
+    centroids_memory_ = reinterpret_cast<char*>(malloc(centroids_bytes));
     if (centroids_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids");
     }
@@ -1233,7 +1237,9 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
     float distk = 1e10;
 
     EstimateRecord start_estimate_record;
-    get_full_est_direct<Kernel>(q_to_centroids, query_wrapper, ep_id, start_estimate_record);
+    get_full_est_direct<Kernel>(
+        q_to_centroids, query_wrapper, ep_id, start_estimate_record
+    );
     float est_dist = start_estimate_record.est_dist;
     float low_dist = start_estimate_record.low_dist;
 
@@ -1270,13 +1276,15 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
                 );
             }
 
-            if(vl->get(candidate_id)) {
+            if (vl->get(candidate_id)) {
                 continue;
             }
             vl->set(candidate_id);
 
             EstimateRecord candest;
-            get_bin_est_direct<Kernel>(q_to_centroids, query_wrapper, candidate_id, candest);
+            get_bin_est_direct<Kernel>(
+                q_to_centroids, query_wrapper, candidate_id, candest
+            );
 
             bool flag_update_KNNs = boundedKNN.size() < TOPK || candest.low_dist < distk;
 
@@ -1289,8 +1297,7 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
                 }
                 Candidate cand{
                     ResultRecord(candest.est_dist, candest.low_dist),
-                    static_cast<PID>(candidate_id)
-                };
+                    static_cast<PID>(candidate_id)};
                 boundedKNN.insert(cand);
                 distk = boundedKNN.worst().record.est_dist;
             }

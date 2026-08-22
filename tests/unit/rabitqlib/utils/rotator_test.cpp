@@ -1,17 +1,21 @@
-#include <gtest/gtest.h>
 #include "rabitqlib/utils/rotator.hpp"
-#include "test_helpers.hpp"
-#include "test_data.hpp"
-#include <vector>
+
+#include <gtest/gtest.h>
+
 #include <cmath>
-#include <fstream>
 #include <cstring>
+#include <fstream>
+#include <memory>
+#include <vector>
+
+#include "test_data.hpp"
+#include "test_helpers.hpp"
 
 using namespace rabitqlib;
 using namespace rabitq_test;
 
 class RotatorTest : public ::testing::Test {
-protected:
+   protected:
     void SetUp() override {
         dim = 128;
         test_data = TestDataGenerator::GenerateRandomVector(dim, -1.0f, 1.0f, 42);
@@ -28,15 +32,13 @@ protected:
 
 // Test that FhtKacRotator is chosen by default
 TEST_F(RotatorTest, DefaultRotatorType) {
-    Rotator<float>* rotator = choose_rotator<float>(dim);
+    std::unique_ptr<Rotator<float>> rotator(choose_rotator<float>(dim));
     ASSERT_NE(rotator, nullptr);
 
     // FhtKacRotator pads to multiple of 64
     size_t padded_dim = rotator->size();
     EXPECT_EQ(padded_dim % 64, 0);
     EXPECT_GE(padded_dim, dim);
-
-    delete rotator;
 }
 
 uint8_t bitreverse8(uint8_t x) {
@@ -67,7 +69,7 @@ TEST(FlipSignTest, FlipWorks) {
         ASSERT_EQ(abs(data[i]), static_cast<float>(i + 1));
         int sign = (data[i] < 0) ? 1 : 0;
         signs = (signs << 1) | sign;
-        if(i%8 == 7) {
+        if (i % 8 == 7) {
             uint8_t expected = flip[i / 8];
             signs = bitreverse8(signs);
             ASSERT_EQ(static_cast<uint8_t>(signs & 0xFF), expected);

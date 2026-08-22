@@ -92,9 +92,14 @@ void new_transpose_bin_512_avx512(
             __m512i vec = _mm512_loadu_si512(current_q);
 
             for (size_t j = 0; j < b_query; ++j) {
-                int bit_idx = b_query - 1 - j;
-                __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(1 << bit_idx));
-                tq[(b_query - j - 1) * num_chunks + k] = reverse_bits_u64(static_cast<uint64_t>(m));
+                int bit_idx = static_cast<int>(b_query - 1 - j);
+                // The signed byte preserves the intended one-bit mask, including bit 7.
+                const char bit_mask = static_cast<char>(
+                    1U << bit_idx
+                );  // NOLINT(bugprone-narrowing-conversions)
+                __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(bit_mask));
+                tq[(b_query - j - 1) * num_chunks + k] =
+                    reverse_bits_u64(static_cast<uint64_t>(m));
             }
         }
 

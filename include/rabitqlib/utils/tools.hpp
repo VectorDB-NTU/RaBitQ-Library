@@ -26,9 +26,17 @@ inline void assert_floating() {
 // thread save rand int
 template <typename T>
 inline T rand_integer(T min, T max) {
-    static thread_local std::mt19937 generator(
-        std::random_device{}() + std::hash<std::thread::id>()(std::this_thread::get_id())
-    );
+    static thread_local std::mt19937 generator = [] {
+        std::random_device rd;
+        const size_t thread_hash = std::hash<std::thread::id>()(std::this_thread::get_id());
+        std::seed_seq seed{
+            rd(),
+            rd(),
+            static_cast<uint32_t>(thread_hash),
+            static_cast<uint32_t>(thread_hash >> 32U),
+        };
+        return std::mt19937(seed);
+    }();
     std::uniform_int_distribution<T> distribution(min, max);
     return distribution(generator);
 }

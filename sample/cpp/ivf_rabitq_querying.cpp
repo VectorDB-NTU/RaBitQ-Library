@@ -88,18 +88,26 @@ int main(int argc, char** argv) {
             size_t nprobe = nprobes[l];
             if (nprobe > ivf.num_clusters()) {
                 std::cout << "nprobe " << nprobe << " is larger than number of clusters, ";
-                std::cout << "will use nprobe = num_cluster (" << ivf.num_clusters() << ").\n";
+                std::cout << "will use nprobe = num_cluster (" << ivf.num_clusters()
+                          << ").\n";
             }
             size_t total_correct = 0;
             float total_time = 0;
             std::vector<PID> results(topk);
             for (size_t i = 0; i < nq; i++) {
                 stopw.reset();
-                ivf.search(&query(i, 0), topk, nprobe, results.data(), use_hacc);
+                ivf.search(
+                    &query(static_cast<Eigen::Index>(i), 0),
+                    topk,
+                    nprobe,
+                    results.data(),
+                    use_hacc
+                );
                 total_time += stopw.get_elapsed_micro();
                 for (size_t j = 0; j < topk; j++) {
                     for (size_t k = 0; k < topk; k++) {
-                        if (gt(i, k) == results[j]) {
+                        if (gt(static_cast<Eigen::Index>(i),
+                               static_cast<Eigen::Index>(k)) == results[j]) {
                             total_correct++;
                             break;
                         }
@@ -148,10 +156,13 @@ static std::vector<size_t> get_nprobes(
         size_t total_correct = 0;
         std::vector<PID> results(topk);
         for (size_t i = 0; i < nq; i++) {
-            ivf.search(&query(i, 0), topk, nprobe, results.data());
+            ivf.search(
+                &query(static_cast<Eigen::Index>(i), 0), topk, nprobe, results.data()
+            );
             for (size_t j = 0; j < topk; j++) {
                 for (size_t k = 0; k < topk; k++) {
-                    if (gt(i, k) == results[j]) {
+                    if (gt(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(k)) ==
+                        results[j]) {
                         total_correct++;
                         break;
                     }

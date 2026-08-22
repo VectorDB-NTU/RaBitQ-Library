@@ -6,6 +6,58 @@ concurrency:
   group: ${{ github.head_ref || github.sha }}-${{ github.workflow }}
   cancel-in-progress: true
 jobs:
+  format:
+    name: C++ formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-15
+      - name: Check formatting
+        run: ./scripts/check-format.sh
+
+  clang-tidy:
+    name: C++ static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-tidy-15 libomp-15-dev cmake ninja-build
+          python -m pip install "numpy>=1.23" "pybind11>=2.12"
+      - name: Locate pybind11
+        run: echo "pybind11_DIR=$(python -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
+      - name: Configure compilation database
+        run: >-
+          cmake -S . -B build-tidy -G Ninja
+          -DRABITQ_BUILD_TESTS=ON
+          -DRABITQ_BUILD_PYTHON_BINDINGS=ON
+          -DCMAKE_BUILD_TYPE=Release
+          -Dpybind11_DIR="$pybind11_DIR"
+      - name: Run clang-tidy
+        run: ./scripts/check-tidy.sh build-tidy
+
+  shellcheck:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+      - name: Check scripts
+        run: shellcheck scripts/*.sh
+
   ubuntu:
     name: Ubuntu
     runs-on: ubuntu-latest

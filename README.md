@@ -127,6 +127,11 @@ GoogleTest is downloaded during test configuration. For a full benchmark on
 the GIST dataset, see [`example.sh`](example.sh). More detailed API and
 algorithm guidance is available in the [documentation](docs/docs/index.md).
 
+## Contributing
+
+Contributions are welcome. See the [contributing guide](CONTRIBUTING.md) for
+the build, formatting, pre-commit, and static-analysis workflows.
+
 ## Why RaBitQ?
 
 - **High accuracy with tiny codes.** RaBitQ provides state-of-the-art

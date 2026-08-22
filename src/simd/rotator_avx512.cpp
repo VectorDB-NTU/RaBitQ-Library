@@ -1,8 +1,9 @@
-#include "rabitqlib/simd/rotator_dispatch.hpp"
-
 #include <immintrin.h>
 
 #include <cstring>
+#include <limits>
+
+#include "rabitqlib/simd/rotator_dispatch.hpp"
 
 namespace rabitqlib::simd {
 
@@ -29,7 +30,8 @@ void flip_sign_avx512(const uint8_t* flip, float* data, size_t dim) {
             _cvtu32_mask16(static_cast<uint32_t>((mask_bits >> 48) & 0xFFFF));
 
         // Prepare sign-flip constant
-        const __m512 sign_flip = _mm512_castsi512_ps(_mm512_set1_epi32(0x80000000));
+        const __m512 sign_flip =
+            _mm512_castsi512_ps(_mm512_set1_epi32(std::numeric_limits<int>::min()));
 
         // Process 16 floats at a time with each mask segment
         __m512 vec0 = _mm512_loadu_ps(&data[i]);

@@ -14,7 +14,9 @@ namespace rabitqlib::cpu {
 namespace {
 
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-void cpuid(uint32_t leaf, uint32_t subleaf, uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d) {
+void cpuid(
+    uint32_t leaf, uint32_t subleaf, uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d
+) {
     int info[4];
     __cpuidex(info, static_cast<int>(leaf), static_cast<int>(subleaf));
     *a = static_cast<uint32_t>(info[0]);
@@ -23,7 +25,9 @@ void cpuid(uint32_t leaf, uint32_t subleaf, uint32_t* a, uint32_t* b, uint32_t* 
     *d = static_cast<uint32_t>(info[3]);
 }
 #elif defined(__x86_64__) || defined(__i386__)
-void cpuid(uint32_t leaf, uint32_t subleaf, uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d) {
+void cpuid(
+    uint32_t leaf, uint32_t subleaf, uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d
+) {
     __cpuid_count(leaf, subleaf, *a, *b, *c, *d);
 }
 #else
@@ -72,8 +76,6 @@ bool has_avx512_core() {
     return detected.avx512f && detected.avx512bw && detected.avx512dq;
 }
 
-bool has_avx512_popcnt() {
-    return has_avx512_core() && features().avx512vpopcntdq;
-}
+bool has_avx512_popcnt() { return has_avx512_core() && features().avx512vpopcntdq; }
 
 }  // namespace rabitqlib::cpu

@@ -4,7 +4,7 @@
 
 #include "rabitqlib/third/Eigen/Dense"
 
-#define BIT_ID(x) (__builtin_popcount((x) - 1))
+#define BIT_ID(x) (__builtin_popcount((x)-1))
 #define LOWBIT(x) ((x) & (-(x)))
 
 namespace rabitqlib {

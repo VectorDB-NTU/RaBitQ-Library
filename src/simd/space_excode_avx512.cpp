@@ -128,7 +128,6 @@ float ip64_fxu3_avx512(
         q = _mm512_loadu_ps(&query[i + 48]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
         sum = _mm512_fmadd_ps(q, cf, sum);
-
     }
 
     result = _mm512_reduce_add_ps(sum);
@@ -164,7 +163,6 @@ float ip64_fxu5_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     __m512 sum = _mm512_setzero_ps();
-
 
     float result = 0.0F;
     const __m128i mask = _mm_set1_epi8(0b1111);
@@ -217,7 +215,6 @@ float ip64_fxu5_avx512(
         q = _mm512_loadu_ps(&query[i + 48]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
         sum = _mm512_fmadd_ps(q, cf, sum);
-
     }
     result = _mm512_reduce_add_ps(sum);
 
@@ -269,7 +266,6 @@ float ip64_fxu6_avx512(
         q = _mm512_loadu_ps(&query[i + 48]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
         sum = _mm512_fmadd_ps(q, cf, sum);
-
     }
     result = _mm512_reduce_add_ps(sum);
 
@@ -280,7 +276,6 @@ float ip64_fxu7_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     __m512 sum = _mm512_setzero_ps();
-
 
     float result = 0.0F;
     const __m128i mask6 = _mm_set1_epi8(0b00111111);
@@ -339,7 +334,6 @@ float ip64_fxu7_avx512(
         q = _mm512_loadu_ps(&query[i + 48]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
         sum = _mm512_fmadd_ps(q, cf, sum);
-
     }
 
     result = _mm512_reduce_add_ps(sum);

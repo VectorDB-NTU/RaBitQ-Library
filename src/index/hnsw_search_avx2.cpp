@@ -1,5 +1,4 @@
 #include "hnsw_search_avx2_kernels.hpp"
-
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 
 namespace rabitqlib::hnsw::detail {

@@ -1,5 +1,6 @@
-import numpy as np
 import struct
+
+import numpy as np
 
 
 def read_ivecs(filename):

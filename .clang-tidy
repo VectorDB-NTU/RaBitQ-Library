@@ -1,0 +1,30 @@
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-branch-clone,
+  bugprone-infinite-loop,
+  bugprone-macro-parentheses,
+  bugprone-macro-repeated-side-effects,
+  bugprone-narrowing-conversions,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-*,
+  bugprone-use-after-move,
+  misc-redundant-expression,
+  misc-static-assert,
+  misc-throw-by-value-catch-by-reference,
+  modernize-use-noexcept,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-using,
+  performance-*,
+  portability-*,
+  readability-duplicate-include,
+  readability-inconsistent-declaration-parameter-name,
+  readability-misleading-indentation,
+  readability-redundant-control-flow,
+  -portability-simd-intrinsics,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+
+# Keep the selected first-party baseline regression-free. Repository-wide
+# naming checks remain deferred because they would change public APIs.
+WarningsAsErrors: "*"

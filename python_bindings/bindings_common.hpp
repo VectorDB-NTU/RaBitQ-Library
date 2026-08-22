@@ -1,13 +1,13 @@
 #pragma once
 
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
-
-#include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/utils/rotator.hpp"
@@ -42,8 +42,7 @@ inline rabitqlib::RotatorType rotator_from_string(const std::string& method) {
 
 template <typename T>
 inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_2d_array(
-    py::handle value,
-    const char* name
+    py::handle value, const char* name
 ) {
     auto array = py::array_t<T, py::array::c_style | py::array::forcecast>::ensure(value);
     if (!array) {
@@ -57,8 +56,7 @@ inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_2d_array
 
 template <typename T>
 inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_1d_array(
-    py::handle value,
-    const char* name
+    py::handle value, const char* name
 ) {
     auto array = py::array_t<T, py::array::c_style | py::array::forcecast>::ensure(value);
     if (!array) {

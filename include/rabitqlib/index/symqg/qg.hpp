@@ -83,8 +83,7 @@ class QuantizedGraph {
     }
 
     [[nodiscard]] PID* get_neighbors(PID data_id) {
-        return reinterpret_cast<PID*>(
-            &data_.at((row_offset_ * data_id) + neighbor_offset_)
+        return reinterpret_cast<PID*>(&data_.at((row_offset_ * data_id) + neighbor_offset_)
         );
     }
 

@@ -10,8 +10,7 @@ struct BatchDataMap {
    public:
     explicit BatchDataMap(char* data, size_t padded_dim)
         : batch_bin_code_(reinterpret_cast<uint8_t*>(data))
-        , f_add_(
-              reinterpret_cast<T*>(data + (padded_dim * fastscan::kBatchSize / 8))
+        , f_add_(reinterpret_cast<T*>(data + (padded_dim * fastscan::kBatchSize / 8))
           )  // 1 bit code
         , f_rescale_(f_add_ + fastscan::kBatchSize)
         , f_error_(f_rescale_ + fastscan::kBatchSize) {}
@@ -38,8 +37,7 @@ struct ConstBatchDataMap {
    public:
     explicit ConstBatchDataMap(const char* data, size_t padded_dim)
         : batch_bin_code_(reinterpret_cast<const uint8_t*>(data))
-        , f_add_(
-              reinterpret_cast<const T*>(data + (padded_dim * fastscan::kBatchSize / 8))
+        , f_add_(reinterpret_cast<const T*>(data + (padded_dim * fastscan::kBatchSize / 8))
           )  // 1 bit code
         , f_rescale_(f_add_ + fastscan::kBatchSize)
         , f_error_(f_rescale_ + fastscan::kBatchSize) {}
@@ -61,8 +59,7 @@ struct QGBatchDataMap {
    public:
     explicit QGBatchDataMap(char* data, size_t padded_dim)
         : batch_bin_code_(reinterpret_cast<uint8_t*>(data))
-        , f_add_(
-              reinterpret_cast<T*>(data + (padded_dim * fastscan::kBatchSize / 8))
+        , f_add_(reinterpret_cast<T*>(data + (padded_dim * fastscan::kBatchSize / 8))
           )  // 1 bit code
         , f_rescale_(f_add_ + fastscan::kBatchSize) {}
 
@@ -86,8 +83,7 @@ struct ConstQGBatchDataMap {
    public:
     explicit ConstQGBatchDataMap(const char* data, size_t padded_dim)
         : batch_bin_code_(reinterpret_cast<const uint8_t*>(data))
-        , f_add_(
-              reinterpret_cast<const T*>(data + (padded_dim * fastscan::kBatchSize / 8))
+        , f_add_(reinterpret_cast<const T*>(data + (padded_dim * fastscan::kBatchSize / 8))
           )  // 1 bit code
         , f_rescale_(f_add_ + fastscan::kBatchSize) {}
 
@@ -134,8 +130,7 @@ struct ConstExDataMap {
     explicit ConstExDataMap(const char* data, size_t padded_dim, size_t ex_bits)
         : ex_code_(reinterpret_cast<const uint8_t*>(data))
         , f_add_ex_(*reinterpret_cast<const T*>(data + (padded_dim * ex_bits / 8)))
-        , f_recale_ex_(
-              *(reinterpret_cast<const T*>(data + (padded_dim * ex_bits / 8)) + 1)
+        , f_recale_ex_(*(reinterpret_cast<const T*>(data + (padded_dim * ex_bits / 8)) + 1)
           ) {}
 
     [[nodiscard]] const uint8_t* ex_code() const { return ex_code_; }

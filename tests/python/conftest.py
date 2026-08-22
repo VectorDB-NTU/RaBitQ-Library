@@ -16,6 +16,7 @@ N_CLUSTERS = 5  # used by IVF and HNSW
 
 # ── data fixtures ─────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def base_data() -> np.ndarray:
     """500 random float32 vectors of dimension 64."""
@@ -42,6 +43,7 @@ def clusters(base_data: np.ndarray):
 
 # ── pure-numpy helpers ────────────────────────────────────────────────────────
 
+
 def brute_force_knn(data: np.ndarray, queries: np.ndarray, k: int):
     """Exact L2 k-NN. Returns (ids, sq_dists) of shape (nq, k).
 
@@ -59,7 +61,5 @@ def brute_force_knn(data: np.ndarray, queries: np.ndarray, k: int):
 def recall_at_k(approx_ids: np.ndarray, exact_ids: np.ndarray, k: int) -> float:
     """Fraction of exact top-k neighbors found in the approximate top-k results."""
     nq = approx_ids.shape[0]
-    hits = sum(
-        len(set(approx_ids[i, :k]) & set(exact_ids[i, :k])) for i in range(nq)
-    )
+    hits = sum(len(set(approx_ids[i, :k]) & set(exact_ids[i, :k])) for i in range(nq))
     return hits / (nq * k)

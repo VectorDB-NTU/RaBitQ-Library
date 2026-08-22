@@ -103,6 +103,8 @@ static inline void prefetch_l2(const void* addr) {
 }
 
 inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
+    // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
+    // NOLINTBEGIN(bugprone-branch-clone)
     switch (num_lines) {
         default:
             [[fallthrough]];
@@ -184,14 +186,16 @@ inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
             [[fallthrough]];
         case 1:
             prefetch_l1(ptr);
-            ptr += 64;
             [[fallthrough]];
         case 0:
             break;
     }
+    // NOLINTEND(bugprone-branch-clone)
 }
 
 inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
+    // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
+    // NOLINTBEGIN(bugprone-branch-clone)
     switch (num_lines) {
         default:
             [[fallthrough]];
@@ -273,10 +277,10 @@ inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
             [[fallthrough]];
         case 1:
             prefetch_l2(ptr);
-            ptr += 64;
             [[fallthrough]];
         case 0:
             break;
     }
+    // NOLINTEND(bugprone-branch-clone)
 }
 }  // namespace rabitqlib::memory
