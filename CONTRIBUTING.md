@@ -61,7 +61,7 @@ performance checks. Install the pinned analyzer and the dependencies needed to
 configure every first-party target:
 
 ```bash
-sudo apt-get install clang-tidy-15 cmake ninja-build
+sudo apt-get install clang-tidy-15 libomp-15-dev cmake ninja-build
 python -m pip install "numpy>=1.23" "pybind11>=2.12"
 ```
 

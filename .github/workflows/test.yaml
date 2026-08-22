@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y clang-tidy-15 cmake ninja-build
+          sudo apt-get install -y clang-tidy-15 libomp-15-dev cmake ninja-build
           python -m pip install "numpy>=1.23" "pybind11>=2.12"
       - name: Locate pybind11
         run: echo "pybind11_DIR=$(python -m pybind11 --cmakedir)" >> "$GITHUB_ENV"
