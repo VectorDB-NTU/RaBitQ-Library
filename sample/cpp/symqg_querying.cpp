@@ -11,8 +11,25 @@ using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
 std::vector<size_t> efs = {
-    10, 20, 40, 50, 60, 80, 100, 150, 170, 190, 200, 250, 300, 400, 500, 600, 700, 800, 1500
-};
+    10,
+    20,
+    40,
+    50,
+    60,
+    80,
+    100,
+    150,
+    170,
+    190,
+    200,
+    250,
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    1500};
 size_t test_round = 3;
 size_t topk = 10;
 
@@ -53,11 +70,12 @@ int main(int argc, char** argv) {
             std::vector<PID> results(topk);
             for (size_t z = 0; z < nq; z++) {
                 stopw.reset();
-                qg.search(&query(z, 0), topk, results.data());
+                qg.search(&query(static_cast<Eigen::Index>(z), 0), topk, results.data());
                 total_time += stopw.get_elapsed_micro();
                 for (size_t y = 0; y < topk; y++) {
                     for (size_t k = 0; k < topk; k++) {
-                        if (gt(z, k) == results[y]) {
+                        if (gt(static_cast<Eigen::Index>(z),
+                               static_cast<Eigen::Index>(k)) == results[y]) {
                             total_correct++;
                             break;
                         }

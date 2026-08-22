@@ -37,9 +37,23 @@ constexpr static std::array<int, 16> kPos = {
 };  // all possible combination for a 4 bit string
 
 constexpr static std::array<int, 16> kPerm0 = {
-    0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15
-};  // data order of packed quantization code, please refer to code and the link offered
-    // above for detailed information
+    0,
+    8,
+    1,
+    9,
+    2,
+    10,
+    3,
+    11,
+    4,
+    12,
+    5,
+    13,
+    6,
+    14,
+    7,
+    15};  // data order of packed quantization code, please refer to code and the link
+          // offered above for detailed information
 
 template <typename T, class TA>
 static inline void get_column(

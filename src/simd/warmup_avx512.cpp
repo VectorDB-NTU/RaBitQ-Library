@@ -70,8 +70,6 @@ float warmup_ip_x0_q_512_avx512(
     ppc_scalar += static_cast<size_t>(_mm512_reduce_add_epi64(acc_ppc));
 
     return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
-
 }
-
 
 }  // namespace rabitqlib::simd

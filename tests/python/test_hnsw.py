@@ -2,15 +2,15 @@
 
 import numpy as np
 import pytest
+from conftest import DIM, N_CLUSTERS, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
 from rabitqlib import HnswIndex
-
-from conftest import DIM, N_CLUSTERS, N_VECTORS, N_QUERIES, brute_force_knn, recall_at_k
 
 _TOPK = 10
 _EF = 50  # generous ef for correctness tests on a small dataset
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def built_hnsw(base_data, clusters):
@@ -21,6 +21,7 @@ def built_hnsw(base_data, clusters):
 
 
 # ── construction ──────────────────────────────────────────────────────────────
+
 
 def test_is_built(built_hnsw):
     assert built_hnsw.is_built
@@ -42,6 +43,7 @@ def test_fast_quantization_builds(base_data, clusters):
 
 
 # ── search output shape and dtype ─────────────────────────────────────────────
+
 
 def test_search_output_shape(built_hnsw, query_data):
     ids, dists = built_hnsw.search(query_data, k=_TOPK, ef=_EF)
@@ -78,6 +80,7 @@ def test_single_query(built_hnsw, query_data):
 
 # ── search correctness ────────────────────────────────────────────────────────
 
+
 def test_self_retrieval(built_hnsw, base_data):
     """Each database vector must be its own nearest neighbor at high ef."""
     probes = base_data[:10]
@@ -97,6 +100,7 @@ def test_recall_vs_brute_force(built_hnsw, base_data, query_data):
 
 # ── error handling ────────────────────────────────────────────────────────────
 
+
 def test_wrong_data_dim_raises(clusters):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
@@ -112,6 +116,7 @@ def test_wrong_query_dim_raises(built_hnsw):
 
 
 # ── save / load roundtrip ─────────────────────────────────────────────────────
+
 
 def test_save_load_roundtrip(built_hnsw, query_data, tmp_path):
     path = str(tmp_path / "hnsw.index")

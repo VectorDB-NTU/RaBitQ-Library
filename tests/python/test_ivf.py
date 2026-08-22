@@ -2,15 +2,15 @@
 
 import numpy as np
 import pytest
+from conftest import DIM, N_CLUSTERS, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
 from rabitqlib import IvfIndex
-
-from conftest import DIM, N_CLUSTERS, N_VECTORS, N_QUERIES, brute_force_knn, recall_at_k
 
 _TOPK = 10
 _NPROBE_ALL = N_CLUSTERS  # probe every cluster → deterministic coverage
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def built_ivf(base_data, clusters):
@@ -21,6 +21,7 @@ def built_ivf(base_data, clusters):
 
 
 # ── construction ──────────────────────────────────────────────────────────────
+
 
 def test_is_built(built_ivf):
     assert built_ivf.is_built
@@ -42,6 +43,7 @@ def test_fast_quantization_builds(base_data, clusters):
 
 
 # ── search output shape and dtype ─────────────────────────────────────────────
+
 
 def test_search_output_shape(built_ivf, query_data):
     ids, dists = built_ivf.search(query_data, k=_TOPK, nprobe=_NPROBE_ALL)
@@ -79,6 +81,7 @@ def test_k_equals_one(built_ivf, query_data):
 
 # ── search correctness ────────────────────────────────────────────────────────
 
+
 def test_self_retrieval(built_ivf, base_data):
     """Probing all clusters: each database vector must be its own nearest neighbor."""
     probes = base_data[:10]
@@ -98,6 +101,7 @@ def test_recall_vs_brute_force(built_ivf, base_data, query_data):
 
 # ── optional parameters ───────────────────────────────────────────────────────
 
+
 def test_high_accuracy_false(built_ivf, query_data):
     ids, dists = built_ivf.search(
         query_data, k=_TOPK, nprobe=_NPROBE_ALL, high_accuracy=False
@@ -106,13 +110,18 @@ def test_high_accuracy_false(built_ivf, query_data):
 
 
 def test_multithreaded_search_matches_single(built_ivf, query_data):
-    ids1, dists1 = built_ivf.search(query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=1)
-    ids2, dists2 = built_ivf.search(query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=2)
+    ids1, dists1 = built_ivf.search(
+        query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=1
+    )
+    ids2, dists2 = built_ivf.search(
+        query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=2
+    )
     np.testing.assert_array_equal(ids1, ids2)
     np.testing.assert_allclose(dists1, dists2, rtol=1e-5)
 
 
 # ── error handling ────────────────────────────────────────────────────────────
+
 
 def test_wrong_data_dim_raises(clusters):
     idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
@@ -145,6 +154,7 @@ def test_wrong_query_dim_raises(built_ivf):
 
 
 # ── save / load roundtrip ─────────────────────────────────────────────────────
+
 
 def test_save_load_roundtrip(built_ivf, query_data, tmp_path):
     path = str(tmp_path / "ivf.index")

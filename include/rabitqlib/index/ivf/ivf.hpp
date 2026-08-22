@@ -42,14 +42,8 @@ class IVF {
     MetricType metric_type_ = rabitqlib::METRIC_L2;  // metric type
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
-    void quantize_cluster(
-        Cluster&,
-        const std::vector<PID>&,
-        const float*,
-        const float*,
-        float*,
-        const quant::RabitqConfig&
-    );
+    void
+    quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, const quant::RabitqConfig&);
 
     [[nodiscard]] size_t ids_bytes() const { return sizeof(PID) * num_; }
 
@@ -167,7 +161,10 @@ inline IVF::~IVF() {
  * @param clustter_ids Cluster ID for each data objects
  */
 inline void IVF::construct(
-    const float* data, const float* centroids, const PID* cluster_ids, bool faster = false,
+    const float* data,
+    const float* centroids,
+    const PID* cluster_ids,
+    bool faster = false,
     size_t num_threads = std::numeric_limits<size_t>::max()
 ) {
     std::cout << "Start IVF construction...\n";
@@ -521,7 +518,6 @@ inline void IVF::scan_one_batch(
             PID id = ids[i];
             float ex_dist = est_distance[i];
             knns.insert(id, ex_dist);
-            distk = knns.top_dist();
         }
         return;
     }

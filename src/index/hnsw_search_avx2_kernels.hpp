@@ -14,8 +14,38 @@ namespace rabitqlib::hnsw::detail {
 static inline __m256i hnsw_popcount_avx2(__m256i v) {
     // Lookup table for population count of 0-15
     const __m256i lookup = _mm256_setr_epi8(
-        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
-        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+        0,
+        1,
+        1,
+        2,
+        1,
+        2,
+        2,
+        3,
+        1,
+        2,
+        2,
+        3,
+        2,
+        3,
+        3,
+        4,
+        0,
+        1,
+        1,
+        2,
+        1,
+        2,
+        2,
+        3,
+        1,
+        2,
+        2,
+        3,
+        2,
+        3,
+        3,
+        4
     );
     const __m256i low_mask = _mm256_set1_epi8(0x0f);
 
@@ -100,7 +130,8 @@ static inline float hnsw_warmup_ip_x0_q_512_avx2(
     for (; i < dim_end_512; i += 512) {
         // Load 64 bytes of data using paired 32-byte loads
         __m256i data_vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
-        __m256i data_vec_hi = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 4));
+        __m256i data_vec_hi =
+            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 4));
         data += 8;  // Advance 8 x 64-bit ints (64 bytes)
 
         acc_ppc = _mm256_add_epi64(acc_ppc, hnsw_popcount_avx2(data_vec_lo));

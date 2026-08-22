@@ -1,11 +1,12 @@
-import numpy as np
-import faiss
 from time import time
 
+import faiss
+import numpy as np
 
 # ──────────────────────────────────────────────
 # File I/O
 # ──────────────────────────────────────────────
+
 
 def read_ivecs(filename: str) -> np.ndarray:
     print(f"Reading File - {filename}")
@@ -18,9 +19,11 @@ def read_ivecs(filename: str) -> np.ndarray:
 def read_fvecs(filename: str) -> np.ndarray:
     return read_ivecs(filename).view("float32")
 
+
 # ──────────────────────────────────────────────
 # Benchmarking utilities
 # ──────────────────────────────────────────────
+
 
 def compute_recall(ids: np.ndarray, gt: np.ndarray, topk: int) -> float:
     """Compute recall@topk: fraction of gt top-k found in returned top-k."""
@@ -33,9 +36,11 @@ def compute_recall(ids: np.ndarray, gt: np.ndarray, topk: int) -> float:
                 total_correct += 1
     return total_correct / (nq * topk)
 
+
 # ──────────────────────────────────────────────
 # Clustering
 # ──────────────────────────────────────────────
+
 
 def cluster_data(
     X: np.ndarray,
@@ -70,8 +75,8 @@ def cluster_data(
     index.train(X)
     print(f"IVF training time: {time() - t0:.2f}s")
 
-    centroids = index.quantizer.reconstruct_n(0, index.nlist)       # (K, dim) float32
-    _, cluster_ids_2d = index.quantizer.search(X, 1)               # (n, 1)   int64
-    cluster_ids = cluster_ids_2d.flatten().astype(np.uint32)        # (n,)     uint32
+    centroids = index.quantizer.reconstruct_n(0, index.nlist)  # (K, dim) float32
+    _, cluster_ids_2d = index.quantizer.search(X, 1)  # (n, 1)   int64
+    cluster_ids = cluster_ids_2d.flatten().astype(np.uint32)  # (n,)     uint32
 
     return centroids, cluster_ids

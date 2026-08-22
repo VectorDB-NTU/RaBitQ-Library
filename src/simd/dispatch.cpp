@@ -5,17 +5,19 @@
 #include <stdexcept>
 #include <string>
 
-#include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"
+#include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/warmup_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace rabitqlib::simd {
 
 [[noreturn]] static void missing_feature(const char* feature_name) {
-    throw std::runtime_error(std::string(feature_name) + " requires AVX2/FMA or AVX512 support");
+    throw std::runtime_error(
+        std::string(feature_name) + " requires AVX2/FMA or AVX512 support"
+    );
 }
 
 ExcodeIpTable resolve_excode_ip_table() {
@@ -121,9 +123,7 @@ void flip_sign(const uint8_t* flip, float* data, size_t dim) {
     kFlipSignFn(flip, data, dim);
 }
 
-void kacs_walk(float* data, size_t len) {
-    kKacsWalkFn(data, len);
-}
+void kacs_walk(float* data, size_t len) { kKacsWalkFn(data, len); }
 
 void scalar_quantize_uint8(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
@@ -258,9 +258,7 @@ float excode_ipimpl::ip64_fxu7_avx(
     return kIp64Fxu7AvxFn(query, compact_code, dim);
 }
 
-void new_transpose_bin(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
-) {
+void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query) {
     kNewTransposeBinFn(q, tq, padded_dim, b_query);
 }
 
@@ -337,7 +335,8 @@ void accumulate_hacc(
 
 namespace rabitqlib {
 
-using WarmupIpX0Q512Fn = float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t);
+using WarmupIpX0Q512Fn =
+    float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t);
 const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
     if (rabitqlib::cpu::has_avx512_popcnt()) {
         return rabitqlib::simd::warmup_ip_x0_q_512_avx512;

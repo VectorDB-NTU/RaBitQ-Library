@@ -11,6 +11,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python-quality:
+    name: Python formatting and linting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install Ruff
+        run: python -m pip install "ruff==0.16.1"
+      - name: Check Python
+        run: ./scripts/check-python.sh
+
   python-build:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

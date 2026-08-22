@@ -6,9 +6,9 @@
 namespace py = pybind11;
 
 // Forward declarations of registration functions implemented in other cpp files
-void register_hnsw(py::module_ &m);
-void register_ivf(py::module_ &m);
-void register_symqg(py::module_ &m);
+void register_hnsw(py::module_& m);
+void register_ivf(py::module_& m);
+void register_symqg(py::module_& m);
 
 PYBIND11_MODULE(_rabitqlib, m) {
     m.doc() = "RabitQ Python bindings combined module";

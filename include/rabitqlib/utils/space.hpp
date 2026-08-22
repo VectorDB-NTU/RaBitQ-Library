@@ -219,13 +219,27 @@ inline PID exact_nn(
 
 namespace excode_ipimpl {
 
-float ip16_fxu1_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu2_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu3_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip16_fxu4_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu5_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu6_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu7_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
+float ip16_fxu1_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu2_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu3_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip16_fxu4_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu5_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu6_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu7_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
 
 // inner product between float type and int type vectors
 template <typename TF, typename TI>
@@ -262,9 +276,7 @@ static inline uint64_t reverse_bits_u64(uint64_t n) {
     return n;
 }
 
-void new_transpose_bin(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
-);
+void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query);
 
 void new_transpose_bin_512(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query

@@ -72,7 +72,8 @@ int main(int argc, char* argv[]) {
             for (size_t i = 0; i < nq; i++) {
                 for (size_t j = 0; j < topk; j++) {
                     for (size_t k = 0; k < topk; k++) {
-                        if (gt(i, k) == res[i][j].second) {
+                        if (gt(static_cast<Eigen::Index>(i),
+                               static_cast<Eigen::Index>(k)) == res[i][j].second) {
                             total_correct++;
                             break;
                         }
