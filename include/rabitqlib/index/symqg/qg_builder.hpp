@@ -11,9 +11,9 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
-#include "rabitqlib/utils/visited_set.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
@@ -37,9 +37,9 @@ class QGBuilder {
     static constexpr size_t kMaxPrunedSize =
         300;                                    // max number of recorded pruned candidates
     std::vector<CandidateList> new_neighbors_;  // new neighbors for current iteration
-    std::vector<CandidateList> pruned_neighbors_;    // recorded pruned neighbors
-    std::vector<VisitedSet> visited_list_;  // per-thread visited sets
-    std::vector<uint32_t> degrees_;                  // record degree of qg
+    std::vector<CandidateList> pruned_neighbors_;  // recorded pruned neighbors
+    std::vector<VisitedSet> visited_list_;         // per-thread visited sets
+    std::vector<uint32_t> degrees_;                // record degree of qg
     void random_init();
     void search_new_neighbors(bool refine);
     void heuristic_prune(PID, CandidateList&, CandidateList&, bool);

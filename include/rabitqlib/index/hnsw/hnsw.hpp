@@ -1138,7 +1138,7 @@ inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn_direct(
 
     if (metric_type_ == METRIC_L2) {
         for (size_t i = 0; i < num_cluster_; i++) {
-            q_to_centroids[i] = std::sqrt(euclidean_sqr(
+            q_to_centroids[i] = std::sqrt(raw_dist_func_(
                 rotated_query,
                 reinterpret_cast<float*>(centroids_memory_) + (i * padded_dim_),
                 padded_dim_

@@ -10,7 +10,7 @@
 namespace rabitqlib {
 namespace detail {
 template <typename T>
-struct check_visited_set {
+struct CheckVisitedSet {
     static_assert(
         std::is_constructible<T, size_t>::value,
         "visited set must be constructible from a size_t id space"
@@ -35,12 +35,12 @@ struct check_visited_set {
         std::is_same<decltype(&T::set), void (T::*)(PID)>::value,
         "visited set must declare: void set(PID)"
     );
-    static constexpr bool value = true;
+    static constexpr bool kValue = true;
 };
 }  // namespace detail
 
-static_assert(detail::check_visited_set<EpochBasedVisitedSet>::value, "");
-static_assert(detail::check_visited_set<HashBasedVisitedSet>::value, "");
+static_assert(detail::CheckVisitedSet<EpochBasedVisitedSet>::kValue, "");
+static_assert(detail::CheckVisitedSet<HashBasedVisitedSet>::kValue, "");
 
 using VisitedSet = HashBasedVisitedSet;
 }  // namespace rabitqlib

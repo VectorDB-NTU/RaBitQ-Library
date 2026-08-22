@@ -20,12 +20,12 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/array.hpp"
 #include "rabitqlib/utils/buffer.hpp"
-#include "rabitqlib/utils/visited_set.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/visited_pool.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 
@@ -94,25 +94,16 @@ class QuantizedGraph {
         );
     }
 
-    void find_candidates(
-        PID,
-        size_t,
-        std::vector<AnnCandidate<T>>&,
-        VisitedSet&,
-        const std::vector<uint32_t>&
-    ) const;
+    void
+    find_candidates(PID, size_t, std::vector<AnnCandidate<T>>&, VisitedSet&, const std::vector<uint32_t>&)
+        const;
 
     void update_qg(PID, const std::vector<AnnCandidate<T>>&);
 
     void update_results(buffer::SearchBuffer<T>&, VisitedSet&, const T*);
 
     void scan_neighbors(
-        const BatchQuery<T>&,
-        PID,
-        T*,
-        buffer::SearchBuffer<T>&,
-        VisitedSet&,
-        size_t
+        const BatchQuery<T>&, PID, T*, buffer::SearchBuffer<T>&, VisitedSet&, size_t
     ) const;
 
    public:
