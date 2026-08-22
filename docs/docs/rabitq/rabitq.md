@@ -8,8 +8,8 @@ The RaBitQ algorithm is a drop-in replacement of binary quantization and (unifor
 
 The key advantages of RaBitQ include
 
-- **High Accuracy with Tiny Space** - RaBitQ achieves the state-of-the-art accuracy under diverse space budgets for the estimation of similarity metrics. It produces promising accuracy with even **1-bit per dimension**.
-- **Fast Distance Estimation** - RaBitQ supports to estimate the similarity metrics with high efficiency based on bitwise operations or [FastScan](https://arxiv.org/abs/1704.07355).
+- **High Accuracy with Tiny Space** - RaBitQ provides the state-of-the-art estimates under diverse space budgets. Its smallest representation uses a one-bit code per padded dimension plus per-vector factors.
+- **Fast Distance Estimation** - The implementation uses bitwise operations and, for batched scans in IVF and SymphonyQG, [FastScan](https://arxiv.org/abs/1704.07355).
 - **Theoretical Error Bound** - RaBitQ provides an asymptotically optimal error bound for the estimation of distances and inner product. The error bound can be used for reliable ordering and [reranking](reranking.md).
 
 
@@ -22,5 +22,7 @@ The RaBitQ algorithm includes two steps:
 2. **Quantization** - After the random rotation, the quantization algorithm quantizes a vector of floating-point numbers into a vector of low-bit unsigned integers. See [Quantizer](quantizer.md) for more details.
 
 
-After the quantization, we can estimate the similarity metrics including Euclidean distance, inner product and cosine similarity based on the code vector $\mathbf{x}_u$ and the rescaling factor $\Delta_x$. See [Estimator](estimator.md) for more details.
-
+After quantization, the library supports Euclidean distance and inner product
+using the code vector $\mathbf{x}_u$ and its factors. Cosine similarity is
+obtained by normalizing data and query vectors before using inner-product
+search. See [Estimator](estimator.md) for details.

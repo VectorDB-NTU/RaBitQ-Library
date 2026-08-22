@@ -1,6 +1,11 @@
 # IVF + RaBitQ
 
-[IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical clustering-based method for ANN. It has tiny space consumption. When it is combined with RaBitQ and [FastScan](https://dl.acm.org/doi/abs/10.1145/3078971.3078992), it produces promising time-accuracy trade-off for vector search. This part describes how the library combines IVF with RaBitQ.
+[IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical
+clustering-based ANN method. This implementation stores RaBitQ codes and
+vector IDs rather than retaining the raw dataset after construction, and uses
+[FastScan](https://dl.acm.org/doi/abs/10.1145/3078971.3078992) to estimate a
+batch of distances. Its actual memory, latency, and recall depend on the bit
+width, number of clusters, and `nprobe`.
 
 The algorithm includes two phases: indexing and querying.
 
@@ -39,8 +44,9 @@ rabitqlib::load_vecs<float, data_type>(centroids_file, centroids);
 rabitqlib::load_vecs<PID, gt_type>(cids_file, cids);
 ```
 
-Then, you need to initialize an IVF object using (1) the number of data points, (2) the dimension of each vector, (3) the number of clusters
-, and (4) the total bits used to quantize each vector. For example:
+Then initialize an IVF object with the number of data points, vector
+dimension, number of clusters, and total bits per dimension. The C++ index
+accepts total bit widths from 1 through 9.
 
 ```c++
 using index_type = rabitqlib::ivf::IVF;
@@ -58,14 +64,16 @@ void IVF::construct(
     const float* data, 
     const float* centroids, 
     const PID* cluster_ids, 
-    bool faster = false
+    bool faster = false,
+    size_t num_threads = std::numeric_limits<size_t>::max()
 );
 ```
 
 - **data**: Pointer to the raw data vectors.
 - **centroids**: Centroids computed by K-means clustering on the raw data vectors (we recommend to tune cluster_num around 4 * the square root of the dataset following Faiss).
-- **cluster_ids**: Array of length data_num where each entry indicates the centroid ID (0–15) for the corresponding data vector.
+- **cluster_ids**: Array of length `data_num`; every entry must be in the range `[0, cluster_num)`.
 - **faster**: If true, enable fast implementations for RaBitQ (By default, it is set as `false` to pursue better accuracy.).
+- **num_threads**: Maximum number of OpenMP threads used to quantize clusters.
 
 For example:
 ```c++
@@ -75,6 +83,8 @@ ivf.construct(data.data(), centroids.data(), cids.data(), true);
 During the construction phase, we quantize each cluster in parallel. For each cluster, we first rotate the centroid and
 vectors in this cluster using a random matrix, then compute the 1-bit codes and (total_bits - 1)-bit ex codes along with
 corresponding factors.
+The raw `data` input is used during construction but is not stored in the
+finished IVF index.
 
 After construction, you can directly save the index file to disk:
 ```c++

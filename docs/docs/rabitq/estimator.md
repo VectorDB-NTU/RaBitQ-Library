@@ -30,7 +30,12 @@ $$
 where $c_B=- \frac{2^B-1}{2}$ and $B$ is the number of bits used for the quantization. $\mathbf{1}_D$ is the all-one vector of dimension $D$. $P$ is a sample of random rotation matrices. 
 
 ## Estimator
-The following derivation covers the estimators for Euclidean distances, inner products, and cosine similarity. The cosine similarity is supported by the same estimator as the inner product. 
+The following derivation covers squared Euclidean distance and inner product.
+The public metric choices are `METRIC_L2` and `METRIC_IP`; there is no separate
+cosine metric. For cosine search, normalize both data and query vectors, then
+use inner product. The implementation represents inner-product distance as
+$1-\langle\mathbf{o},\mathbf{q}\rangle$, which preserves the same ranking while
+keeping the nearest-neighbor convention that smaller values are better.
 
 ### Estimator of Euclidean Distance
 $$
@@ -72,15 +77,18 @@ We store the following variables such that the estimator can be computed easily.
 
 
 ### Estimator of Inner Product
-When inner product is used as the metric of vector search, it targets the data vector which has the *maximum* inner product with the query vector. To unify the question with nearest neighbor search, we follows Faiss and hnswlib to compute the negative inner product. 
+When inner product is used as the metric of vector search, it targets the data
+vector with the *maximum* inner product with the query. The implementation
+uses $1-\langle\mathbf{o},\mathbf{q}\rangle$ so that smaller distances rank
+higher-inner-product vectors first. The constant 1 does not affect ordering.
 
 $$
 \begin{align}
-&-\left< \mathbf{o}_r,\mathbf{q}_r\right>
-\\=& -\left< \mathbf{o}_r-\mathbf{c} + \mathbf{c},\mathbf{q}_r-\mathbf{c} + \mathbf{c}\right>
-\\=& -\left< \mathbf{q}_r,\mathbf{c}\right> -\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right> -  \left< \mathbf{o}_r-\mathbf{c},\mathbf{q}_r-\mathbf{c} \right>
-\\ \approx &-\left< \mathbf{q}_r,\mathbf{c}\right> -\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right> +\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>} - \frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}\cdot \left[ \left< \mathbf{x}_u, \mathbf{q}_r' \right>+c_B S_q\right]
-\\ -\left< \mathbf{o}_r,\mathbf{q}_r\right>\approx &-\left< \mathbf{q}_r,\mathbf{c}\right> -\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right> +\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>} - \frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}\cdot \left[ \left< \mathbf{x}_u, \mathbf{q}_r' \right>+c_B S_q\right]
+&1-\left< \mathbf{o}_r,\mathbf{q}_r\right>
+\\=&1 -\left< \mathbf{o}_r-\mathbf{c} + \mathbf{c},\mathbf{q}_r-\mathbf{c} + \mathbf{c}\right>
+\\=&1 -\left< \mathbf{q}_r,\mathbf{c}\right> -\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right> -  \left< \mathbf{o}_r-\mathbf{c},\mathbf{q}_r-\mathbf{c} \right>
+\\ \approx &1 -\left< \mathbf{q}_r,\mathbf{c}\right> -\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right> +\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>} - \frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}\cdot \left[ \left< \mathbf{x}_u, \mathbf{q}_r' \right>+c_B S_q\right]
+\\ 1-\left< \mathbf{o}_r,\mathbf{q}_r\right>\approx &1 -\left< \mathbf{q}_r,\mathbf{c}\right> -\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right> +\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>} - \frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}\cdot \left[ \left< \mathbf{x}_u, \mathbf{q}_r' \right>+c_B S_q\right]
 \end{align}
 $$
 
@@ -101,7 +109,7 @@ We store the following variables such that the estimator can be computed easily.
 
 | Name (Type) of Variable | Description |
 | ----------------- | ----------- |
-| `F_add (float)`| $-\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right>+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}$ |
+| `F_add (float)`| $1-\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right>+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}$ |
 | `F_rescale (float)`| $-\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}$|
 | `F_error (float)`| $\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}$|
 | `G_add (float)`| $-\left< \mathbf{q}_r,\mathbf{c}\right>$ |
@@ -134,21 +142,28 @@ float ub_dist = est_dist + error_bound
 
 RaBitQ supports incremental distance estimation. We split the code into two parts: the binary code (the most significant bits) and the extended code (the remaining $B-1$ bits). 
 Incremental distance estimation supports to first estimate a coarse distance based on the binary code. If the accuracy is insufficient, we then access the extended code to boost the accuracy. 
-For this, we need to prepare factors for both the binary code and the extended code. The factors for the binary code are stored in `F_add`, `F_rescale` and `F_error`. The factors for the extended code are stored in `F_add_ex`, `F_rescale_ex` and `F_error_ex`.
+For this, we prepare factors for both parts. The binary layout stores `F_add`,
+`F_rescale`, and `F_error`; the extended layout stores `F_add_ex` and
+`F_rescale_ex`. The implementation obtains the refined error bound by scaling
+the binary error factor by $2^{B-1}$ rather than storing a separate
+`F_error_ex`.
 The factors for the query includes `G_add`, `G_error`, `G_kBxSumq` and `G_k1xSumq`. 
 Let `ip_bin` be the inner product between the binary code and the randomly rotated query vector and `ip_ex` be the inner product between the ex-code and the randomly rotated query vector. 
 
 
 ```cpp
 // 1-bit dist
-float est_dist = F_add + G_add + F_rescale * (ip_bin + G_k1xSumq)
-float bound = F_error * G_error
-float ub_dist = est_dist + bound
-float lb_dist = est_dist - bound
+float est_dist = F_add + G_add + F_rescale * (ip_bin + G_k1xSumq);
+float bound = F_error * G_error;
+float ub_dist = est_dist + bound;
+float lb_dist = est_dist - bound;
 
 // boost to full-bit dist
-float ex_est_dist = F_add_ex + G_add + F_rescale_ex * (ip_bin << (bits - 1) + ip_ex + G_kBxSumq)
-float ex_bound = F_error_ex * G_error
+float ex_scale = static_cast<float>(1 << (bits - 1));
+float ex_est_dist =
+    F_add_ex + G_add +
+    F_rescale_ex * (ex_scale * ip_bin + ip_ex + G_kBxSumq);
+float ex_bound = F_error * G_error / ex_scale;
 float ex_ub_dist = ex_est_dist + ex_bound;
 float ex_lb_dist = ex_est_dist - ex_bound;
 ```
