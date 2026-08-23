@@ -8,80 +8,148 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <new>
+#include <stdexcept>
 #include <type_traits>
-
-#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::memory {
 #define PORTABLE_ALIGN32 __attribute__((aligned(32)))
 #define PORTABLE_ALIGN64 __attribute__((aligned(64)))
 
+namespace detail {
+template <size_t Alignment>
+[[nodiscard]] constexpr size_t aligned_allocation_size(size_t bytes) {
+    static_assert(Alignment >= alignof(void*));
+    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
+
+    if (bytes == 0) {
+        return 0;
+    }
+    if (bytes > std::numeric_limits<size_t>::max() - (Alignment - 1)) {
+        throw std::length_error("aligned allocation size overflow");
+    }
+    return (bytes + (Alignment - 1)) & ~(Alignment - 1);
+}
+}  // namespace detail
+
 template <typename T, size_t Alignment = 64, bool HugePage = false>
 class AlignedAllocator {
    private:
     static_assert(Alignment >= alignof(T));
+    static_assert(Alignment >= alignof(void*));
+    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
 
    public:
     using value_type = T;
 
     template <class U>
     struct rebind {
-        using other = AlignedAllocator<U, Alignment>;
+        using other = AlignedAllocator<U, Alignment, HugePage>;
     };
+
+    using is_always_equal = std::true_type;
 
     constexpr AlignedAllocator() noexcept = default;
 
     constexpr AlignedAllocator(const AlignedAllocator&) noexcept = default;
 
     template <typename U>
-    constexpr explicit AlignedAllocator(AlignedAllocator<U, Alignment> const&) noexcept {}
+    constexpr explicit AlignedAllocator(AlignedAllocator<
+                                        U,
+                                        Alignment,
+                                        HugePage> const&) noexcept {}
+
+    template <typename U>
+    [[nodiscard]] constexpr bool operator==(const AlignedAllocator<U, Alignment, HugePage>&)
+        const noexcept {
+        return true;
+    }
+
+    template <typename U>
+    [[nodiscard]] constexpr bool operator!=(const AlignedAllocator<U, Alignment, HugePage>&)
+        const noexcept {
+        return false;
+    }
 
     [[nodiscard]] T* allocate(std::size_t n) {
+        if (n == 0) {
+            return nullptr;
+        }
         if (n > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
             throw std::bad_array_new_length();
         }
 
-        auto nbytes = round_up_to_multiple_of<size_t>(n * sizeof(T), Alignment);
+        const size_t nbytes = detail::aligned_allocation_size<Alignment>(n * sizeof(T));
         auto* ptr = std::aligned_alloc(Alignment, nbytes);
-        if (HugePage) {
-            madvise(ptr, nbytes, MADV_HUGEPAGE);
+        if (ptr == nullptr) {
+            throw std::bad_alloc();
+        }
+        if constexpr (HugePage) {
+            static_cast<void>(madvise(ptr, nbytes, MADV_HUGEPAGE));
         }
         return reinterpret_cast<T*>(ptr);
     }
 
-    void deallocate(T* ptr, [[maybe_unused]] std::size_t n) { std::free(ptr); }
+    void deallocate(T* ptr, [[maybe_unused]] std::size_t n) noexcept { std::free(ptr); }
 };
 
 template <typename T>
-struct Allocator {
+class Allocator {
    public:
     using value_type = T;
+    using is_always_equal = std::true_type;
+
+    template <typename U>
+    struct rebind {
+        using other = Allocator<U>;
+    };
 
     constexpr Allocator() noexcept = default;
 
     template <typename U>
-    explicit constexpr Allocator(const Allocator<U>&) noexcept {}
+    constexpr Allocator(const Allocator<U>&) noexcept {}
 
-    [[nodiscard]] constexpr T* allocate(std::size_t n) { return ::new T[n]; }
-
-    constexpr void deallocate(T* ptr, [[maybe_unused]] size_t n) noexcept {
-        ::delete[] ptr;
+    [[nodiscard]] T* allocate(std::size_t n) {
+        if (n == 0) {
+            return nullptr;
+        }
+        if (n > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+            throw std::bad_array_new_length();
+        }
+        return std::allocator<T>{}.allocate(n);
     }
 
-    // Intercept zero-argument construction to do default initialization.
+    void deallocate(T* ptr, std::size_t n) noexcept {
+        if (ptr != nullptr) {
+            std::allocator<T>{}.deallocate(ptr, n);
+        }
+    }
+
     template <typename U>
-    void construct(U* ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
-        ::new (static_cast<void*>(ptr)) U;
+    [[nodiscard]] constexpr bool operator==(const Allocator<U>&) const noexcept {
+        return true;
+    }
+
+    template <typename U>
+    [[nodiscard]] constexpr bool operator!=(const Allocator<U>&) const noexcept {
+        return false;
     }
 };
 
 template <size_t Alignment, typename T, bool HugePage = false>
 inline T* align_allocate(size_t nbytes) {
-    auto size = round_up_to_multiple_of<size_t>(nbytes, Alignment);
+    static_assert(Alignment >= alignof(T));
+    const size_t size = detail::aligned_allocation_size<Alignment>(nbytes);
+    if (size == 0) {
+        return nullptr;
+    }
     void* ptr = std::aligned_alloc(Alignment, size);
-    if (HugePage) {
-        madvise(ptr, size, MADV_HUGEPAGE);
+    if (ptr == nullptr) {
+        throw std::bad_alloc();
+    }
+    if constexpr (HugePage) {
+        static_cast<void>(madvise(ptr, size, MADV_HUGEPAGE));
     }
     return static_cast<T*>(ptr);
 }
