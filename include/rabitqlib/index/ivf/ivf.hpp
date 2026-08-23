@@ -3,11 +3,16 @@
 #include <omp.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <fstream>
 #include <iostream>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -18,6 +23,7 @@
 #include "rabitqlib/index/query.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/utils/array.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
@@ -27,50 +33,106 @@
 namespace rabitqlib::ivf {
 class IVF {
    private:
-    Initializer* initer_ = nullptr;      // initializer for find candidate cluster
-    char* batch_data_ = nullptr;         // 1-bit code and factors
-    char* ex_data_ = nullptr;            // code for remaining bits
-    PID* ids_ = nullptr;                 // PID of vectors (orgnized by clusters)
-    size_t num_;                         // num of data points
-    size_t dim_;                         // dimension of data points
-    size_t padded_dim_;                  // dimension after padding,
-    size_t num_cluster_;                 // num of centroids (clusters)
-    size_t ex_bits_;                     // total bits = ex_bits_ + 1
-    RotatorType type_;                   // type of rotator
-    Rotator<float>* rotator_ = nullptr;  // Data Rotator
-    std::vector<Cluster> cluster_lst_;   // List of clusters in ivf
+    using Dimensions = std::array<size_t, 1>;
+    using ByteArray = Array<char, Dimensions, memory::AlignedAllocator<char, 64, true>>;
+    using IdArray = Array<PID, Dimensions, memory::AlignedAllocator<PID, 64, true>>;
+
+    struct Storage {
+        std::unique_ptr<Initializer> initer;
+        ByteArray batch_data;
+        ByteArray ex_data;
+        IdArray ids;
+        std::vector<Cluster> clusters;
+    };
+
+    std::unique_ptr<Initializer> initer_;  // initializer for candidate clusters
+    ByteArray batch_data_;                 // 1-bit code and factors
+    ByteArray ex_data_;                    // code for remaining bits
+    IdArray ids_;                          // PID of vectors (organized by clusters)
+    size_t num_ = 0;                       // num of data points
+    size_t dim_ = 0;                       // dimension of data points
+    size_t padded_dim_ = 0;                // dimension after padding,
+    size_t num_cluster_ = 0;               // num of centroids (clusters)
+    size_t ex_bits_ = 0;                   // total bits = ex_bits_ + 1
+    RotatorType type_ = RotatorType::FhtKacRotator;  // type of rotator
+    std::unique_ptr<Rotator<float>> rotator_;        // Data Rotator
+    std::vector<Cluster> cluster_lst_;               // List of clusters in ivf
     MetricType metric_type_ = rabitqlib::METRIC_L2;  // metric type
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
     void
     quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, const quant::RabitqConfig&);
 
-    [[nodiscard]] size_t ids_bytes() const { return sizeof(PID) * num_; }
+    [[nodiscard]] static size_t checked_add(
+        size_t first, size_t second, const char* message
+    ) {
+        if (second > std::numeric_limits<size_t>::max() - first) {
+            throw std::length_error(message);
+        }
+        return first + second;
+    }
+
+    [[nodiscard]] static size_t checked_multiply(
+        size_t first, size_t second, const char* message
+    ) {
+        if (first != 0 && second > std::numeric_limits<size_t>::max() / first) {
+            throw std::length_error(message);
+        }
+        return first * second;
+    }
+
+    [[nodiscard]] size_t ids_bytes() const {
+        return checked_multiply(sizeof(PID), num_, "IVF ID storage size overflow");
+    }
+
+    [[nodiscard]] static size_t num_batches(size_t num_vectors) noexcept {
+        return (num_vectors / fastscan::kBatchSize) +
+               static_cast<size_t>(num_vectors % fastscan::kBatchSize != 0);
+    }
 
     // get num of bytes used for 1-bit code and corresponding factors
     [[nodiscard]] size_t batch_data_bytes(const std::vector<size_t>& cluster_sizes) const {
         assert(cluster_sizes.size() == num_cluster_);  // num of clusters
         size_t total_blocks = 0;
         for (auto size : cluster_sizes) {
-            total_blocks += div_round_up(size, fastscan::kBatchSize);
+            total_blocks =
+                checked_add(total_blocks, num_batches(size), "IVF batch count overflow");
         }
-        return total_blocks * BatchDataMap<float>::data_bytes(padded_dim_);
+        const size_t code_bytes =
+            checked_multiply(
+                padded_dim_, fastscan::kBatchSize, "IVF batch data size overflow"
+            ) /
+            8;
+        constexpr size_t kFactorBytes = sizeof(float) * fastscan::kBatchSize * 3;
+        const size_t bytes_per_batch =
+            checked_add(code_bytes, kFactorBytes, "IVF batch data size overflow");
+        return checked_multiply(
+            total_blocks, bytes_per_batch, "IVF batch storage size overflow"
+        );
     }
 
     [[nodiscard]] size_t ex_data_bytes() const {
-        return ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * num_;
+        if (ex_bits_ == 0) {
+            return 0;
+        }
+        const size_t code_bytes =
+            checked_multiply(padded_dim_, ex_bits_, "IVF extra-code size overflow") / 8;
+        const size_t bytes_per_vector =
+            checked_add(code_bytes, sizeof(float) * 2, "IVF extra-code size overflow");
+        return checked_multiply(
+            bytes_per_vector, num_, "IVF extra-code storage size overflow"
+        );
     }
 
-    void allocate_memory(const std::vector<size_t>&);
+    [[nodiscard]] std::unique_ptr<Initializer> make_initializer() const;
 
-    void init_clusters(const std::vector<size_t>&);
+    [[nodiscard]] Storage allocate_storage(const std::vector<size_t>&) const;
 
-    void free_memory() {
-        ::delete initer_;
-        std::free(batch_data_);
-        std::free(ex_data_);
-        std::free(ids_);
-    }
+    void init_clusters(const std::vector<size_t>&, Storage&) const;
+
+    void commit_storage(Storage&&);
+
+    void swap(IVF&) noexcept;
 
     void search_cluster(
         const Cluster&, const SplitBatchQuery<float>&, buffer::SearchBuffer<float>&, bool
@@ -87,7 +149,7 @@ class IVF {
     ) const;
 
    public:
-    explicit IVF() {}
+    explicit IVF() = default;
     explicit IVF(
         size_t,
         size_t,
@@ -97,7 +159,7 @@ class IVF {
         RotatorType type = RotatorType::FhtKacRotator
     );
 
-    ~IVF();
+    ~IVF() = default;
 
     [[nodiscard]] size_t max_elements() const { return num_; }
     [[nodiscard]] size_t dimension() const { return dim_; }
@@ -141,16 +203,11 @@ inline IVF::IVF(
         std::cerr.flush();
         exit(1);
     };
-    rotator_ = choose_rotator<float>(dim, type, round_up_to_multiple(dim_, 64));
+    rotator_.reset(choose_rotator<float>(dim, type, round_up_to_multiple(dim_, 64)));
     padded_dim_ = rotator_->size();
     /* check size */
     assert(padded_dim_ % 64 == 0);
     assert(padded_dim_ >= dim_);
-}
-
-inline IVF::~IVF() {
-    delete rotator_;
-    free_memory();
 }
 
 /**
@@ -183,13 +240,12 @@ inline void IVF::construct(
         counts[cid] += 1;
     }
 
-    allocate_memory(counts);
-
-    // init the cluster list
-    init_clusters(counts);
+    Storage storage = allocate_storage(counts);
 
     // all rotated centroids
-    std::vector<float> rotated_centroids(num_cluster_ * padded_dim_);
+    std::vector<float> rotated_centroids(checked_multiply(
+        num_cluster_, padded_dim_, "IVF rotated-centroid storage size overflow"
+    ));
 
     quant::RabitqConfig config;
     if (faster) {
@@ -202,55 +258,95 @@ inline void IVF::construct(
     for (size_t i = 0; i < num_cluster_; ++i) {
         const float* cur_centroid = centroids + (i * dim_);
         float* cur_rotated_c = &rotated_centroids[i * padded_dim_];
-        Cluster& cp = cluster_lst_[i];
+        Cluster& cp = storage.clusters[i];
         quantize_cluster(cp, id_lists[i], data, cur_centroid, cur_rotated_c, config);
     }
 
-    this->initer_->add_vectors(rotated_centroids.data(), num_threads);
+    storage.initer->add_vectors(rotated_centroids.data(), num_threads);
+    commit_storage(std::move(storage));
 }
 
-inline void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
-    std::cout << "Allocating memory for IVF...\n";
+inline std::unique_ptr<Initializer> IVF::make_initializer() const {
     if (num_cluster_ < 20000UL) {
-        this->initer_ = new FlatInitializer(padded_dim_, num_cluster_);
-    } else {
-        this->initer_ = new HNSWInitializer(padded_dim_, num_cluster_);
+        return std::make_unique<FlatInitializer>(padded_dim_, num_cluster_);
     }
-    this->batch_data_ =
-        memory::align_allocate<64, char, true>(batch_data_bytes(cluster_sizes));
-    if (ex_bits_ > 0) {
-        this->ex_data_ = memory::align_allocate<64, char, true>(ex_data_bytes());
-    }
-    this->ids_ = memory::align_allocate<64, PID, true>(ids_bytes());
+    return std::make_unique<HNSWInitializer>(padded_dim_, num_cluster_);
+}
 
-    this->ip_func_ = select_excode_ipfunc(ex_bits_);
+inline auto IVF::allocate_storage(const std::vector<size_t>& cluster_sizes) const
+    -> Storage {
+    std::cout << "Allocating memory for IVF...\n";
+    static_cast<void>(
+        checked_multiply(num_cluster_, padded_dim_, "IVF initializer storage size overflow")
+    );
+    Storage storage{
+        make_initializer(),
+        ByteArray(Dimensions{batch_data_bytes(cluster_sizes)}),
+        ByteArray(Dimensions{ex_data_bytes()}),
+        IdArray(Dimensions{num_}),
+        {}};
+    init_clusters(cluster_sizes, storage);
+    return storage;
 }
 
 /**
  * @brief intialize the cluster list: finding idx for all data
  */
-inline void IVF::init_clusters(const std::vector<size_t>& cluster_sizes) {
-    this->cluster_lst_.reserve(num_cluster_);
+inline void IVF::init_clusters(const std::vector<size_t>& cluster_sizes, Storage& storage)
+    const {
+    storage.clusters.reserve(num_cluster_);
     size_t added_vectors = 0;
     size_t added_batches = 0;
     for (size_t i = 0; i < num_cluster_; ++i) {
         // find data location for current cluster
         size_t num = cluster_sizes[i];
-        size_t num_batches = div_round_up(num, fastscan::kBatchSize);
+        size_t cluster_batches = num_batches(num);
 
         char* current_batch_data =
-            batch_data_ + (BatchDataMap<float>::data_bytes(padded_dim_) * added_batches);
+            storage.batch_data.empty()
+                ? nullptr
+                : storage.batch_data.data() +
+                      (BatchDataMap<float>::data_bytes(padded_dim_) * added_batches);
         char* current_ex_data =
-            ex_data_ +
-            (added_vectors * ExDataMap<float>::data_bytes(padded_dim_, ex_bits_));
-        PID* ids = ids_ + added_vectors;
+            storage.ex_data.empty()
+                ? nullptr
+                : storage.ex_data.data() +
+                      (added_vectors * ExDataMap<float>::data_bytes(padded_dim_, ex_bits_));
+        PID* ids = storage.ids.empty() ? nullptr : storage.ids.data() + added_vectors;
 
-        Cluster cur_cluster(num, current_batch_data, current_ex_data, ids);
-        this->cluster_lst_.push_back(std::move(cur_cluster));
+        storage.clusters.emplace_back(num, current_batch_data, current_ex_data, ids);
 
         added_vectors += num;
-        added_batches += num_batches;
+        added_batches += cluster_batches;
     }
+}
+
+inline void IVF::commit_storage(Storage&& storage) {
+    auto* next_ip_func = select_excode_ipfunc(ex_bits_);
+    initer_ = std::move(storage.initer);
+    batch_data_ = std::move(storage.batch_data);
+    ex_data_ = std::move(storage.ex_data);
+    ids_ = std::move(storage.ids);
+    cluster_lst_ = std::move(storage.clusters);
+    ip_func_ = next_ip_func;
+}
+
+inline void IVF::swap(IVF& other) noexcept {
+    using std::swap;
+    swap(initer_, other.initer_);
+    swap(batch_data_, other.batch_data_);
+    swap(ex_data_, other.ex_data_);
+    swap(ids_, other.ids_);
+    swap(num_, other.num_);
+    swap(dim_, other.dim_);
+    swap(padded_dim_, other.padded_dim_);
+    swap(num_cluster_, other.num_cluster_);
+    swap(ex_bits_, other.ex_bits_);
+    swap(type_, other.type_);
+    swap(rotator_, other.rotator_);
+    swap(cluster_lst_, other.cluster_lst_);
+    swap(metric_type_, other.metric_type_);
+    swap(ip_func_, other.ip_func_);
 }
 
 inline void IVF::quantize_cluster(
@@ -269,13 +365,17 @@ inline void IVF::quantize_cluster(
     }
 
     // copy ids
-    std::copy(IDs.begin(), IDs.end(), cp.ids());
+    if (!IDs.empty()) {
+        std::copy(IDs.begin(), IDs.end(), cp.ids());
+    }
 
     // rotate centroid
     this->rotator_->rotate(cur_centroid, rotated_centroid);
 
     // rotate vectors for this cluster
-    std::vector<float> rotated_data(padded_dim_ * num_points);
+    std::vector<float> rotated_data(
+        checked_multiply(padded_dim_, num_points, "IVF rotated-data storage size overflow")
+    );
     for (size_t i = 0; i < num_points; ++i) {
         rotator_->rotate(data + (IDs[i] * dim_), rotated_data.data() + (i * padded_dim_));
     }
@@ -298,7 +398,9 @@ inline void IVF::quantize_cluster(
         );
 
         batch_data += BatchDataMap<float>::data_bytes(padded_dim_);
-        ex_data += ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * n;
+        if (ex_bits_ > 0) {
+            ex_data += ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * n;
+        }
     }
 }
 
@@ -334,14 +436,12 @@ inline void IVF::save(const char* filename) const {
 
     /* Save data */
     this->initer_->save(output, filename);
-    output.write(
-        reinterpret_cast<const char*>(batch_data_),
-        static_cast<long>(batch_data_bytes(cluster_sizes))
-    );
-    output.write(
-        reinterpret_cast<const char*>(ex_data_), static_cast<long>(ex_data_bytes())
-    );
-    output.write(reinterpret_cast<const char*>(ids_), static_cast<long>(ids_bytes()));
+    assert(batch_data_.size_bytes() == batch_data_bytes(cluster_sizes));
+    assert(ex_data_.size_bytes() == ex_data_bytes());
+    assert(ids_.size_bytes() == ids_bytes());
+    batch_data_.save(output);
+    ex_data_.save(output);
+    ids_.save(output);
 
     output.close();
 }
@@ -349,49 +449,90 @@ inline void IVF::save(const char* filename) const {
 inline void IVF::load(const char* filename) {
     std::cout << "Loading IVF...\n";
     std::ifstream input(filename, std::ios::binary);
-    assert(input.is_open());
+    if (!input.is_open()) {
+        throw std::ios_base::failure("cannot open IVF index for reading");
+    }
+
+    IVF candidate;
 
     /* Load meta data */
     std::cout << "\tLoading meta data...\n";
-    input.read(reinterpret_cast<char*>(&this->num_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&this->dim_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&this->num_cluster_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&this->ex_bits_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&type_), sizeof(type_));
-    input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
+    input.read(reinterpret_cast<char*>(&candidate.num_), sizeof(size_t));
+    input.read(reinterpret_cast<char*>(&candidate.dim_), sizeof(size_t));
+    input.read(reinterpret_cast<char*>(&candidate.num_cluster_), sizeof(size_t));
+    input.read(reinterpret_cast<char*>(&candidate.ex_bits_), sizeof(size_t));
+    input.read(reinterpret_cast<char*>(&candidate.type_), sizeof(candidate.type_));
+    input.read(
+        reinterpret_cast<char*>(&candidate.metric_type_), sizeof(candidate.metric_type_)
+    );
+    if (!input.good()) {
+        throw std::ios_base::failure("failed to read IVF metadata");
+    }
+    if (candidate.num_ == 0 || candidate.dim_ == 0 || candidate.num_cluster_ == 0) {
+        throw std::invalid_argument(
+            "IVF point, dimension, and cluster counts must be positive"
+        );
+    }
+    if (candidate.ex_bits_ > 8) {
+        throw std::invalid_argument("IVF extra-bit count must be between 0 and 8");
+    }
+    if (candidate.type_ != RotatorType::MatrixRotator &&
+        candidate.type_ != RotatorType::FhtKacRotator) {
+        throw std::invalid_argument("invalid IVF rotator type");
+    }
+    if (candidate.metric_type_ != METRIC_L2 && candidate.metric_type_ != METRIC_IP) {
+        throw std::invalid_argument("invalid IVF metric type");
+    }
+    if (candidate.dim_ > std::numeric_limits<size_t>::max() - 63) {
+        throw std::length_error("IVF padded dimension overflow");
+    }
+    if (candidate.type_ == RotatorType::FhtKacRotator &&
+        (candidate.dim_ < 64 || candidate.dim_ >= 4096)) {
+        throw std::invalid_argument("FHT-Kac IVF dimension must be between 64 and 4095");
+    }
 
-    rotator_ = choose_rotator<float>(dim_, type_, round_up_to_multiple(dim_, 64));
-    padded_dim_ = rotator_->size();
+    candidate.rotator_.reset(choose_rotator<float>(
+        candidate.dim_, candidate.type_, round_up_to_multiple(candidate.dim_, 64)
+    ));
+    candidate.padded_dim_ = candidate.rotator_->size();
 
     /* Load number of vectors of each cluster */
-    std::vector<size_t> cluster_sizes(num_cluster_, 0);
+    std::vector<size_t> cluster_sizes(candidate.num_cluster_, 0);
     input.read(
         reinterpret_cast<char*>(cluster_sizes.data()),
-        static_cast<long>(sizeof(size_t) * num_cluster_)
+        static_cast<long>(sizeof(size_t) * candidate.num_cluster_)
     );
+    if (!input.good()) {
+        throw std::ios_base::failure("failed to read IVF cluster sizes");
+    }
 
-    size_t tmp =
-        std::accumulate(cluster_sizes.begin(), cluster_sizes.end(), static_cast<size_t>(0));
-    if (tmp != num_) {
-        std::cerr << "The sum of cluster num != total number of points\n";
-        exit(1);
+    size_t total_points = 0;
+    for (const size_t cluster_size : cluster_sizes) {
+        if (total_points > candidate.num_ || cluster_size > candidate.num_ - total_points) {
+            throw std::runtime_error("IVF cluster sizes exceed point count");
+        }
+        total_points += cluster_size;
+    }
+    if (total_points != candidate.num_) {
+        throw std::runtime_error("the sum of IVF cluster sizes does not match point count");
     }
 
     /* Load rotator */
-    this->rotator_->load(input);
+    candidate.rotator_->load(input);
+    if (!input.good()) {
+        throw std::ios_base::failure("failed to read IVF rotator");
+    }
 
     /* Load data */
-    free_memory();
-    allocate_memory(cluster_sizes);
-    this->initer_->load(input, filename);
-    input.read(batch_data_, static_cast<long>(batch_data_bytes(cluster_sizes)));
-    input.read(ex_data_, static_cast<long>(ex_data_bytes()));
-    input.read(reinterpret_cast<char*>(ids_), static_cast<long>(ids_bytes()));
-
-    /* Init each cluster */
-    init_clusters(cluster_sizes);
+    Storage storage = candidate.allocate_storage(cluster_sizes);
+    storage.initer->load(input, filename);
+    storage.batch_data.load(input);
+    storage.ex_data.load(input);
+    storage.ids.load(input);
+    candidate.commit_storage(std::move(storage));
 
     input.close();
+    swap(candidate);
     std::cout << "Index loaded\n";
 }
 
@@ -476,8 +617,10 @@ inline void IVF::search_cluster(
         );
 
         batch_data += BatchDataMap<float>::data_bytes(padded_dim_);
-        ex_data +=
-            ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * fastscan::kBatchSize;
+        if (ex_bits_ > 0) {
+            ex_data +=
+                ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * fastscan::kBatchSize;
+        }
         ids += fastscan::kBatchSize;
     }
 
