@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <ostream>
+#include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -61,6 +62,8 @@ class QuantizedGraph {
     size_t neighbor_offset_ = 0;    // offset of neighbors
     size_t row_offset_ = 0;         // length of entire row
     size_t ef_ = 0;
+
+    void validate_configuration() const;
 
     void initialize();
 
@@ -157,12 +160,32 @@ inline QuantizedGraph<T>::QuantizedGraph(
     , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<T> : euclidean_sqr<T>)
     , metric_type_(metric_type)
     , rotator_type_(rotator_type) {
+    validate_configuration();
     initialize();
 }
 
 template <typename T>
+inline void QuantizedGraph<T>::validate_configuration() const {
+    if (degree_bound_ == 0 || degree_bound_ % fastscan::kBatchSize != 0) {
+        throw std::invalid_argument(
+            "QuantizedGraph degree bound must be a positive multiple of 32"
+        );
+    }
+    if (degree_bound_ >= num_points_) {
+        throw std::invalid_argument(
+            "QuantizedGraph degree bound must be smaller than the number of points"
+        );
+    }
+    if (num_points_ > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument(
+            "QuantizedGraph point count exceeds the search-buffer ID limit"
+        );
+    }
+}
+
+template <typename T>
 inline QuantizedGraph<T>::~QuantizedGraph() {
-    ::delete this->rotator_;
+    delete this->rotator_;
 }
 
 template <typename T>
@@ -225,6 +248,7 @@ inline void QuantizedGraph<T>::load(const char* filename) {
 
     raw_dist_func_ = (metric_type_ == METRIC_IP) ? dot_product_dis<T> : euclidean_sqr<T>;
 
+    validate_configuration();
     initialize();
 
     /* Data */
@@ -335,7 +359,7 @@ inline void QuantizedGraph<T>::search(
 }
 
 // scan a data row (including data vec and quantization codes for its neighbors)
-// store estimated distance & return exact distnace for current vertex
+// Store estimated neighbor distances; the caller computes the current vertex exactly.
 template <typename T>
 void QuantizedGraph<T>::scan_neighbors(
     const BatchQuery<T>& q_obj,
@@ -395,7 +419,7 @@ inline void QuantizedGraph<T>::update_results(
 // initialize const offsets & data array
 template <typename T>
 inline void QuantizedGraph<T>::initialize() {
-    ::delete rotator_;
+    delete rotator_;
 
     rotator_ = choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64));
     padded_dim_ = rotator_->size();

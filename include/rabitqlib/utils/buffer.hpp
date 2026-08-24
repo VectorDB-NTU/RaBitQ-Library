@@ -1,12 +1,18 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/utils/memory.hpp"
 
 namespace rabitqlib::buffer {
+
+inline constexpr PID kSearchBufferCheckedMask = PID{1}
+                                                << (std::numeric_limits<PID>::digits - 1);
+inline constexpr size_t kSearchBufferMaxPointCount =
+    static_cast<size_t>(kSearchBufferCheckedMask);
 /**
  * @brief sorted linear buffer, used as beam set for graph-based ANN search. In symphonyqg,
  * the search buffer may contain duplicate id with different distances
@@ -31,10 +37,10 @@ class SearchBuffer {
     }
 
     // set top bit to 1 as checked
-    static void set_checked(PID& data_id) { data_id |= (1 << 31); }
+    static void set_checked(PID& data_id) { data_id |= kSearchBufferCheckedMask; }
 
     [[nodiscard]] static auto is_checked(PID data_id) -> bool {
-        return static_cast<bool>(data_id >> 31);
+        return (data_id & kSearchBufferCheckedMask) != 0;
     }
 
    public:
@@ -97,13 +103,18 @@ class SearchBuffer {
     }
 
     T top_dist() const {
+        if (capacity_ == 0) {
+            return std::numeric_limits<T>::lowest();
+        }
         return is_full() ? data_[size_ - 1].distance : std::numeric_limits<T>::max();
     }
 
     [[nodiscard]] auto is_full() const -> bool { return size_ == capacity_; }
 
     // judge if dist can be inserted into buffer
-    [[nodiscard]] auto is_full(T dist) const -> bool { return dist > top_dist(); }
+    [[nodiscard]] auto is_full(T dist) const -> bool {
+        return capacity_ == 0 || dist > top_dist();
+    }
 
     const std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>& data() {
         return data_;

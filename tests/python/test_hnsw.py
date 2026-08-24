@@ -115,6 +115,12 @@ def test_wrong_query_dim_raises(built_hnsw):
         built_hnsw.search(bad_queries, k=1)
 
 
+def test_search_before_build_raises(query_data):
+    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    with pytest.raises(Exception):
+        idx.search(query_data[:1], k=1)
+
+
 # ── save / load roundtrip ─────────────────────────────────────────────────────
 
 

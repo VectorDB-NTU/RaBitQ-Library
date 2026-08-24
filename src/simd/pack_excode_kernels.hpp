@@ -84,7 +84,7 @@ inline void packing_3bit_excode_intrinsics(
 inline void packing_4bit_excode_intrinsics(
     const uint8_t* o_raw, uint8_t* o_compact, size_t dim
 ) {
-    // although this part only requries SSE, computing inner product for this orgnization
+    // Although this part only requires SSE, computing inner products for this organization
     // requires AVX512F, similar for remaining functions
     // ! require dim % 16 == 0
     for (size_t j = 0; j < dim; j += 16) {

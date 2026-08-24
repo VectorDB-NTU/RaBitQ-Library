@@ -14,7 +14,7 @@ template <typename T>
 class Lut {
     static constexpr size_t kNumBits = 8;
     static constexpr size_t kNumBitsHacc = 16;
-    static_assert(std::is_floating_point_v<T>, "T must be an floating type in Lut");
+    static_assert(std::is_floating_point_v<T>, "T must be a floating-point type in Lut");
 
    private:
     size_t table_length_ = 0;

@@ -33,13 +33,10 @@ inline void split_batch_estdist(
 ) {
     constexpr size_t kSafeChunkDim = 1024;
     ConstBatchDataMap<float> cur_batch(batch_data, padded_dim);
-    RowMajorArray<int32_t> accu_arr(1, fastscan::kBatchSize);
+    std::array<int32_t, fastscan::kBatchSize> accu_values{};
+    RowMajorArrayMap<int32_t> accu_arr(accu_values.data(), 1, fastscan::kBatchSize);
     const auto* codes_ptr = cur_batch.bin_code();
     const auto* lut_ptr = q_obj.lut();
-    for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-        accu_arr.data()[i] = 0;
-    }
-
     if (use_hacc) {
         std::array<int32_t, fastscan::kBatchSize> accu_res;
         size_t remaining_dim = padded_dim;
@@ -165,7 +162,7 @@ template <typename T, typename TA = uint16_t>
 inline void qg_batch_estdist(
     const char* batch_data, const BatchQuery<T>& q_obj, size_t padded_dim, T* est_distance
 ) {
-    std::vector<TA> accu_res(fastscan::kBatchSize);
+    std::array<TA, fastscan::kBatchSize> accu_res{};
 
     ConstQGBatchDataMap<T> cur_batch(batch_data, padded_dim);
 

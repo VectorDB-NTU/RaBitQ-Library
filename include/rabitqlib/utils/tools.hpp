@@ -23,7 +23,7 @@ inline void assert_floating() {
     );
 }
 
-// thread save rand int
+// Generate a thread-safe random integer in the inclusive range [min, max].
 template <typename T>
 inline T rand_integer(T min, T max) {
     static thread_local std::mt19937 generator = [] {

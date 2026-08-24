@@ -108,6 +108,11 @@ def test_search_before_build_raises():
         idx.search(queries, k=1, ef=_EF)
 
 
+def test_invalid_degree_raises():
+    with pytest.raises(Exception):
+        SymqgIndex(DIM, max_degree=16)
+
+
 # ── save / load roundtrip ─────────────────────────────────────────────────────
 
 
