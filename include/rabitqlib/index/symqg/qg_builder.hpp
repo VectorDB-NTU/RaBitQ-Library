@@ -59,7 +59,7 @@ class QGBuilder {
     )
         : qg_{index}
         , ef_build_{ef_build}
-        , num_threads_{std::min(num_threads, total_threads())}
+        , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
         , num_nodes_{qg_.num_vertices()}
         , dim_{qg_.dimension()}
         , degree_bound_(qg_.degree_bound())
@@ -88,7 +88,7 @@ class QGBuilder {
 
     void build(size_t num_iter = 3) {
         if (num_iter < 2) {
-            std::cerr << "The number of iter for building qg should >= 3\n";
+            std::cerr << "The number of iterations for building QG must be at least 2\n";
             exit(1);
         }
         // for first iterations, we do not need to refine the graph structure

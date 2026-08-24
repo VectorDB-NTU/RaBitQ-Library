@@ -17,7 +17,11 @@ namespace rabitqlib::python_bindings {
 class SymqgIndex {
    public:
     SymqgIndex(size_t dim, size_t max_degree, const std::string& metric = "l2")
-        : dim_(dim), max_degree_(max_degree), metric_(metric_from_string(metric)) {}
+        : dim_(dim), max_degree_(max_degree), metric_(metric_from_string(metric)) {
+        if (max_degree == 0 || max_degree % rabitqlib::fastscan::kBatchSize != 0) {
+            throw std::invalid_argument("max_degree must be a positive multiple of 32");
+        }
+    }
 
     void build(py::handle data, size_t ef_construction, size_t num_threads = 1) {
         auto data_array = ensure_2d_array<float>(data, "data");
@@ -41,6 +45,12 @@ class SymqgIndex {
         auto query_array = ensure_2d_array<float>(queries, "queries");
         if (!built_) {
             throw std::runtime_error("SymqgIndex must be built or loaded before search");
+        }
+        if (k == 0 || k > num_points_) {
+            throw std::invalid_argument("k must be between 1 and num_points");
+        }
+        if (ef == 0) {
+            throw std::invalid_argument("ef must be positive");
         }
         if (static_cast<size_t>(query_array.shape(1)) != dim_) {
             throw std::invalid_argument("query dimension does not match index dim");
