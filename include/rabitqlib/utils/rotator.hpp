@@ -58,14 +58,14 @@ inline size_t padding_requirement(size_t dim, RotatorType type) {
 template <typename T = float>
 class MatrixRotator : public Rotator<T> {
    private:
-    RowMajorMatrix<T> rand_mat_;  // Rotation Maxtrix
+    RowMajorMatrix<T> rand_mat_;  // Rotation matrix
    public:
     explicit MatrixRotator(size_t dim, size_t padded_dim)
         : Rotator<T>(dim, padded_dim), rand_mat_(dim, padded_dim) {
         RowMajorMatrix<T> rand = random_gaussian_matrix<T>(padded_dim, padded_dim);
         Eigen::HouseholderQR<RowMajorMatrix<T>> qr(rand);
-        RowMajorMatrix<T> q_inv =
-            qr.householderQ().transpose();  // inverse of orthogonal mat is its inverse
+        RowMajorMatrix<T> q_inv = qr.householderQ().transpose(
+        );  // The inverse of an orthogonal matrix is its transpose.
 
         // the random matrix only need the first dim rows, since we just pad zeros for
         // the vector to be rotated to padded dimension
@@ -84,27 +84,27 @@ class MatrixRotator : public Rotator<T> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(rand_mat_.data()),
-            static_cast<long>(sizeof(float) * this->dim_ * this->padded_dim_)
+            static_cast<long>(sizeof(T) * this->dim_ * this->padded_dim_)
         );
     }
 
     void save(std::ofstream& output) const override {
         output.write(
             reinterpret_cast<const char*>(rand_mat_.data()),
-            (sizeof(float) * this->dim_ * this->padded_dim_)
+            (sizeof(T) * this->dim_ * this->padded_dim_)
         );
     }
 
     void load(const char* data) override {
-        std::memcpy(rand_mat_.data(), data, sizeof(float) * this->dim_ * this->padded_dim_);
+        std::memcpy(rand_mat_.data(), data, sizeof(T) * this->dim_ * this->padded_dim_);
     }
 
     void save(char* data) const override {
-        std::memcpy(data, rand_mat_.data(), sizeof(float) * this->dim_ * this->padded_dim_);
+        std::memcpy(data, rand_mat_.data(), sizeof(T) * this->dim_ * this->padded_dim_);
     }
 
     size_t dump_bytes() const override {
-        return sizeof(float) * this->dim_ * this->padded_dim_;
+        return sizeof(T) * this->dim_ * this->padded_dim_;
     }
 
     void rotate(const T* vec, T* rotated_vec) const override {

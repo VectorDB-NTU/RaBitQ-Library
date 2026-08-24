@@ -69,7 +69,7 @@ inline void parallel_for(size_t start, size_t end, size_t numThreads, Function f
 }
 
 /**
- * @brief For ivf centroids, we need an intializer to get the candidate clusters.
+ * @brief For IVF centroids, an initializer finds the candidate clusters.
  */
 class Initializer {
    protected:
