@@ -1,6 +1,6 @@
 #include <pybind11/stl.h>
 
-#include <algorithm>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -50,8 +50,17 @@ class IvfIndex {
         if (static_cast<size_t>(data_array.shape(1)) != dim_) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
+        if (static_cast<size_t>(data_array.shape(0)) != max_elements_) {
+            throw std::invalid_argument("number of data rows must match index max_elements"
+            );
+        }
         if (static_cast<size_t>(centroids_array.shape(1)) != dim_) {
             throw std::invalid_argument("centroid dimension does not match index dim");
+        }
+        if (static_cast<size_t>(centroids_array.shape(0)) != num_clusters_) {
+            throw std::invalid_argument(
+                "number of centroid rows must match index num_clusters"
+            );
         }
         if (static_cast<size_t>(cluster_ids_array.shape(0)) !=
             static_cast<size_t>(data_array.shape(0))) {
@@ -78,8 +87,17 @@ class IvfIndex {
         size_t num_threads = 1
     ) {
         auto query_array = ensure_2d_array<float>(queries, "queries");
+        if (!built_) {
+            throw std::runtime_error("IvfIndex must be built or loaded before search");
+        }
         if (static_cast<size_t>(query_array.shape(1)) != dim_) {
             throw std::invalid_argument("query dimension does not match index dim");
+        }
+        if (k == 0 || k > max_elements_) {
+            throw std::invalid_argument("k must be between 1 and max_elements");
+        }
+        if (nprobe == 0) {
+            throw std::invalid_argument("nprobe must be positive");
         }
 
         const size_t nq = static_cast<size_t>(query_array.shape(0));
@@ -95,8 +113,8 @@ class IvfIndex {
             nq,
             num_threads,
             [&](size_t idx, size_t /*threadId*/) {
-                std::vector<rabitqlib::PID> row_ids(k, 0);
-                std::vector<float> row_dists(k, 0.0F);
+                std::vector<rabitqlib::PID> row_ids(k, rabitqlib::kPidMax);
+                std::vector<float> row_dists(k, std::numeric_limits<float>::infinity());
 
                 index_->search(
                     query_array.data() + (idx * dim_),

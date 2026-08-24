@@ -79,6 +79,20 @@ def test_k_equals_one(built_ivf, query_data):
     assert dists.shape == (N_QUERIES, 1)
 
 
+def test_unfilled_results_use_sentinels():
+    data = np.zeros((4, DIM), dtype=np.float32)
+    data[1:] = 100.0
+    centroids = np.stack((data[0], data[1]))
+    cluster_ids = np.array([0, 1, 1, 1], dtype=np.uint32)
+    idx = IvfIndex(DIM, 4, 2, nbits=4)
+    idx.build(data, centroids, cluster_ids)
+
+    ids, dists = idx.search(data[:1], k=3, nprobe=1)
+    assert ids[0, 0] == 0
+    np.testing.assert_array_equal(ids[0, 1:], np.iinfo(np.uint32).max)
+    assert np.all(np.isinf(dists[0, 1:]))
+
+
 # ── search correctness ────────────────────────────────────────────────────────
 
 
@@ -151,6 +165,12 @@ def test_wrong_query_dim_raises(built_ivf):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
     with pytest.raises(Exception):
         built_ivf.search(bad_queries, k=1, nprobe=1)
+
+
+def test_search_before_build_raises(query_data):
+    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
+    with pytest.raises(Exception):
+        idx.search(query_data[:1], k=1, nprobe=1)
 
 
 # ── save / load roundtrip ─────────────────────────────────────────────────────
