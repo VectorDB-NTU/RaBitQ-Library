@@ -44,9 +44,9 @@ def test_hnsw_construct_explicit():
 
 
 def test_symqg_construct():
-    idx = SymqgIndex(64, max_degree=16)
+    idx = SymqgIndex(64, max_degree=32)
     assert idx.dim == 64
-    assert idx.max_degree == 16
+    assert idx.max_degree == 32
     assert not idx.is_built
 
 
