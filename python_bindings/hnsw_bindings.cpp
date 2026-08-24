@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -50,6 +51,12 @@ class HnswIndex {
         if (static_cast<size_t>(data_array.shape(1)) != dim_) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
+        if (data_array.shape(0) == 0 ||
+            static_cast<size_t>(data_array.shape(0)) > max_elements_) {
+            throw std::invalid_argument(
+                "number of data rows must be between 1 and max_elements"
+            );
+        }
         if (static_cast<size_t>(centroids_array.shape(1)) != dim_) {
             throw std::invalid_argument("centroid dimension does not match index dim");
         }
@@ -61,6 +68,14 @@ class HnswIndex {
         }
 
         const size_t num_clusters = static_cast<size_t>(centroids_array.shape(0));
+        if (num_clusters == 0) {
+            throw std::invalid_argument("at least one centroid is required");
+        }
+        for (ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
+            if (cluster_ids_array.data()[i] >= num_clusters) {
+                throw std::invalid_argument("cluster_ids contains an out-of-range value");
+            }
+        }
         num_clusters_ = num_clusters;
 
         // Ensure cluster_ids are writable for the C++ API by making a copy
@@ -87,17 +102,29 @@ class HnswIndex {
 
     py::tuple search(py::handle queries, size_t k, size_t ef = 0, size_t num_threads = 1) {
         auto query_array = ensure_2d_array<float>(queries, "queries");
+        if (!built_) {
+            throw std::runtime_error("HnswIndex must be built or loaded before search");
+        }
         if (dim_ != 0 && static_cast<size_t>(query_array.shape(1)) != dim_) {
             throw std::invalid_argument("query dimension does not match index dim");
         }
         if (ef == 0) {
             ef = std::max<size_t>(k, 10);
         }
+        if (k == 0 || k > max_elements_) {
+            throw std::invalid_argument("k must be between 1 and max_elements");
+        }
 
         const auto shape = std::vector<ssize_t>{
             static_cast<ssize_t>(query_array.shape(0)), static_cast<ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
+        std::fill(ids.mutable_data(), ids.mutable_data() + ids.size(), rabitqlib::kPidMax);
+        std::fill(
+            dists.mutable_data(),
+            dists.mutable_data() + dists.size(),
+            std::numeric_limits<float>::infinity()
+        );
         auto ids_buf = ids.mutable_unchecked<2>();
         auto dists_buf = dists.mutable_unchecked<2>();
 
