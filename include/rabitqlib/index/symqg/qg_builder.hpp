@@ -75,8 +75,9 @@ class QGBuilder {
         std::vector<float> centroid =
             compute_centroid(data, num_nodes_, dim_, num_threads_);
 
-        PID entry_point =
-            exact_nn(data, centroid.data(), num_nodes_, dim_, num_threads_, euclidean_sqr<float>);
+        PID entry_point = exact_nn(
+            data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
+        );
 
         std::cout << "Setting entry_point to " << entry_point << '\n' << std::flush;
 
