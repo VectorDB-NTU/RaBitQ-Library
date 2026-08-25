@@ -55,6 +55,23 @@ TEST(Select_IP_Func, returns_stable_function_pointer) {
     }
 }
 
+TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
+    constexpr size_t dim = 64;
+    std::vector<float> query(dim);
+    std::vector<uint8_t> codes(dim / 8);
+
+    for (size_t i = 0; i < dim; ++i) {
+        query[i] = static_cast<float>(i) + 1.0F;
+    }
+    for (size_t i = 0; i < codes.size(); ++i) {
+        codes[i] = 0xFF;
+    }
+
+    ex_ipfunc ip_func = select_excode_ipfunc(0);
+    ASSERT_NE(ip_func, nullptr);
+    ASSERT_EQ(ip_func(query.data(), codes.data(), dim), 0.0F);
+}
+
 TEST(ScalarQuantize, Uint8MatchesRoundedScalar) {
     constexpr size_t dim = 37;
     constexpr float lo = -3.0F;
