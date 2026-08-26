@@ -20,10 +20,19 @@ namespace rabitqlib::simd {
     );
 }
 
+// With zero extra bits there is no extra code to contribute to the inner
+// product, so the ex_bits == 0 slot must be a constant-zero stub rather than
+// a duplicate of the 1-bit implementation.
+static float ip_fxu0(
+    const float* /*query*/, const uint8_t* /*compact_code*/, size_t /*dim*/
+) {
+    return 0.0F;
+}
+
 ExcodeIpTable resolve_excode_ip_table() {
     if (cpu::has_avx512_core()) {
         return {
-            excode_ipimpl::ip16_fxu1_avx512,
+            ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx512,
             excode_ipimpl::ip64_fxu2_avx512,
             excode_ipimpl::ip64_fxu3_avx512,
@@ -35,7 +44,7 @@ ExcodeIpTable resolve_excode_ip_table() {
         };
     } else if (cpu::has_avx2()) {
         return {
-            excode_ipimpl::ip16_fxu1_avx2,
+            ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx2,
             excode_ipimpl::ip64_fxu2_avx2,
             excode_ipimpl::ip64_fxu3_avx2,
