@@ -423,7 +423,7 @@ inline HierarchicalNSW::HierarchicalNSW(
         offsetExData_ + size_ex_data_;  // (# of edges + edges) + (cluster_id) + (external
                                         // label) + (BinData) + (ExData)
     data_level0_memory_ =
-        reinterpret_cast<char*>(malloc(max_elements_ * size_data_per_element_));
+        memory::huge_page_allocate<char>(max_elements_ * size_data_per_element_);
     if (data_level0_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory");
     }
@@ -549,7 +549,7 @@ inline void HierarchicalNSW::load(const char* filename) {
     input.read(reinterpret_cast<char*>(&ef_construction_), sizeof(size_t));
 
     const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
-    centroids_memory_ = reinterpret_cast<char*>(malloc(centroids_bytes));
+    centroids_memory_ = memory::huge_page_allocate<char>(centroids_bytes);
     if (centroids_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory: loadIndex failed to allocate centroids"
         );
@@ -561,7 +561,7 @@ inline void HierarchicalNSW::load(const char* filename) {
     );
 
     data_level0_memory_ =
-        reinterpret_cast<char*>(malloc(max_elements_ * size_data_per_element_));
+        memory::huge_page_allocate<char>(max_elements_ * size_data_per_element_);
 
     input.read(
         data_level0_memory_,
