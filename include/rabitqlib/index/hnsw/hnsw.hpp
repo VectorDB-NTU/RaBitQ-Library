@@ -1237,9 +1237,15 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
     float distk = 1e10;
 
     EstimateRecord start_estimate_record;
-    get_full_est_direct<Kernel>(
-        q_to_centroids, query_wrapper, ep_id, start_estimate_record
-    );
+    if (ex_bits_ > 0) {
+        get_full_est_direct<Kernel>(
+            q_to_centroids, query_wrapper, ep_id, start_estimate_record
+        );
+    } else {
+        get_bin_est_direct<Kernel>(
+            q_to_centroids, query_wrapper, ep_id, start_estimate_record
+        );
+    }
     float est_dist = start_estimate_record.est_dist;
     float low_dist = start_estimate_record.low_dist;
 
