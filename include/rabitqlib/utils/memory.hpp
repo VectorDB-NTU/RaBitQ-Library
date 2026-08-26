@@ -86,6 +86,14 @@ inline T* align_allocate(size_t nbytes) {
     return static_cast<T*>(ptr);
 }
 
+inline constexpr size_t kHugePageSize = 2UL << 20;
+
+// Allocate a large buffer backed by transparent huge pages.
+template <typename T>
+inline T* huge_page_allocate(size_t nbytes) {
+    return align_allocate<kHugePageSize, T, true>(nbytes);
+}
+
 static inline void prefetch_l1(const void* addr) {
 #if defined(__SSE2__)
     _mm_prefetch(addr, _MM_HINT_T0);
