@@ -1079,7 +1079,7 @@ a C++17 API for both indexes and low-level quantization.</p>
   AVX2 with FMA or AVX-512F/BW/DQ with FMA</li>
 <li>Python 3.9 or newer for the Python package</li>
 <li>A C++17 compiler with OpenMP support</li>
-<li>CMake 3.15 or newer for Python builds, or CMake 3.10 or newer for C++ builds</li>
+<li>CMake 3.15 or newer</li>
 </ul>
 <p>Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
 AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
@@ -1143,6 +1143,10 @@ cover construction, querying, and index persistence.</p>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
 </code></pre></div>
+<p>Release builds enable native CPU tuning by default. To build a binary that can
+be moved between AVX2- and AVX-512-capable machines, configure with
+<code>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code>; the ISA-specific kernels will still
+be selected at runtime.</p>
 <p>Example executables are written to <code>bin/</code>. Their source demonstrates complete
 indexing and querying workflows:</p>
 <ul>
