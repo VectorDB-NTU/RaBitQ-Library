@@ -265,29 +265,30 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
     std::vector<std::mutex> locks(num_nodes_);
     std::vector<CandidateList> reverse_buffer(num_nodes_);
 
+    // Keep new_neighbors_ read-only while reverse candidates are collected. Mutating a
+    // destination row here races with another worker reading that row as its source.
 #pragma omp parallel for schedule(dynamic)
     for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
         for (const auto& nei : new_neighbors_[data_id]) {
-            PID dst = nei.id;
-            bool dup = false;
-            CandidateList& dst_neighbors = new_neighbors_[dst];
-            std::lock_guard lock(locks[dst]);
-            for (auto& dst_nei : dst_neighbors) {
-                if (dst_nei.id == data_id) {
-                    dup = true;
-                    break;
+            const PID destination = nei.id;
+            const CandidateList& destination_neighbors = new_neighbors_[destination];
+            const bool reciprocal = std::any_of(
+                destination_neighbors.begin(),
+                destination_neighbors.end(),
+                [&](const auto& destination_neighbor) {
+                    return destination_neighbor.id == data_id;
                 }
-            }
-            if (dup) {
+            );
+            if (reciprocal) {
                 continue;
             }
 
-            if (dst_neighbors.size() < degree_bound_) {
-                dst_neighbors.emplace_back(data_id, nei.distance);
-            } else {
-                if (reverse_buffer[dst].size() < kMaxCandidatePoolSize) {
-                    reverse_buffer[dst].emplace_back(data_id, nei.distance);
-                }
+            std::lock_guard lock(locks[destination]);
+            const size_t missing_slots =
+                degree_bound_ - std::min(degree_bound_, destination_neighbors.size());
+            if (reverse_buffer[destination].size() <
+                kMaxCandidatePoolSize + missing_slots) {
+                reverse_buffer[destination].emplace_back(data_id, nei.distance);
             }
         }
     }
