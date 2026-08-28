@@ -10,7 +10,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-SET(CMAKE_CXX_FLAGS  "-Wall -Ofast -Wextra -lrt -fpic -fopenmp -ftree-vectorize -fexceptions")
+SET(CMAKE_CXX_FLAGS  "-Wall -Ofast -Wextra -lrt -march=native -fpic -fopenmp -ftree-vectorize -fexceptions")
 
 set(RABITQ_COMMON_SOURCES
     src/utils/cpu_features.cpp
