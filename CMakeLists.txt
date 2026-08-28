@@ -3,6 +3,9 @@ cmake_minimum_required(VERSION 3.15)
 project(RaBitQLib LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(RABITQ_BUILD_SAMPLES "Build C++ sample programs" ON)
 option(RABITQ_BUILD_TESTS "Build C++ tests" OFF)
