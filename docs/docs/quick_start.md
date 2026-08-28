@@ -9,7 +9,7 @@ a C++17 API for both indexes and low-level quantization.
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
 - Python 3.9 or newer for the Python package
 - A C++17 compiler with OpenMP support
-- CMake 3.15 or newer for Python builds, or CMake 3.10 or newer for C++ builds
+- CMake 3.15 or newer
 
 Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
 AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
@@ -91,6 +91,11 @@ cd RaBitQ-Library
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
+
+Release builds enable native CPU tuning by default. To build a binary that can
+be moved between AVX2- and AVX-512-capable machines, configure with
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; the ISA-specific kernels will still
+be selected at runtime.
 
 Example executables are written to `bin/`. Their source demonstrates complete
 indexing and querying workflows:

@@ -90,7 +90,7 @@ persistence.
 
 #### Requirements
 
-- CMake 3.10 or newer
+- CMake 3.15 or newer
 - a C++17 compiler with OpenMP support
 - an x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
@@ -110,6 +110,11 @@ cd RaBitQ-Library
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
+
+Release builds enable native CPU tuning by default. To build a binary that can
+be moved between AVX2- and AVX-512-capable machines, configure with
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; the ISA-specific kernels will still
+be selected at runtime.
 
 The index example executables are written to `bin/`. Their source code shows
 the complete indexing and querying workflows:

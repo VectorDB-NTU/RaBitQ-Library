@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 3.10)
-
 # Fetch Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -10,19 +8,16 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-enable_testing()
-
-# Include directories
-include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/common)
-
-# Compiler flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-
 # Automatically register all tests under unit and <other folders> folders
-file(GLOB_RECURSE UNIT_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/unit/*_test.cpp)
-file(GLOB_RECURSE INTEG_TESTS ${CMAKE_CURRENT_SOURCE_DIR}/integration/*_test.cpp)
-file(GLOB_RECURSE COMMON_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp)
+file(GLOB_RECURSE UNIT_TESTS CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/unit/*_test.cpp
+)
+file(GLOB_RECURSE INTEG_TESTS CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/*_test.cpp
+)
+file(GLOB_RECURSE COMMON_SRCS CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/common/*.cpp
+)
 
 # add executables
 add_executable(rabitq_tests
@@ -30,13 +25,14 @@ add_executable(rabitq_tests
     ${UNIT_TESTS}
     ${INTEG_TESTS}
 )
+target_include_directories(rabitq_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/common)
+rabitq_enable_warnings(rabitq_tests)
 
 # Link google test and rabitqlib headers
 target_link_libraries(rabitq_tests
-    gtest
-    gtest_main           
-    rabitq_headers
-    pthread
+    PRIVATE
+        GTest::gtest_main
+        rabitq_headers
 )
 
 # Discover tests for CTest

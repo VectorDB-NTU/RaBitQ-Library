@@ -5,7 +5,7 @@ binding tests for RaBitQ Library.
 
 ## Prerequisites
 
-- CMake 3.10 or newer
+- CMake 3.15 or newer
 - A GCC- or Clang-compatible C++17 compiler with OpenMP support
 - An x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 runtime dispatch
 - Network access during the first configuration so CMake can download
@@ -35,12 +35,19 @@ ctest --test-dir build --output-on-failure
 
 The combined test executable is also available as `build/tests/rabitq_tests`.
 
+Release builds use native CPU tuning by default. Pass
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` when the resulting test binary must
+run on a different AVX2- or AVX-512-capable machine.
+
 ### Building without Tests
 
-By default, tests are **not built**. If you want to build only the library:
+By default, tests are **not built**, while the C++ samples are. To build only
+the library:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build \
+    -DRABITQ_BUILD_SAMPLES=OFF \
+    -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
