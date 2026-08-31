@@ -116,6 +116,7 @@ class SplitSingleQuery {
     std::vector<uint64_t> QueryBin_;
     T G_add_;
     T G_k1xSumq_;
+    T G_kbaseSumq_;
     T G_kbxSumq_;
     T G_error_;
     T delta_;
@@ -129,15 +130,18 @@ class SplitSingleQuery {
         size_t padded_dim,
         size_t ex_bits,
         quant::RabitqConfig config,
-        size_t metric_type = METRIC_L2
+        size_t metric_type = METRIC_L2,
+        size_t base_bits = 1
     )
         : rotated_query_(rotated_query), QueryBin_(padded_dim * kNumBits / 64, 0) {
         float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
-        float c_b = -static_cast<float>((1 << (ex_bits + 1)) - 1) / 2.F;
+        float c_base = -static_cast<float>((1U << base_bits) - 1) / 2.F;
+        float c_b = -static_cast<float>((1U << (base_bits + ex_bits)) - 1) / 2.F;
         T sumq =
             std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
 
         G_k1xSumq_ = sumq * c_1;
+        G_kbaseSumq_ = sumq * c_base;
         G_kbxSumq_ = sumq * c_b;
 
         metric_type_ = (metric_type == METRIC_IP) ? METRIC_IP : METRIC_L2;
@@ -153,9 +157,6 @@ class SplitSingleQuery {
         rabitqlib::new_transpose_bin_512(
             quant_query.data(), QueryBin_.data(), padded_dim, kNumBits
         );
-
-        // new_transpose_bin_512 already stores the query in the bit-plane/chunk
-        // layout consumed by warmup_ip_x0_q_512.
     }
 
     [[nodiscard]] size_t num_bits() const { return kNumBits; }
@@ -169,6 +170,9 @@ class SplitSingleQuery {
     [[nodiscard]] T vl() const { return vl_; }
 
     [[nodiscard]] T k1xsumq() const { return G_k1xSumq_; }
+
+    // Equals k1xsumq() when base_bits == 1.
+    [[nodiscard]] T kbase_sumq() const { return G_kbaseSumq_; }
 
     [[nodiscard]] T kbxsumq() const { return G_kbxSumq_; }
 

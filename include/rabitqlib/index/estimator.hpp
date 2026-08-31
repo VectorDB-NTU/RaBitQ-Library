@@ -307,4 +307,61 @@ inline void split_single_estdist_direct(
     low_dist = est_dist - (cur_bin.f_error() * g_error);
 };
 
+inline void xy_single_base_dist(
+    const char* base_data,
+    float (*base_ip_func)(const float*, const uint8_t*, size_t),
+    const SplitSingleQuery<float>& q_obj,
+    size_t padded_dim,
+    size_t base_bits,
+    float& ip_base,
+    float& est_dist,
+    float& low_dist,
+    float g_add = 0,
+    float g_error = 0
+) {
+    ConstBaseDataMap<float> cur_base(base_data, padded_dim, base_bits);
+
+    ip_base = base_ip_func(q_obj.rotated_query(), cur_base.base_code(), padded_dim);
+
+    est_dist =
+        cur_base.f_add() + g_add + (cur_base.f_rescale() * (ip_base + q_obj.kbase_sumq()));
+
+    low_dist = est_dist - (cur_base.f_error() * g_error);
+}
+
+inline void xy_single_full_dist(
+    const char* base_data,
+    const char* ex_data,
+    float (*base_ip_func)(const float*, const uint8_t*, size_t),
+    float (*ex_ip_func)(const float*, const uint8_t*, size_t),
+    const SplitSingleQuery<float>& q_obj,
+    size_t padded_dim,
+    size_t base_bits,
+    size_t ex_bits,
+    float& est_dist,
+    float& low_dist,
+    float& ip_base,
+    float g_add = 0,
+    float g_error = 0
+) {
+    ConstBaseDataMap<float> cur_base(base_data, padded_dim, base_bits);
+    ip_base = base_ip_func(q_obj.rotated_query(), cur_base.base_code(), padded_dim);
+
+    if (ex_bits == 0) {
+        est_dist = cur_base.f_add() + g_add +
+                   (cur_base.f_rescale() * (ip_base + q_obj.kbase_sumq()));
+        low_dist = est_dist - (cur_base.f_error() * g_error);
+        return;
+    }
+
+    ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
+
+    float ip = (static_cast<float>(1 << ex_bits) * ip_base) +
+               ex_ip_func(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim);
+
+    est_dist = cur_ex.f_add_ex() + g_add + (cur_ex.f_rescale_ex() * (ip + q_obj.kbxsumq()));
+
+    low_dist = est_dist - (cur_base.f_error() * g_error / static_cast<float>(1 << ex_bits));
+}
+
 }  // namespace rabitqlib
