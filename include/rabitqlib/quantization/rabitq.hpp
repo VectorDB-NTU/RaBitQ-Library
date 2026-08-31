@@ -265,6 +265,30 @@ inline void quantize_split_single(
     }
 }
 
+inline void quantize_xy_single(
+    const float* data,
+    const float* centroid,
+    size_t padded_dim,
+    size_t base_bits,
+    size_t ex_bits,
+    char* base_data,
+    char* ex_data,
+    MetricType metric_type = METRIC_L2,
+    RabitqConfig config = RabitqConfig()
+) {
+    rabitq_impl::xy_bits::split_code_with_factor<float>(
+        data,
+        centroid,
+        padded_dim,
+        base_bits,
+        ex_bits,
+        base_data,
+        ex_data,
+        metric_type,
+        config.t_const
+    );
+}
+
 template <typename T, typename TP>
 inline void quantize_full_single(
     const T* data,

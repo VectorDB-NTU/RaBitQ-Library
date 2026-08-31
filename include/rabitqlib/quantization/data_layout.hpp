@@ -144,6 +144,53 @@ struct ConstExDataMap {
 };
 
 template <typename T>
+struct BaseDataMap {
+   public:
+    explicit BaseDataMap(char* data, size_t padded_dim, size_t base_bits)
+        : base_code_(reinterpret_cast<uint8_t*>(data))
+        , f_add_(*reinterpret_cast<T*>(data + (padded_dim * base_bits / 8)))
+        , f_rescale_(*(reinterpret_cast<T*>(data + (padded_dim * base_bits / 8)) + 1))
+        , f_error_(*(reinterpret_cast<T*>(data + (padded_dim * base_bits / 8)) + 2)) {}
+
+    static size_t data_bytes(size_t padded_dim, size_t base_bits) {
+        return (padded_dim * base_bits / 8) + (sizeof(T) * 3);
+    }
+
+    [[nodiscard]] uint8_t* base_code() { return base_code_; }
+    [[nodiscard]] T& f_add() { return f_add_; }
+    [[nodiscard]] T& f_rescale() { return f_rescale_; }
+    [[nodiscard]] T& f_error() { return f_error_; }
+
+   private:
+    uint8_t* base_code_;
+    T& f_add_;
+    T& f_rescale_;
+    T& f_error_;
+};
+
+template <typename T>
+struct ConstBaseDataMap {
+   public:
+    explicit ConstBaseDataMap(const char* data, size_t padded_dim, size_t base_bits)
+        : base_code_(reinterpret_cast<const uint8_t*>(data))
+        , f_add_(*reinterpret_cast<const T*>(data + (padded_dim * base_bits / 8)))
+        , f_rescale_(*(reinterpret_cast<const T*>(data + (padded_dim * base_bits / 8)) + 1))
+        , f_error_(*(reinterpret_cast<const T*>(data + (padded_dim * base_bits / 8)) + 2)) {
+    }
+
+    [[nodiscard]] const uint8_t* base_code() const { return base_code_; }
+    [[nodiscard]] const T& f_add() const { return f_add_; }
+    [[nodiscard]] const T& f_rescale() const { return f_rescale_; }
+    [[nodiscard]] const T& f_error() const { return f_error_; }
+
+   private:
+    const uint8_t* base_code_;
+    const T& f_add_;
+    const T& f_rescale_;
+    const T& f_error_;
+};
+
+template <typename T>
 struct BinDataMap {
    public:
     explicit BinDataMap(char* data, size_t padded_dim)
