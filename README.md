@@ -1,55 +1,81 @@
-# RaBitQ Library
+<div align="center">
 
-[![C++ tests](https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/test.yaml/badge.svg)](https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/test.yaml)
-[![Python tests](https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml/badge.svg)](https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+<h1>RaBitQ Library</h1>
 
-RaBitQ Library is a C++17 library with Python bindings for compact, accurate
-vector quantization and approximate nearest-neighbor search. It provides:
+<h3>Compact vectors. Accurate distances. Fast ANN search.</h3>
 
-- the [1-bit](https://arxiv.org/abs/2405.12497) and
-  [multi-bit](https://arxiv.org/abs/2409.09913) RaBitQ quantizers;
-- IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730)
-  indexes powered by RaBitQ;
-- Euclidean distance and inner-product search (cosine search is
-  available by normalizing vectors before using inner product); and
-- optimized AVX2 and AVX-512 kernels with runtime CPU dispatch.
+<p>
+  A research-backed C++17 library with Python bindings for 1-bit and multi-bit<br>
+  vector quantization, IVF, HNSW, and SymphonyQG.
+</p>
+
+<p>
+  <a href="https://pypi.org/project/rabitqlib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/rabitqlib.svg"></a>
+  <a href="https://pypi.org/project/rabitqlib/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/rabitqlib.svg"></a>
+  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/test.yaml"><img alt="C++ tests" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/test.yaml/badge.svg"></a>
+  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml"><img alt="Python tests" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml/badge.svg"></a>
+  <a href="https://vectordb-ntu.github.io/RaBitQ-Library/"><img alt="Documentation" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/docs.yml/badge.svg"></a>
+  <a href="https://doi.org/10.1145/3725413"><img alt="Paper DOI" src="https://img.shields.io/badge/DOI-10.1145%2F3725413-blue"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+</p>
+
+<p>
+  <a href="https://vectordb-ntu.github.io/RaBitQ-Library/">Documentation</a> ·
+  <a href="https://pypi.org/project/rabitqlib/">Python package</a> ·
+  <a href="https://doi.org/10.1145/3725413">Paper</a> ·
+  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/releases">Releases</a>
+</p>
+
+</div>
+
+## Install
+
+```bash
+pip install rabitqlib
+```
+
+Prebuilt wheels support Linux x86-64 and CPython 3.9–3.14. AVX2 + FMA is the
+portable CPU baseline; supported AVX-512 kernels are selected at runtime.
+
+## Adopted across the vector-search ecosystem
+
+[Milvus](https://github.com/milvus-io/milvus) ·
+[Faiss](https://github.com/facebookresearch/faiss) ·
+[VSAG](https://github.com/antgroup/vsag) ·
+[VectorChord](https://github.com/tensorchord/VectorChord) ·
+[Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) ·
+[CockroachDB](https://github.com/cockroachdb/cockroach) ·
+[Elasticsearch](https://github.com/elastic/elasticsearch) ·
+[Lucene](https://github.com/apache/lucene) ·
+[turbopuffer](https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ) ·
+[Zvec](https://github.com/alibaba/zvec)
+
+## Accuracy at a glance
+
+![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](docs/docs/assets/img/acc_bench.png)
+
+*Average and maximum relative estimation error across six datasets; lower is
+better. Results from the
+[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
+
+## Why RaBitQ?
+
+| | |
+| --- | --- |
+| **Compact by design** | Choose [1-bit](https://arxiv.org/abs/2405.12497) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
+| **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
+| **Fast on x86-64** | Dedicated AVX2 and AVX-512 kernels are selected through runtime CPU dispatch. |
+| **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
+
+The library supports Euclidean distance and inner product. Cosine search is
+available by normalizing vectors before using inner product.
 
 RaBitQ is developed by the
 [VectorDB group](https://vectordb-ntu.github.io/) at Nanyang Technological
 University, Singapore. A GPU implementation is also available in
 [cuvs_rabitq](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq).
 
-## Quick start
-
-### Python
-
-#### Requirements
-
-- Python 3.9 or newer
-- a C++17 compiler
-- CMake 3.15 or newer
-- OpenMP
-- an x86-64 CPU supported by the selected kernels: most paths accept either
-  AVX2 with FMA or AVX-512F/BW/DQ with FMA
-
-Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
-AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
-available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
-AVX-512 core path also checks for AVX2 and FMA, and otherwise uses its AVX2
-path when available. AVX-512 translation units are compiled with FMA enabled.
-
-On Ubuntu or Debian, install the system build tools and then install RaBitQ
-from the repository:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libomp-dev
-
-git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
-cd RaBitQ-Library
-python -m pip install .
-```
+## Python quick start
 
 The following complete example builds a small IVF index and searches it. It
 uses deterministic synthetic data, so no dataset download is required.
@@ -86,20 +112,41 @@ Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
 [Python examples](sample/python/) for index construction, querying, and index
 persistence.
 
-### C++
+<details>
+<summary>Build the Python bindings from source</summary>
 
-#### Requirements
+Source builds require a C++17 compiler, CMake 3.15 or newer, and OpenMP. On
+Ubuntu or Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake libomp-dev
+git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
+cd RaBitQ-Library
+python -m pip install .
+```
+
+</details>
+
+## C++ quick start
+
+### Requirements
 
 - CMake 3.15 or newer
 - a C++17 compiler with OpenMP support
 - an x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
 
+<details>
+<summary>CPU dispatch details</summary>
+
 Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
 AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
 available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
-AVX-512 core path also checks for AVX2 and FMA, and otherwise uses its AVX2
-path when available. AVX-512 translation units are compiled with FMA enabled.
+AVX-512 core path also checks for AVX2 and FMA. AVX-512 translation units are
+compiled with FMA enabled.
+
+</details>
 
 Clone and build the library and example programs:
 
@@ -139,44 +186,21 @@ GoogleTest is downloaded during test configuration. For a full benchmark on
 the GIST dataset, see [`example.sh`](example.sh). More detailed API and
 algorithm guidance is available in the [documentation](docs/docs/index.md).
 
-## Contributing
+## Choose the right building block
 
-Contributions are welcome. See the [contributing guide](CONTRIBUTING.md) for
-the build, formatting, pre-commit, and static-analysis workflows.
+| Component | Best fit | Storage and search profile |
+| --- | --- | --- |
+| **Quantizer** | Integrating RaBitQ into an existing system | Low-level 1-bit or multi-bit encoding and distance estimation. |
+| **IVF** | Memory-efficient partitioned search | Stores quantized codes without retaining the raw dataset. |
+| **HNSW** | Graph search with compact vectors | Adds graph links and searches directly from quantized codes. |
+| **SymphonyQG** | Query speed when more memory is available | Retains raw vectors and stores per-neighborhood quantization data. |
 
-## Why RaBitQ?
-
-- **High accuracy with tiny codes.** RaBitQ provides state-of-the-art similarity
-  estimation across different bit widths and remains effective with a
-  one-bit code per padded dimension plus per-vector factors.
-- **Fast distance estimation.** IVF and SymphonyQG use
-  [FastScan](https://arxiv.org/abs/1704.07355) for batched estimates, while
-  HNSW uses single-code AVX2 or AVX-512 kernels.
-- **Theoretical error bounds.** RaBitQ provides an asymptotically optimal error
-  bound that can support reliable ordering and reranking.
-- **Multiple index trade-offs.** IVF stores quantized codes without the raw
-  dataset. HNSW adds graph links but also searches from quantized codes.
-  SymphonyQG retains raw vectors and stores per-neighborhood quantization data
-  to improve its access pattern.
+IVF and SymphonyQG use [FastScan](https://arxiv.org/abs/1704.07355) for batched
+estimates, while HNSW uses single-code AVX2 or AVX-512 kernels.
 
 In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
 90%, 95%, and 99% recall, respectively, without reranking. Actual results
 depend on the dataset, index configuration, and search parameters.
-
-## RaBitQ in industry
-
-RaBitQ has been adopted by vector databases, search engines, and libraries:
-
-- [Milvus](https://github.com/milvus-io/milvus) — IVF + RaBitQ (C++)
-- [Faiss](https://github.com/facebookresearch/faiss) — IVF + RaBitQ (C++)
-- [VSAG](https://github.com/antgroup/vsag) — HGraph + RaBitQ (C++)
-- [VectorChord](https://github.com/tensorchord/VectorChord) — IVF + RaBitQ (Rust)
-- [Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) — DiskANN + RaBitQ
-- [CockroachDB](https://github.com/cockroachdb/cockroach) — CSPANN + RaBitQ (Go)
-- [Elasticsearch](https://github.com/elastic/elasticsearch) — HNSW + BBQ, a modified RaBitQ implementation (Java)
-- [Lucene](https://github.com/apache/lucene) — HNSW + BBQ, a modified RaBitQ implementation (Java)
-- [turbopuffer](https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ) — SPFresh + RaBitQ
-- [Zvec](https://github.com/alibaba/zvec) — HNSW/IVF + RaBitQ (C++)
 
 ## Citation
 
@@ -185,7 +209,13 @@ If RaBitQ helps your research or system, please cite:
 > Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, and Raymond
 > Chi-Wing Wong. “Practical and Asymptotically Optimal Quantization of
 > High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
-> Search.” SIGMOD 2025. [arXiv:2409.09913](https://arxiv.org/abs/2409.09913).
+> Search.” *Proceedings of the ACM on Management of Data* 3, 3, Article 202
+> (June 2025), 26 pages. [https://doi.org/10.1145/3725413](https://doi.org/10.1145/3725413).
+
+## Contributing
+
+Contributions are welcome. See the [contributing guide](CONTRIBUTING.md) for
+the build, formatting, pre-commit, and static-analysis workflows.
 
 ## Acknowledgements
 

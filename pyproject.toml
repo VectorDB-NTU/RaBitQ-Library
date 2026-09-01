@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "rabitqlib"
-version = "0.1.2"
+version = "0.2.0"
 description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -22,6 +22,13 @@ cmake.args = [
     "-DRABITQ_BUILD_PYTHON_BINDINGS=ON",
     "-DCMAKE_BUILD_TYPE=Release"
 ]
+
+[tool.cibuildwheel]
+build = "cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+build-verbosity = 1
+environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" }
+test-requires = "pytest"
+test-command = "pytest {project}/tests/python --tb=short -q"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

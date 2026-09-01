@@ -1,0 +1,99 @@
+name: Release wheels
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-wheels:
+    name: Linux x86-64 wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Check tag matches package version
+        if: github.event_name == 'push'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+
+          with open("pyproject.toml", "rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+
+          expected_tag = f"v{version}"
+          if os.environ["RELEASE_TAG"] != expected_tag:
+              raise SystemExit(
+                  f"release tag {os.environ['RELEASE_TAG']!r} does not match "
+                  f"package version {version!r}; expected {expected_tag!r}"
+              )
+          PY
+
+      - name: Build and test wheels
+        uses: pypa/cibuildwheel@v4.2.0
+        with:
+          output-dir: wheelhouse
+
+      - name: Store wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64-wheels
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  pypi-publish:
+    name: Publish wheels to PyPI
+    if: github.event_name == 'push'
+    needs: linux-wheels
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rabitqlib/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64-wheels
+          path: wheelhouse
+
+      - name: Publish wheels
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse
+
+  github-release:
+    name: Create GitHub release
+    if: github.event_name == 'push'
+    needs: [linux-wheels, pypi-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64-wheels
+          path: wheelhouse
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" wheelhouse/*.whl --generate-notes --verify-tag

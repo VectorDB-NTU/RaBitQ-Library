@@ -1,6 +1,6 @@
 # RaBitQ
 
-The RaBitQ algorithm is a drop-in replacement of binary quantization and (uniform) scalar quantization, with its [1-bit version](https://arxiv.org/abs/2405.12497) (released in May 2024) and [multi-bit version](https://arxiv.org/abs/2409.09913) (released in Sep 2024), respectively.
+The RaBitQ algorithm is a drop-in replacement of binary quantization and (uniform) scalar quantization, with its [1-bit version](https://arxiv.org/abs/2405.12497) (released in May 2024) and [multi-bit version](https://doi.org/10.1145/3725413) (published at SIGMOD 2025), respectively.
 
 <!-- It provides significantly better accuracy under the same space budget and is theoretically proven to be asymptotically optimal.  -->
 
