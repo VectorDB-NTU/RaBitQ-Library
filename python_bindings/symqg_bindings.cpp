@@ -1,9 +1,9 @@
+#include <pybind11/stl.h>
+
 #include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <pybind11/stl.h>
 
 #include "bindings_common.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
@@ -17,9 +17,11 @@ namespace rabitqlib::python_bindings {
 class SymqgIndex {
    public:
     SymqgIndex(size_t dim, size_t max_degree, const std::string& metric = "l2")
-        : dim_(dim)
-        , max_degree_(max_degree)
-        , metric_(metric_from_string(metric)) {}
+        : dim_(dim), max_degree_(max_degree), metric_(metric_from_string(metric)) {
+        if (max_degree == 0 || max_degree % rabitqlib::fastscan::kBatchSize != 0) {
+            throw std::invalid_argument("max_degree must be a positive multiple of 32");
+        }
+    }
 
     void build(py::handle data, size_t ef_construction, size_t num_threads = 1) {
         auto data_array = ensure_2d_array<float>(data, "data");
@@ -32,7 +34,9 @@ class SymqgIndex {
             num_points_, dim_, max_degree_, metric_, rabitqlib::RotatorType::FhtKacRotator
         );
 
-        rabitqlib::symqg::QGBuilder builder(*index_, ef_construction, data_array.data(), num_threads);
+        rabitqlib::symqg::QGBuilder builder(
+            *index_, ef_construction, data_array.data(), num_threads
+        );
         builder.build();
         built_ = true;
     }
@@ -42,6 +46,12 @@ class SymqgIndex {
         if (!built_) {
             throw std::runtime_error("SymqgIndex must be built or loaded before search");
         }
+        if (k == 0 || k > num_points_) {
+            throw std::invalid_argument("k must be between 1 and num_points");
+        }
+        if (ef == 0) {
+            throw std::invalid_argument("ef must be positive");
+        }
         if (static_cast<size_t>(query_array.shape(1)) != dim_) {
             throw std::invalid_argument("query dimension does not match index dim");
         }
@@ -49,12 +59,13 @@ class SymqgIndex {
         index_->set_ef(ef);
 
         const size_t nq = static_cast<size_t>(query_array.shape(0));
-        const auto shape = std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
+        const auto shape =
+            std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
         auto ids_buf = ids.mutable_unchecked<2>();
         auto dists_buf = dists.mutable_unchecked<2>();
-    
+
         rabitqlib::ivf::parallel_for(
             0,
             nq,
@@ -62,10 +73,17 @@ class SymqgIndex {
             [&](size_t idx, size_t /*threadId*/) {
                 std::vector<rabitqlib::PID> row_ids(k, 0);
                 std::vector<float> row_dists(k, 0.0F);
-                index_->search(query_array.data() + (idx * dim_), static_cast<uint32_t>(k), row_ids.data(), row_dists.data());
+                index_->search(
+                    query_array.data() + (idx * dim_),
+                    static_cast<uint32_t>(k),
+                    row_ids.data(),
+                    row_dists.data()
+                );
                 for (size_t j = 0; j < k; ++j) {
-                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_ids[j];
-                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_dists[j];
+                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) =
+                        row_ids[j];
+                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) =
+                        row_dists[j];
                 }
             }
         );
@@ -112,28 +130,36 @@ class SymqgIndex {
 }  // namespace rabitqlib::python_bindings
 
 // Register Symqg bindings into combined module
-void register_symqg(py::module_ &m) {
+void register_symqg(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
     py::class_<SymqgIndex>(m, "SymqgIndex")
-       .def(py::init<size_t, size_t, const std::string&>(),
-           py::arg("dim"),
-           py::arg("max_degree"),
-           py::arg("metric") = "l2")
-       .def("build", &SymqgIndex::build,
-           py::arg("data"),
-           py::arg("ef_construction"),
-           py::arg("num_threads") = 1)
-       .def("search", &SymqgIndex::search,
-           py::arg("queries"),
-           py::arg("k"),
-           py::arg("ef"),
-           py::arg("num_threads") = 1)
-       .def("save", &SymqgIndex::save, py::arg("path"))
-       .def_static("load", &SymqgIndex::load, py::arg("path"))
-       .def_property_readonly("dim", &SymqgIndex::dim)
-       .def_property_readonly("max_degree", &SymqgIndex::max_degree)
-       .def_property_readonly("num_points", &SymqgIndex::num_points)
-       .def_property_readonly("is_built", &SymqgIndex::is_built)
-       .def_property_readonly("metric", &SymqgIndex::metric);
+        .def(
+            py::init<size_t, size_t, const std::string&>(),
+            py::arg("dim"),
+            py::arg("max_degree"),
+            py::arg("metric") = "l2"
+        )
+        .def(
+            "build",
+            &SymqgIndex::build,
+            py::arg("data"),
+            py::arg("ef_construction"),
+            py::arg("num_threads") = 1
+        )
+        .def(
+            "search",
+            &SymqgIndex::search,
+            py::arg("queries"),
+            py::arg("k"),
+            py::arg("ef"),
+            py::arg("num_threads") = 1
+        )
+        .def("save", &SymqgIndex::save, py::arg("path"))
+        .def_static("load", &SymqgIndex::load, py::arg("path"))
+        .def_property_readonly("dim", &SymqgIndex::dim)
+        .def_property_readonly("max_degree", &SymqgIndex::max_degree)
+        .def_property_readonly("num_points", &SymqgIndex::num_points)
+        .def_property_readonly("is_built", &SymqgIndex::is_built)
+        .def_property_readonly("metric", &SymqgIndex::metric);
 }

@@ -86,6 +86,14 @@ inline T* align_allocate(size_t nbytes) {
     return static_cast<T*>(ptr);
 }
 
+inline constexpr size_t kHugePageSize = 2UL << 20;
+
+// Allocate a large buffer backed by transparent huge pages.
+template <typename T>
+inline T* huge_page_allocate(size_t nbytes) {
+    return align_allocate<kHugePageSize, T, true>(nbytes);
+}
+
 static inline void prefetch_l1(const void* addr) {
 #if defined(__SSE2__)
     _mm_prefetch(addr, _MM_HINT_T0);
@@ -103,6 +111,8 @@ static inline void prefetch_l2(const void* addr) {
 }
 
 inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
+    // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
+    // NOLINTBEGIN(bugprone-branch-clone)
     switch (num_lines) {
         default:
             [[fallthrough]];
@@ -184,14 +194,16 @@ inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
             [[fallthrough]];
         case 1:
             prefetch_l1(ptr);
-            ptr += 64;
             [[fallthrough]];
         case 0:
             break;
     }
+    // NOLINTEND(bugprone-branch-clone)
 }
 
 inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
+    // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
+    // NOLINTBEGIN(bugprone-branch-clone)
     switch (num_lines) {
         default:
             [[fallthrough]];
@@ -273,10 +285,10 @@ inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
             [[fallthrough]];
         case 1:
             prefetch_l2(ptr);
-            ptr += 64;
             [[fallthrough]];
         case 0:
             break;
     }
+    // NOLINTEND(bugprone-branch-clone)
 }
 }  // namespace rabitqlib::memory

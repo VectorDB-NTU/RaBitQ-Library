@@ -13,7 +13,9 @@ Various advanced data formats are provided to support the following needs.
 4. Incremental distance estimation for splitted single vectors.
 5. Incremental distance estimation for splitted batched vectors.
 
-Note that these data formats only map raw floating-point vectors into codes of `uint8`/`uint32` arrays. To compactly store the code vector, please further refer to `rabitqlib/quantization/pack_ex_code.hpp`.
+These data formats map raw floating-point vectors into `uint8` or `uint32`
+codes. For the packed extended-code layouts, see
+`rabitqlib/quantization/pack_excode.hpp`.
 
 RaBitQ quantizer is included in `rabitq_impl.hpp` and `rabitq.hpp`.
 ```css
@@ -53,7 +55,7 @@ This format allows RaBitQ to be used as a direct replacement for uniform scalar 
 #include <random>
 #include <vector>
 
-#include "quantization/rabitq.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
 
 int main() {
     size_t dim = 768;
@@ -103,7 +105,7 @@ This format is designed for computing distance metrics between data vectors and 
 #include <random>
 #include <vector>
 
-#include "quantization/rabitq.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
 
 int main() {
     size_t dim = 768;
@@ -209,7 +211,7 @@ In practical implementation of our SymphonyQG index, the data is compactly store
 #include <random>
 #include <vector>
 
-#include "quantization/rabitq_impl.hpp"
+#include "rabitqlib/quantization/rabitq_impl.hpp"
 
 int main() {
     size_t dim = 768;
@@ -258,15 +260,17 @@ Here, we assume the data are compactly stored in the layout of `QGBatchDataMap` 
 ```cpp
 
     size_t dim = 768;  // the dimensionality
-    std::vector<float> rotated_query(dim);
+    std::vector<float> query(dim);
+    std::vector<float> centroid(dim);
     std::vector<char> batch_data(rabitqlib::QGBatchDataMap<float>::data_bytes(dim));
 
-    rabitqlib::BatchQuery<float> processed_query(rotated_query.data(), dim);
+    rabitqlib::BatchQuery<float> processed_query(query.data(), dim);
 
-    // The factors should be set according to the centroid vector.
-    // For ANN, this is preprocessed for every center vector when a query comes.
+    // G_add is the squared L2 distance between the query and the centroid.
+    // This standalone example omits rotation, so both operands are raw vectors.
+    // In an index that applies rotation, rotate both with the same transformation.
     processed_query.set_g_add(
-        std::sqrt(rabitqlib::euclidean_sqr(rotated_query.data(), centroid.data(), dim))
+        rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim)
     );
 
     size_t batch_size = 32;
@@ -296,7 +300,7 @@ This format supports computing distances incrementally when vectors are split ac
 #include <random>
 #include <vector>
 
-#include "quantization/rabitq.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
 
 int main() {
     size_t dim = 768;
@@ -360,28 +364,34 @@ int main() {
 ...
     size_t dim = 768;  // the dimensionality
     size_t bits = 5;   // the bit-width of DATA vectors
-    std::vector<float> rotated_query(dim);
+    std::vector<float> query(dim);
 
     // the config of fast quantizer is necessary for preprocessing queries
     rabitqlib::quant::RabitqConfig config = rabitqlib::quant::faster_config(dim, bits);
 
     rabitqlib::SplitSingleQuery<float> processed_query(
-        rotated_query.data(), dim, bits - 1, config, rabitqlib::METRIC_L2
+        query.data(), dim, bits - 1, config, rabitqlib::METRIC_L2
     );
 
-    // set factors for distance estimation.
-    // In ANN the factors are precomputed when a query comes.
-    float norm =
-        rabitqlib::euclidean_sqr(rotated_query.data(), centroid.data(), dim);
-    float error = rabitqlib::dot_product(rotated_query.data(), centroid.data(), dim);
+    // This standalone example omits rotation, so query and centroid are both raw.
+    // If rotation is used, apply the same transformation to both operands.
+    float distance_sqr = rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim);
+    float distance_norm = std::sqrt(distance_sqr);
 
     // Compute estimated distances based on binary codes
     float ip_x0_qr;
     float est_dist;
     float low_dist;
 
-    split_single_estdist(
-        bin_data.data(), processed_query, dim, ip_x0_qr, est_dist, low_dist, -norm, error
+    rabitqlib::split_single_estdist(
+        bin_data.data(),
+        processed_query,
+        dim,
+        ip_x0_qr,
+        est_dist,
+        low_dist,
+        distance_sqr,
+        distance_norm
     );
 
     // the kernel of computing inner product between compact codes and query vectors
@@ -392,7 +402,7 @@ int main() {
     float low_dist_ex;
     float ip_x0_qr_ex;
 
-    split_single_fulldist(
+    rabitqlib::split_single_fulldist(
         bin_data.data(),
         ex_data.data(),
         ip_func,
@@ -402,8 +412,8 @@ int main() {
         est_dist_ex,
         low_dist_ex,
         ip_x0_qr_ex,
-        -norm,
-        error
+        distance_sqr,
+        distance_norm
     );
 ```
 
@@ -417,7 +427,7 @@ This format combines the benefits of batched processing with incremental computa
 #include <random>
 #include <vector>
 
-#include "quantization/rabitq.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
 
 int main() {
     size_t dim = 768;
@@ -483,7 +493,7 @@ int main() {
 ```cpp
     size_t dim = 768;  // the dimensionality
     size_t bits = 5;   // the bit-width of DATA vectors
-    std::vector<float> rotated_query(dim);
+    std::vector<float> query(dim);
 
     // The flag use_hacc controls the precision of FastScan.
     // `use_hacc = false` - each number in LUTs is quantized into 8 bits.
@@ -493,15 +503,14 @@ int main() {
     // When the bit-width of data <= 2, `use_hacc = false` does not harm accuracy.
 
     rabitqlib::SplitBatchQuery<float> processed_query(
-        rotated_query.data(), dim, bits - 1, rabitqlib::METRIC_L2, true
+        query.data(), dim, bits - 1, rabitqlib::METRIC_L2, true
     );
 
-    // The factors should be set according to the centroid vector.
-    // For ANN, this is preprocessed for every center vector when a query comes.
-    processed_query.set_g_add(
-        std::sqrt(rabitqlib::euclidean_sqr(rotated_query.data(), centroid.data(), dim)),
-        rabitqlib::dot_product(rotated_query.data(), centroid.data(), dim)
-    );
+    // SplitBatchQuery expects the L2 norm and squares it internally for G_add.
+    // This example omits rotation, so query and centroid are both raw vectors.
+    float distance_norm =
+        std::sqrt(rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim));
+    processed_query.set_g_add(distance_norm);
 
     size_t batch_size = 32;
 
@@ -525,10 +534,10 @@ int main() {
     );
 
     // the kernel of computing inner product between compact codes and query vectors
-    auto ip_func = select_excode_ipfunc(bits - 1);
+    auto ip_func = rabitqlib::select_excode_ipfunc(bits - 1);
 
     size_t i = 15;
-    split_distance_boosting(
+    rabitqlib::split_distance_boosting(
         ex_data.data() + (i * rabitqlib::ExDataMap<float>::data_bytes(dim, bits - 1)),
         ip_func,
         processed_query,
@@ -538,4 +547,3 @@ int main() {
     );
 
 ```
-

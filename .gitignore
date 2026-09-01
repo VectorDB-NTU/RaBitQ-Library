@@ -40,7 +40,10 @@ data/
 results/
 
 *.pyc
+__pycache__/
 .clang-*
+!.clang-format
+!.clang-tidy
 .clangd*
 
 # macOS garbages

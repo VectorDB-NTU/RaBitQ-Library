@@ -11,8 +11,38 @@ namespace rabitqlib::simd {
 static inline __m256i popcount_avx2(__m256i v) {
     // Lookup table for population count of 0-15
     const __m256i lookup = _mm256_setr_epi8(
-        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
-        0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+        0,
+        1,
+        1,
+        2,
+        1,
+        2,
+        2,
+        3,
+        1,
+        2,
+        2,
+        3,
+        2,
+        3,
+        3,
+        4,
+        0,
+        1,
+        1,
+        2,
+        1,
+        2,
+        2,
+        3,
+        1,
+        2,
+        2,
+        3,
+        2,
+        3,
+        3,
+        4
     );
     const __m256i low_mask = _mm256_set1_epi8(0x0f);
 
@@ -57,17 +87,20 @@ float warmup_ip_x0_q_512_avx2(
     for (; i < dim_end_512; i += 512) {
         // Load 64 bytes of data using paired 32-byte loads
         __m256i data_vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
-        __m256i data_vec_hi = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 4));
-        data += 8; // Advance 8 x 64-bit ints (64 bytes)
+        __m256i data_vec_hi =
+            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 4));
+        data += 8;  // Advance 8 x 64-bit ints (64 bytes)
 
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_lo));
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_hi));
 
         for (size_t j = 0; j < b_query; ++j) {
             // Load 64 bytes of transposed query matching the 512-bit block layout
-            __m256i query_vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query));
-            __m256i query_vec_hi = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 4));
-            query += 8; // Advance 8 x 64-bit ints (64 bytes)
+            __m256i query_vec_lo =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query));
+            __m256i query_vec_hi =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 4));
+            query += 8;  // Advance 8 x 64-bit ints (64 bytes)
 
             __m256i pop_lo = popcount_avx2(_mm256_and_si256(data_vec_lo, query_vec_lo));
             __m256i pop_hi = popcount_avx2(_mm256_and_si256(data_vec_hi, query_vec_hi));
@@ -93,21 +126,25 @@ float warmup_ip_x0_q_512_avx2(
         // If chunks_lo is 3, limit will be [3,3,3,3,3,3,3,3].
         // 3 > seq results in [-1, -1, -1, 0, 0, 0, 0, 0], which is the exact mask needed.
         __m256i limit_lo = _mm256_set1_epi32(static_cast<int>(chunks_lo));
-        __m256i mask_lo  = _mm256_cmpgt_epi32(limit_lo, sequence);
+        __m256i mask_lo = _mm256_cmpgt_epi32(limit_lo, sequence);
 
         __m256i limit_hi = _mm256_set1_epi32(static_cast<int>(chunks_hi));
-        __m256i mask_hi  = _mm256_cmpgt_epi32(limit_hi, sequence);
+        __m256i mask_hi = _mm256_cmpgt_epi32(limit_hi, sequence);
 
         // 3. Vectorized execution continues with zero memory latency
-        __m256i data_vec_lo = _mm256_maskload_epi32(reinterpret_cast<const int*>(data), mask_lo);
-        __m256i data_vec_hi = _mm256_maskload_epi32(reinterpret_cast<const int*>(data + 4), mask_hi);
+        __m256i data_vec_lo =
+            _mm256_maskload_epi32(reinterpret_cast<const int*>(data), mask_lo);
+        __m256i data_vec_hi =
+            _mm256_maskload_epi32(reinterpret_cast<const int*>(data + 4), mask_hi);
 
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_lo));
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_hi));
 
         for (size_t j = 0; j < b_query; ++j) {
-            __m256i query_vec_lo = _mm256_maskload_epi32(reinterpret_cast<const int*>(query), mask_lo);
-            __m256i query_vec_hi = _mm256_maskload_epi32(reinterpret_cast<const int*>(query + 4), mask_hi);
+            __m256i query_vec_lo =
+                _mm256_maskload_epi32(reinterpret_cast<const int*>(query), mask_lo);
+            __m256i query_vec_hi =
+                _mm256_maskload_epi32(reinterpret_cast<const int*>(query + 4), mask_hi);
             query += num_chunks_64;
 
             __m256i pop_lo = popcount_avx2(_mm256_and_si256(data_vec_lo, query_vec_lo));
@@ -135,8 +172,6 @@ float warmup_ip_x0_q_512_avx2(
     ppc_scalar += mm256_reduce_add_epi64(acc_ppc);
 
     return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
-
 }
-
 
 }  // namespace rabitqlib::simd

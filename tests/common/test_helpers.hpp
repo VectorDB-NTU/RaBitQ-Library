@@ -1,10 +1,11 @@
 #ifndef RABITQ_TEST_HELPERS_HPP
 #define RABITQ_TEST_HELPERS_HPP
 
-#include <cmath>
-#include <vector>
-#include <random>
 #include <gtest/gtest.h>
+
+#include <cmath>
+#include <random>
+#include <vector>
 
 namespace rabitq_test {
 
@@ -18,7 +19,9 @@ inline bool DoubleNearlyEqual(double a, double b, double epsilon = 1e-10) {
 }
 
 // Vector comparison
-inline bool VectorsNearlyEqual(const float* a, const float* b, size_t size, float epsilon = 1e-5f) {
+inline bool VectorsNearlyEqual(
+    const float* a, const float* b, size_t size, float epsilon = 1e-5f
+) {
     for (size_t i = 0; i < size; ++i) {
         if (!FloatNearlyEqual(a[i], b[i], epsilon)) {
             return false;
@@ -42,7 +45,7 @@ inline float MeanSquaredError(const float* a, const float* b, size_t size) {
         float diff = a[i] - b[i];
         mse += diff * diff;
     }
-    return mse / size;
+    return mse / static_cast<float>(size);
 }
 
 // Calculate dot product
@@ -65,20 +68,20 @@ inline float L2Distance(const float* a, const float* b, size_t size) {
 }
 
 // Custom assertion macros
-#define ASSERT_FLOAT_NEARLY_EQUAL(a, b, epsilon) \
-    ASSERT_TRUE(rabitq_test::FloatNearlyEqual(a, b, epsilon)) \
-        << "Expected: " << a << " to be nearly equal to " << b \
-        << " (epsilon: " << epsilon << "), but difference was " << std::abs(a - b)
+#define ASSERT_FLOAT_NEARLY_EQUAL(a, b, epsilon)                    \
+    ASSERT_TRUE(rabitq_test::FloatNearlyEqual((a), (b), (epsilon))) \
+        << "Expected: " << (a) << " to be nearly equal to " << (b)  \
+        << " (epsilon: " << (epsilon) << "), but difference was " << std::abs((a) - (b))
 
-#define EXPECT_FLOAT_NEARLY_EQUAL(a, b, epsilon) \
-    EXPECT_TRUE(rabitq_test::FloatNearlyEqual(a, b, epsilon)) \
-        << "Expected: " << a << " to be nearly equal to " << b \
-        << " (epsilon: " << epsilon << "), but difference was " << std::abs(a - b)
+#define EXPECT_FLOAT_NEARLY_EQUAL(a, b, epsilon)                    \
+    EXPECT_TRUE(rabitq_test::FloatNearlyEqual((a), (b), (epsilon))) \
+        << "Expected: " << (a) << " to be nearly equal to " << (b)  \
+        << " (epsilon: " << (epsilon) << "), but difference was " << std::abs((a) - (b))
 
-#define ASSERT_VECTORS_NEARLY_EQUAL(a, b, size, epsilon) \
-    ASSERT_TRUE(rabitq_test::VectorsNearlyEqual(a, b, size, epsilon)) \
-        << "Vectors are not nearly equal (epsilon: " << epsilon << ")"
+#define ASSERT_VECTORS_NEARLY_EQUAL(a, b, size, epsilon)                      \
+    ASSERT_TRUE(rabitq_test::VectorsNearlyEqual((a), (b), (size), (epsilon))) \
+        << "Vectors are not nearly equal (epsilon: " << (epsilon) << ")"
 
-} // namespace rabitq_test
+}  // namespace rabitq_test
 
-#endif // RABITQ_TEST_HELPERS_HPP
+#endif  // RABITQ_TEST_HELPERS_HPP

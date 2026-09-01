@@ -1,8 +1,9 @@
-#include "rabitqlib/simd/rotator_dispatch.hpp"
-
 #include <immintrin.h>
 
 #include <cstring>
+#include <limits>
+
+#include "rabitqlib/simd/rotator_dispatch.hpp"
 
 namespace rabitqlib::simd {
 
@@ -10,10 +11,10 @@ void flip_sign_avx2(const uint8_t* flip, float* data, size_t dim) {
     // Process 32 floats (4 AVX2 registers) per iteration
     constexpr size_t kFloatsPerChunk = 32;
 
-    const __m256i bit_select = _mm256_setr_epi32(
-        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80
-    );
-    const __m256 sign_flip = _mm256_castsi256_ps(_mm256_set1_epi32(0x80000000));
+    const __m256i bit_select =
+        _mm256_setr_epi32(0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80);
+    const __m256 sign_flip =
+        _mm256_castsi256_ps(_mm256_set1_epi32(std::numeric_limits<int>::min()));
 
     // Utility lambda to create a mask for flipping signs
     auto create_mask = [&](uint8_t byte_mask) -> __m256 {

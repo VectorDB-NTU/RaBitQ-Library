@@ -1,15 +1,16 @@
 #include <gtest/gtest.h>
-#include <rabitqlib/quantization/pack_excode.hpp>
-#include <rabitqlib/utils/space.hpp>
+
 #include <algorithm>
-#include <vector>
 #include <cmath>
 #include <cstdlib>
+#include <rabitqlib/quantization/pack_excode.hpp>
+#include <rabitqlib/utils/space.hpp>
+#include <vector>
 
 using namespace rabitqlib;
 
 class BitPackUnpackTest : public ::testing::Test {
-protected:
+   protected:
     // 1. Shared Constants & Data Structures
     const size_t dim = 768;
     std::vector<float> query;
@@ -19,13 +20,13 @@ protected:
     // 2. Common Initialization (Runs before EVERY test)
     void SetUp() override {
         srand(42);
-        
+
         // Initialize Query (Same for all tests)
         query.resize(dim);
-        for(size_t i = 0; i < dim; ++i) {
+        for (size_t i = 0; i < dim; ++i) {
             query[i] = static_cast<float>((rand() * 100.0) / RAND_MAX);
         }
-        
+
         // Pre-allocate code vector
         code.resize(dim);
     }
@@ -37,7 +38,7 @@ protected:
 
         // Generate random codes based on bit depth
         for (size_t i = 0; i < dim; ++i) {
-            code[i] = rand() % (1 << bits); 
+            code[i] = rand() % (1 << bits);
         }
 
         // Pack the code
@@ -50,7 +51,7 @@ protected:
     float CalculateExpected() const {
         float expected_result = 0.0f;
         for (size_t i = 0; i < dim; ++i) {
-            expected_result += query[i] * code[i];
+            expected_result += query[i] * static_cast<float>(code[i]);
         }
         return expected_result;
     }
@@ -64,79 +65,71 @@ protected:
 // --- Test Cases ---
 
 TEST_F(BitPackUnpackTest, ExCode1Bit) {
-    PrepareData(1); // Set up for 1-bit
+    PrepareData(1);  // Set up for 1-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip16_fxu1_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip16_fxu1_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
 
 TEST_F(BitPackUnpackTest, ExCode2Bit) {
-    PrepareData(2); // Set up for 2-bit
+    PrepareData(2);  // Set up for 2-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip64_fxu2_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip64_fxu2_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
 
 TEST_F(BitPackUnpackTest, ExCode3Bit) {
-    PrepareData(3); // Set up for 3-bit
+    PrepareData(3);  // Set up for 3-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip64_fxu3_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip64_fxu3_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
 
 TEST_F(BitPackUnpackTest, ExCode4Bit) {
-    PrepareData(4); // Set up for 4-bit
+    PrepareData(4);  // Set up for 4-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip16_fxu4_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip16_fxu4_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
 
 TEST_F(BitPackUnpackTest, ExCode5Bit) {
-    PrepareData(5); // Set up for 5-bit
+    PrepareData(5);  // Set up for 5-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip64_fxu5_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip64_fxu5_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
 
 TEST_F(BitPackUnpackTest, ExCode6Bit) {
-    PrepareData(6); // Set up for 6-bit
+    PrepareData(6);  // Set up for 6-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip64_fxu6_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip64_fxu6_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
 
 TEST_F(BitPackUnpackTest, ExCode7Bit) {
-    PrepareData(7); // Set up for 7-bit
+    PrepareData(7);  // Set up for 7-bit
 
     // Run the AVX function
-    float result = rabitqlib::excode_ipimpl::ip64_fxu7_avx(
-        query.data(), compact_code.data(), dim
-    );
+    float result =
+        rabitqlib::excode_ipimpl::ip64_fxu7_avx(query.data(), compact_code.data(), dim);
 
     ExpectIpNear(result);
 }
-

@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
-#include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/third/hnswlib/hnswlib.h"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::ivf {
 template <class Function>
@@ -69,7 +69,7 @@ inline void parallel_for(size_t start, size_t end, size_t numThreads, Function f
 }
 
 /**
- * @brief For ivf centroids, we need an intializer to get the candidate clusters.
+ * @brief For IVF centroids, an initializer finds the candidate clusters.
  */
 class Initializer {
    protected:
@@ -81,9 +81,8 @@ class Initializer {
     virtual ~Initializer() = 0;
     [[nodiscard]] virtual const float* centroid(PID) const = 0;
     virtual void add_vectors(const float*, size_t) = 0;
-    virtual void centroids_distances(
-        const float*, size_t, std::vector<AnnCandidate<float>>&
-    ) const = 0;
+    virtual void
+    centroids_distances(const float*, size_t, std::vector<AnnCandidate<float>>&) const = 0;
     virtual void load(std::ifstream&, const char*) = 0;
     virtual void save(std::ofstream&, const char*) const = 0;
 };

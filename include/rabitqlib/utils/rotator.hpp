@@ -29,14 +29,14 @@ class Rotator {
 
    public:
     explicit Rotator() = default;
-    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim) {};
+    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim){};
     virtual ~Rotator() = default;
     virtual void rotate(const T* src, T* dst) const = 0;
     virtual void load(std::ifstream&) = 0;
     virtual void save(std::ofstream&) const = 0;
     // Buffer I/O
-    virtual void load(const char *data) = 0;
-    virtual void save(char *data) const = 0; // dump to buffer
+    virtual void load(const char* data) = 0;
+    virtual void save(char* data) const = 0;  // dump to buffer
     virtual size_t dump_bytes() const = 0;
     [[nodiscard]] size_t size() const { return this->padded_dim_; }
 };
@@ -58,21 +58,21 @@ inline size_t padding_requirement(size_t dim, RotatorType type) {
 template <typename T = float>
 class MatrixRotator : public Rotator<T> {
    private:
-    RowMajorMatrix<T> rand_mat_;  // Rotation Maxtrix
+    RowMajorMatrix<T> rand_mat_;  // Rotation matrix
    public:
     explicit MatrixRotator(size_t dim, size_t padded_dim)
         : Rotator<T>(dim, padded_dim), rand_mat_(dim, padded_dim) {
         RowMajorMatrix<T> rand = random_gaussian_matrix<T>(padded_dim, padded_dim);
         Eigen::HouseholderQR<RowMajorMatrix<T>> qr(rand);
-        RowMajorMatrix<T> q_inv =
-            qr.householderQ().transpose();  // inverse of orthogonal mat is its inverse
+        RowMajorMatrix<T> q_inv = qr.householderQ().transpose(
+        );  // The inverse of an orthogonal matrix is its transpose.
 
         // the random matrix only need the first dim rows, since we just pad zeros for
         // the vector to be rotated to padded dimension
         std::memcpy(&rand_mat_(0, 0), &q_inv(0, 0), sizeof(T) * dim * padded_dim);
     }
     MatrixRotator() = default;
-    ~MatrixRotator() = default;
+    ~MatrixRotator() override = default;
 
     MatrixRotator& operator=(const MatrixRotator& other) {
         this->dim_ = other.dim_;
@@ -84,28 +84,28 @@ class MatrixRotator : public Rotator<T> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(rand_mat_.data()),
-            static_cast<long>(sizeof(float) * this->dim_ * this->padded_dim_)
+            static_cast<long>(sizeof(T) * this->dim_ * this->padded_dim_)
         );
     }
 
     void save(std::ofstream& output) const override {
         output.write(
             reinterpret_cast<const char*>(rand_mat_.data()),
-            (sizeof(float) * this->dim_ * this->padded_dim_)
+            (sizeof(T) * this->dim_ * this->padded_dim_)
         );
     }
 
-    void load(const char *data) override {
-        std::memcpy(rand_mat_.data(), data, sizeof(float) * this->dim_ * this->padded_dim_);
+    void load(const char* data) override {
+        std::memcpy(rand_mat_.data(), data, sizeof(T) * this->dim_ * this->padded_dim_);
     }
 
-    void save(char *data) const override {
-        std::memcpy(data, rand_mat_.data(), sizeof(float) * this->dim_ * this->padded_dim_);
+    void save(char* data) const override {
+        std::memcpy(data, rand_mat_.data(), sizeof(T) * this->dim_ * this->padded_dim_);
     }
 
     size_t dump_bytes() const override {
-        return sizeof(float) * this->dim_ * this->padded_dim_;
-  }
+        return sizeof(T) * this->dim_ * this->padded_dim_;
+    }
 
     void rotate(const T* vec, T* rotated_vec) const override {
         ConstRowMajorMatrixMap<T> v(vec, 1, this->dim_);
@@ -130,8 +130,9 @@ class FhtKacRotator : public Rotator<float> {
    public:
     explicit FhtKacRotator(size_t dim, size_t padded_dim)
         : Rotator<float>(dim, padded_dim), flip_(4 * padded_dim / kByteLen) {
-        std::random_device rd;   // Seed
-        std::mt19937 gen(rd());  // Mersenne Twister RNG
+        std::random_device rd;
+        std::seed_seq seed{rd(), rd(), rd(), rd()};
+        std::mt19937 gen(seed);
 
         // Uniform distribution in the range [0, 255]
         std::uniform_int_distribution<int> dist(0, 255);
@@ -188,17 +189,15 @@ class FhtKacRotator : public Rotator<float> {
         );
     }
 
-    void load(const char *data) override {
+    void load(const char* data) override {
         std::memcpy(flip_.data(), data, sizeof(uint8_t) * flip_.size());
     }
 
-    void save(char *data) const override {
+    void save(char* data) const override {
         std::memcpy(data, flip_.data(), sizeof(uint8_t) * flip_.size());
     }
 
-    size_t dump_bytes() const override {
-        return sizeof(uint8_t) * flip_.size();
-    }
+    size_t dump_bytes() const override { return sizeof(uint8_t) * flip_.size(); }
 
     FhtKacRotator& operator=(const FhtKacRotator& other) {
         this->dim_ = other.dim_;
@@ -210,9 +209,7 @@ class FhtKacRotator : public Rotator<float> {
         return *this;
     }
 
-    static void kacs_walk(float* data, size_t len) {
-        simd::kacs_walk(data, len);
-    }
+    static void kacs_walk(float* data, size_t len) { simd::kacs_walk(data, len); }
 
     void rotate(const float* data, float* rotated_vec) const override {
         std::memcpy(rotated_vec, data, sizeof(float) * dim_);

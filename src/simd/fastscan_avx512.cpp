@@ -90,9 +90,9 @@ void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
             hc_lut + (i / kLutPerIter * kCodePerIter) + ((i % kLutPerIter) * kCodePerLine);
         uint8_t* fill_hi = fill_lo + (kRegBits / kByteBits);
 
-        __m512i tmp = _mm512_cvtepi16_epi32(
-            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lut))
-        );
+        __m512i tmp =
+            _mm512_cvtepi16_epi32(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(lut))
+            );
         __m128i lo = _mm512_cvtepi32_epi8(tmp);
         __m128i hi = _mm512_cvtepi32_epi8(_mm512_srli_epi32(tmp, 8));
         _mm_store_si128(reinterpret_cast<__m128i*>(fill_lo), lo);

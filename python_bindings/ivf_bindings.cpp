@@ -1,9 +1,9 @@
-#include <algorithm>
+#include <pybind11/stl.h>
+
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <pybind11/stl.h>
 
 #include "bindings_common.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
@@ -44,19 +44,38 @@ class IvfIndex {
     ) {
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
-        auto cluster_ids_array = ensure_1d_array<rabitqlib::PID>(cluster_ids, "cluster_ids");
+        auto cluster_ids_array =
+            ensure_1d_array<rabitqlib::PID>(cluster_ids, "cluster_ids");
 
         if (static_cast<size_t>(data_array.shape(1)) != dim_) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
+        if (static_cast<size_t>(data_array.shape(0)) != max_elements_) {
+            throw std::invalid_argument("number of data rows must match index max_elements"
+            );
+        }
         if (static_cast<size_t>(centroids_array.shape(1)) != dim_) {
             throw std::invalid_argument("centroid dimension does not match index dim");
         }
-        if (static_cast<size_t>(cluster_ids_array.shape(0)) != static_cast<size_t>(data_array.shape(0))) {
-            throw std::invalid_argument("cluster_ids length must match number of rows in data");
+        if (static_cast<size_t>(centroids_array.shape(0)) != num_clusters_) {
+            throw std::invalid_argument(
+                "number of centroid rows must match index num_clusters"
+            );
+        }
+        if (static_cast<size_t>(cluster_ids_array.shape(0)) !=
+            static_cast<size_t>(data_array.shape(0))) {
+            throw std::invalid_argument(
+                "cluster_ids length must match number of rows in data"
+            );
         }
 
-        index_->construct(data_array.data(), centroids_array.data(), cluster_ids_array.data(), fast_quantization, num_threads);
+        index_->construct(
+            data_array.data(),
+            centroids_array.data(),
+            cluster_ids_array.data(),
+            fast_quantization,
+            num_threads
+        );
         built_ = true;
     }
 
@@ -68,12 +87,22 @@ class IvfIndex {
         size_t num_threads = 1
     ) {
         auto query_array = ensure_2d_array<float>(queries, "queries");
+        if (!built_) {
+            throw std::runtime_error("IvfIndex must be built or loaded before search");
+        }
         if (static_cast<size_t>(query_array.shape(1)) != dim_) {
             throw std::invalid_argument("query dimension does not match index dim");
         }
+        if (k == 0 || k > max_elements_) {
+            throw std::invalid_argument("k must be between 1 and max_elements");
+        }
+        if (nprobe == 0) {
+            throw std::invalid_argument("nprobe must be positive");
+        }
 
         const size_t nq = static_cast<size_t>(query_array.shape(0));
-        const auto shape = std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
+        const auto shape =
+            std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
         auto ids_buf = ids.mutable_unchecked<2>();
@@ -84,9 +113,9 @@ class IvfIndex {
             nq,
             num_threads,
             [&](size_t idx, size_t /*threadId*/) {
-                std::vector<rabitqlib::PID> row_ids(k, 0);
-                std::vector<float> row_dists(k, 0.0F);
-                
+                std::vector<rabitqlib::PID> row_ids(k, rabitqlib::kPidMax);
+                std::vector<float> row_dists(k, std::numeric_limits<float>::infinity());
+
                 index_->search(
                     query_array.data() + (idx * dim_),
                     k,
@@ -95,10 +124,12 @@ class IvfIndex {
                     row_dists.data(),
                     high_accuracy
                 );
-                
+
                 for (size_t j = 0; j < k; ++j) {
-                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_ids[j];
-                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) = row_dists[j];
+                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) =
+                        row_ids[j];
+                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) =
+                        row_dists[j];
                 }
             }
         );
@@ -148,34 +179,42 @@ class IvfIndex {
 }  // namespace rabitqlib::python_bindings
 
 // Register IVF bindings into combined module
-void register_ivf(py::module_ &m) {
+void register_ivf(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
     py::class_<IvfIndex>(m, "IvfIndex")
-       .def(py::init<size_t, size_t, size_t, size_t, const std::string&>(),
-           py::arg("dim"),
-           py::arg("max_elements"),
-           py::arg("num_clusters"),
-           py::arg("nbits"),
-           py::arg("metric") = "l2")
-       .def("build", &IvfIndex::build,
-           py::arg("data"),
-           py::arg("centroids"),
-           py::arg("cluster_ids"),
-           py::arg("num_threads") = 1,
-           py::arg("fast_quantization") = false)
-       .def("search", &IvfIndex::search,
-           py::arg("queries"),
-           py::arg("k"),
-           py::arg("nprobe"),
-           py::arg("high_accuracy") = true,
-           py::arg("num_threads") = 1)
-       .def("save", &IvfIndex::save, py::arg("path"))
-       .def_static("load", &IvfIndex::load, py::arg("path"))
-       .def_property_readonly("dim", &IvfIndex::dim)
-       .def_property_readonly("max_elements", &IvfIndex::max_elements)
-       .def_property_readonly("num_clusters", &IvfIndex::num_clusters)
-       .def_property_readonly("nbits", &IvfIndex::nbits)
-       .def_property_readonly("is_built", &IvfIndex::is_built)
-       .def_property_readonly("metric", &IvfIndex::metric);
+        .def(
+            py::init<size_t, size_t, size_t, size_t, const std::string&>(),
+            py::arg("dim"),
+            py::arg("max_elements"),
+            py::arg("num_clusters"),
+            py::arg("nbits"),
+            py::arg("metric") = "l2"
+        )
+        .def(
+            "build",
+            &IvfIndex::build,
+            py::arg("data"),
+            py::arg("centroids"),
+            py::arg("cluster_ids"),
+            py::arg("num_threads") = 1,
+            py::arg("fast_quantization") = false
+        )
+        .def(
+            "search",
+            &IvfIndex::search,
+            py::arg("queries"),
+            py::arg("k"),
+            py::arg("nprobe"),
+            py::arg("high_accuracy") = true,
+            py::arg("num_threads") = 1
+        )
+        .def("save", &IvfIndex::save, py::arg("path"))
+        .def_static("load", &IvfIndex::load, py::arg("path"))
+        .def_property_readonly("dim", &IvfIndex::dim)
+        .def_property_readonly("max_elements", &IvfIndex::max_elements)
+        .def_property_readonly("num_clusters", &IvfIndex::num_clusters)
+        .def_property_readonly("nbits", &IvfIndex::nbits)
+        .def_property_readonly("is_built", &IvfIndex::is_built)
+        .def_property_readonly("metric", &IvfIndex::metric);
 }

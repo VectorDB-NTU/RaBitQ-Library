@@ -4,10 +4,14 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "rabitqlib"
-version = "0.1.1"
+version = "0.1.2"
 description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "numpy"]
 
 [tool.scikit-build]
 # Disable directory auto-discovery so we can map it via CMake's install target
@@ -18,3 +22,13 @@ cmake.args = [
     "-DRABITQ_BUILD_PYTHON_BINDINGS=ON",
     "-DCMAKE_BUILD_TYPE=Release"
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

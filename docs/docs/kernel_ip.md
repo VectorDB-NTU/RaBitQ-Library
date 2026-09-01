@@ -1,7 +1,8 @@
 # Kernel - Inner Product
 
-<!-- > [!NOTE] -->
-> The implementation of computing inner product between binary codes and query vectors heavily affects the efficiency. The best implementation may vary largely across platforms and the dimensionality of datasets. For now, we only include the implementation with `__builtin_popcountll` and expect that compilers will automatically vectorize it.
+> Inner-product kernels are selected at runtime. The library provides AVX2/FMA
+> and AVX-512 implementations; AVX-512 VPOPCNTDQ is used by popcount-specific
+> paths when available.
 
 This part introduces how to compute the inner product between quantization codes and rotated query vectors i.e., $\left< \mathbf{x}_0,\mathbf{q}_r'\right>$ and $\left< \mathbf{x}_u,\mathbf{q}_r'\right>$. The implementation includes two types:
 
@@ -48,4 +49,7 @@ $$
 
 ## The Kernel for Multi-bit Codes
 
-For the multi-bit codes, we convert the unsigned integer codes to floating point numbers with native instructions of AVX512. 
+For multi-bit codes, the packed unsigned values are unpacked and accumulated
+by the selected AVX2/FMA or AVX-512 kernel. The dispatch table supports zero
+through eight extended bits; full RaBitQ codes therefore contain one through
+nine bits per dimension.

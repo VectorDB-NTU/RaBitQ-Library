@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -27,29 +29,23 @@
 namespace rabitqlib::ivf {
 class IVF {
    private:
-    Initializer* initer_ = nullptr;      // initializer for find candidate cluster
-    char* batch_data_ = nullptr;         // 1-bit code and factors
-    char* ex_data_ = nullptr;            // code for remaining bits
-    PID* ids_ = nullptr;                 // PID of vectors (orgnized by clusters)
-    size_t num_;                         // num of data points
-    size_t dim_;                         // dimension of data points
-    size_t padded_dim_;                  // dimension after padding,
-    size_t num_cluster_;                 // num of centroids (clusters)
-    size_t ex_bits_;                     // total bits = ex_bits_ + 1
-    RotatorType type_;                   // type of rotator
-    Rotator<float>* rotator_ = nullptr;  // Data Rotator
-    std::vector<Cluster> cluster_lst_;   // List of clusters in ivf
+    std::unique_ptr<Initializer> initer_;  // initializer for candidate clusters
+    char* batch_data_ = nullptr;           // 1-bit code and factors
+    char* ex_data_ = nullptr;              // code for remaining bits
+    PID* ids_ = nullptr;                   // PID of vectors (organized by clusters)
+    size_t num_ = 0;                       // num of data points
+    size_t dim_ = 0;                       // dimension of data points
+    size_t padded_dim_ = 0;                // dimension after padding
+    size_t num_cluster_ = 0;               // num of centroids (clusters)
+    size_t ex_bits_ = 0;                   // total bits = ex_bits_ + 1
+    RotatorType type_ = RotatorType::FhtKacRotator;  // type of rotator
+    Rotator<float>* rotator_ = nullptr;              // Data Rotator
+    std::vector<Cluster> cluster_lst_;               // List of clusters in ivf
     MetricType metric_type_ = rabitqlib::METRIC_L2;  // metric type
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
-    void quantize_cluster(
-        Cluster&,
-        const std::vector<PID>&,
-        const float*,
-        const float*,
-        float*,
-        const quant::RabitqConfig&
-    );
+    void
+    quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, const quant::RabitqConfig&);
 
     [[nodiscard]] size_t ids_bytes() const { return sizeof(PID) * num_; }
 
@@ -72,10 +68,10 @@ class IVF {
     void init_clusters(const std::vector<size_t>&);
 
     void free_memory() {
-        ::delete initer_;
-        std::free(batch_data_);
-        std::free(ex_data_);
-        std::free(ids_);
+        initer_.reset();
+        std::free(std::exchange(batch_data_, nullptr));
+        std::free(std::exchange(ex_data_, nullptr));
+        std::free(std::exchange(ids_, nullptr));
     }
 
     void search_cluster(
@@ -93,7 +89,7 @@ class IVF {
     ) const;
 
    public:
-    explicit IVF() {}
+    explicit IVF() = default;
     explicit IVF(
         size_t,
         size_t,
@@ -164,10 +160,13 @@ inline IVF::~IVF() {
  *
  * @param data Data objects (N*DIM)
  * @param centroids Centroid vectors (K*DIM)
- * @param clustter_ids Cluster ID for each data objects
+ * @param cluster_ids Cluster ID for each data object
  */
 inline void IVF::construct(
-    const float* data, const float* centroids, const PID* cluster_ids, bool faster = false,
+    const float* data,
+    const float* centroids,
+    const PID* cluster_ids,
+    bool faster = false,
     size_t num_threads = std::numeric_limits<size_t>::max()
 ) {
     std::cout << "Start IVF construction...\n";
@@ -178,7 +177,7 @@ inline void IVF::construct(
     std::vector<std::vector<PID>> id_lists(num_cluster_);
     for (size_t i = 0; i < num_; ++i) {
         PID cid = cluster_ids[i];
-        if (cid > num_cluster_) {
+        if (cid >= num_cluster_) {
             std::cerr << "Bad cluster id\n";
             exit(1);
         }
@@ -199,7 +198,7 @@ inline void IVF::construct(
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
-    num_threads = std::min(num_threads, rabitqlib::total_threads());
+    num_threads = std::clamp(num_threads, size_t{1}, rabitqlib::total_threads());
     /* Quantize each cluster */
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
     for (size_t i = 0; i < num_cluster_; ++i) {
@@ -214,10 +213,13 @@ inline void IVF::construct(
 
 inline void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
     std::cout << "Allocating memory for IVF...\n";
+    free_memory();
+    cluster_lst_.clear();
+
     if (num_cluster_ < 20000UL) {
-        this->initer_ = new FlatInitializer(padded_dim_, num_cluster_);
+        this->initer_ = std::make_unique<FlatInitializer>(padded_dim_, num_cluster_);
     } else {
-        this->initer_ = new HNSWInitializer(padded_dim_, num_cluster_);
+        this->initer_ = std::make_unique<HNSWInitializer>(padded_dim_, num_cluster_);
     }
     this->batch_data_ =
         memory::align_allocate<64, char, true>(batch_data_bytes(cluster_sizes));
@@ -230,7 +232,7 @@ inline void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
 }
 
 /**
- * @brief intialize the cluster list: finding idx for all data
+ * @brief Initialize the cluster list by finding each cluster's storage offsets.
  */
 inline void IVF::init_clusters(const std::vector<size_t>& cluster_sizes) {
     this->cluster_lst_.reserve(num_cluster_);
@@ -244,8 +246,9 @@ inline void IVF::init_clusters(const std::vector<size_t>& cluster_sizes) {
         char* current_batch_data =
             batch_data_ + (BatchDataMap<float>::data_bytes(padded_dim_) * added_batches);
         char* current_ex_data =
-            ex_data_ +
-            (added_vectors * ExDataMap<float>::data_bytes(padded_dim_, ex_bits_));
+            ex_bits_ > 0 ? ex_data_ + (added_vectors *
+                                       ExDataMap<float>::data_bytes(padded_dim_, ex_bits_))
+                         : nullptr;
         PID* ids = ids_ + added_vectors;
 
         Cluster cur_cluster(num, current_batch_data, current_ex_data, ids);
@@ -266,7 +269,7 @@ inline void IVF::quantize_cluster(
 ) {
     size_t num_points = IDs.size();
     if (cp.num() != num_points) {
-        std::cerr << "Size of cluster and IDs are inequivalent\n";
+        std::cerr << "Cluster size and ID count differ\n";
         std::cerr << "Cluster: " << cp.num() << " IDs: " << num_points << '\n';
         exit(1);
     }
@@ -301,7 +304,9 @@ inline void IVF::quantize_cluster(
         );
 
         batch_data += BatchDataMap<float>::data_bytes(padded_dim_);
-        ex_data += ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * n;
+        if (ex_bits_ > 0) {
+            ex_data += ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * n;
+        }
     }
 }
 
@@ -363,6 +368,7 @@ inline void IVF::load(const char* filename) {
     input.read(reinterpret_cast<char*>(&type_), sizeof(type_));
     input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
 
+    delete rotator_;
     rotator_ = choose_rotator<float>(dim_, type_, round_up_to_multiple(dim_, 64));
     padded_dim_ = rotator_->size();
 
@@ -384,7 +390,6 @@ inline void IVF::load(const char* filename) {
     this->rotator_->load(input);
 
     /* Load data */
-    free_memory();
     allocate_memory(cluster_sizes);
     this->initer_->load(input, filename);
     input.read(batch_data_, static_cast<long>(batch_data_bytes(cluster_sizes)));
@@ -479,8 +484,10 @@ inline void IVF::search_cluster(
         );
 
         batch_data += BatchDataMap<float>::data_bytes(padded_dim_);
-        ex_data +=
-            ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * fastscan::kBatchSize;
+        if (ex_bits_ > 0) {
+            ex_data +=
+                ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * fastscan::kBatchSize;
+        }
         ids += fastscan::kBatchSize;
     }
 
@@ -521,7 +528,6 @@ inline void IVF::scan_one_batch(
             PID id = ids[i];
             float ex_dist = est_distance[i];
             knns.insert(id, ex_dist);
-            distk = knns.top_dist();
         }
         return;
     }

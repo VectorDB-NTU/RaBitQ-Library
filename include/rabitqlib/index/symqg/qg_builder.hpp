@@ -11,9 +11,9 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
-#include "rabitqlib/utils/hashset.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
@@ -37,9 +37,9 @@ class QGBuilder {
     static constexpr size_t kMaxPrunedSize =
         300;                                    // max number of recorded pruned candidates
     std::vector<CandidateList> new_neighbors_;  // new neighbors for current iteration
-    std::vector<CandidateList> pruned_neighbors_;    // recorded pruned neighbors
-    std::vector<HashBasedBooleanSet> visited_list_;  // list of visited hash set
-    std::vector<uint32_t> degrees_;                  // record degree of qg
+    std::vector<CandidateList> pruned_neighbors_;  // recorded pruned neighbors
+    std::vector<VisitedSet> visited_list_;         // per-thread visited sets
+    std::vector<uint32_t> degrees_;                // record degree of qg
     void random_init();
     void search_new_neighbors(bool refine);
     void heuristic_prune(PID, CandidateList&, CandidateList&, bool);
@@ -59,7 +59,7 @@ class QGBuilder {
     )
         : qg_{index}
         , ef_build_{ef_build}
-        , num_threads_{std::min(num_threads, total_threads())}
+        , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
         , num_nodes_{qg_.num_vertices()}
         , dim_{qg_.dimension()}
         , degree_bound_(qg_.degree_bound())
@@ -67,7 +67,7 @@ class QGBuilder {
         , pruned_neighbors_(qg_.num_vertices())
         , visited_list_(
               num_threads_,
-              HashBasedBooleanSet(std::min(ef_build_ * ef_build_, num_nodes_ / 10))
+              VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
           )
         , degrees_(qg_.num_vertices(), degree_bound_) {
         omp_set_num_threads(static_cast<int>(num_threads_));
@@ -76,7 +76,7 @@ class QGBuilder {
             compute_centroid(data, num_nodes_, dim_, num_threads_);
 
         PID entry_point = exact_nn(
-            data, centroid.data(), num_nodes_, dim_, num_threads_, euclidean_sqr<float>
+            data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
         );
 
         std::cout << "Setting entry_point to " << entry_point << '\n' << std::flush;
@@ -89,7 +89,7 @@ class QGBuilder {
 
     void build(size_t num_iter = 3) {
         if (num_iter < 2) {
-            std::cerr << "The number of iter for building qg should >= 3\n";
+            std::cerr << "The number of iterations for building QG must be at least 2\n";
             exit(1);
         }
         // for first iterations, we do not need to refine the graph structure
@@ -143,7 +143,6 @@ inline void QGBuilder::add_pruned_edges(
         float dik_sqr = cur.distance;
 
         if (nei_set.find(cur.id) != nei_set.end()) {
-            occlude = true;
             break;
         }
 
@@ -236,7 +235,7 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
         PID cur_id = i;
         auto tid = omp_get_thread_num();
         CandidateList candidates;
-        HashBasedBooleanSet& vis = visited_list_[tid];
+        VisitedSet& vis = visited_list_[tid];
         candidates.reserve(2 * kMaxCandidatePoolSize);
         vis.clear();
         qg_.find_candidates(cur_id, ef_build_, candidates, vis, degrees_);
@@ -266,29 +265,30 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
     std::vector<std::mutex> locks(num_nodes_);
     std::vector<CandidateList> reverse_buffer(num_nodes_);
 
+    // Keep new_neighbors_ read-only while reverse candidates are collected. Mutating a
+    // destination row here races with another worker reading that row as its source.
 #pragma omp parallel for schedule(dynamic)
     for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
         for (const auto& nei : new_neighbors_[data_id]) {
-            PID dst = nei.id;
-            bool dup = false;
-            CandidateList& dst_neighbors = new_neighbors_[dst];
-            std::lock_guard lock(locks[dst]);
-            for (auto& dst_nei : dst_neighbors) {
-                if (dst_nei.id == data_id) {
-                    dup = true;
-                    break;
+            const PID destination = nei.id;
+            const CandidateList& destination_neighbors = new_neighbors_[destination];
+            const bool reciprocal = std::any_of(
+                destination_neighbors.begin(),
+                destination_neighbors.end(),
+                [&](const auto& destination_neighbor) {
+                    return destination_neighbor.id == data_id;
                 }
-            }
-            if (dup) {
+            );
+            if (reciprocal) {
                 continue;
             }
 
-            if (dst_neighbors.size() < degree_bound_) {
-                dst_neighbors.emplace_back(data_id, nei.distance);
-            } else {
-                if (reverse_buffer[dst].size() < kMaxCandidatePoolSize) {
-                    reverse_buffer[dst].emplace_back(data_id, nei.distance);
-                }
+            std::lock_guard lock(locks[destination]);
+            const size_t missing_slots =
+                degree_bound_ - std::min(degree_bound_, destination_neighbors.size());
+            if (reverse_buffer[destination].size() <
+                kMaxCandidatePoolSize + missing_slots) {
+                reverse_buffer[destination].emplace_back(data_id, nei.distance);
             }
         }
     }

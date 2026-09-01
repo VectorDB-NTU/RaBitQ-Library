@@ -1,33 +1,85 @@
 site_name: RaBitQ Library
+site_description: Compact, accurate vector quantization and approximate nearest-neighbor search
+site_url: https://vectordb-ntu.github.io/RaBitQ-Library/
+repo_url: https://github.com/VectorDB-NTU/RaBitQ-Library
+repo_name: VectorDB-NTU/RaBitQ-Library
+edit_uri: edit/main/docs/docs/
+copyright: Copyright &copy; VectorDB Group, Nanyang Technological University
 
 nav:
-  - Introduction: index.md
+  - Home: index.md
   - Quick Start: quick_start.md
   - RaBitQ:
-    - Introduction: rabitq/rabitq.md
-    - Rotator: rabitq/rotator.md
-    - Quantizer: rabitq/quantizer.md
-    - Estimator: rabitq/estimator.md
-    - Reranking: rabitq/reranking.md
-    - Kernel:
-      - Compact Code Storage: compact_code.md
-      - Inner Product: kernel_ip.md
-  - RaBitQ for Vector Search:
-    - IVF + RaBitQ: index/ivf.md
-    - HNSW + RaBitQ: index/hnsw.md
-    - QG + RaBitQ (SymphonyQG): index/qg.md
+      - Overview: rabitq/rabitq.md
+      - Rotation: rabitq/rotator.md
+      - Quantization: rabitq/quantizer.md
+      - Estimation: rabitq/estimator.md
+      - Reranking: rabitq/reranking.md
+      - Kernels:
+          - Compact Code Storage: compact_code.md
+          - Inner Product: kernel_ip.md
+  - Vector Search:
+      - IVF + RaBitQ: index/ivf.md
+      - HNSW + RaBitQ: index/hnsw.md
+      - SymphonyQG: index/qg.md
 
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/vector-polygon
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.action.edit
+    - content.code.copy
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - search.suggest
 
 markdown_extensions:
-  - pymdownx.arithmatex
-  - pymdownx.details
-  - pymdownx.superfences
-  - pymdownx.highlight
+  - admonition
   - attr_list
   - footnotes
+  - md_in_html
+  - pymdownx.arithmatex
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML
 
-theme: 
-  name: material
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/VectorDB-NTU/RaBitQ-Library
+      name: RaBitQ Library on GitHub
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/rabitqlib/
+      name: RaBitQ Library on PyPI

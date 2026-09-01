@@ -64,10 +64,11 @@ void new_transpose_bin_avx2(
         __m256i vec_48_to_63 = _mm256_loadu_si256((__m256i const*)(q + 48));
 
         // the first (16 - b_query) bits are empty
-        vec_00_to_15 = _mm256_slli_epi32(vec_00_to_15, (16 - b_query));
-        vec_16_to_31 = _mm256_slli_epi32(vec_16_to_31, (16 - b_query));
-        vec_32_to_47 = _mm256_slli_epi32(vec_32_to_47, (16 - b_query));
-        vec_48_to_63 = _mm256_slli_epi32(vec_48_to_63, (16 - b_query));
+        const int shift = static_cast<int>(16 - b_query);
+        vec_00_to_15 = _mm256_slli_epi32(vec_00_to_15, shift);
+        vec_16_to_31 = _mm256_slli_epi32(vec_16_to_31, shift);
+        vec_32_to_47 = _mm256_slli_epi32(vec_32_to_47, shift);
+        vec_48_to_63 = _mm256_slli_epi32(vec_48_to_63, shift);
 
         for (size_t j = 0; j < b_query; ++j) {
             // pack two 16-bit vectors to 8-bit interleaved vectors
@@ -118,11 +119,13 @@ void new_transpose_bin_512_avx2(
             const uint8_t* current_q_lo = q + i + k * 64;
             const uint8_t* current_q_hi = q + i + k * 64 + 32;
 
-            __m256i vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_lo));
-            __m256i vec_hi = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_hi));
+            __m256i vec_lo =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_lo));
+            __m256i vec_hi =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_hi));
 
             for (size_t j = 0; j < b_query; ++j) {
-                int bit_idx = b_query - 1 - j;
+                int bit_idx = static_cast<int>(b_query - 1 - j);
                 __m256i mask_vec = _mm256_set1_epi8(static_cast<char>(1 << bit_idx));
 
                 // Process lower 32 bytes

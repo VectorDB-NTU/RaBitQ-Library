@@ -5,17 +5,28 @@
 #include <stdexcept>
 #include <string>
 
-#include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"
+#include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/warmup_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace rabitqlib::simd {
 
 [[noreturn]] static void missing_feature(const char* feature_name) {
-    throw std::runtime_error(std::string(feature_name) + " requires AVX2/FMA or AVX512 support");
+    throw std::runtime_error(
+        std::string(feature_name) + " requires AVX2/FMA or AVX512 support"
+    );
+}
+
+// With zero extra bits there is no extra code to contribute to the inner
+// product, so the ex_bits == 0 slot must be a constant-zero stub rather than
+// a duplicate of the 1-bit implementation.
+static float ip_fxu0(
+    const float* /*query*/, const uint8_t* /*compact_code*/, size_t /*dim*/
+) {
+    return 0.0F;
 }
 
 static float missing_excode_ip(const float*, const uint8_t*, size_t) {
@@ -75,7 +86,7 @@ static float missing_warmup_ip_x0_q_512(
 ExcodeIpTable resolve_excode_ip_table() {
     if (cpu::has_avx512_core()) {
         return {
-            excode_ipimpl::ip16_fxu1_avx512,
+            ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx512,
             excode_ipimpl::ip64_fxu2_avx512,
             excode_ipimpl::ip64_fxu3_avx512,
@@ -87,7 +98,7 @@ ExcodeIpTable resolve_excode_ip_table() {
         };
     } else if (cpu::has_avx2()) {
         return {
-            excode_ipimpl::ip16_fxu1_avx2,
+            ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx2,
             excode_ipimpl::ip64_fxu2_avx2,
             excode_ipimpl::ip64_fxu3_avx2,
@@ -185,9 +196,7 @@ void flip_sign(const uint8_t* flip, float* data, size_t dim) {
     kFlipSignFn(flip, data, dim);
 }
 
-void kacs_walk(float* data, size_t len) {
-    kKacsWalkFn(data, len);
-}
+void kacs_walk(float* data, size_t len) { kKacsWalkFn(data, len); }
 
 void scalar_quantize_uint8(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
@@ -322,9 +331,7 @@ float excode_ipimpl::ip64_fxu7_avx(
     return kIp64Fxu7AvxFn(query, compact_code, dim);
 }
 
-void new_transpose_bin(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
-) {
+void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query) {
     kNewTransposeBinFn(q, tq, padded_dim, b_query);
 }
 
@@ -401,7 +408,8 @@ void accumulate_hacc(
 
 namespace rabitqlib {
 
-using WarmupIpX0Q512Fn = float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t);
+using WarmupIpX0Q512Fn =
+    float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t);
 const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
     if (rabitqlib::cpu::has_avx512_popcnt()) {
         return rabitqlib::simd::warmup_ip_x0_q_512_avx512;

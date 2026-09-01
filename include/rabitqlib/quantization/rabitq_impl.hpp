@@ -2,6 +2,7 @@
 
 #include <omp.h>
 
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -94,15 +95,27 @@ inline void one_bit_code_with_factor(
     T l2_sqr = l2norm_sqr<T>(residual_arr.data(), dim);
     T l2_norm = std::sqrt(l2_sqr);
 
+    if (l2_sqr == 0) {
+        if (metric_type == METRIC_L2) {
+            f_add = 0;
+        } else if (metric_type == METRIC_IP) {
+            f_add = 1;
+        } else {
+            std::cerr << "Unsupported metric type in quantization\n" << std::flush;
+            exit(1);
+        }
+        f_rescale = 0;
+        f_error = 0;
+        return;
+    }
+
     // dot product between residual and xu_cb
     T ip_resi_xucb = dot_product<T>(residual_arr.data(), xu_cb.data(), dim);
     // dot product between centroid and xu_cb
     T ip_cent_xucb = dot_product<T>(centroid, xu_cb.data(), dim);
 
-    // corner case
-    if (ip_resi_xucb == 0) {
-        ip_resi_xucb = std::numeric_limits<T>::infinity();
-    }
+    // A nonzero residual and its sign code have a strictly positive inner product.
+    assert(ip_resi_xucb > 0);
 
     // We use unnormalized vector to get error factor. To be more specific,
     // sqrt((1 - <o, o_bar>^2) / <o, o_bar>^2) / sqrt(dim - 1) = 3rd item in following
@@ -450,6 +463,22 @@ inline void ex_bits_code_with_factor(
     // residual vector
     RowMajorArray<T> residual_arr = data_arr - cent_arr;
 
+    const T l2_sqr = l2norm_sqr(residual_arr.data(), dim);
+    if (l2_sqr == 0) {
+        std::fill(ex_code, ex_code + dim, static_cast<TP>(0));
+        if (metric_type == METRIC_L2) {
+            f_add_ex = 0;
+        } else if (metric_type == METRIC_IP) {
+            f_add_ex = 1;
+        } else {
+            std::cerr << "Unsupported metric for ex_bits_code()\n" << std::flush;
+            exit(1);
+        }
+        f_rescale_ex = 0;
+        f_error_ex = 0;
+        return;
+    }
+
     T ipnorm_inv = ex_bits_code<T, TP>(residual_arr.data(), dim, ex_bits, ex_code, t_const);
 
     // get factors
@@ -465,16 +494,13 @@ inline void ex_bits_code_with_factor(
     float cb = -(static_cast<float>(1 << ex_bits) - 0.5F);
     RowMajorArray<T> xu_cb = total_code.template cast<T>() + cb;
 
-    T l2_sqr = l2norm_sqr(residual_arr.data(), dim);
     T l2_norm = std::sqrt(l2_sqr);
 
     T ip_resi_xucb = dot_product<T>(residual_arr.data(), xu_cb.data(), dim);
     T ip_cent_xucb = dot_product<T>(centroid, xu_cb.data(), dim);
 
-    // corner case
-    if (ip_resi_xucb == 0) {
-        ip_resi_xucb = std::numeric_limits<T>::infinity();
-    }
+    // A nonzero residual and its quantized code have a strictly positive inner product.
+    assert(ip_resi_xucb > 0);
 
     T tmp_error =
         l2_norm * kConstEpsilon *
@@ -494,7 +520,7 @@ inline void ex_bits_code_with_factor(
         f_rescale_ex = ipnorm_inv * -l2_norm;
         f_error_ex = 1 * tmp_error;
     } else {
-        std::cerr << "Unsupport metric for ex_bits_code()\n" << std::flush;
+        std::cerr << "Unsupported metric for ex_bits_code()\n" << std::flush;
         exit(1);
     }
 }
@@ -550,6 +576,13 @@ static inline void rabitq_scalar_impl(
     RowMajorArray<T> residual_arr =
         rabitq_impl::one_bit::one_bit_code(data, centroid, dim, binary_code.data());
 
+    if (l2norm_sqr(residual_arr.data(), dim) == 0) {
+        std::fill(total_code, total_code + dim, static_cast<TP>(0));
+        delta = 0;
+        vl = 0;
+        return;
+    }
+
     if (ex_bits > 0) {
         ex_bits::ex_bits_code<T, TP>(
             residual_arr.data(), dim, ex_bits, total_code, t_const
@@ -558,7 +591,8 @@ static inline void rabitq_scalar_impl(
 
     // merge 2 one_bit code and ex_bits code
     for (size_t i = 0; i < dim; ++i) {
-        total_code[i] += static_cast<TP>(binary_code[i]) << ex_bits;
+        const TP sign_code = static_cast<TP>(binary_code[i]) << ex_bits;
+        total_code[i] = ex_bits > 0 ? total_code[i] + sign_code : sign_code;
     }
 
     float cb = -(static_cast<float>(1 << ex_bits) - 0.5F);
@@ -612,10 +646,15 @@ static inline void rabitq_full_impl(
             metric_type,
             t_const
         );
+    } else {
+        one_bit::one_bit_code_with_factor(
+            data, centroid, dim, binary_code.data(), f_add, f_rescale, f_error, metric_type
+        );
     }
 
     for (size_t i = 0; i < dim; ++i) {
-        total_code[i] += static_cast<TP>(binary_code[i]) << ex_bits;
+        const TP sign_code = static_cast<TP>(binary_code[i]) << ex_bits;
+        total_code[i] = ex_bits > 0 ? total_code[i] + sign_code : sign_code;
     }
 }
 }  // namespace total_bits

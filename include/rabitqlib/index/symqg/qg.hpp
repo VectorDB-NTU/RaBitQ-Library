@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <ostream>
+#include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -20,12 +21,12 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/array.hpp"
 #include "rabitqlib/utils/buffer.hpp"
-#include "rabitqlib/utils/hashset.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/visited_pool.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 
@@ -62,6 +63,8 @@ class QuantizedGraph {
     size_t row_offset_ = 0;         // length of entire row
     size_t ef_ = 0;
 
+    void validate_configuration() const;
+
     void initialize();
 
     void copy_vectors(const T*);
@@ -83,8 +86,7 @@ class QuantizedGraph {
     }
 
     [[nodiscard]] PID* get_neighbors(PID data_id) {
-        return reinterpret_cast<PID*>(
-            &data_.at((row_offset_ * data_id) + neighbor_offset_)
+        return reinterpret_cast<PID*>(&data_.at((row_offset_ * data_id) + neighbor_offset_)
         );
     }
 
@@ -94,25 +96,16 @@ class QuantizedGraph {
         );
     }
 
-    void find_candidates(
-        PID,
-        size_t,
-        std::vector<AnnCandidate<T>>&,
-        HashBasedBooleanSet&,
-        const std::vector<uint32_t>&
-    ) const;
+    void
+    find_candidates(PID, size_t, std::vector<AnnCandidate<T>>&, VisitedSet&, const std::vector<uint32_t>&)
+        const;
 
     void update_qg(PID, const std::vector<AnnCandidate<T>>&);
 
-    void update_results(buffer::SearchBuffer<T>&, HashBasedBooleanSet&, const T*);
+    void update_results(buffer::SearchBuffer<T>&, VisitedSet&, const T*);
 
     void scan_neighbors(
-        const BatchQuery<T>&,
-        PID,
-        T*,
-        buffer::SearchBuffer<T>&,
-        HashBasedBooleanSet&,
-        size_t
+        const BatchQuery<T>&, PID, T*, buffer::SearchBuffer<T>&, VisitedSet&, size_t
     ) const;
 
    public:
@@ -167,12 +160,32 @@ inline QuantizedGraph<T>::QuantizedGraph(
     , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<T> : euclidean_sqr<T>)
     , metric_type_(metric_type)
     , rotator_type_(rotator_type) {
+    validate_configuration();
     initialize();
 }
 
 template <typename T>
+inline void QuantizedGraph<T>::validate_configuration() const {
+    if (degree_bound_ == 0 || degree_bound_ % fastscan::kBatchSize != 0) {
+        throw std::invalid_argument(
+            "QuantizedGraph degree bound must be a positive multiple of 32"
+        );
+    }
+    if (degree_bound_ >= num_points_) {
+        throw std::invalid_argument(
+            "QuantizedGraph degree bound must be smaller than the number of points"
+        );
+    }
+    if (num_points_ > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument(
+            "QuantizedGraph point count exceeds the search-buffer ID limit"
+        );
+    }
+}
+
+template <typename T>
 inline QuantizedGraph<T>::~QuantizedGraph() {
-    ::delete this->rotator_;
+    delete this->rotator_;
 }
 
 template <typename T>
@@ -235,6 +248,7 @@ inline void QuantizedGraph<T>::load(const char* filename) {
 
     raw_dist_func_ = (metric_type_ == METRIC_IP) ? dot_product_dis<T> : euclidean_sqr<T>;
 
+    validate_configuration();
     initialize();
 
     /* Data */
@@ -345,14 +359,14 @@ inline void QuantizedGraph<T>::search(
 }
 
 // scan a data row (including data vec and quantization codes for its neighbors)
-// store estimated distance & return exact distnace for current vertex
+// Store estimated neighbor distances; the caller computes the current vertex exactly.
 template <typename T>
 void QuantizedGraph<T>::scan_neighbors(
     const BatchQuery<T>& q_obj,
     PID data_id,
     T* est_dist,
     buffer::SearchBuffer<T>& search_pool,
-    HashBasedBooleanSet& vis,
+    VisitedSet& vis,
     size_t cur_degree
 ) const {
     const auto* batch_data = get_batch_data(data_id);
@@ -378,7 +392,7 @@ void QuantizedGraph<T>::scan_neighbors(
 
 template <typename T>
 inline void QuantizedGraph<T>::update_results(
-    buffer::SearchBuffer<T>& result_pool, HashBasedBooleanSet& vis, const T* query
+    buffer::SearchBuffer<T>& result_pool, VisitedSet& vis, const T* query
 ) {
     if (result_pool.is_full()) {
         return;
@@ -405,7 +419,7 @@ inline void QuantizedGraph<T>::update_results(
 // initialize const offsets & data array
 template <typename T>
 inline void QuantizedGraph<T>::initialize() {
-    ::delete rotator_;
+    delete rotator_;
 
     rotator_ = choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64));
     padded_dim_ = rotator_->size();
@@ -433,7 +447,7 @@ inline void QuantizedGraph<T>::find_candidates(
     PID cur_id,
     size_t search_ef,
     std::vector<AnnCandidate<T>>& results,
-    HashBasedBooleanSet& vis,
+    VisitedSet& vis,
     const std::vector<uint32_t>& degrees
 ) const {
     const T* query = get_vector(cur_id);

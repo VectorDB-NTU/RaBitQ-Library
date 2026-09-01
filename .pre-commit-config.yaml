@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format 15
+        entry: scripts/apply-format.sh
+        language: system
+        files: '\.(c|cc|cpp|cxx|h|hpp|cu|cuh)$'
+        exclude: '^(include/rabitqlib/third/|include/rabitqlib/utils/fht_avx\.hpp$)'

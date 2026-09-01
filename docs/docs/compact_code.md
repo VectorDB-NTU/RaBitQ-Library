@@ -39,7 +39,7 @@ The code sequentially stores the binary value for each of the 64 dimensions.
 
 ![2-bit Storage](assets/img/compact/2bit.png){ width=300px align=center }
 
-The code is stored in a byte array of length 16. Each row in the figure represents a byte. The 0-th byte stores the 2-bit codes of the 0-th, 16-th, 32-th and 48-th dimensions. The 1-th byte stores the 2-bit codes of the 1-th, 17-th, 33-th and 49-th dimensions, so on and so forth. This storage allows efficient unpacking with SIMD, i.e., shifting and masking with `SSE`. 
+The code is stored in a byte array of length 16. Each row in the figure represents a byte. The 0-th byte stores the 2-bit codes of the 0-th, 16-th, 32-th and 48-th dimensions. The 1-th byte stores the 2-bit codes of the 1-th, 17-th, 33-th and 49-th dimensions, and so on. This layout supports efficient shifting and masking in the library's AVX2 and AVX-512 unpacking kernels.
 
 ## 3-bit = 2-bit + 1-bit
 
@@ -48,7 +48,7 @@ The code is stored in a byte array of length 16. Each row in the figure represen
 ![4-bit Storage](assets/img/compact/4bit.png){ width=600px align=center }
 
 
-The code is stored in a byte array of length 32. The 0-th byte stores the 4-bit codes of the 0-th and 16-th dimensions. The 1-th byte stores the 4-bit codes of the 1-th and 17-th dimensions, so on and so forth. This storage allows efficient unpacking with SIMD, i.e., shifting and masking with `SSE`. 
+The code is stored in a byte array of length 32. The 0-th byte stores the 4-bit codes of the 0-th and 16-th dimensions. The 1-th byte stores the 4-bit codes of the 1-th and 17-th dimensions, and so on. This layout supports efficient shifting and masking in the library's AVX2 and AVX-512 unpacking kernels.
 
 ## 5-bit = 4-bit + 1-bit
 
@@ -62,14 +62,14 @@ The code is stored in a byte array of length 48.
 - The second 16 bytes store the 6-bit codes of the 16-th to the 31-th dimensions and the upper 2-bit codes of the 48-th to 63-th dimensions.
 - The third 16 bytes store the lower 4-bit codes of the 32-th to 47-th dimensions and the lower 4-bit codes of the 48-th to 63-th dimensions.
 
-This storage allows efficient unpacking with SIMD, i.e., shifting and masking with `SSE`. 
+This layout supports efficient shifting and masking in the library's AVX2 and
+AVX-512 unpacking kernels.
 
 ## 7-bit = 6-bit + 1-bit
 
 ## 8-bit
 
 The code of 8-bit is aligned with byte arrays and needs no specialized design.
-
 
 
 

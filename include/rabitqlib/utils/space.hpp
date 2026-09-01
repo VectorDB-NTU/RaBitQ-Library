@@ -154,10 +154,17 @@ template <typename T>
 inline std::vector<T> compute_centroid(
     const T* data, size_t num_points, size_t dim, size_t num_threads
 ) {
-    omp_set_num_threads(static_cast<int>(num_threads));
-    std::vector<std::vector<T>> all_results(num_threads, std::vector<T>(dim, 0));
+    const auto thread_count = static_cast<int>(std::max<size_t>(
+        1,
+        std::min(
+            {num_threads,
+             std::max<size_t>(num_points, 1),
+             static_cast<size_t>(std::numeric_limits<int>::max())}
+        )
+    ));
+    std::vector<std::vector<T>> all_results(thread_count, std::vector<T>(dim, 0));
 
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(thread_count)
     for (size_t i = 0; i < num_points; ++i) {
         auto tid = omp_get_thread_num();
         std::vector<T>& cur_results = all_results[tid];
@@ -191,9 +198,17 @@ inline PID exact_nn(
     size_t num_threads,
     T (*dist_func)(const T*, const T*, size_t)
 ) {
-    std::vector<AnnCandidate<T, PID>> best_entries(num_threads);
+    const auto thread_count = static_cast<int>(std::max<size_t>(
+        1,
+        std::min(
+            {num_threads,
+             std::max<size_t>(num_points, 1),
+             static_cast<size_t>(std::numeric_limits<int>::max())}
+        )
+    ));
+    std::vector<AnnCandidate<T, PID>> best_entries(thread_count);
 
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(thread_count)
     for (size_t i = 0; i < num_points; ++i) {
         auto tid = omp_get_thread_num();
         AnnCandidate<T, PID>& cur_entry = best_entries[tid];
@@ -219,19 +234,33 @@ inline PID exact_nn(
 
 namespace excode_ipimpl {
 
-float ip16_fxu1_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu2_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu3_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip16_fxu4_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu5_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu6_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
-float ip64_fxu7_avx(const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim);
+float ip16_fxu1_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu2_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu3_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip16_fxu4_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu5_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu6_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
+float ip64_fxu7_avx(
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
+);
 
 // inner product between float type and int type vectors
 template <typename TF, typename TI>
 inline TF ip_fxi(const TF* __restrict__ vec0, const TI* __restrict__ vec1, size_t dim) {
-    static_assert(std::is_floating_point_v<TF>, "TF must be an floating type");
-    static_assert(std::is_integral_v<TI>, "TI must be an integeral type");
+    static_assert(std::is_floating_point_v<TF>, "TF must be a floating-point type");
+    static_assert(std::is_integral_v<TI>, "TI must be an integral type");
 
     ConstVectorMap<TF> v0(vec0, dim);
     ConstVectorMap<TI> v1(vec1, dim);
@@ -262,9 +291,7 @@ static inline uint64_t reverse_bits_u64(uint64_t n) {
     return n;
 }
 
-void new_transpose_bin(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
-);
+void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query);
 
 void new_transpose_bin_512(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
