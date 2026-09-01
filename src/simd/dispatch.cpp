@@ -73,7 +73,9 @@ static void missing_fastscan_transfer_lut_hacc(const uint16_t*, size_t, uint8_t*
     missing_feature("fastscan high-accuracy LUT transfer");
 }
 
-static void missing_fastscan_accumulate_hacc(const uint8_t*, const uint8_t*, int32_t*, size_t) {
+static void missing_fastscan_accumulate_hacc(
+    const uint8_t*, const uint8_t*, int32_t*, size_t
+) {
     missing_feature("fastscan high-accuracy accumulate");
 }
 
@@ -110,7 +112,7 @@ ExcodeIpTable resolve_excode_ip_table() {
         };
     } else {
         return {
-            missing_excode_ip,
+            ip_fxu0,
             missing_excode_ip,
             missing_excode_ip,
             missing_excode_ip,
