@@ -37,9 +37,7 @@ static void missing_flip_sign(const uint8_t*, float*, size_t) {
     missing_feature("sign flip");
 }
 
-static void missing_kacs_walk(float*, size_t) {
-    missing_feature("FhtKacRotator");
-}
+static void missing_kacs_walk(float*, size_t) { missing_feature("FhtKacRotator"); }
 
 static void missing_scalar_quantize_uint8(uint8_t*, const float*, size_t, float, float) {
     missing_feature("uint8 quantize");
