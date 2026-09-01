@@ -4,6 +4,27 @@
 [![Python tests](https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml/badge.svg)](https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+```bash
+pip install rabitqlib
+```
+
+**Adopted by:** [Milvus](https://github.com/milvus-io/milvus) ·
+[Faiss](https://github.com/facebookresearch/faiss) ·
+[VSAG](https://github.com/antgroup/vsag) ·
+[VectorChord](https://github.com/tensorchord/VectorChord) ·
+[Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) ·
+[CockroachDB](https://github.com/cockroachdb/cockroach) ·
+[Elasticsearch](https://github.com/elastic/elasticsearch) ·
+[Lucene](https://github.com/apache/lucene) ·
+[turbopuffer](https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ) ·
+[Zvec](https://github.com/alibaba/zvec)
+
+![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](docs/docs/assets/img/acc_bench.png)
+
+*Average and maximum relative estimation error across six datasets; lower is
+better. Results from the
+[multi-bit RaBitQ paper](https://arxiv.org/abs/2409.09913).*
+
 RaBitQ Library is a C++17 library with Python bindings for compact, accurate
 vector quantization and approximate nearest-neighbor search. It provides:
 
@@ -30,14 +51,14 @@ University, Singapore. A GPU implementation is also available in
 - an x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
 
-Prebuilt wheels for Linux x86-64 and CPython 3.9 through 3.14 are attached to
-each [GitHub release](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
-Download the wheel matching your Python version (for example, `cp312` for
-CPython 3.12), then install it directly:
+Install a prebuilt wheel from PyPI:
 
 ```bash
-python -m pip install ./rabitqlib-0.2.0-cp312-cp312-manylinux_*.whl
+python -m pip install rabitqlib
 ```
+
+Linux x86-64 wheels for CPython 3.9 through 3.14 are also attached to each
+[GitHub release](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
 
 Building from source additionally requires a C++17 compiler, CMake 3.15 or
 newer, and OpenMP.
@@ -171,21 +192,6 @@ the build, formatting, pre-commit, and static-analysis workflows.
 In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
 90%, 95%, and 99% recall, respectively, without reranking. Actual results
 depend on the dataset, index configuration, and search parameters.
-
-## RaBitQ in industry
-
-RaBitQ has been adopted by vector databases, search engines, and libraries:
-
-- [Milvus](https://github.com/milvus-io/milvus) — IVF + RaBitQ (C++)
-- [Faiss](https://github.com/facebookresearch/faiss) — IVF + RaBitQ (C++)
-- [VSAG](https://github.com/antgroup/vsag) — HGraph + RaBitQ (C++)
-- [VectorChord](https://github.com/tensorchord/VectorChord) — IVF + RaBitQ (Rust)
-- [Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) — DiskANN + RaBitQ
-- [CockroachDB](https://github.com/cockroachdb/cockroach) — CSPANN + RaBitQ (Go)
-- [Elasticsearch](https://github.com/elastic/elasticsearch) — HNSW + BBQ, a modified RaBitQ implementation (Java)
-- [Lucene](https://github.com/apache/lucene) — HNSW + BBQ, a modified RaBitQ implementation (Java)
-- [turbopuffer](https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ) — SPFresh + RaBitQ
-- [Zvec](https://github.com/alibaba/zvec) — HNSW/IVF + RaBitQ (C++)
 
 ## Citation
 
