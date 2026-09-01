@@ -27,11 +27,20 @@ University, Singapore. A GPU implementation is also available in
 #### Requirements
 
 - Python 3.9 or newer
-- a C++17 compiler
-- CMake 3.15 or newer
-- OpenMP
 - an x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
+
+Prebuilt wheels for Linux x86-64 and CPython 3.9 through 3.14 are attached to
+each [GitHub release](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
+Download the wheel matching your Python version (for example, `cp312` for
+CPython 3.12), then install it directly:
+
+```bash
+python -m pip install ./rabitqlib-0.2.0-cp312-cp312-manylinux_*.whl
+```
+
+Building from source additionally requires a C++17 compiler, CMake 3.15 or
+newer, and OpenMP.
 
 Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
 AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
