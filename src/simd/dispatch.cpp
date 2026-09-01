@@ -29,6 +29,60 @@ static float ip_fxu0(
     return 0.0F;
 }
 
+static float missing_excode_ip(const float*, const uint8_t*, size_t) {
+    missing_feature("excode ip functions");
+}
+
+static void missing_flip_sign(const uint8_t*, float*, size_t) {
+    missing_feature("sign flip");
+}
+
+static void missing_kacs_walk(float*, size_t) { missing_feature("FhtKacRotator"); }
+
+static void missing_scalar_quantize_uint8(uint8_t*, const float*, size_t, float, float) {
+    missing_feature("uint8 quantize");
+}
+
+static void missing_scalar_quantize_uint16(uint16_t*, const float*, size_t, float, float) {
+    missing_feature("uint16 quantize");
+}
+
+static void missing_pack_excode(const uint8_t*, uint8_t*, size_t) {
+    missing_feature("excode packing");
+}
+
+static void missing_new_transpose_bin(const uint16_t*, uint64_t*, size_t, size_t) {
+    missing_feature("new transpose bin");
+}
+
+static void missing_new_transpose_bin_512(const uint8_t*, uint64_t*, size_t, size_t) {
+    missing_feature("new_transpose_bin_512");
+}
+
+static float missing_mask_ip_x0_q(const float*, const uint64_t*, size_t) {
+    missing_feature("mask ip x0 q");
+}
+
+static void missing_fastscan_accumulate(const uint8_t*, const uint8_t*, uint16_t*, size_t) {
+    missing_feature("fastscan accumulate");
+}
+
+static void missing_fastscan_transfer_lut_hacc(const uint16_t*, size_t, uint8_t*) {
+    missing_feature("fastscan high-accuracy LUT transfer");
+}
+
+static void missing_fastscan_accumulate_hacc(
+    const uint8_t*, const uint8_t*, int32_t*, size_t
+) {
+    missing_feature("fastscan high-accuracy accumulate");
+}
+
+static float missing_warmup_ip_x0_q_512(
+    const uint64_t*, const uint64_t*, float, float, size_t, size_t
+) {
+    missing_feature("warmup_ip_x0_q_512");
+}
+
 ExcodeIpTable resolve_excode_ip_table() {
     if (cpu::has_avx512_core()) {
         return {
@@ -55,7 +109,17 @@ ExcodeIpTable resolve_excode_ip_table() {
             excode_ipimpl::ip16_fxu8_avx2,
         };
     } else {
-        missing_feature("excode ip functions");
+        return {
+            ip_fxu0,
+            missing_excode_ip,
+            missing_excode_ip,
+            missing_excode_ip,
+            missing_excode_ip,
+            missing_excode_ip,
+            missing_excode_ip,
+            missing_excode_ip,
+            missing_excode_ip,
+        };
     }
 }
 
@@ -66,7 +130,7 @@ const FlipSignFn kFlipSignFn = [] {
     } else if (cpu::has_avx2()) {
         return flip_sign_avx2;
     } else {
-        missing_feature("sign flip");
+        return missing_flip_sign;
     }
 }();
 
@@ -77,7 +141,7 @@ const KacsWalkFn kKacsWalkFn = [] {
     } else if (cpu::has_avx2()) {
         return kacs_walk_avx2;
     } else {
-        missing_feature("FhtKacRotator");
+        return missing_kacs_walk;
     }
 }();
 
@@ -88,7 +152,7 @@ const ScalarQuantizeUint8Fn kScalarQuantizeUint8Fn = [] {
     } else if (cpu::has_avx2()) {
         return scalar_quantize_uint8_avx2;
     } else {
-        missing_feature("uint8 quantize");
+        return missing_scalar_quantize_uint8;
     }
 }();
 
@@ -99,7 +163,7 @@ const ScalarQuantizeUint16Fn kScalarQuantizeUint16Fn = [] {
     } else if (cpu::has_avx2()) {
         return scalar_quantize_uint16_avx2;
     } else {
-        missing_feature("uint16 quantize");
+        return missing_scalar_quantize_uint16;
     }
 }();
 
@@ -111,7 +175,7 @@ static PackExcodeFn resolve_pack_excode_fn(PackExcodeFn avx512_fn, PackExcodeFn 
     } else if (cpu::has_avx2()) {
         return avx2_fn;
     } else {
-        missing_feature("excode packing");
+        return missing_pack_excode;
     }
 }
 
@@ -191,7 +255,7 @@ const NewTransposeBinFn kNewTransposeBinFn = [] {
     } else if (cpu::has_avx2()) {
         return simd::new_transpose_bin_avx2;
     } else {
-        simd::missing_feature("new transpose bin");
+        return simd::missing_new_transpose_bin;
     }
 }();
 
@@ -202,7 +266,7 @@ const NewTransposeBin512Fn kNewTransposeBin512Fn = [] {
     } else if (cpu::has_avx2()) {
         return simd::new_transpose_bin_512_avx2;
     } else {
-        simd::missing_feature("new_transpose_bin_512");
+        return simd::missing_new_transpose_bin_512;
     }
 }();
 
@@ -213,7 +277,7 @@ const MaskIpX0QFn kMaskIpX0QFn = [] {
     } else if (cpu::has_avx2()) {
         return simd::mask_ip_x0_q_avx2;
     } else {
-        simd::missing_feature("mask ip x0 q");
+        return simd::missing_mask_ip_x0_q;
     }
 }();
 
@@ -292,7 +356,7 @@ const AccumulateFn kAccumulateFn = [] {
     } else if (cpu::has_avx2()) {
         return simd::accumulate_avx2;
     } else {
-        rabitqlib::simd::missing_feature("fastscan accumulate");
+        return rabitqlib::simd::missing_fastscan_accumulate;
     }
 }();
 
@@ -303,7 +367,7 @@ const TransferLutHaccFn kTransferLutHaccFn = [] {
     } else if (cpu::has_avx2()) {
         return simd::transfer_lut_hacc_avx2;
     } else {
-        rabitqlib::simd::missing_feature("fastscan high-accuracy LUT transfer");
+        return rabitqlib::simd::missing_fastscan_transfer_lut_hacc;
     }
 }();
 
@@ -314,7 +378,7 @@ const AccumulateHaccFn kAccumulateHaccFn = [] {
     } else if (cpu::has_avx2()) {
         return simd::accumulate_hacc_avx2;
     } else {
-        rabitqlib::simd::missing_feature("fastscan high-accuracy accumulate");
+        return rabitqlib::simd::missing_fastscan_accumulate_hacc;
     }
 }();
 
@@ -352,7 +416,7 @@ const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
     } else if (rabitqlib::cpu::has_avx2()) {
         return rabitqlib::simd::warmup_ip_x0_q_512_avx2;
     } else {
-        rabitqlib::simd::missing_feature("warmup_ip_x0_q_512");
+        return rabitqlib::simd::missing_warmup_ip_x0_q_512;
     }
 }();
 
