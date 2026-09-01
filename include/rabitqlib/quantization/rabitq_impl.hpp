@@ -2,6 +2,7 @@
 
 #include <omp.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -10,6 +11,7 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/pack_excode.hpp"
 #include "rabitqlib/utils/space.hpp"
 
@@ -485,7 +487,7 @@ inline void ex_bits_code_with_factor(
     RowMajorArray<int> total_code =
         RowMajorArrayMap<TP>(ex_code, 1, dim).template cast<int>();
     for (size_t i = 0; i < dim; ++i) {
-        total_code(0, static_cast<long>(i)) += static_cast<int>(residual_arr.data()[i] >= 0)
+        total_code(0, static_cast<long>(i)) += static_cast<int>(residual_arr.data()[i] > 0)
                                                << ex_bits;
     }
 
@@ -558,6 +560,25 @@ inline void ex_bits_compact_code(
 }  // namespace ex_bits
 
 namespace total_bits {
+
+template <typename T, typename TP>
+inline void combined_code(
+    const T* residual, size_t dim, size_t total_bits, TP* total_code, double t_const = -1
+) {
+    const size_t ex_bits = total_bits - 1;
+
+    ConstRowMajorArrayMap<T> res_arr(residual, 1, static_cast<long>(dim));
+    RowMajorArrayMap<TP> code_arr(total_code, 1, static_cast<long>(dim));
+
+    if (ex_bits > 0) {
+        ex_bits::ex_bits_code<T, TP>(residual, dim, ex_bits, total_code, t_const);
+    } else {
+        code_arr.setZero();
+    }
+
+    code_arr += (res_arr > 0).template cast<TP>() * static_cast<TP>(1 << ex_bits);
+}
+
 template <typename T, typename TP>
 static inline void rabitq_scalar_impl(
     const T* data,
@@ -570,11 +591,11 @@ static inline void rabitq_scalar_impl(
     double t_const = -1,
     ScalarQuantizerType scalar_quantizer_type = ScalarQuantizerType::RECONSTRUCTION
 ) {
-    std::vector<int> binary_code(dim);
     size_t ex_bits = total_bits - 1;
 
-    RowMajorArray<T> residual_arr =
-        rabitq_impl::one_bit::one_bit_code(data, centroid, dim, binary_code.data());
+    ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<long>(dim));
+    RowMajorArray<T> residual_arr = data_arr - cent_arr;
 
     if (l2norm_sqr(residual_arr.data(), dim) == 0) {
         std::fill(total_code, total_code + dim, static_cast<TP>(0));
@@ -583,17 +604,7 @@ static inline void rabitq_scalar_impl(
         return;
     }
 
-    if (ex_bits > 0) {
-        ex_bits::ex_bits_code<T, TP>(
-            residual_arr.data(), dim, ex_bits, total_code, t_const
-        );
-    }
-
-    // merge 2 one_bit code and ex_bits code
-    for (size_t i = 0; i < dim; ++i) {
-        const TP sign_code = static_cast<TP>(binary_code[i]) << ex_bits;
-        total_code[i] = ex_bits > 0 ? total_code[i] + sign_code : sign_code;
-    }
+    combined_code<T, TP>(residual_arr.data(), dim, total_bits, total_code, t_const);
 
     float cb = -(static_cast<float>(1 << ex_bits) - 0.5F);
     RowMajorArrayMap<TP> total_code_arr(total_code, 1, dim);
@@ -658,4 +669,183 @@ static inline void rabitq_full_impl(
     }
 }
 }  // namespace total_bits
+
+namespace xy_bits {
+
+constexpr size_t kMaxCombinedBits = 9;
+
+static_assert(
+    ex_bits::kTightStart.size() >= kMaxCombinedBits,
+    "kTightStart must cover magnitude widths up to kMaxCombinedBits - 1"
+);
+
+inline void validate_bit_size(size_t base_bits, size_t ex_bits) {
+    if (base_bits < 1 || base_bits > 8) {
+        std::cerr << "base_bits must be in [1, 8]\n" << std::flush;
+        exit(1);
+    }
+    if (ex_bits > 8) {
+        std::cerr << "ex_bits must be in [0, 8]\n" << std::flush;
+        exit(1);
+    }
+    if (base_bits + ex_bits > kMaxCombinedBits) {
+        std::cerr << "base_bits + ex_bits must be in [1, " << kMaxCombinedBits << "]\n"
+                  << std::flush;
+        exit(1);
+    }
+}
+
+/**
+ * @brief Derive the 3 estimation factors for an arbitrary integer code.
+ *
+ * one_bit_code_with_factor() and ex_bits_code_with_factor() both compute the
+ * same three quantities from xu_cb = code + cb, differing only in how the
+ * code and cb are produced. This is that shared derivation, so a base-only
+ * code and a combined code can both be turned into factors without
+ * duplicating the algebra. With cb = -0.5 and a sign-bit code it reproduces
+ * one_bit_code_with_factor()'s outputs bit-for-bit.
+ *
+ * @param residual data - centroid
+ * @param code integer code, values in [0, 2^bits)
+ * @param cb offset-binary constant for that code width, -(2^bits - 1)/2
+ */
+template <typename T>
+inline void code_factors(
+    const T* residual,
+    const T* centroid,
+    size_t dim,
+    const int* code,
+    float cb,
+    T& f_add,
+    T& f_rescale,
+    T& f_error,
+    MetricType metric_type = METRIC_L2
+) {
+    ConstRowMajorArrayMap<int> code_arr(code, 1, static_cast<long>(dim));
+    RowMajorArray<T> xu_cb = code_arr.template cast<T>() + cb;
+
+    T l2_sqr = l2norm_sqr<T>(residual, dim);
+
+    if (l2_sqr == 0) {
+        if (metric_type == METRIC_L2) {
+            f_add = 0;
+        } else if (metric_type == METRIC_IP) {
+            f_add = 1;
+        } else {
+            std::cerr << "Unsupported metric type in code_factors()\n" << std::flush;
+            exit(1);
+        }
+        f_rescale = 0;
+        f_error = 0;
+        return;
+    }
+
+    T l2_norm = std::sqrt(l2_sqr);
+
+    T ip_resi_xucb = dot_product<T>(residual, xu_cb.data(), dim);
+    T ip_cent_xucb = dot_product<T>(centroid, xu_cb.data(), dim);
+
+    // A nonzero residual and its quantized code have a strictly positive inner product.
+    assert(ip_resi_xucb > 0);
+
+    // Cauchy-Schwarz guarantees this value is nonnegative. Clamp small negative
+    // round-off errors for collinear residual/code vectors before taking the square root.
+    const T normalized_error =
+        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1
+        ) /
+        (dim - 1);
+    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
+
+    if (metric_type == METRIC_L2) {
+        f_add = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
+        f_rescale = -2 * l2_sqr / ip_resi_xucb;
+        f_error = 2 * tmp_error;
+    } else if (metric_type == METRIC_IP) {
+        f_add = 1 - dot_product<T>(residual, centroid, dim) +
+                (l2_sqr * ip_cent_xucb / ip_resi_xucb);
+        f_rescale = -l2_sqr / ip_resi_xucb;
+        f_error = 1 * tmp_error;
+    } else {
+        std::cerr << "Unsupported metric type in code_factors()\n" << std::flush;
+        exit(1);
+    }
+}
+
+template <typename T>
+inline void split_code_with_factor(
+    const T* data,
+    const T* centroid,
+    size_t dim,
+    size_t base_bits,
+    size_t ex_bits,
+    char* base_data,
+    char* ex_data,
+    MetricType metric_type = METRIC_L2,
+    double t_const = -1
+) {
+    validate_bit_size(base_bits, ex_bits);
+
+    ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<long>(dim));
+    RowMajorArray<T> residual_arr = data_arr - cent_arr;
+    const T* residual = residual_arr.data();
+
+    const size_t total_bits = base_bits + ex_bits;
+    std::vector<int> total_code(dim);
+    total_bits::combined_code<T, int>(
+        residual, dim, total_bits, total_code.data(), t_const
+    );
+
+    const auto ex_mask = (ex_bits > 0) ? static_cast<int>((1U << ex_bits) - 1) : 0;
+    std::vector<int> base_code_int(dim);
+    std::vector<uint8_t> ex_raw(ex_bits > 0 ? dim : 0, 0);
+    for (size_t i = 0; i < dim; ++i) {
+        base_code_int[i] = total_code[i] >> ex_bits;
+        if (ex_bits > 0) {
+            ex_raw[i] = static_cast<uint8_t>(total_code[i] & ex_mask);
+        }
+    }
+
+    std::vector<uint8_t> base_raw(dim);
+    for (size_t i = 0; i < dim; ++i) {
+        base_raw[i] = static_cast<uint8_t>(base_code_int[i]);
+    }
+
+    // Base layer first: its factors describe the filter code on its own.
+    BaseDataMap<T> base_map(base_data, dim, base_bits);
+    code_factors<T>(
+        residual,
+        centroid,
+        dim,
+        base_code_int.data(),
+        -(static_cast<float>((1U << base_bits) - 1) / 2.F),
+        base_map.f_add(),
+        base_map.f_rescale(),
+        base_map.f_error(),
+        metric_type
+    );
+    ex_bits::packing_rabitqplus_code(base_raw.data(), base_map.base_code(), dim, base_bits);
+
+    if (ex_bits == 0) {
+        return;
+    }
+
+    // Refine layer: the same derivation over the combined code.
+    ExDataMap<T> ex_map(ex_data, dim, ex_bits);
+    T f_error_ex = 0;
+    code_factors<T>(
+        residual,
+        centroid,
+        dim,
+        total_code.data(),
+        -(static_cast<float>((1U << total_bits) - 1) / 2.F),
+        ex_map.f_add_ex(),
+        ex_map.f_rescale_ex(),
+        f_error_ex,
+        metric_type
+    );
+
+    ex_bits::packing_rabitqplus_code(ex_raw.data(), ex_map.ex_code(), dim, ex_bits);
+}
+}  // namespace xy_bits
 }  // namespace rabitqlib::quant::rabitq_impl
