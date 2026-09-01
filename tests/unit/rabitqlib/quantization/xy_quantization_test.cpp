@@ -63,7 +63,8 @@ XySplitResult SplitCode(
     const std::vector<float>& centroid,
     size_t dim,
     size_t base_bits,
-    size_t extra_bits
+    size_t extra_bits,
+    MetricType metric = METRIC_L2
 ) {
     XySplitResult res;
     res.base_code.resize(dim);
@@ -84,7 +85,7 @@ XySplitResult SplitCode(
         extra_bits,
         base_block.data(),
         extra_bits > 0 ? extra_block.data() : nullptr,
-        METRIC_L2
+        metric
     );
 
     BaseDataMap<float> base_map(base_block.data(), dim, base_bits);
@@ -218,6 +219,66 @@ TEST(XyQuantization, SignBitMatchesOneBitPathOnZeroResiduals) {
     }
 }
 
+TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kExtraBits = 3;
+
+    std::vector<float> centroid(kDim, 1.0F);
+    std::vector<float> data(kDim);
+    for (size_t dim = 0; dim < kDim; ++dim) {
+        data[dim] = dim % 2 == 0
+                        ? centroid[dim]
+                        : centroid[dim] +
+                              ((static_cast<float>(static_cast<int>(dim % 3) - 1)) * 0.7F);
+    }
+
+    for (MetricType metric : {METRIC_L2, METRIC_IP}) {
+        std::vector<int> reference_base_code(kDim);
+        float reference_base_add = 0;
+        float reference_base_rescale = 0;
+        float reference_base_error = 0;
+        quant::rabitq_impl::one_bit::one_bit_code_with_factor(
+            data.data(),
+            centroid.data(),
+            kDim,
+            reference_base_code.data(),
+            reference_base_add,
+            reference_base_rescale,
+            reference_base_error,
+            metric
+        );
+
+        std::vector<uint8_t> reference_extra_code(kDim);
+        float reference_full_add = 0;
+        float reference_full_rescale = 0;
+        float reference_full_error = 0;
+        quant::rabitq_impl::ex_bits::ex_bits_code_with_factor<float, uint8_t>(
+            data.data(),
+            centroid.data(),
+            kDim,
+            kExtraBits,
+            reference_extra_code.data(),
+            reference_full_add,
+            reference_full_rescale,
+            reference_full_error,
+            metric
+        );
+
+        XySplitResult result =
+            SplitCode(data, centroid, kDim, /*base_bits=*/1, kExtraBits, metric);
+
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            EXPECT_EQ(result.base_code[dim], reference_base_code[dim]);
+            EXPECT_EQ(result.extra_code[dim], reference_extra_code[dim]);
+        }
+        EXPECT_FLOAT_NEARLY_EQUAL(result.f_add_base, reference_base_add, 1e-4F);
+        EXPECT_FLOAT_NEARLY_EQUAL(result.f_rescale_base, reference_base_rescale, 1e-4F);
+        EXPECT_FLOAT_NEARLY_EQUAL(result.f_error_base, reference_base_error, 1e-4F);
+        EXPECT_FLOAT_NEARLY_EQUAL(result.f_add_full, reference_full_add, 1e-4F);
+        EXPECT_FLOAT_NEARLY_EQUAL(result.f_rescale_full, reference_full_rescale, 1e-4F);
+    }
+}
+
 // A point sitting exactly on its centroid is normal (an IVF cluster of one,
 // or a duplicate of the centroid). code_factors must return the same finite
 // zeros one_bit_code_with_factor and ex_bits_code_with_factor return, not a
@@ -269,6 +330,40 @@ TEST(XyQuantization, ZeroResidualGivesFiniteFactors) {
             }
         }
     }
+}
+
+TEST(XyQuantization, CollinearResidualGivesFiniteErrorFactor) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kBaseBits = 2;
+
+    std::mt19937 gen(314);
+    std::uniform_real_distribution<float> scale_dist(0.001F, 10000.0F);
+    std::uniform_int_distribution<int> code_dist(0, 3);
+
+    const float scale = scale_dist(gen);
+    std::vector<float> centroid(kDim, 0.0F);
+    std::vector<float> data(kDim);
+    for (float& value : data) {
+        value = (static_cast<float>(code_dist(gen)) - 1.5F) * scale;
+    }
+
+    std::vector<char> base_data(BaseDataMap<float>::data_bytes(kDim, kBaseBits), 0);
+    quant::quantize_xy_single(
+        data.data(),
+        centroid.data(),
+        kDim,
+        kBaseBits,
+        /*ex_bits=*/0,
+        base_data.data(),
+        /*ex_data=*/nullptr,
+        METRIC_L2
+    );
+
+    ConstBaseDataMap<float> base_map(base_data.data(), kDim, kBaseBits);
+    EXPECT_TRUE(std::isfinite(base_map.f_add()));
+    EXPECT_TRUE(std::isfinite(base_map.f_rescale()));
+    EXPECT_TRUE(std::isfinite(base_map.f_error()));
+    EXPECT_FLOAT_EQ(base_map.f_error(), 0.0F);
 }
 
 TEST(XyQuantization, SplitInnerProductRecombinesExactly) {
@@ -568,4 +663,20 @@ TEST(XyQuantization, CombinedBitsBeyondCapAborts) {
         SplitCode(data, centroid, kDim, /*base_bits=*/8, /*extra_bits=*/8);
     };
     EXPECT_DEATH(call_with_bad_bits(), "");
+}
+
+TEST(XyQuantization, SplitSingleQueryRejectsInvalidBitWidths) {
+    constexpr size_t kDim = 64;
+    std::vector<float> query(kDim, 1.0F);
+
+    for (const auto& [base_bits, ex_bits] :
+         {std::pair<size_t, size_t>{0, 0}, {9, 0}, {1, 9}, {8, 2}, {32, 0}}) {
+        EXPECT_THROW(
+            SplitSingleQuery<float>(
+                query.data(), kDim, ex_bits, quant::RabitqConfig(), METRIC_L2, base_bits
+            ),
+            std::invalid_argument
+        ) << "base_bits="
+          << base_bits << ", ex_bits=" << ex_bits;
+    }
 }

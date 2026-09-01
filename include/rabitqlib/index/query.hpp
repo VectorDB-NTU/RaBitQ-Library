@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <numeric>
+#include <stdexcept>
 #include <utility>
 
 #include "rabitqlib/defines.hpp"
@@ -134,6 +135,13 @@ class SplitSingleQuery {
         size_t base_bits = 1
     )
         : rotated_query_(rotated_query), QueryBin_(padded_dim * kNumBits / 64, 0) {
+        if (base_bits < 1 || base_bits > 8 || ex_bits > 8 || base_bits + ex_bits > 9) {
+            throw std::invalid_argument(
+                "SplitSingleQuery requires base_bits in [1, 8], ex_bits in [0, 8], "
+                "and base_bits + ex_bits <= 9"
+            );
+        }
+
         float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
         float c_base = -static_cast<float>((1U << base_bits) - 1) / 2.F;
         float c_b = -static_cast<float>((1U << (base_bits + ex_bits)) - 1) / 2.F;

@@ -2,6 +2,7 @@
 
 #include <omp.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -486,7 +487,7 @@ inline void ex_bits_code_with_factor(
     RowMajorArray<int> total_code =
         RowMajorArrayMap<TP>(ex_code, 1, dim).template cast<int>();
     for (size_t i = 0; i < dim; ++i) {
-        total_code(0, static_cast<long>(i)) += static_cast<int>(residual_arr.data()[i] >= 0)
+        total_code(0, static_cast<long>(i)) += static_cast<int>(residual_arr.data()[i] > 0)
                                                << ex_bits;
     }
 
@@ -744,18 +745,16 @@ inline void code_factors(
     T ip_resi_xucb = dot_product<T>(residual, xu_cb.data(), dim);
     T ip_cent_xucb = dot_product<T>(centroid, xu_cb.data(), dim);
 
-    // corner case
-    if (ip_resi_xucb == 0) {
-        ip_resi_xucb = std::numeric_limits<T>::infinity();
-    }
+    // A nonzero residual and its quantized code have a strictly positive inner product.
+    assert(ip_resi_xucb > 0);
 
-    T tmp_error =
-        l2_norm * kConstEpsilon *
-        std::sqrt(
-            (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
-             1) /
-            (dim - 1)
-        );
+    // Cauchy-Schwarz guarantees this value is nonnegative. Clamp small negative
+    // round-off errors for collinear residual/code vectors before taking the square root.
+    const T normalized_error =
+        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1
+        ) /
+        (dim - 1);
+    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
 
     if (metric_type == METRIC_L2) {
         f_add = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
