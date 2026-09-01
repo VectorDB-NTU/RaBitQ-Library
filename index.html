@@ -322,6 +322,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#accuracy-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accuracy at a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#start-with-python" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -921,6 +932,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#accuracy-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Accuracy at a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#start-with-python" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1029,6 +1051,11 @@ indexes backed by optimized AVX2 and AVX-512 kernels.</p>
   </div>
 </div>
 
+<h2 id="accuracy-at-a-glance">Accuracy at a glance<a class="headerlink" href="#accuracy-at-a-glance" title="Permanent link">&para;</a></h2>
+<p><img alt="RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST" src="assets/img/acc_bench.png" /></p>
+<p><em>Average and maximum relative estimation error across six datasets; lower is
+better. Results from the
+<a href="https://doi.org/10.1145/3725413">SIGMOD camera-ready paper</a>.</em></p>
 <h2 id="start-with-python">Start with Python<a class="headerlink" href="#start-with-python" title="Permanent link">&para;</a></h2>
 <p>Install the latest release from PyPI:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>rabitqlib
@@ -1112,7 +1139,7 @@ degree, and search parameters.</p>
 <p>The library supports Euclidean distance and inner product. Cosine similarity
 can be implemented by normalizing vectors and using inner product.
 It implements the <a href="https://arxiv.org/abs/2405.12497">1-bit RaBitQ</a> and
-<a href="https://arxiv.org/abs/2409.09913">multi-bit RaBitQ</a> research from the
+<a href="https://doi.org/10.1145/3725413">multi-bit RaBitQ</a> research from the
 <a href="https://vectordb-ntu.github.io/">VectorDB Group</a> at Nanyang Technological
 University.</p>
 <h2 id="used-across-the-vector-search-ecosystem">Used across the vector-search ecosystem<a class="headerlink" href="#used-across-the-vector-search-ecosystem" title="Permanent link">&para;</a></h2>
@@ -1121,6 +1148,7 @@ University.</p>
 <a href="https://github.com/facebookresearch/faiss">Faiss</a>,
 <a href="https://github.com/antgroup/vsag">VSAG</a>,
 <a href="https://github.com/tensorchord/VectorChord">VectorChord</a>,
+<a href="https://www.volcengine.com/docs/6465/1553583">Volcengine OpenSearch</a>,
 <a href="https://github.com/cockroachdb/cockroach">CockroachDB</a>,
 <a href="https://github.com/elastic/elasticsearch">Elasticsearch</a>,
 <a href="https://github.com/apache/lucene">Lucene</a>,
@@ -1132,7 +1160,8 @@ University.</p>
 <p>Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, and Raymond
 Chi-Wing Wong. “Practical and Asymptotically Optimal Quantization of
 High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
-Search.” SIGMOD 2025. <a href="https://arxiv.org/abs/2409.09913">arXiv:2409.09913</a>.</p>
+Search.” <em>Proceedings of the ACM on Management of Data</em> 3, 3, Article 202
+(June 2025), 26 pages. <a href="https://doi.org/10.1145/3725413">https://doi.org/10.1145/3725413</a>.</p>
 </blockquote>
 
 
