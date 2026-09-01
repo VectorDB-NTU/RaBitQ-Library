@@ -56,13 +56,13 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
 
 *Average and maximum relative estimation error across six datasets; lower is
 better. Results from the
-[multi-bit RaBitQ paper](https://arxiv.org/abs/2409.09913).*
+[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
 
 ## Why RaBitQ?
 
 | | |
 | --- | --- |
-| **Compact by design** | Choose [1-bit](https://arxiv.org/abs/2405.12497) or [multi-bit](https://arxiv.org/abs/2409.09913) codes to match your memory and accuracy target. |
+| **Compact by design** | Choose [1-bit](https://arxiv.org/abs/2405.12497) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
 | **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
 | **Fast on x86-64** | Dedicated AVX2 and AVX-512 kernels are selected through runtime CPU dispatch. |
 | **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
@@ -209,7 +209,8 @@ If RaBitQ helps your research or system, please cite:
 > Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, and Raymond
 > Chi-Wing Wong. “Practical and Asymptotically Optimal Quantization of
 > High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
-> Search.” SIGMOD 2025. [arXiv:2409.09913](https://arxiv.org/abs/2409.09913).
+> Search.” *Proceedings of the ACM on Management of Data* 3, 3, Article 202
+> (June 2025), 26 pages. [https://doi.org/10.1145/3725413](https://doi.org/10.1145/3725413).
 
 ## Contributing
 

@@ -33,6 +33,14 @@ indexes backed by optimized AVX2 and AVX-512 kernels.
   </div>
 </div>
 
+## Accuracy at a glance
+
+![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](assets/img/acc_bench.png)
+
+*Average and maximum relative estimation error across six datasets; lower is
+better. Results from the
+[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
+
 ## Start with Python
 
 Install the latest release from PyPI:
@@ -103,7 +111,7 @@ degree, and search parameters.
 The library supports Euclidean distance and inner product. Cosine similarity
 can be implemented by normalizing vectors and using inner product.
 It implements the [1-bit RaBitQ](https://arxiv.org/abs/2405.12497) and
-[multi-bit RaBitQ](https://arxiv.org/abs/2409.09913) research from the
+[multi-bit RaBitQ](https://doi.org/10.1145/3725413) research from the
 [VectorDB Group](https://vectordb-ntu.github.io/) at Nanyang Technological
 University.
 
@@ -114,6 +122,7 @@ RaBitQ has been adopted by projects including
 [Faiss](https://github.com/facebookresearch/faiss),
 [VSAG](https://github.com/antgroup/vsag),
 [VectorChord](https://github.com/tensorchord/VectorChord),
+[Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583),
 [CockroachDB](https://github.com/cockroachdb/cockroach),
 [Elasticsearch](https://github.com/elastic/elasticsearch),
 [Lucene](https://github.com/apache/lucene),
@@ -127,4 +136,5 @@ If RaBitQ helps your research or system, please cite:
 > Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, and Raymond
 > Chi-Wing Wong. “Practical and Asymptotically Optimal Quantization of
 > High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
-> Search.” SIGMOD 2025. [arXiv:2409.09913](https://arxiv.org/abs/2409.09913).
+> Search.” *Proceedings of the ACM on Management of Data* 3, 3, Article 202
+> (June 2025), 26 pages. [https://doi.org/10.1145/3725413](https://doi.org/10.1145/3725413).
