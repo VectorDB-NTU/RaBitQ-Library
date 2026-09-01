@@ -5,7 +5,13 @@ if(PYTHON_EXECUTABLE AND NOT Python_EXECUTABLE)
 endif()
 
 # 2. Locate Python, NumPy, and pybind11 from the active Python environment.
-find_package(Python REQUIRED COMPONENTS Interpreter Development NumPy)
+# CMake 3.18+ can request only the module-development files. This avoids
+# requiring libpython for embedding, which manylinux images do not provide.
+if(CMAKE_VERSION VERSION_LESS 3.18)
+    find_package(Python REQUIRED COMPONENTS Interpreter Development NumPy)
+else()
+    find_package(Python REQUIRED COMPONENTS Interpreter Development.Module NumPy)
+endif()
 find_package(pybind11 CONFIG REQUIRED)
 
 # 3. Define the shared pybind11 module.
