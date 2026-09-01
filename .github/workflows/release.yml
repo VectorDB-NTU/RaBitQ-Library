@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   linux-wheels:
@@ -54,8 +54,45 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  pypi-publish:
+    name: Publish wheels to PyPI
+    if: github.event_name == 'push'
+    needs: linux-wheels
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rabitqlib/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64-wheels
+          path: wheelhouse
+
+      - name: Publish wheels
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse
+
+  github-release:
+    name: Create GitHub release
+    if: github.event_name == 'push'
+    needs: [linux-wheels, pypi-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x86_64-wheels
+          path: wheelhouse
+
       - name: Create GitHub release
-        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
