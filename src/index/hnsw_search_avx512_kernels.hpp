@@ -14,7 +14,7 @@ static inline float hnsw_mask_ip_x0_q_avx512(
     const float* query, const uint64_t* data, size_t padded_dim
 ) {
     const size_t num_blk = padded_dim / 64;
-    const uint64_t* it_data = data;
+    const uint8_t* it_data = reinterpret_cast<const uint8_t*>(data);
     const float* it_query = query;
 
     //    __m512 sum0 = _mm512_setzero_ps();
@@ -24,7 +24,7 @@ static inline float hnsw_mask_ip_x0_q_avx512(
 
     __m512 sum = _mm512_setzero_ps();
     for (size_t i = 0; i < num_blk; ++i) {
-        uint64_t bits = rabitqlib::reverse_bits_u64(*it_data);
+        uint64_t bits = rabitqlib::reverse_bits_u64(rabitqlib::load_unaligned_u64(it_data));
 
         auto mask0 = static_cast<__mmask16>(bits);
         auto mask1 = static_cast<__mmask16>(bits >> 16);
@@ -43,7 +43,7 @@ static inline float hnsw_mask_ip_x0_q_avx512(
 
         //         _mm_prefetch(reinterpret_cast<const char*>(it_query + 128), _MM_HINT_T1);
 
-        ++it_data;
+        it_data += sizeof(uint64_t);
         it_query += 64;
     }
 

@@ -13,6 +13,54 @@
 
 using namespace rabitqlib;
 
+TEST(PackBinary, SupportsUnalignedOutput) {
+    constexpr size_t dim = 128;
+    std::array<int, dim> binary_code{};
+    for (size_t i = 0; i < dim; ++i) {
+        binary_code[i] = (i % 3) == 0;
+    }
+
+    alignas(uint64_t) std::array<uint8_t, (2 * sizeof(uint64_t)) + 1> storage{};
+    auto* output = reinterpret_cast<uint64_t*>(storage.data() + 1);
+    ASSERT_NE(reinterpret_cast<uintptr_t>(output) % alignof(uint64_t), 0U);
+    pack_binary(binary_code.data(), output, dim);
+
+    const std::array<uint64_t, 2> packed{
+        load_unaligned_u64(storage.data() + 1),
+        load_unaligned_u64(storage.data() + 1 + sizeof(uint64_t)),
+    };
+    for (size_t i = 0; i < dim; ++i) {
+        const size_t word = i / 64;
+        const auto bit = static_cast<int>((packed[word] >> (63 - (i % 64))) & 1U);
+        EXPECT_EQ(bit, binary_code[i]) << "bit " << i;
+    }
+}
+
+TEST(MaskIpX0Q, SupportsUnalignedCodes) {
+    constexpr size_t dim = 128;
+    std::array<int, dim> binary_code{};
+    std::array<float, dim> query{};
+    float expected = 0;
+    for (size_t i = 0; i < dim; ++i) {
+        binary_code[i] = (i % 3) == 0;
+        query[i] = static_cast<float>(i + 1);
+        expected += binary_code[i] != 0 ? query[i] : 0;
+    }
+
+    alignas(uint64_t) std::array<uint8_t, (2 * sizeof(uint64_t)) + 1> storage{};
+    auto* codes = reinterpret_cast<uint64_t*>(storage.data() + 1);
+    ASSERT_NE(reinterpret_cast<uintptr_t>(codes) % alignof(uint64_t), 0U);
+    pack_binary(binary_code.data(), codes, dim);
+
+    if (cpu::has_avx2()) {
+        EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx2(query.data(), codes, dim), expected);
+    }
+    if (cpu::has_avx512_core()) {
+        EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx512(query.data(), codes, dim), expected);
+    }
+    EXPECT_FLOAT_EQ(mask_ip_x0_q(query.data(), codes, dim), expected);
+}
+
 TEST(Select_IP_Func, returns_stable_function_pointer) {
     auto ip_func = select_excode_ipfunc(0);
     ASSERT_NE(ip_func, nullptr);
