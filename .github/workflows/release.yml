@@ -44,7 +44,16 @@ jobs:
               )
           PY
 
-      - name: Build and test wheels
+      - name: Build and test PR wheel
+        if: github.event_name == 'pull_request'
+        uses: pypa/cibuildwheel@v4.2.0
+        env:
+          CIBW_BUILD: cp311-manylinux_x86_64
+        with:
+          output-dir: wheelhouse
+
+      - name: Build and test release wheels
+        if: github.event_name != 'pull_request'
         uses: pypa/cibuildwheel@v4.2.0
         with:
           output-dir: wheelhouse
