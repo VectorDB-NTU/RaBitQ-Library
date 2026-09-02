@@ -73,7 +73,7 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
     </td>
   </tr>
   <tr>
-    <td align="center" colspan="5">
+    <td align="center" width="20%">
       <a href="https://github.com/alibaba/zvec"><img src="https://github.com/alibaba.png?size=96" width="64" height="64" alt="Zvec logo"><br><strong>Zvec</strong></a>
     </td>
   </tr>
