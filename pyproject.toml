@@ -19,6 +19,13 @@ classifiers = [
 ]
 dependencies = ["numpy"]
 
+[project.urls]
+Homepage = "https://vectordb-ntu.github.io/RaBitQ-Library/"
+Documentation = "https://vectordb-ntu.github.io/RaBitQ-Library/"
+Repository = "https://github.com/VectorDB-NTU/RaBitQ-Library"
+Issues = "https://github.com/VectorDB-NTU/RaBitQ-Library/issues"
+Paper = "https://doi.org/10.1145/3725413"
+
 [project.optional-dependencies]
 test = ["pytest>=7", "numpy"]
 
