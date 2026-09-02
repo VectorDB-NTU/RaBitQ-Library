@@ -434,10 +434,10 @@ inline T ex_bits_code(
         ipnorm_inv = quantize_ex(abs_res.data(), ex_code, dim, ex_bits);
     }
 
-    // revert codes for negative dims
+    // Revert codes for negative or zero dims
     int32_t mask = (1 << ex_bits) - 1;
     for (size_t j = 0; j < dim; ++j) {
-        if (res_arr.data()[j] < 0) {
+        if (res_arr.data()[j] <= 0) {
             TP tmp = ex_code[j];
             ex_code[j] = (~tmp) & mask;
         }
