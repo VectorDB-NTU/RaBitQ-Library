@@ -88,6 +88,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download wheel artifacts
         uses: actions/download-artifact@v4
         with:
