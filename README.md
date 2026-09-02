@@ -10,8 +10,8 @@
 </p>
 
 <p>
-  <a href="https://pypi.org/project/rabitqlib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/rabitqlib.svg"></a>
-  <a href="https://pypi.org/project/rabitqlib/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/rabitqlib.svg"></a>
+  <a href="https://pypi.org/project/rabitqlib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/rabitqlib.svg?cacheSeconds=300"></a>
+  <a href="https://pypi.org/project/rabitqlib/"><img alt="Python versions" src="https://img.shields.io/badge/python-3.11--3.14-3776AB.svg?logo=python&amp;logoColor=white"></a>
   <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/test.yaml"><img alt="C++ tests" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/test.yaml/badge.svg"></a>
   <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml"><img alt="Python tests" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/python.yml/badge.svg"></a>
   <a href="https://vectordb-ntu.github.io/RaBitQ-Library/"><img alt="Documentation" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/docs.yml/badge.svg"></a>

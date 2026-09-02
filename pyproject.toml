@@ -4,10 +4,19 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "rabitqlib"
-version = "0.2.0"
+version = "0.2.1"
 description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
 readme = "README.md"
 requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
 dependencies = ["numpy"]
 
 [project.optional-dependencies]
