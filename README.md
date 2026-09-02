@@ -41,6 +41,7 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
 
 [Milvus](https://github.com/milvus-io/milvus) ·
 [Faiss](https://github.com/facebookresearch/faiss) ·
+[NVIDIA cuVS](https://github.com/NVIDIA/cuvs) ·
 [VSAG](https://github.com/antgroup/vsag) ·
 [VectorChord](https://github.com/tensorchord/VectorChord) ·
 [Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) ·
