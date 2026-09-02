@@ -5,6 +5,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -15,6 +16,13 @@
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib {
+
+inline uint64_t load_unaligned_u64(const void* data) {
+    uint64_t value = 0;
+    std::memcpy(&value, data, sizeof(value));
+    return value;
+}
+
 namespace scalar_impl {
 template <typename T>
 void scalar_quantize_normal(
@@ -124,14 +132,15 @@ inline void pack_binary(
     const int* __restrict__ binary_code, T* __restrict__ compact_code, size_t length
 ) {
     constexpr size_t kTypeBits = sizeof(T) * 8;
+    auto* output = reinterpret_cast<uint8_t*>(compact_code);
 
     for (size_t i = 0; i < length; i += kTypeBits) {
         T cur = 0;
         for (size_t j = 0; j < kTypeBits; ++j) {
             cur |= (static_cast<T>(binary_code[i + j]) << (kTypeBits - 1 - j));
         }
-        *compact_code = cur;
-        ++compact_code;
+        std::memcpy(output, &cur, sizeof(cur));
+        output += sizeof(cur);
     }
 }
 

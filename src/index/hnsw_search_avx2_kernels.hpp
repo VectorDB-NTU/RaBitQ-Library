@@ -68,14 +68,14 @@ static inline float hnsw_mask_ip_x0_q_avx2(
     const float* query, const uint64_t* data, size_t padded_dim
 ) {
     const size_t num_blk = padded_dim / 64;
-    const uint64_t* it_data = data;
+    const uint8_t* it_data = reinterpret_cast<const uint8_t*>(data);
     const float* it_query = query;
 
     __m256 sum = _mm256_setzero_ps();
     __m256i bit_checker = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
 
     for (size_t i = 0; i < num_blk; ++i) {
-        uint64_t bits = rabitqlib::reverse_bits_u64(*it_data);
+        uint64_t bits = rabitqlib::reverse_bits_u64(rabitqlib::load_unaligned_u64(it_data));
 
         // 64 bits / 8 floats = 8 iterations
         for (int j = 0; j < 8; ++j) {
@@ -91,7 +91,7 @@ static inline float hnsw_mask_ip_x0_q_avx2(
 
             it_query += 8;
         }
-        ++it_data;
+        it_data += sizeof(uint64_t);
     }
 
     alignas(32) float lanes[8];
