@@ -7,7 +7,7 @@ name = "rabitqlib"
 version = "0.2.0"
 description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = ["numpy"]
 
 [project.optional-dependencies]
@@ -24,7 +24,7 @@ cmake.args = [
 ]
 
 [tool.cibuildwheel]
-build = "cp39-manylinux_x86_64 cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
 build-verbosity = 1
 environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" }
 test-requires = "pytest"
@@ -35,7 +35,7 @@ testpaths = ["tests/python"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]

@@ -7,7 +7,7 @@ a C++17 API for both indexes and low-level quantization.
 
 - An x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
-- Python 3.9 or newer for the Python package
+- Python 3.11 or newer for the Python package
 - A C++17 compiler with OpenMP support
 - CMake 3.15 or newer
 

@@ -34,7 +34,7 @@
 pip install rabitqlib
 ```
 
-Prebuilt wheels support Linux x86-64 and CPython 3.9–3.14. AVX2 + FMA is the
+Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14. AVX2 + FMA is the
 portable CPU baseline; supported AVX-512 kernels are selected at runtime.
 
 ## Adopted across the vector-search ecosystem
