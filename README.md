@@ -37,17 +37,48 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
 
 ## Adopted across the vector-search ecosystem
 
-[Milvus](https://github.com/milvus-io/milvus) ·
-[Faiss](https://github.com/facebookresearch/faiss) ·
-[NVIDIA cuVS](https://github.com/NVIDIA/cuvs) ·
-[VSAG](https://github.com/antgroup/vsag) ·
-[VectorChord](https://github.com/tensorchord/VectorChord) ·
-[Volcengine OpenSearch](https://www.volcengine.com/docs/6465/1553583) ·
-[CockroachDB](https://github.com/cockroachdb/cockroach) ·
-[Elasticsearch](https://github.com/elastic/elasticsearch) ·
-[Lucene](https://github.com/apache/lucene) ·
-[turbopuffer](https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ) ·
-[Zvec](https://github.com/alibaba/zvec)
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <a href="https://github.com/milvus-io/milvus"><img src="https://github.com/milvus-io.png?size=96" width="64" height="64" alt="Milvus logo"><br><strong>Milvus</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://github.com/facebookresearch/faiss"><img src="https://github.com/facebookresearch.png?size=96" width="64" height="64" alt="Faiss logo"><br><strong>Faiss</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://github.com/NVIDIA/cuvs"><img src="https://github.com/NVIDIA.png?size=96" width="64" height="64" alt="NVIDIA cuVS logo"><br><strong>NVIDIA cuVS</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://github.com/antgroup/vsag"><img src="https://github.com/antgroup.png?size=96" width="64" height="64" alt="VSAG logo"><br><strong>VSAG</strong></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">
+      <a href="https://github.com/tensorchord/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="64" height="64" alt="VectorChord logo"><br><strong>VectorChord</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://www.volcengine.com/docs/6465/1553583"><img src="https://github.com/volcengine.png?size=96" width="64" height="64" alt="Volcengine OpenSearch logo"><br><strong>Volcengine OpenSearch</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://github.com/cockroachdb/cockroach"><img src="https://github.com/cockroachdb.png?size=96" width="64" height="64" alt="CockroachDB logo"><br><strong>CockroachDB</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://github.com/elastic/elasticsearch"><img src="https://github.com/elastic.png?size=96" width="64" height="64" alt="Elasticsearch logo"><br><strong>Elasticsearch</strong></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="25%">
+      <a href="https://github.com/apache/lucene"><img src="https://github.com/apache.png?size=96" width="64" height="64" alt="Apache Lucene logo"><br><strong>Apache Lucene</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ"><img src="https://github.com/turbopuffer.png?size=96" width="64" height="64" alt="turbopuffer logo"><br><strong>turbopuffer</strong></a>
+    </td>
+    <td align="center" width="25%">
+      <a href="https://github.com/alibaba/zvec"><img src="https://github.com/alibaba.png?size=96" width="64" height="64" alt="Zvec logo"><br><strong>Zvec</strong></a>
+    </td>
+    <td align="center" width="25%"></td>
+  </tr>
+</table>
 
 ## Accuracy at a glance
 
