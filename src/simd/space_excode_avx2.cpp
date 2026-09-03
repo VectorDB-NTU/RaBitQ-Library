@@ -1,10 +1,9 @@
-#include <immintrin.h>
-
 #include <array>
 #include <cstdint>
 #include <cstring>
 
 #include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/simd/x86_compat.hpp"
 
 namespace rabitqlib::simd::excode_ipimpl {
 

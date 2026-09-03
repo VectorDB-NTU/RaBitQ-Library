@@ -70,7 +70,7 @@ class QGBuilder {
               VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
           )
         , degrees_(qg_.num_vertices(), degree_bound_) {
-        omp_set_num_threads(static_cast<int>(num_threads_));
+        parallel::set_thread_count(static_cast<int>(num_threads_));
 
         std::vector<float> centroid =
             compute_centroid(data, num_nodes_, dim_, num_threads_);
@@ -233,7 +233,7 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
 #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < num_nodes_; ++i) {
         PID cur_id = i;
-        auto tid = omp_get_thread_num();
+        auto tid = parallel::thread_index();
         CandidateList candidates;
         VisitedSet& vis = visited_list_[tid];
         candidates.reserve(2 * kMaxCandidatePoolSize);

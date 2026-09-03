@@ -1,7 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -22,6 +20,7 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/parallel.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <immintrin.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+
+#include "rabitqlib/simd/x86_compat.hpp"
 
 namespace rabitqlib::simd::detail {
 

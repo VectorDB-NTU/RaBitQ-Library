@@ -1,7 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -13,6 +11,7 @@
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/pack_excode.hpp"
+#include "rabitqlib/utils/parallel.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::quant::rabitq_impl {
@@ -291,6 +290,9 @@ inline double best_rescale_factor(const T* o_abs, size_t dim, size_t ex_bits) {
     constexpr double kEps = 1e-5;
     constexpr int kNEnum = 10;
     double max_o = *std::max_element(o_abs, o_abs + dim);
+    if (max_o == 0) {
+        return 0;
+    }
 
     double t_end = static_cast<double>(((1 << ex_bits) - 1) + kNEnum) / max_o;
     double t_start = t_end * kTightStart[ex_bits];
@@ -424,7 +426,11 @@ inline T ex_bits_code(
     ConstRowMajorArrayMap<T> res_arr(residual, 1, dim);
 
     // get normalized abs residual for plus code
-    RowMajorArray<T> abs_res = res_arr.rowwise().normalized().abs();
+    RowMajorArray<T> abs_res = res_arr.abs();
+    const T norm = abs_res.matrix().norm();
+    if (norm > 0) {
+        abs_res /= norm;
+    }
 
     // quantize data
     T ipnorm_inv = 1;

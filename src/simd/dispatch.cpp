@@ -14,11 +14,13 @@
 
 namespace rabitqlib::simd {
 
+#if !defined(__aarch64__)
 [[noreturn]] static void missing_feature(const char* feature_name) {
     throw std::runtime_error(
         std::string(feature_name) + " requires AVX2/FMA or AVX512 support"
     );
 }
+#endif
 
 // With zero extra bits there is no extra code to contribute to the inner
 // product, so the ex_bits == 0 slot must be a constant-zero stub rather than
@@ -29,6 +31,7 @@ static float ip_fxu0(
     return 0.0F;
 }
 
+#if !defined(__aarch64__)
 static float missing_excode_ip(const float*, const uint8_t*, size_t) {
     missing_feature("excode ip functions");
 }
@@ -82,8 +85,22 @@ static float missing_warmup_ip_x0_q_512(
 ) {
     missing_feature("warmup_ip_x0_q_512");
 }
+#endif
 
 ExcodeIpTable resolve_excode_ip_table() {
+#if defined(__aarch64__)
+    return {
+        ip_fxu0,
+        excode_ipimpl::ip16_fxu1_avx2,
+        excode_ipimpl::ip64_fxu2_avx2,
+        excode_ipimpl::ip64_fxu3_avx2,
+        excode_ipimpl::ip16_fxu4_avx2,
+        excode_ipimpl::ip64_fxu5_avx2,
+        excode_ipimpl::ip64_fxu6_avx2,
+        excode_ipimpl::ip64_fxu7_avx2,
+        excode_ipimpl::ip16_fxu8_avx2,
+    };
+#else
     if (cpu::has_avx512_core()) {
         return {
             ip_fxu0,
@@ -121,10 +138,14 @@ ExcodeIpTable resolve_excode_ip_table() {
             missing_excode_ip,
         };
     }
+#endif
 }
 
 using FlipSignFn = void (*)(const uint8_t*, float*, size_t);
 const FlipSignFn kFlipSignFn = [] {
+#if defined(__aarch64__)
+    return flip_sign_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return flip_sign_avx512;
     } else if (cpu::has_avx2()) {
@@ -132,10 +153,14 @@ const FlipSignFn kFlipSignFn = [] {
     } else {
         return missing_flip_sign;
     }
+#endif
 }();
 
 using KacsWalkFn = void (*)(float*, size_t);
 const KacsWalkFn kKacsWalkFn = [] {
+#if defined(__aarch64__)
+    return kacs_walk_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return kacs_walk_avx512;
     } else if (cpu::has_avx2()) {
@@ -143,10 +168,14 @@ const KacsWalkFn kKacsWalkFn = [] {
     } else {
         return missing_kacs_walk;
     }
+#endif
 }();
 
 using ScalarQuantizeUint8Fn = void (*)(uint8_t*, const float*, size_t, float, float);
 const ScalarQuantizeUint8Fn kScalarQuantizeUint8Fn = [] {
+#if defined(__aarch64__)
+    return scalar_quantize_uint8_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return scalar_quantize_uint8_avx512;
     } else if (cpu::has_avx2()) {
@@ -154,10 +183,14 @@ const ScalarQuantizeUint8Fn kScalarQuantizeUint8Fn = [] {
     } else {
         return missing_scalar_quantize_uint8;
     }
+#endif
 }();
 
 using ScalarQuantizeUint16Fn = void (*)(uint16_t*, const float*, size_t, float, float);
 const ScalarQuantizeUint16Fn kScalarQuantizeUint16Fn = [] {
+#if defined(__aarch64__)
+    return scalar_quantize_uint16_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return scalar_quantize_uint16_avx512;
     } else if (cpu::has_avx2()) {
@@ -165,10 +198,19 @@ const ScalarQuantizeUint16Fn kScalarQuantizeUint16Fn = [] {
     } else {
         return missing_scalar_quantize_uint16;
     }
+#endif
 }();
 
 using PackExcodeFn = void (*)(const uint8_t*, uint8_t*, size_t);
 
+#if defined(__aarch64__)
+const PackExcodeFn kPacking2BitExcodeFn = packing_2bit_excode_avx2;
+const PackExcodeFn kPacking3BitExcodeFn = packing_3bit_excode_avx2;
+const PackExcodeFn kPacking4BitExcodeFn = packing_4bit_excode_avx2;
+const PackExcodeFn kPacking5BitExcodeFn = packing_5bit_excode_avx2;
+const PackExcodeFn kPacking6BitExcodeFn = packing_6bit_excode_avx2;
+const PackExcodeFn kPacking7BitExcodeFn = packing_7bit_excode_avx2;
+#else
 static PackExcodeFn resolve_pack_excode_fn(PackExcodeFn avx512_fn, PackExcodeFn avx2_fn) {
     if (cpu::has_avx512_core()) {
         return avx512_fn;
@@ -191,6 +233,7 @@ const PackExcodeFn kPacking6BitExcodeFn =
     resolve_pack_excode_fn(packing_6bit_excode_avx512, packing_6bit_excode_avx2);
 const PackExcodeFn kPacking7BitExcodeFn =
     resolve_pack_excode_fn(packing_7bit_excode_avx512, packing_7bit_excode_avx2);
+#endif
 
 void flip_sign(const uint8_t* flip, float* data, size_t dim) {
     kFlipSignFn(flip, data, dim);
@@ -250,6 +293,9 @@ const ex_ipfunc kIp64Fxu7AvxFn = kExcodeIpTable[7];
 
 using NewTransposeBinFn = void (*)(const uint16_t*, uint64_t*, size_t, size_t);
 const NewTransposeBinFn kNewTransposeBinFn = [] {
+#if defined(__aarch64__)
+    return simd::new_transpose_bin_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return simd::new_transpose_bin_avx512;
     } else if (cpu::has_avx2()) {
@@ -257,10 +303,14 @@ const NewTransposeBinFn kNewTransposeBinFn = [] {
     } else {
         return simd::missing_new_transpose_bin;
     }
+#endif
 }();
 
 using NewTransposeBin512Fn = void (*)(const uint8_t*, uint64_t*, size_t, size_t);
 const NewTransposeBin512Fn kNewTransposeBin512Fn = [] {
+#if defined(__aarch64__)
+    return simd::new_transpose_bin_512_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return simd::new_transpose_bin_512_avx512;
     } else if (cpu::has_avx2()) {
@@ -268,10 +318,14 @@ const NewTransposeBin512Fn kNewTransposeBin512Fn = [] {
     } else {
         return simd::missing_new_transpose_bin_512;
     }
+#endif
 }();
 
 using MaskIpX0QFn = float (*)(const float*, const uint64_t*, size_t);
 const MaskIpX0QFn kMaskIpX0QFn = [] {
+#if defined(__aarch64__)
+    return simd::mask_ip_x0_q_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return simd::mask_ip_x0_q_avx512;
     } else if (cpu::has_avx2()) {
@@ -279,6 +333,7 @@ const MaskIpX0QFn kMaskIpX0QFn = [] {
     } else {
         return simd::missing_mask_ip_x0_q;
     }
+#endif
 }();
 
 ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
@@ -351,6 +406,9 @@ namespace rabitqlib::fastscan {
 
 using AccumulateFn = void (*)(const uint8_t*, const uint8_t*, uint16_t*, size_t);
 const AccumulateFn kAccumulateFn = [] {
+#if defined(__aarch64__)
+    return simd::accumulate_neon;
+#else
     if (cpu::has_avx512_core()) {
         return simd::accumulate_avx512;
     } else if (cpu::has_avx2()) {
@@ -358,10 +416,14 @@ const AccumulateFn kAccumulateFn = [] {
     } else {
         return rabitqlib::simd::missing_fastscan_accumulate;
     }
+#endif
 }();
 
 using TransferLutHaccFn = void (*)(const uint16_t*, size_t, uint8_t*);
 const TransferLutHaccFn kTransferLutHaccFn = [] {
+#if defined(__aarch64__)
+    return simd::transfer_lut_hacc_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return simd::transfer_lut_hacc_avx512;
     } else if (cpu::has_avx2()) {
@@ -369,10 +431,14 @@ const TransferLutHaccFn kTransferLutHaccFn = [] {
     } else {
         return rabitqlib::simd::missing_fastscan_transfer_lut_hacc;
     }
+#endif
 }();
 
 using AccumulateHaccFn = void (*)(const uint8_t*, const uint8_t*, int32_t*, size_t);
 const AccumulateHaccFn kAccumulateHaccFn = [] {
+#if defined(__aarch64__)
+    return simd::accumulate_hacc_avx2;
+#else
     if (cpu::has_avx512_core()) {
         return simd::accumulate_hacc_avx512;
     } else if (cpu::has_avx2()) {
@@ -380,6 +446,7 @@ const AccumulateHaccFn kAccumulateHaccFn = [] {
     } else {
         return rabitqlib::simd::missing_fastscan_accumulate_hacc;
     }
+#endif
 }();
 
 void accumulate(
@@ -411,6 +478,9 @@ namespace rabitqlib {
 using WarmupIpX0Q512Fn =
     float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t);
 const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
+#if defined(__aarch64__)
+    return rabitqlib::simd::warmup_ip_x0_q_512_avx2;
+#else
     if (rabitqlib::cpu::has_avx512_popcnt()) {
         return rabitqlib::simd::warmup_ip_x0_q_512_avx512;
     } else if (rabitqlib::cpu::has_avx2()) {
@@ -418,6 +488,7 @@ const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
     } else {
         return rabitqlib::simd::missing_warmup_ip_x0_q_512;
     }
+#endif
 }();
 
 float warmup_ip_x0_q_512(

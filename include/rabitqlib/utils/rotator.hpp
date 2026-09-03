@@ -12,7 +12,11 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"
+#if defined(__aarch64__)
+#include "rabitqlib/utils/fht_portable.hpp"
+#else
 #include "rabitqlib/utils/fht_avx.hpp"
+#endif
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 

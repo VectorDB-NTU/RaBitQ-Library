@@ -1,12 +1,11 @@
 #pragma once
 
-#include <immintrin.h>
-
 #include <cstddef>
 #include <cstdint>
 
 #include "rabitqlib/index/query.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/simd/x86_compat.hpp"
 
 namespace rabitqlib::hnsw::detail {
 

@@ -48,17 +48,17 @@ class BitPackUnpackTest : public ::testing::Test {
     }
 
     // 4. Helper for Ground Truth Calculation
-    float CalculateExpected() const {
-        float expected_result = 0.0f;
+    double CalculateExpected() const {
+        double expected_result = 0.0;
         for (size_t i = 0; i < dim; ++i) {
-            expected_result += query[i] * static_cast<float>(code[i]);
+            expected_result += static_cast<double>(query[i]) * code[i];
         }
         return expected_result;
     }
 
     void ExpectIpNear(float result) const {
-        float expected = CalculateExpected();
-        ASSERT_NEAR(expected, result, std::max(0.1f, std::abs(expected) * 1e-6f));
+        double expected = CalculateExpected();
+        ASSERT_NEAR(expected, result, std::max(0.1, std::abs(expected) * 1e-6));
     }
 };
 

@@ -1,9 +1,8 @@
-#include <immintrin.h>
-
 #include <cstring>
 #include <limits>
 
 #include "rabitqlib/simd/rotator_dispatch.hpp"
+#include "rabitqlib/simd/x86_compat.hpp"
 
 namespace rabitqlib::simd {
 
