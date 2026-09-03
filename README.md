@@ -35,7 +35,7 @@ pip install rabitqlib
 Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14. AVX2 + FMA is the
 portable CPU baseline; supported AVX-512 kernels are selected at runtime.
 
-## Adopted across the vector-search ecosystem
+## RaBitQ across the vector-search ecosystem
 
 <table>
   <tr>
@@ -49,13 +49,16 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
       <a href="https://github.com/NVIDIA/cuvs"><img src="https://github.com/NVIDIA.png?size=96" width="64" height="64" alt="NVIDIA cuVS logo"><br><strong>NVIDIA cuVS</strong></a>
     </td>
     <td align="center" width="20%">
-      <a href="https://github.com/antgroup/vsag"><img src="https://github.com/antgroup.png?size=96" width="64" height="64" alt="VSAG logo"><br><strong>VSAG</strong></a>
+      <a href="https://github.com/microsoft/DiskANN/blob/main/diskann-quantization/src/lib.rs"><img src="https://github.com/microsoft.png?size=96" width="64" height="64" alt="Microsoft DiskANN logo"><br><strong>Microsoft DiskANN</strong></a>
     </td>
     <td align="center" width="20%">
-      <a href="https://github.com/tensorchord/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="64" height="64" alt="VectorChord logo"><br><strong>VectorChord</strong></a>
+      <a href="https://github.com/antgroup/vsag"><img src="https://github.com/antgroup.png?size=96" width="64" height="64" alt="VSAG logo"><br><strong>VSAG</strong></a>
     </td>
   </tr>
   <tr>
+    <td align="center" width="20%">
+      <a href="https://github.com/tensorchord/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="64" height="64" alt="VectorChord logo"><br><strong>VectorChord</strong></a>
+    </td>
     <td align="center" width="20%">
       <a href="https://www.volcengine.com/docs/6465/1553583"><img src="https://github.com/volcengine.png?size=96" width="64" height="64" alt="Volcengine OpenSearch logo"><br><strong>Volcengine OpenSearch</strong></a>
     </td>
@@ -68,13 +71,30 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
     <td align="center" width="20%">
       <a href="https://github.com/apache/lucene"><img src="https://github.com/apache.png?size=96" width="64" height="64" alt="Apache Lucene logo"><br><strong>Apache Lucene</strong></a>
     </td>
+  </tr>
+  <tr>
     <td align="center" width="20%">
       <a href="https://turbopuffer.com/blog/ann-v3#:~:text=ANN%20v3%20employs%20the%20RaBitQ"><img src="https://github.com/turbopuffer.png?size=96" width="64" height="64" alt="turbopuffer logo"><br><strong>turbopuffer</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="https://github.com/alibaba/zvec"><img src="https://github.com/alibaba.png?size=96" width="64" height="64" alt="Zvec logo"><br><strong>Zvec</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="https://docs.lancedb.com/indexing/quantization#rabitq-quantization"><img src="https://github.com/lancedb.png?size=96" width="64" height="64" alt="LanceDB logo"><br><strong>LanceDB</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="https://docs.databricks.com/aws/en/oltp/projects/lakebase-vector"><img src="https://github.com/databricks.png?size=96" width="64" height="64" alt="Databricks logo"><br><strong>Databricks</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/annindexes#quantized-codecs-methods"><img src="https://github.com/ClickHouse.png?size=96" width="64" height="64" alt="ClickHouse logo"><br><strong>ClickHouse</strong></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="20%">
-      <a href="https://github.com/alibaba/zvec"><img src="https://github.com/alibaba.png?size=96" width="64" height="64" alt="Zvec logo"><br><strong>Zvec</strong></a>
+      <a href="https://qdrant.tech/articles/turboquant-quantization/#1-bit-rabitq-bit-plane-scoring"><img src="https://github.com/qdrant.png?size=96" width="64" height="64" alt="Qdrant logo"><br><strong>Qdrant</strong></a>
+    </td>
+    <td align="center" width="20%">
+      <a href="https://docs.weaviate.io/weaviate/concepts/vector-quantization#rotational-quantization"><img src="https://github.com/weaviate.png?size=96" width="64" height="64" alt="Weaviate logo"><br><strong>Weaviate</strong></a>
     </td>
   </tr>
 </table>
