@@ -34,10 +34,10 @@ class SymqgIndex {
             num_points_, dim_, max_degree_, metric_, rabitqlib::RotatorType::FhtKacRotator
         );
 
-            rabitqlib::symqg::QGBuilder builder(
-                *index_, ef_construction, data_array.data(), num_threads
-            );
-            builder.build();
+        rabitqlib::symqg::QGBuilder builder(
+            *index_, ef_construction, data_array.data(), num_threads
+        );
+        builder.build();
         built_ = true;
     }
 
