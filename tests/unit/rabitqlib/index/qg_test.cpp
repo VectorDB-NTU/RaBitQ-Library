@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "rabitqlib/index/symqg/qg_builder.hpp"
@@ -21,6 +24,22 @@ TEST(QuantizedGraphConfigurationTest, RejectsDegreeNotAlignedForFastScan) {
 TEST(QuantizedGraphConfigurationTest, RejectsDegreeThatCannotExcludeSelf) {
     EXPECT_THROW(
         (QuantizedGraph<float>(32, 64, 32, METRIC_L2, RotatorType::MatrixRotator)),
+        std::invalid_argument
+    );
+}
+
+TEST(QuantizedGraphConfigurationTest, AcceptsOnlySupportedVectorQuantizationBits) {
+    EXPECT_NO_THROW(
+        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 0))
+    );
+    EXPECT_NO_THROW(
+        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 4))
+    );
+    EXPECT_NO_THROW(
+        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 8))
+    );
+    EXPECT_THROW(
+        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 6)),
         std::invalid_argument
     );
 }
@@ -87,6 +106,55 @@ TEST(QGEstimatorTest, AccumulatesAcrossUint16SafeChunks) {
         for (float distance : estimated) {
             EXPECT_FLOAT_EQ(distance, expected);
         }
+    }
+}
+
+TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
+    constexpr size_t kNumPoints = 33;
+    constexpr size_t kDim = 64;
+    constexpr size_t kDegree = 32;
+    std::vector<float> data(kNumPoints * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.13F) +
+                  std::cos(static_cast<float>(i) * 0.07F);
+    }
+
+    for (size_t bits : {4U, 8U}) {
+        SCOPED_TRACE(bits);
+        QuantizedGraph<float> graph(
+            kNumPoints, kDim, kDegree, METRIC_L2, RotatorType::MatrixRotator, bits
+        );
+        {
+            QGBuilder builder(graph, kDegree, data.data(), 1);
+            builder.build(2);
+        }
+        graph.set_ef(kNumPoints);
+
+        std::array<PID, 5> ids{};
+        std::array<float, 5> distances{};
+        graph.search(data.data(), ids.size(), ids.data(), distances.data());
+        for (size_t i = 0; i < ids.size(); ++i) {
+            EXPECT_LT(ids[i], kNumPoints);
+            EXPECT_TRUE(std::isfinite(distances[i]));
+        }
+
+        const std::string path =
+            ::testing::TempDir() + "rabitq_qg_quant_" + std::to_string(bits) + ".index";
+        graph.save(path.c_str());
+        QuantizedGraph<float> loaded;
+        loaded.load(path.c_str());
+        loaded.set_ef(kNumPoints);
+        EXPECT_TRUE(loaded.is_quantized());
+        EXPECT_EQ(loaded.quantization_bits(), bits);
+
+        std::array<PID, 5> loaded_ids{};
+        std::array<float, 5> loaded_distances{};
+        loaded.search(
+            data.data(), loaded_ids.size(), loaded_ids.data(), loaded_distances.data()
+        );
+        EXPECT_EQ(loaded_ids, ids);
+        EXPECT_EQ(loaded_distances, distances);
+        std::remove(path.c_str());
     }
 }
 

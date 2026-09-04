@@ -33,6 +33,7 @@ def test_properties(built_symqg):
     assert built_symqg.max_degree == _MAX_DEGREE
     assert built_symqg.num_points == N_VECTORS
     assert built_symqg.metric == "l2"
+    assert built_symqg.quantization_bits == 0
 
 
 # ── search output shape and dtype ─────────────────────────────────────────────
@@ -111,6 +112,30 @@ def test_search_before_build_raises():
 def test_invalid_degree_raises():
     with pytest.raises(Exception):
         SymqgIndex(DIM, max_degree=16)
+
+
+def test_invalid_quantization_bits_raises():
+    with pytest.raises(Exception):
+        SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=6)
+
+
+@pytest.mark.parametrize("bits", [4, 8])
+def test_qg_quant_build_search_and_roundtrip(bits, base_data, query_data, tmp_path):
+    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=bits)
+    idx.build(base_data, ef_construction=_EF_BUILD)
+    assert idx.quantization_bits == bits
+
+    ids, dists = idx.search(query_data, k=5, ef=_EF)
+    assert np.all(ids < N_VECTORS)
+    assert np.all(np.isfinite(dists))
+
+    path = str(tmp_path / f"symqg_quant{bits}.index")
+    idx.save(path)
+    loaded = SymqgIndex.load(path)
+    assert loaded.quantization_bits == bits
+    loaded_ids, loaded_dists = loaded.search(query_data, k=5, ef=_EF)
+    np.testing.assert_array_equal(loaded_ids, ids)
+    np.testing.assert_allclose(loaded_dists, dists, rtol=1e-5)
 
 
 # ── save / load roundtrip ─────────────────────────────────────────────────────

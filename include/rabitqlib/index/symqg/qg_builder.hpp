@@ -75,17 +75,20 @@ class QGBuilder {
         std::vector<float> centroid =
             compute_centroid(data, num_nodes_, dim_, num_threads_);
 
+        qg_.set_quantization_centroid(centroid.data());
+        qg_.copy_vectors(data);
+
         PID entry_point = exact_nn(
             data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
         );
 
         std::cout << "Setting entry_point to " << entry_point << '\n' << std::flush;
-
         qg_.set_ep(entry_point);
-        qg_.copy_vectors(data);
 
         random_init();
     }
+
+    ~QGBuilder() { qg_.build_data_ = nullptr; }
 
     void build(size_t num_iter = 3) {
         if (num_iter < 2) {
@@ -139,7 +142,7 @@ inline void QGBuilder::add_pruned_edges(
     while (new_result.size() < degree_bound_ && start < pruned_list.size()) {
         const auto& cur = pruned_list[start];
         bool occlude = false;
-        const float* cur_data = qg_.get_vector(cur.id);
+        const float* cur_data = qg_.get_build_vector(cur.id);
         float dik_sqr = cur.distance;
 
         if (nei_set.find(cur.id) != nei_set.end()) {
@@ -151,7 +154,8 @@ inline void QGBuilder::add_pruned_edges(
             if (dij_sqr > dik_sqr) {
                 break;
             }
-            float djk_sqr = qg_.raw_dist_func_(qg_.get_vector(nei.id), cur_data, dim_);
+            float djk_sqr =
+                qg_.raw_dist_func_(qg_.get_build_vector(nei.id), cur_data, dim_);
             float cosine =
                 (dik_sqr + dij_sqr - djk_sqr) / (2 * std::sqrt(dij_sqr * dik_sqr));
             if (cosine > threshold) {
@@ -200,7 +204,7 @@ inline void QGBuilder::heuristic_prune(
         }
 
         pruned_results.emplace_back(pool[start]);  // add current candidate to result
-        const float* data_j = qg_.get_vector(candidate_id);
+        const float* data_j = qg_.get_build_vector(candidate_id);
 
         // i : current vertex
         // j : neighbor added in this iter
@@ -210,7 +214,7 @@ inline void QGBuilder::heuristic_prune(
                 continue;
             }
             float dik = pool[k].distance;
-            auto djk = qg_.raw_dist_func_(data_j, qg_.get_vector(pool[k].id), dim_);
+            auto djk = qg_.raw_dist_func_(data_j, qg_.get_build_vector(pool[k].id), dim_);
 
             if (djk < dik) {
                 if (refine && pruned_neighbors_[cur_id].size() < kMaxPrunedSize) {
@@ -319,11 +323,12 @@ inline void QGBuilder::random_init() {
             }
         }
 
-        const float* cur_data = qg_.get_vector(i);
+        const float* cur_data = qg_.get_build_vector(i);
         new_neighbors_[i].reserve(degree_bound_);
         for (PID cur_neigh : neighbor_set) {
             new_neighbors_[i].emplace_back(
-                cur_neigh, qg_.raw_dist_func_(cur_data, qg_.get_vector(cur_neigh), dim_)
+                cur_neigh,
+                qg_.raw_dist_func_(cur_data, qg_.get_build_vector(cur_neigh), dim_)
             );
         }
 
@@ -385,7 +390,9 @@ inline void QGBuilder::graph_refine() {
                 if (rand_id != static_cast<PID>(i) && ids.find(rand_id) == ids.end()) {
                     new_result.emplace_back(
                         rand_id,
-                        qg_.raw_dist_func_(qg_.get_vector(rand_id), qg_.get_vector(i), dim_)
+                        qg_.raw_dist_func_(
+                            qg_.get_build_vector(rand_id), qg_.get_build_vector(i), dim_
+                        )
                     );
                     ids.emplace(rand_id);
                 }

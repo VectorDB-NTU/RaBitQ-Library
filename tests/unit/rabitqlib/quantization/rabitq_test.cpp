@@ -93,6 +93,38 @@ TEST(RabitqOneBitTest, FullQuantizationInitializesCodesAndFactors) {
     EXPECT_TRUE(std::isfinite(f_error));
 }
 
+TEST(RabitqFullQuantizationTest, ReconstructsFromCodeAndEstimatorFactors) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kBits = 4;
+    std::array<float, kDim> data{};
+    std::array<float, kDim> centroid{};
+    std::array<uint8_t, kDim> code{};
+    std::array<float, kDim> reconstructed{};
+    for (size_t i = 0; i < kDim; ++i) {
+        data[i] = static_cast<float>(i % 11) - 5.0F;
+        centroid[i] = static_cast<float>(i % 3) * 0.25F;
+    }
+
+    float f_add = 0;
+    float f_rescale = 0;
+    float f_error = 0;
+    quantize_full_single(
+        data.data(), centroid.data(), kDim, kBits, code.data(), f_add, f_rescale, f_error
+    );
+    reconstruct_full_vec(
+        code.data(), centroid.data(), kDim, kBits, f_rescale, reconstructed.data()
+    );
+
+    const float code_center = -static_cast<float>((1 << kBits) - 1) / 2;
+    const float scale = -f_rescale / 2;
+    for (size_t i = 0; i < kDim; ++i) {
+        EXPECT_FLOAT_EQ(
+            reconstructed[i],
+            centroid[i] + scale * (static_cast<float>(code[i]) + code_center)
+        );
+    }
+}
+
 // An exactly-zero residual coordinate must be encoded consistently by both halves of
 // the split code. one_bit_code() uses (residual > 0) and so calls zero negative; if
 // ex_bits_code() calls it positive, the assembled code lands 2^ex_bits away from where

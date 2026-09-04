@@ -393,6 +393,25 @@ inline void reconstruct_vec(
         (ConstRowMajorArrayMap<TP>(quantized_vec, 1, dim).template cast<T>() * delta) + vl;
 }
 
+template <typename T, typename TP>
+inline void reconstruct_full_vec(
+    const TP* quantized_vec,
+    const T* centroid,
+    size_t dim,
+    size_t bits,
+    T f_rescale,
+    T* results,
+    MetricType metric_type = METRIC_L2
+) {
+    const T code_center = -static_cast<T>((static_cast<size_t>(1) << bits) - 1) / 2;
+    const T scale = metric_type == METRIC_L2 ? -f_rescale / 2 : -f_rescale;
+    RowMajorArrayMap<T> result_arr(results, 1, dim);
+    result_arr =
+        ConstRowMajorArrayMap<T>(centroid, 1, dim) +
+        scale * (ConstRowMajorArrayMap<TP>(quantized_vec, 1, dim).template cast<T>() +
+                 code_center);
+}
+
 template <typename TF, typename TI>
 inline TF full_est_dist(
     const TI* quantized_vec,
