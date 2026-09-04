@@ -975,10 +975,20 @@
 is a graph-based index originating from the
 <a href="https://github.com/yahoojapan/NGT">NGT library</a>. This implementation comes
 from the <a href="https://dl.acm.org/doi/abs/10.1145/3709730">SymphonyQG</a> project. For
-each vertex it stores the raw vector, a fixed-size neighbor list, and batched
+each vertex vanilla QG stores the raw vector, a fixed-size neighbor list, and batched
 one-bit RaBitQ data for those neighbors. This layout uses more memory than the
 raw vectors alone, but lets graph traversal estimate a group of neighbor
 distances with FastScan while computing exact distances for visited vertices.</p>
+<p>QG-quant replaces each raw vector with an independent packed 4- or 8-bit RaBitQ
+code. All codes use the dataset's global centroid and are not combined with the
+one-bit neighbor codes. Pass <code>quantization_bits</code> as <code>4</code> or <code>8</code> to select
+QG-quant, or leave it at <code>0</code> for vanilla QG.</p>
+<p>During graph construction, candidate discovery uses a floating-point source
+vector against the stored qg-quant candidate codes. Those estimated distances
+are retained for candidate ordering and source-to-candidate pruning terms, while
+candidate-to-candidate pruning comparisons and graph refinement use the available
+raw build vectors. The raw vectors are not retained in the completed qg-quant
+index.</p>
 <p>Memory and performance depend on the dimension, degree, build window, and
 search window. See <code>sample/cpp/symqg_indexing.cpp</code> and
 <code>sample/cpp/symqg_querying.cpp</code> for complete programs.</p>
@@ -991,19 +1001,21 @@ Since the QG is more complicated than other indices, we need a QGBuilder to help
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">max_deg</span><span class="p">,</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">        </span><span class="n">MetricType</span><span class="w"> </span><span class="n">metric_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">METRIC_L2</span><span class="p">,</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">        </span><span class="n">RotatorType</span><span class="w"> </span><span class="n">rotator_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RotatorType</span><span class="o">::</span><span class="n">FhtKacRotator</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="p">);</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">QGBuilder</span><span class="o">::</span><span class="n">QGBuilder</span><span class="p">(</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">        </span><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">index</span><span class="p">,</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">ef_build</span><span class="p">,</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">        </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span><span class="p">)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">        </span><span class="n">RotatorType</span><span class="w"> </span><span class="n">rotator_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RotatorType</span><span class="o">::</span><span class="n">FhtKacRotator</span><span class="p">,</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">quantization_bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="p">);</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">QGBuilder</span><span class="o">::</span><span class="n">QGBuilder</span><span class="p">(</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">index</span><span class="p">,</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">        </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">ef_build</span><span class="p">,</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">        </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">    </span><span class="p">)</span>
 </code></pre></div>
 - <strong>num</strong>: Number of vertices (vectors) in the dataset.<br />
 - <strong>dim</strong>: Dimension of the dataset.<br />
 - <strong>max_deg</strong>: Degree bound of QG, must be a multiple of 32.<br />
+- <strong>quantization_bits</strong>: <code>0</code> for vanilla QG, or <code>4</code>/<code>8</code> for QG-quant.
 - <strong>index</strong>: Previously initialized QG.<br />
 - <strong>ef_build</strong>: Search window size during indexing.<br />
 - <strong>data</strong>: Pointer to the dataset, size of num * dim.<br />
@@ -1031,6 +1043,8 @@ Since the QG is more complicated than other indices, we need a QGBuilder to help
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>[Batch data for QG]
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>[Edges]
 </code></pre></div></p>
+<p>For QG-quant, the first block becomes <code>[Packed 4/8-bit RaBitQ code + factors]</code>.
+The index also stores one rotated global centroid shared by all rows.</p>
 <p><code>Batch data for QG</code> contains one-bit codes and estimator factors for the
 element's neighbors, organized in FastScan batches of 32. Consequently,
 <code>max_deg</code> must be a multiple of 32.</p>
