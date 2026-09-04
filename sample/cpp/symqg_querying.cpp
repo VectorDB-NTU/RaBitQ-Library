@@ -68,9 +68,15 @@ int main(int argc, char** argv) {
             float total_time = 0;
             qg.set_ef(ef);
             std::vector<PID> results(topk);
+            std::vector<float> dists(topk);
             for (size_t z = 0; z < nq; z++) {
                 stopw.reset();
-                qg.search(&query(static_cast<Eigen::Index>(z), 0), topk, results.data());
+                qg.search(
+                    &query(static_cast<Eigen::Index>(z), 0),
+                    topk,
+                    results.data(),
+                    dists.data()
+                );
                 total_time += stopw.get_elapsed_micro();
                 for (size_t y = 0; y < topk; y++) {
                     for (size_t k = 0; k < topk; k++) {

@@ -81,13 +81,15 @@ element's neighbors, organized in FastScan batches of 32. Consequently,
 For querying, code is pretty simple.
 ```cpp
 void QuantizedGraph::search(
-    const T* __restrict__ query, 
-    uint32_t k, 
-    uint32_t* __restrict__ results);
+    const T* __restrict__ query,
+    uint32_t k,
+    uint32_t* __restrict__ results,
+    T* __restrict__ dists);
 ```
 - **query**: Query vector.  
 - **k**: Top-k.  
 - **results**: Result buffer, size of k.  
+- **dists**: Distance buffer, size of k.
 Then we can use a pre-constructed index to search.
 ```cpp
 QuantizedGraph<float> qg;
@@ -97,8 +99,9 @@ qg.load("./qg_example.index"); // load pre-constructed index
 size_t ef = 100;
 size_t topk = 10;
 std::vector<PID> results(topk); // result buffer
+std::vector<float> dists(topk); // distance buffer
 std::vector<float> query(cols); // populate with a query vector
 
 qg.set_ef(ef);  // set search window size
-qg.search(query.data(), topk, results.data());
+qg.search(query.data(), topk, results.data(), dists.data());
 ```
