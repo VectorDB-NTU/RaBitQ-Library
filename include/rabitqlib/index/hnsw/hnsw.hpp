@@ -192,7 +192,7 @@ class HierarchicalNSW {
 
     float (*ip_func_)(const float*, const uint8_t*, size_t);
 
-    Rotator<float>* rotator_ = nullptr;
+    std::unique_ptr<Rotator<float>> rotator_;
 
     quant::RabitqConfig query_config_;
 
@@ -222,8 +222,7 @@ class HierarchicalNSW {
 
         free(centroids_memory_);
 
-        delete rotator_;
-        rotator_ = nullptr;
+        rotator_.reset();
     }
 
     void set_ef(size_t ef) { ef_ = ef; }
@@ -375,9 +374,9 @@ inline HierarchicalNSW::HierarchicalNSW(
     , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>) {
     max_elements_ = max_elements;
     dim_ = dim;
-    rotator_ = choose_rotator<float>(
+    rotator_.reset(choose_rotator<float>(
         dim, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 64)
-    );
+    ));
     padded_dim_ = rotator_->size();
     /* check size */
     assert(padded_dim_ % 64 == 0);
@@ -604,9 +603,9 @@ inline void HierarchicalNSW::load(const char* filename) {
 
     visited_list_pool_ = std::make_unique<VisitedListPool>(1, max_elements_);
 
-    rotator_ = choose_rotator<float>(
+    rotator_.reset(choose_rotator<float>(
         dim_, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 64)
-    );
+    ));
     if (rotator_->size() != padded_dim_) {
         std::cerr << "Bad padded_dim_ for rotator in hnsw.load()\n";
         exit(1);

@@ -9,6 +9,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <ostream>
 #include <stdexcept>
 #include <vector>
@@ -51,8 +52,8 @@ class QuantizedGraph {
             char,
             1 << 22,
             true>>
-        data_;                       // vectors + graph + quantization codes + factors
-    Rotator<T>* rotator_ = nullptr;  // data rotator
+        data_;                             // vectors + graph + quantization codes + factors
+    std::unique_ptr<Rotator<T>> rotator_;  // data rotator
     std::unique_ptr<VisitedListPool> visited_list_pool_ = nullptr;
 
     // Position of different data in each row (RawData + QuantizationCodes + Factors +
@@ -119,7 +120,7 @@ class QuantizedGraph {
 
     explicit QuantizedGraph() = default;
 
-    ~QuantizedGraph();
+    ~QuantizedGraph() = default;
 
     [[nodiscard]] auto num_vertices() const { return this->num_points_; }
 
@@ -181,11 +182,6 @@ inline void QuantizedGraph<T>::validate_configuration() const {
             "QuantizedGraph point count exceeds the search-buffer ID limit"
         );
     }
-}
-
-template <typename T>
-inline QuantizedGraph<T>::~QuantizedGraph() {
-    delete this->rotator_;
 }
 
 template <typename T>
@@ -419,9 +415,9 @@ inline void QuantizedGraph<T>::update_results(
 // initialize const offsets & data array
 template <typename T>
 inline void QuantizedGraph<T>::initialize() {
-    delete rotator_;
-
-    rotator_ = choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64));
+    rotator_.reset(
+        choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64))
+    );
     padded_dim_ = rotator_->size();
 
     /* check size */
