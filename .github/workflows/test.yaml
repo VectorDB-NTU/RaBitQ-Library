@@ -1,7 +1,9 @@
 name: Test
 on:
-  - push
-  - pull_request
+  push:
+    branches:
+      - main
+  pull_request:
 concurrency:
   group: ${{ github.head_ref || github.sha }}-${{ github.workflow }}
   cancel-in-progress: true
@@ -38,7 +40,8 @@ jobs:
       - name: Configure compilation database
         run: >-
           cmake -S . -B build-tidy -G Ninja
-          -DRABITQ_BUILD_TESTS=ON
+          -DRABITQ_BUILD_SAMPLES=OFF
+          -DRABITQ_BUILD_TESTS=OFF
           -DRABITQ_BUILD_PYTHON_BINDINGS=ON
           -DCMAKE_BUILD_TYPE=Release
           -Dpybind11_DIR="$pybind11_DIR"

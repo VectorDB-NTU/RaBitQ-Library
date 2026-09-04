@@ -92,4 +92,4 @@ if ! "$tidy_runner" \
     exit 1
 fi
 
-echo "clang-tidy passed for all first-party translation units"
+echo "clang-tidy passed for all configured first-party translation units"
