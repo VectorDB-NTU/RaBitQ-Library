@@ -19,9 +19,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <climits>
 #include <cstring>
-#include <iostream>
 #include <limits>
 #include <unordered_set>
 #include <vector>
@@ -45,10 +45,7 @@ class HashBasedVisitedSet {
     void initialize_table(const size_t table_size) {
         table_size_ = table_size;
         mask_ = static_cast<PID>(table_size_ - 1);
-        const PID check_val = hash1(static_cast<PID>(table_size));
-        if (check_val != 0) {
-            std::cerr << "[WARN] table size is not 2^N :  " << table_size << '\n';
-        }
+        assert(hash1(static_cast<PID>(table_size)) == 0);
 
         table_ = std::vector<PID, memory::AlignedAllocator<PID>>(table_size);
         std::fill(table_.begin(), table_.end(), kPidMax);

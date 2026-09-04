@@ -3,12 +3,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
-#include <iostream>
 #include <random>
+#include <stdexcept>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"
@@ -51,8 +50,7 @@ inline size_t padding_requirement(size_t dim, RotatorType type) {
     if (type == RotatorType::FhtKacRotator) {
         return round_up_to_multiple(dim, 64);
     }
-    std::cerr << "Invalid rotator type in padding_requirement()\n" << std::flush;
-    exit(1);
+    throw std::invalid_argument("Invalid rotator type in padding_requirement()");
 }
 
 template <typename T = float>
@@ -168,8 +166,7 @@ class FhtKacRotator : public Rotator<float> {
                 break;
             default:
                 // TODO(lib): should we do more?
-                std::cerr << "dimension of vector is too big\n";
-                exit(1);
+                throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
         }
     }
     FhtKacRotator() = default;
@@ -275,34 +272,23 @@ Rotator<T>* choose_rotator(
 ) {
     if (padded_dim == 0) {
         padded_dim = rotator_impl::padding_requirement(dim, type);
-        if (padded_dim != dim) {
-            std::cerr << "vectors are padded to " << padded_dim
-                      << " dimensions for aligned computation\n";
-            std::cerr << "check rabitqlib/utils/rotator.hpp in case that users want to "
-                         "remove padding\n";
-        }
     }
 
     if (padded_dim != rotator_impl::padding_requirement(padded_dim, type)) {
-        std::cerr << "Invalid padded dim for the given rotator type\n" << std::flush;
-        exit(1);
+        throw std::invalid_argument("Invalid padded dimension for the rotator type");
     }
 
     if (type == RotatorType::FhtKacRotator) {
         if (!std::is_same_v<T, float>) {
-            std::cerr << "FhtKacRotator is only for float type currently\n";
-            exit(1);
+            throw std::invalid_argument("FhtKacRotator only supports float");
         }
-        std::cerr << "FhtKacRotator is selected\n";
         return ::new rotator_impl::FhtKacRotator(dim, padded_dim);
     }
 
     if (type == RotatorType::MatrixRotator) {
-        std::cerr << "MatrixRotator is selected\n";
         return ::new rotator_impl::MatrixRotator<T>(dim, padded_dim);
     }
 
-    std::cerr << "Invaid rotator type in choose_rotator()\n";
-    exit(1);
+    throw std::invalid_argument("Invalid rotator type in choose_rotator()");
 }
 }  // namespace rabitqlib

@@ -72,3 +72,52 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    name: ASan and UBSan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Configure
+        run: >-
+          cmake -S . -B build-sanitizers -G Ninja
+          -DRABITQ_BUILD_SAMPLES=OFF
+          -DRABITQ_BUILD_TESTS=ON
+          -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+          -DRABITQ_ENABLE_SANITIZERS=ON
+          -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build-sanitizers
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-sanitizers --output-on-failure
+
+  downstream-consumer:
+    name: Installed CMake consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Build and install RaBitQ-Library
+        run: |
+          cmake -S . -B build-install -G Ninja \
+            -DRABITQ_BUILD_SAMPLES=OFF \
+            -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/rabitqlib-install"
+          cmake --build build-install
+          cmake --install build-install
+      - name: Build downstream consumer
+        run: |
+          cmake -S tests/consumer -B build-consumer -G Ninja \
+            -DCMAKE_PREFIX_PATH="$PWD/rabitqlib-install"
+          cmake --build build-consumer
+      - name: Test downstream consumer
+        run: ctest --test-dir build-consumer --output-on-failure

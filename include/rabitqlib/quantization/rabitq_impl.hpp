@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -103,8 +104,7 @@ inline void one_bit_code_with_factor(
         } else if (metric_type == METRIC_IP) {
             f_add = 1;
         } else {
-            std::cerr << "Unsupported metric type in quantization\n" << std::flush;
-            exit(1);
+            throw std::invalid_argument("Unsupported metric type in quantization");
         }
         f_rescale = 0;
         f_error = 0;
@@ -145,8 +145,7 @@ inline void one_bit_code_with_factor(
         f_rescale = -l2_sqr / ip_resi_xucb;
         f_error = 1 * tmp_error;
     } else {
-        std::cerr << "Unsupported metric type in quantization\n" << std::flush;
-        exit(1);
+        throw std::invalid_argument("Unsupported metric type in quantization");
     }
 }
 
@@ -291,6 +290,9 @@ inline double best_rescale_factor(const T* o_abs, size_t dim, size_t ex_bits) {
     constexpr double kEps = 1e-5;
     constexpr int kNEnum = 10;
     double max_o = *std::max_element(o_abs, o_abs + dim);
+    if (max_o == 0) {
+        return 0;
+    }
 
     double t_end = static_cast<double>(((1 << ex_bits) - 1) + kNEnum) / max_o;
     double t_start = t_end * kTightStart[ex_bits];
@@ -423,15 +425,18 @@ inline T ex_bits_code(
 ) {
     ConstRowMajorArrayMap<T> res_arr(residual, 1, dim);
 
-    // get normalized abs residual for plus code
-    RowMajorArray<T> abs_res = res_arr.rowwise().normalized().abs();
-
     // quantize data
     T ipnorm_inv = 1;
-    if (t_const > 0) {
-        ipnorm_inv = faster_quantize_ex(abs_res.data(), ex_code, dim, ex_bits, t_const);
+    const T residual_norm = std::sqrt(l2norm_sqr<T>(residual, dim));
+    if (residual_norm == 0) {
+        std::fill(ex_code, ex_code + dim, static_cast<TP>(0));
     } else {
-        ipnorm_inv = quantize_ex(abs_res.data(), ex_code, dim, ex_bits);
+        RowMajorArray<T> abs_res = res_arr.abs() / residual_norm;
+        if (t_const > 0) {
+            ipnorm_inv = faster_quantize_ex(abs_res.data(), ex_code, dim, ex_bits, t_const);
+        } else {
+            ipnorm_inv = quantize_ex(abs_res.data(), ex_code, dim, ex_bits);
+        }
     }
 
     // Revert codes for negative or zero dims
@@ -473,8 +478,7 @@ inline void ex_bits_code_with_factor(
         } else if (metric_type == METRIC_IP) {
             f_add_ex = 1;
         } else {
-            std::cerr << "Unsupported metric for ex_bits_code()\n" << std::flush;
-            exit(1);
+            throw std::invalid_argument("Unsupported metric for ex_bits_code()");
         }
         f_rescale_ex = 0;
         f_error_ex = 0;
@@ -522,8 +526,7 @@ inline void ex_bits_code_with_factor(
         f_rescale_ex = ipnorm_inv * -l2_norm;
         f_error_ex = 1 * tmp_error;
     } else {
-        std::cerr << "Unsupported metric for ex_bits_code()\n" << std::flush;
-        exit(1);
+        throw std::invalid_argument("Unsupported metric for ex_bits_code()");
     }
 }
 
@@ -681,17 +684,13 @@ static_assert(
 
 inline void validate_bit_size(size_t base_bits, size_t ex_bits) {
     if (base_bits < 1 || base_bits > 8) {
-        std::cerr << "base_bits must be in [1, 8]\n" << std::flush;
-        exit(1);
+        throw std::invalid_argument("base_bits must be in [1, 8]");
     }
     if (ex_bits > 8) {
-        std::cerr << "ex_bits must be in [0, 8]\n" << std::flush;
-        exit(1);
+        throw std::invalid_argument("ex_bits must be in [0, 8]");
     }
     if (base_bits + ex_bits > kMaxCombinedBits) {
-        std::cerr << "base_bits + ex_bits must be in [1, " << kMaxCombinedBits << "]\n"
-                  << std::flush;
-        exit(1);
+        throw std::invalid_argument("base_bits + ex_bits exceeds the supported limit");
     }
 }
 
@@ -732,8 +731,7 @@ inline void code_factors(
         } else if (metric_type == METRIC_IP) {
             f_add = 1;
         } else {
-            std::cerr << "Unsupported metric type in code_factors()\n" << std::flush;
-            exit(1);
+            throw std::invalid_argument("Unsupported metric type in code_factors()");
         }
         f_rescale = 0;
         f_error = 0;
@@ -766,8 +764,7 @@ inline void code_factors(
         f_rescale = -l2_sqr / ip_resi_xucb;
         f_error = 1 * tmp_error;
     } else {
-        std::cerr << "Unsupported metric type in code_factors()\n" << std::flush;
-        exit(1);
+        throw std::invalid_argument("Unsupported metric type in code_factors()");
     }
 }
 

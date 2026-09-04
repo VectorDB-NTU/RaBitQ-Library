@@ -5,10 +5,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -232,6 +230,7 @@ inline QuantizedGraph<T>::QuantizedGraph(
 
 template <typename T>
 inline void QuantizedGraph<T>::validate_configuration() const {
+    validate_metric_type(metric_type_);
     if (degree_bound_ == 0 || degree_bound_ % fastscan::kBatchSize != 0) {
         throw std::invalid_argument(
             "QuantizedGraph degree bound must be a positive multiple of 32"
@@ -300,7 +299,6 @@ inline void QuantizedGraph<T>::copy_vectors(const T* data) {
                     );
                 }
             }
-            std::cout << "\tVectors quantized to " << quantization_bits_ << " bits\n";
             return;
         }
     }
@@ -310,7 +308,6 @@ inline void QuantizedGraph<T>::copy_vectors(const T* data) {
         T* dst = get_vector(i);
         std::copy(src, src + dim_, dst);
     }
-    std::cout << "\tVectors Copied\n";
 }
 
 template <typename T>
@@ -324,9 +321,10 @@ inline void QuantizedGraph<T>::set_quantization_centroid(const T* centroid) {
 
 template <typename T>
 inline void QuantizedGraph<T>::save(const char* filename) const {
-    std::cout << "Saving quantized graph to " << filename << '\n';
     std::ofstream output(filename, std::ios::binary);
-    assert(output.is_open());
+    if (!output.is_open()) {
+        throw std::runtime_error("Cannot open quantized graph file for writing");
+    }
 
     constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;  // "QGRABITQ"
     constexpr uint32_t kFormatVersion = 1;
@@ -361,21 +359,19 @@ inline void QuantizedGraph<T>::save(const char* filename) const {
     this->rotator_->save(output);
 
     output.close();
-    std::cout << "\tQuantized graph saved!\n";
 }
 
 template <typename T>
 inline void QuantizedGraph<T>::load(const char* filename) {
-    std::cout << "loading quantized graph " << filename << '\n';
-
     /* Check existence */
     if (!file_exists(filename)) {
-        std::cerr << "Index does not exist!\n";
-        exit(1);
+        throw std::runtime_error("Quantized graph file does not exist");
     }
 
     std::ifstream input(filename, std::ios::binary);
-    assert(input.is_open());
+    if (!input.is_open()) {
+        throw std::runtime_error("Cannot open quantized graph file");
+    }
 
     constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;  // "QGRABITQ"
     constexpr uint32_t kFormatVersion = 1;
@@ -425,12 +421,10 @@ inline void QuantizedGraph<T>::load(const char* filename) {
     /* Rotator */
     this->rotator_->load(input);
     if (rotator_->size() != padded_dim_) {
-        std::cerr << "Bad padded_dim_ for rotator in QuantizedGraph<T>.load()\n";
-        exit(1);
+        throw std::runtime_error("Invalid padded dimension in quantized graph file");
     }
 
     input.close();
-    std::cout << "Quantized graph loaded!\n";
 }
 
 template <typename T>

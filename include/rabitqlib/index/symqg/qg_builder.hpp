@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <mutex>
 #include <numeric>
+#include <stdexcept>
 #include <unordered_set>
 #include <vector>
 
@@ -82,7 +83,6 @@ class QGBuilder {
             data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
         );
 
-        std::cout << "Setting entry_point to " << entry_point << '\n' << std::flush;
         qg_.set_ep(entry_point);
 
         random_init();
@@ -92,8 +92,9 @@ class QGBuilder {
 
     void build(size_t num_iter = 3) {
         if (num_iter < 2) {
-            std::cerr << "The number of iterations for building QG must be at least 2\n";
-            exit(1);
+            throw std::invalid_argument(
+                "The number of QG build iterations must be at least 2"
+            );
         }
         // for first iterations, we do not need to refine the graph structure
         for (size_t i = 0; i < num_iter - 1; ++i) {
@@ -343,8 +344,6 @@ inline void QGBuilder::random_init() {
  *
  */
 inline void QGBuilder::graph_refine() {
-    std::cout << "Supplementing edges...\n";
-
 #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < num_nodes_; ++i) {
         CandidateList& cur_neighbors = new_neighbors_[i];
@@ -401,7 +400,6 @@ inline void QGBuilder::graph_refine() {
 
         cur_neighbors = new_result;
     }
-    std::cout << "Supplementing finished...\n";
 }
 
 inline void QGBuilder::iter(bool refine) {

@@ -118,7 +118,6 @@ void accumulate_hacc_avx512(
 
     size_t num_codebook = dim >> 2;
 
-    // std::cerr << "FastScan YES!" << std::endl;
     for (size_t m = 0; m < num_codebook; m += 4) {
         __m512i c = _mm512_loadu_si512(codes);
         __m512i lo = _mm512_and_si512(c, low_mask);
@@ -143,8 +142,6 @@ void accumulate_hacc_avx512(
         }
         codes += 64;
     }
-
-    // std::cerr << "FastScan YES!" << std::endl;
 
     __m512i res[2];
     __m512i dis0[2];

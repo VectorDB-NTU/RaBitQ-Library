@@ -44,6 +44,15 @@ TEST(QuantizedGraphConfigurationTest, AcceptsOnlySupportedVectorQuantizationBits
     );
 }
 
+TEST(QuantizedGraphConfigurationTest, RejectsUnsupportedMetric) {
+    EXPECT_THROW(
+        (QuantizedGraph<float>(
+            33, 64, 32, static_cast<MetricType>(255), RotatorType::MatrixRotator
+        )),
+        std::invalid_argument
+    );
+}
+
 TEST(QuantizedGraphLifecycleTest, DestroysConcreteRotatorThroughBasePointer) {
     QuantizedGraph<float> graph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator);
     EXPECT_EQ(graph.num_vertices(), 33U);

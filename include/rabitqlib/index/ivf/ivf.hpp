@@ -7,8 +7,8 @@
 #include <cmath>
 #include <cstddef>
 #include <fstream>
-#include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -137,11 +137,9 @@ inline IVF::IVF(
     , ex_bits_(bits - 1)
     , type_(type)
     , metric_type_(metric_type) {
+    validate_metric_type(metric_type);
     if (bits < 1 || bits > 9) {
-        std::cerr << "Invalid number of bits for quantization in IVF::IVF\n";
-        std::cerr << "Expected: 1 to 9  Input:" << bits << '\n';
-        std::cerr.flush();
-        exit(1);
+        throw std::invalid_argument("IVF quantization bits must be in [1, 9]");
     };
     rotator_.reset(choose_rotator<float>(dim, type, round_up_to_multiple(dim_, 64)));
     padded_dim_ = rotator_->size();
@@ -166,17 +164,13 @@ inline void IVF::construct(
     bool faster = false,
     size_t num_threads = std::numeric_limits<size_t>::max()
 ) {
-    std::cout << "Start IVF construction...\n";
-
     // get id list for each cluster
-    std::cout << "\tLoading clustering information...\n";
     std::vector<size_t> counts(num_cluster_, 0);
     std::vector<std::vector<PID>> id_lists(num_cluster_);
     for (size_t i = 0; i < num_; ++i) {
         PID cid = cluster_ids[i];
         if (cid >= num_cluster_) {
-            std::cerr << "Bad cluster id\n";
-            exit(1);
+            throw std::invalid_argument("Cluster ID is out of range");
         }
         id_lists[cid].push_back(static_cast<PID>(i));
         counts[cid] += 1;
@@ -209,7 +203,6 @@ inline void IVF::construct(
 }
 
 inline void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
-    std::cout << "Allocating memory for IVF...\n";
     free_memory();
     cluster_lst_.clear();
 
@@ -266,9 +259,7 @@ inline void IVF::quantize_cluster(
 ) {
     size_t num_points = IDs.size();
     if (cp.num() != num_points) {
-        std::cerr << "Cluster size and ID count differ\n";
-        std::cerr << "Cluster: " << cp.num() << " IDs: " << num_points << '\n';
-        exit(1);
+        throw std::invalid_argument("Cluster size and ID count differ");
     }
 
     // copy ids
@@ -309,8 +300,7 @@ inline void IVF::quantize_cluster(
 
 inline void IVF::save(const char* filename) const {
     if (cluster_lst_.size() == 0) {
-        std::cerr << "IVF not constructed\n";
-        return;
+        throw std::logic_error("Cannot save an unconstructed IVF index");
     }
 
     std::ofstream output(filename, std::ios::binary);
@@ -352,18 +342,19 @@ inline void IVF::save(const char* filename) const {
 }
 
 inline void IVF::load(const char* filename) {
-    std::cout << "Loading IVF...\n";
     std::ifstream input(filename, std::ios::binary);
-    assert(input.is_open());
+    if (!input.is_open()) {
+        throw std::runtime_error("Cannot open IVF index file");
+    }
 
     /* Load meta data */
-    std::cout << "\tLoading meta data...\n";
     input.read(reinterpret_cast<char*>(&this->num_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&this->dim_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&this->num_cluster_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&this->ex_bits_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&type_), sizeof(type_));
     input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
+    validate_metric_type(metric_type_);
 
     rotator_.reset(choose_rotator<float>(dim_, type_, round_up_to_multiple(dim_, 64)));
     padded_dim_ = rotator_->size();
@@ -378,8 +369,7 @@ inline void IVF::load(const char* filename) {
     size_t tmp =
         std::accumulate(cluster_sizes.begin(), cluster_sizes.end(), static_cast<size_t>(0));
     if (tmp != num_) {
-        std::cerr << "The sum of cluster num != total number of points\n";
-        exit(1);
+        throw std::runtime_error("Invalid cluster counts in IVF index file");
     }
 
     /* Load rotator */
@@ -396,7 +386,6 @@ inline void IVF::load(const char* filename) {
     init_clusters(cluster_sizes);
 
     input.close();
-    std::cout << "Index loaded\n";
 }
 
 inline void IVF::search(
@@ -445,9 +434,7 @@ inline void IVF::search(
             q_obj.set_g_add(dist, g_add_ip);
         } else {
             // unsupported
-            std::cerr << "Invalid quantize metric type, only support L2 and IP metric\n "
-                      << std::flush;
-            return;
+            throw std::invalid_argument("Quantization only supports L2 and IP metrics");
         }
         // q_obj.set_g_add(dist);
         search_cluster(cur_cluster, q_obj, knns, use_hacc);

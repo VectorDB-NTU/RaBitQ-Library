@@ -220,6 +220,74 @@ be moved between AVX2- and AVX-512-capable machines, configure with
 `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; the ISA-specific kernels will still
 be selected at runtime.
 
+### Use RaBitQ-Library in another C++ project
+
+The C++ API and ABI are still evolving. For reproducible builds, pin a release
+or commit and include RaBitQ-Library as a Git submodule:
+
+```bash
+git submodule add https://github.com/VectorDB-NTU/RaBitQ-Library.git third_party/rabitqlib
+git submodule update --init --recursive
+```
+
+Add the library and link its namespaced target in the consuming project's
+`CMakeLists.txt`:
+
+```cmake
+set(RABITQ_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/rabitqlib)
+
+target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
+```
+
+Update the pinned revision deliberately when you are ready to adopt upstream
+changes:
+
+```bash
+git -C third_party/rabitqlib fetch
+git -C third_party/rabitqlib checkout <release-or-commit>
+git add third_party/rabitqlib
+```
+
+<details>
+<summary>Optional: install the C++ library</summary>
+
+Installation is useful for package managers, container images, and shared
+server environments. Disable native optimization when the installed library
+may run on a different CPU from the build machine:
+
+```bash
+cmake -S . -B build \
+  -DRABITQ_BUILD_SAMPLES=OFF \
+  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake --build build --parallel
+cmake --install build
+```
+
+Consume the installed package with:
+
+```cmake
+find_package(rabitqlib CONFIG REQUIRED)
+target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
+```
+
+For a non-system prefix, point CMake to the installation when configuring the
+consumer:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/.local"
+cmake --build build --parallel
+```
+
+The [downstream consumer test](tests/consumer/) provides a minimal complete
+example of the installed-package workflow.
+
+</details>
+
+Both integration methods require OpenMP on the consuming system.
+
 The index example executables are written to `bin/`. Their source code shows
 the complete indexing and querying workflows:
 

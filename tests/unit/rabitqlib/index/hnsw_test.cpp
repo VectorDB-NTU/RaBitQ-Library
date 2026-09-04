@@ -8,6 +8,13 @@
 namespace rabitqlib::hnsw {
 namespace {
 
+TEST(HnswConfigurationTest, RejectsUnsupportedMetric) {
+    EXPECT_THROW(
+        (HierarchicalNSW(8, 64, 1, 2, 10, 100, static_cast<MetricType>(255))),
+        std::invalid_argument
+    );
+}
+
 TEST(HnswOneBitSearchTest, UsesBinaryEstimateForEntryPoint) {
     constexpr size_t dim = 64;
     constexpr size_t count = 8;

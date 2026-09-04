@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <stdexcept>
 
 #include "rabitqlib/third/Eigen/Dense"
 
@@ -63,5 +64,12 @@ struct AnnCandidate {
 };
 
 enum MetricType : std::uint8_t { METRIC_L2, METRIC_IP };
+
+inline void validate_metric_type(MetricType metric_type) {
+    if (metric_type != METRIC_L2 && metric_type != METRIC_IP) {
+        throw std::invalid_argument("Metric type must be METRIC_L2 or METRIC_IP");
+    }
+}
+
 enum ScalarQuantizerType : std::uint8_t { RECONSTRUCTION, UNBIASED_ESTIMATION, PLAIN };
 }  // namespace rabitqlib

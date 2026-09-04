@@ -156,13 +156,11 @@ class HNSWInitializer : public Initializer {
     }
 
     void add_vectors(const float* cent, size_t num_threads) override {
-        std::cout << "Inserting vectors into hnsw...\n";
         size_t start = 0;
         size_t rows = num_cluster_;
         parallel_for(start, rows, num_threads, [&](size_t row, size_t /*thread_id*/) {
             alg_hnsw_->addPoint(cent + (row * dim_), row);
         });
-        std::cout << "Inserted vectors into hnsw...\n" << std::flush;
     }
 
     [[nodiscard]] const float* centroid(PID id) const override {

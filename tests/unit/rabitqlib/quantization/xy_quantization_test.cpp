@@ -653,7 +653,7 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
     EXPECT_LE(base_low, full_est);
 }
 
-TEST(XyQuantization, CombinedBitsBeyondCapAborts) {
+TEST(XyQuantization, CombinedBitsBeyondCapThrows) {
     constexpr size_t kDim = 64;
     std::mt19937 gen(1);
     std::vector<float> data = RandomVec(kDim, gen);
@@ -662,7 +662,7 @@ TEST(XyQuantization, CombinedBitsBeyondCapAborts) {
     auto call_with_bad_bits = [&]() {
         SplitCode(data, centroid, kDim, /*base_bits=*/8, /*extra_bits=*/8);
     };
-    EXPECT_DEATH(call_with_bad_bits(), "");
+    EXPECT_THROW(call_with_bad_bits(), std::invalid_argument);
 }
 
 TEST(XyQuantization, SplitSingleQueryRejectsInvalidBitWidths) {

@@ -37,7 +37,7 @@ target_link_libraries(rabitq_tests
 
 # Discover tests for CTest
 include(GoogleTest)
-gtest_discover_tests(rabitq_tests)
+gtest_discover_tests(rabitq_tests DISCOVERY_MODE PRE_TEST)
 
 # Message to verify files are found
 message(STATUS "Discovered test files:")

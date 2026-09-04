@@ -2,9 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
-#include <iostream>
+#include <stdexcept>
 
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 
@@ -83,8 +82,7 @@ inline void packing_rabitqplus_code(
     } else if (ex_bits == 8) {
         packing_8bit_excode(o_raw, o_compact, dim);
     } else {
-        std::cerr << "Bad value for ex_bits in packing_rabitqplus_code()\b";
-        exit(1);
+        throw std::invalid_argument("ex_bits must be in [1, 8]");
     }
 }
 }  // namespace rabitqlib::quant::rabitq_impl::ex_bits

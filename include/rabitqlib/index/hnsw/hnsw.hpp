@@ -6,11 +6,10 @@
 #include <atomic>
 #include <cassert>
 #include <cstddef>
-#include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
@@ -221,6 +220,7 @@ class HierarchicalNSW {
         cur_element_count_ = 0;
 
         free(centroids_memory_);
+        centroids_memory_ = nullptr;
 
         rotator_.reset();
     }
@@ -372,6 +372,7 @@ inline HierarchicalNSW::HierarchicalNSW(
     , link_list_locks_(max_elements)
     , element_levels_(max_elements)
     , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>) {
+    validate_metric_type(metric_type);
     max_elements_ = max_elements;
     dim_ = dim;
     rotator_.reset(choose_rotator<float>(
@@ -384,11 +385,7 @@ inline HierarchicalNSW::HierarchicalNSW(
     ex_bits_ = total_bits - 1;
 
     if (total_bits < 1 || total_bits > 9) {
-        std::cerr << "Invalid number of bits for quantization in "
-                     "HierarchicalNSW::HierarchicalNSW\n";
-        std::cerr << "Expected: 1 to 9  Input:" << total_bits << '\n';
-        std::cerr.flush();
-        exit(1);
+        throw std::invalid_argument("HNSW quantization bits must be in [1, 9]");
     };
 
     assert(padded_dim_ % 64 == 0);
@@ -398,9 +395,6 @@ inline HierarchicalNSW::HierarchicalNSW(
     if (M <= 10000) {
         M_ = M;
     } else {
-        std::cout << "warning: M parameter exceeds 10000 which may lead to adverse effects."
-                  << '\n';
-        std::cout << "Cap to 10000 will be applied for the rest of the processing." << '\n';
         M_ = 10000;
     }
 
@@ -482,8 +476,6 @@ inline void HierarchicalNSW::save(const char* filename) const {
     output.write(reinterpret_cast<const char*>(&mult_), sizeof(double));
     output.write(reinterpret_cast<const char*>(&ef_construction_), sizeof(size_t));
 
-    std::cout << "cur_element_count = " << cur_element_count_ << '\n';
-
     output.write(
         reinterpret_cast<const char*>(centroids_memory_),
         static_cast<std::streamsize>(num_cluster_ * padded_dim_ * sizeof(float))
@@ -524,6 +516,7 @@ inline void HierarchicalNSW::load(const char* filename) {
     input.read(reinterpret_cast<char*>(&num_cluster_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&ex_bits_), sizeof(size_t));
     input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
+    validate_metric_type(metric_type_);
     raw_dist_func_ =
         (metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
 
@@ -567,8 +560,6 @@ inline void HierarchicalNSW::load(const char* filename) {
         static_cast<std::streamsize>(cur_element_count_ * size_data_per_element_)
     );
 
-    std::cout << "cur_element_count = " << cur_element_count_ << '\n';
-
     std::vector<std::mutex>(max_elements_).swap(link_list_locks_);
     std::vector<std::mutex>(kMaxLabelOperationLock).swap(label_op_locks_);
 
@@ -607,8 +598,7 @@ inline void HierarchicalNSW::load(const char* filename) {
         dim_, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 64)
     ));
     if (rotator_->size() != padded_dim_) {
-        std::cerr << "Bad padded_dim_ for rotator in hnsw.load()\n";
-        exit(1);
+        throw std::runtime_error("Invalid padded dimension in HNSW index file");
     }
     rotator_->load(input);
     input.close();
@@ -645,9 +635,7 @@ inline void HierarchicalNSW::construct(
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
-    std::cout << "Start HierarchicalNSW construction..." << '\n';
     rawDataPtr_ = data;
-    std::cout << "Build edges with non-quantized vectors..." << '\n';
     rabitqlib::ivf::parallel_for(
         0,
         data_num,

@@ -1,24 +1,16 @@
 #pragma once
 
-#include <sys/stat.h>
-
 #include <cassert>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 
 namespace rabitqlib {
 // get num of bytes
-inline size_t get_filesize(const char* filename) noexcept {
-    try {
-        return std::filesystem::file_size(filename);
-    } catch (const std::filesystem::filesystem_error& e) {
-        // Log the error and return -1 to maintain original behavior on error.
-        std::cerr << "Error getting file size for '" << filename << "': " << e.what()
-                  << '\n';
-        return static_cast<size_t>(-1);
-    }
+inline size_t get_filesize(const char* filename) {
+    return std::filesystem::file_size(filename);
 }
 
 inline bool file_exists(const char* filename) { return std::filesystem::exists(filename); }
@@ -27,8 +19,7 @@ inline bool file_exists(const char* filename) { return std::filesystem::exists(f
 template <typename T, class M>
 void load_vecs(const char* filename, M& row_mat) {
     if (!file_exists(filename)) {
-        std::cerr << "File " << filename << " not exists\n";
-        exit(1);
+        throw std::runtime_error("File does not exist: " + std::string(filename));
     }
 
     assert((std::is_same_v<T*, std::decay_t<decltype(row_mat.data())>> == true));
@@ -50,8 +41,6 @@ void load_vecs(const char* filename, M& row_mat) {
         input.read(reinterpret_cast<char*>(&row_mat(i, 0)), sizeof(T) * cols);
     }
 
-    std::cout << "File " << filename << " loaded\n";
-    std::cout << "Rows " << rows << " Cols " << cols << '\n' << std::flush;
     input.close();
 }
 
@@ -59,8 +48,7 @@ void load_vecs(const char* filename, M& row_mat) {
 template <typename T, class M>
 void load_bin(const char* filename, M& row_mat) {
     if (!file_exists(filename)) {
-        std::cerr << "File " << filename << " not exists\n";
-        exit(1);
+        throw std::runtime_error("File does not exist: " + std::string(filename));
     }
 
     assert((std::is_same_v<T*, std::decay_t<decltype(row_mat.data())>> == true));
@@ -78,8 +66,6 @@ void load_bin(const char* filename, M& row_mat) {
         input.read(reinterpret_cast<char*>(&row_mat(i, 0)), sizeof(T) * cols);
     }
 
-    std::cout << "File " << filename << " loaded\n";
-    std::cout << "Rows " << rows << " Cols " << cols << '\n' << std::flush;
     input.close();
 }
 }  // namespace rabitqlib

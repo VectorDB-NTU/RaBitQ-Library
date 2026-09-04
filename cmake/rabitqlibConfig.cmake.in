@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(OpenMP REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/rabitqlibTargets.cmake")
+
+check_required_components(rabitqlib)
