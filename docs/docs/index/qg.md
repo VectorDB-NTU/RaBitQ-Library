@@ -4,10 +4,22 @@
 is a graph-based index originating from the
 [NGT library](https://github.com/yahoojapan/NGT). This implementation comes
 from the [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) project. For
-each vertex it stores the raw vector, a fixed-size neighbor list, and batched
+each vertex vanilla QG stores the raw vector, a fixed-size neighbor list, and batched
 one-bit RaBitQ data for those neighbors. This layout uses more memory than the
 raw vectors alone, but lets graph traversal estimate a group of neighbor
 distances with FastScan while computing exact distances for visited vertices.
+
+QG-quant replaces each raw vector with an independent packed 4- or 8-bit RaBitQ
+code. All codes use the dataset's global centroid and are not combined with the
+one-bit neighbor codes. Pass `quantization_bits` as `4` or `8` to select
+QG-quant, or leave it at `0` for vanilla QG.
+
+During graph construction, candidate discovery uses a floating-point source
+vector against the stored qg-quant candidate codes. Those estimated distances
+are retained for candidate ordering and source-to-candidate pruning terms, while
+candidate-to-candidate pruning comparisons and graph refinement use the available
+raw build vectors. The raw vectors are not retained in the completed qg-quant
+index.
 
 Memory and performance depend on the dimension, degree, build window, and
 search window. See `sample/cpp/symqg_indexing.cpp` and
@@ -25,7 +37,8 @@ QuantizedGraph::QuantizedGraph(
         size_t dim,
         size_t max_deg,
         MetricType metric_type = METRIC_L2,
-        RotatorType rotator_type = RotatorType::FhtKacRotator
+        RotatorType rotator_type = RotatorType::FhtKacRotator,
+        size_t quantization_bits = 0
     );
 
 QGBuilder::QGBuilder(
@@ -38,6 +51,7 @@ QGBuilder::QGBuilder(
 - **num**: Number of vertices (vectors) in the dataset.  
 - **dim**: Dimension of the dataset.  
 - **max_deg**: Degree bound of QG, must be a multiple of 32.  
+- **quantization_bits**: `0` for vanilla QG, or `4`/`8` for QG-quant.
 - **index**: Previously initialized QG.  
 - **ef_build**: Search window size during indexing.  
 - **data**: Pointer to the dataset, size of num * dim.  
@@ -71,6 +85,9 @@ Each indexed element is stored in the following layout.
 [Batch data for QG]
 [Edges]
 ```
+
+For QG-quant, the first block becomes `[Packed 4/8-bit RaBitQ code + factors]`.
+The index also stores one rotated global centroid shared by all rows.
 
 `Batch data for QG` contains one-bit codes and estimator factors for the
 element's neighbors, organized in FastScan batches of 32. Consequently,

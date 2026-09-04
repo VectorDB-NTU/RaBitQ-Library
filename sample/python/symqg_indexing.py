@@ -11,6 +11,7 @@ from utils import read_fvecs
 MAX_DEGREE = 32  # degree bound for SymphonyQG
 EF_CONSTRUCTION = 200  # ef for indexing
 METRIC = "l2"  # "l2" or "ip"
+QUANTIZATION_BITS = 0  # 0 for vanilla QG, or 4/8 for QG-quant
 NUM_THREADS = 16  # number of threads for build
 # ──────────────────────────────────────────────
 
@@ -24,10 +25,16 @@ def main(args=None) -> None:
     n, dim = data.shape
     print(
         f"\nBuilding SymphonyQG index: n={n}, dim={dim}, MaxDegree={args.max_degree}, "
-        f"ef={args.ef_construction}, metric={args.metric}"
+        f"ef={args.ef_construction}, metric={args.metric}, "
+        f"quantization_bits={args.quantization_bits}"
     )
 
-    idx = SymqgIndex(dim=dim, max_degree=args.max_degree, metric=args.metric)
+    idx = SymqgIndex(
+        dim=dim,
+        max_degree=args.max_degree,
+        metric=args.metric,
+        quantization_bits=args.quantization_bits,
+    )
 
     t0 = time()
     idx.build(data, ef_construction=args.ef_construction, num_threads=args.num_threads)
@@ -64,6 +71,14 @@ if __name__ == "__main__":
         default=METRIC,
         choices=["l2", "ip"],
         help="Distance metric (l2 or ip)",
+    )
+    parser.add_argument(
+        "--quantization-bits",
+        dest="quantization_bits",
+        type=int,
+        choices=[0, 4, 8],
+        default=QUANTIZATION_BITS,
+        help="Vector quantization bits: 0 for vanilla QG, or 4/8 for QG-quant",
     )
     parser.add_argument(
         "--num-threads",

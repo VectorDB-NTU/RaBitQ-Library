@@ -18,7 +18,8 @@ int main(int argc, char** argv) {
                   << "arg2: degree bound for symqg, must be a multiple of 32\n"
                   << "arg3: ef for indexing \n"
                   << "arg4: path for saving index\n"
-                  << "arg5: metric type (\"l2\" or \"ip\"), l2 by default\n";
+                  << "arg5: metric type (\"l2\" or \"ip\"), l2 by default\n"
+                  << "arg6: vector quantization bits (0, 4, or 8), 0 by default\n";
         exit(1);
     }
 
@@ -39,6 +40,7 @@ int main(int argc, char** argv) {
     } else if (metric_type == rabitqlib::METRIC_L2) {
         std::cout << "Metric Type: L2\n";
     }
+    size_t quantization_bits = argc > 6 ? static_cast<size_t>(atoi(argv[6])) : 0;
 
     data_type data;
 
@@ -46,7 +48,14 @@ int main(int argc, char** argv) {
 
     rabitqlib::StopW stopw;
 
-    index_type qg(data.rows(), data.cols(), degree, metric_type);
+    index_type qg(
+        data.rows(),
+        data.cols(),
+        degree,
+        metric_type,
+        rabitqlib::RotatorType::FhtKacRotator,
+        quantization_bits
+    );
 
     rabitqlib::symqg::QGBuilder builder(qg, ef, data.data());
 

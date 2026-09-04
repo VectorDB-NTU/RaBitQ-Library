@@ -16,10 +16,21 @@ namespace rabitqlib::python_bindings {
 
 class SymqgIndex {
    public:
-    SymqgIndex(size_t dim, size_t max_degree, const std::string& metric = "l2")
-        : dim_(dim), max_degree_(max_degree), metric_(metric_from_string(metric)) {
+    SymqgIndex(
+        size_t dim,
+        size_t max_degree,
+        const std::string& metric = "l2",
+        size_t quantization_bits = 0
+    )
+        : dim_(dim)
+        , max_degree_(max_degree)
+        , metric_(metric_from_string(metric))
+        , quantization_bits_(quantization_bits) {
         if (max_degree == 0 || max_degree % rabitqlib::fastscan::kBatchSize != 0) {
             throw std::invalid_argument("max_degree must be a positive multiple of 32");
+        }
+        if (quantization_bits != 0 && quantization_bits != 4 && quantization_bits != 8) {
+            throw std::invalid_argument("quantization_bits must be 0, 4, or 8");
         }
     }
 
@@ -31,7 +42,12 @@ class SymqgIndex {
 
         num_points_ = static_cast<size_t>(data_array.shape(0));
         index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>(
-            num_points_, dim_, max_degree_, metric_, rabitqlib::RotatorType::FhtKacRotator
+            num_points_,
+            dim_,
+            max_degree_,
+            metric_,
+            rabitqlib::RotatorType::FhtKacRotator,
+            quantization_bits_
         );
 
         rabitqlib::symqg::QGBuilder builder(
@@ -100,6 +116,7 @@ class SymqgIndex {
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_degree_ = wrapper.index_->degree_bound();
         wrapper.metric_ = wrapper.index_->metric_type();
+        wrapper.quantization_bits_ = wrapper.index_->quantization_bits();
         wrapper.built_ = true;
         return wrapper;
     }
@@ -109,6 +126,7 @@ class SymqgIndex {
     [[nodiscard]] size_t num_points() const { return num_points_; }
     [[nodiscard]] bool is_built() const { return built_; }
     [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
+    [[nodiscard]] size_t quantization_bits() const { return quantization_bits_; }
 
    private:
     SymqgIndex() = default;
@@ -117,6 +135,7 @@ class SymqgIndex {
     size_t max_degree_ = 0;
     size_t num_points_ = 0;
     rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
+    size_t quantization_bits_ = 0;
     bool built_ = false;
     std::unique_ptr<rabitqlib::symqg::QuantizedGraph<float>> index_;
 };
@@ -129,10 +148,11 @@ void register_symqg(py::module_& m) {
 
     py::class_<SymqgIndex>(m, "SymqgIndex")
         .def(
-            py::init<size_t, size_t, const std::string&>(),
+            py::init<size_t, size_t, const std::string&, size_t>(),
             py::arg("dim"),
             py::arg("max_degree"),
-            py::arg("metric") = "l2"
+            py::arg("metric") = "l2",
+            py::arg("quantization_bits") = 0
         )
         .def(
             "build",
@@ -155,5 +175,6 @@ void register_symqg(py::module_& m) {
         .def_property_readonly("max_degree", &SymqgIndex::max_degree)
         .def_property_readonly("num_points", &SymqgIndex::num_points)
         .def_property_readonly("is_built", &SymqgIndex::is_built)
-        .def_property_readonly("metric", &SymqgIndex::metric);
+        .def_property_readonly("metric", &SymqgIndex::metric)
+        .def_property_readonly("quantization_bits", &SymqgIndex::quantization_bits);
 }

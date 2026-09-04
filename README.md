@@ -26,6 +26,14 @@
 
 </div>
 
+## News
+
+- **September 2026 — Quantized SymphonyQG:** SymphonyQG now supports optional
+  4-bit and 8-bit RaBitQ vector storage. Select QG-quant with
+  `quantization_bits=4` or `quantization_bits=8`; vanilla raw-vector QG remains
+  the default. See the [SymphonyQG documentation](docs/docs/index/qg.md) for
+  details.
+
 ## Install
 
 ```bash
@@ -242,7 +250,7 @@ algorithm guidance is available in the [documentation](docs/docs/index.md).
 | **Quantizer** | Integrating RaBitQ into an existing system | Low-level 1-bit or multi-bit encoding and distance estimation. |
 | **IVF** | Memory-efficient partitioned search | Stores quantized codes without retaining the raw dataset. |
 | **HNSW** | Graph search with compact vectors | Adds graph links and searches directly from quantized codes. |
-| **SymphonyQG** | Query speed when more memory is available | Retains raw vectors and stores per-neighborhood quantization data. |
+| **SymphonyQG** | Fast graph search with a configurable memory/accuracy tradeoff | Uses raw vectors by default, or optional packed 4-bit/8-bit RaBitQ vectors, alongside per-neighborhood quantization data. |
 
 IVF and SymphonyQG use [FastScan](https://arxiv.org/abs/1704.07355) for batched
 estimates, while HNSW uses single-code AVX2 or AVX-512 kernels.
