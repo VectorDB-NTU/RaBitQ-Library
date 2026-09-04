@@ -119,7 +119,7 @@ better. Results from the
 
 | | |
 | --- | --- |
-| **Compact by design** | Choose [1-bit](https://arxiv.org/abs/2405.12497) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
+| **Compact by design** | Choose [1-bit](https://doi.org/10.1145/3654970) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
 | **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
 | **Fast on x86-64** | Dedicated AVX2 and AVX-512 kernels are selected through runtime CPU dispatch. |
 | **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
@@ -268,6 +268,17 @@ If RaBitQ helps your research or system, please cite:
 > High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
 > Search.” *Proceedings of the ACM on Management of Data* 3, 3, Article 202
 > (June 2025), 26 pages. [https://doi.org/10.1145/3725413](https://doi.org/10.1145/3725413).
+
+> Yutong Gou, Jianyang Gao, Yuexuan Xu, and Cheng Long. “SymphonyQG: Towards
+> Symphonious Integration of Quantization and Graph for Approximate Nearest
+> Neighbor Search.” *Proceedings of the ACM on Management of Data* 3, 1,
+> Article 80 (February 2025), 26 pages.
+> [https://doi.org/10.1145/3709730](https://doi.org/10.1145/3709730).
+
+> Jianyang Gao and Cheng Long. “RaBitQ: Quantizing High-Dimensional Vectors
+> with a Theoretical Error Bound for Approximate Nearest Neighbor Search.”
+> *Proceedings of the ACM on Management of Data* 2, 3, Article 167 (May 2024),
+> 27 pages. [https://doi.org/10.1145/3654970](https://doi.org/10.1145/3654970).
 
 ## Contributing
 
