@@ -21,7 +21,7 @@ find_package(OpenMP REQUIRED)
 add_library(rabitq_compile_options INTERFACE)
 target_compile_features(rabitq_compile_options INTERFACE cxx_std_17)
 target_compile_options(rabitq_compile_options INTERFACE
-    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-Ofast>
+    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-O3>
     $<$<AND:$<BOOL:${RABITQ_ENABLE_NATIVE_OPTIMIZATION}>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-march=native>
 )
 target_link_libraries(rabitq_compile_options INTERFACE OpenMP::OpenMP_CXX)
