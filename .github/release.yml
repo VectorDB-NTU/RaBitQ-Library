@@ -1,0 +1,30 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+
+  categories:
+    - title: Added
+      labels:
+        - enhancement
+
+    - title: Fixed
+      labels:
+        - bug
+
+    - title: Documentation
+      labels:
+        - documentation
+
+    - title: Python
+      labels:
+        - python
+
+    - title: Dependencies
+      labels:
+        - dependencies
+
+    - title: Other changes
+      labels:
+        - "*"
