@@ -182,9 +182,9 @@ python -m pip install .
 ### Requirements
 
 - CMake 3.15 or newer
-- a C++17 compiler with OpenMP support
-- an x86-64 CPU supported by the selected kernels: most paths accept either
-  AVX2 with FMA or AVX-512F/BW/DQ with FMA
+- a C++17 compiler; OpenMP is enabled by default and can be disabled for serial builds
+- an x86-64 CPU with AVX2/FMA or AVX-512F/BW/DQ/FMA, or an AArch64 CPU with
+  [SIMDe](https://github.com/simd-everywhere/simde) headers available at build time
 
 <details>
 <summary>CPU dispatch details</summary>
@@ -206,6 +206,30 @@ cd RaBitQ-Library
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
+
+For an AArch64 source build, supply the directory containing `simde/`:
+
+```bash
+cmake -S . -B build-arm -DCMAKE_BUILD_TYPE=Release \
+  -DSIMDE_INCLUDE_DIR=/path/to/simde-checkout \
+  -DRABITQ_ENABLE_OPENMP=OFF -DRABITQ_BUILD_TESTS=ON
+cmake --build build-arm --parallel
+ctest --test-dir build-arm --output-on-failure
+```
+
+The ARM backend uses a native NEON ordinary FastScan accumulator, SIMDe for
+the remaining AVX2 kernels, and a portable Hadamard transform. SIMDe is a
+private build dependency of the compiled library; consumers link the existing
+`rabitq_headers` target without including SIMDe themselves. The public API,
+saved-index layout, and production rotation seed policy are unchanged.
+The implementation was tested with SIMDe revision
+`b49b253a24ba1f26c7e619ed88330cae53135950` on Apple Silicon.
+
+`RABITQ_ENABLE_OPENMP=OFF` selects serial execution. With an OpenMP compiler
+and runtime installed, omit that option to retain parallel construction and
+batch operations. ARM support here covers C++ source builds; prebuilt Python
+wheels remain Linux x86-64 only. Multi-architecture macOS universal binaries
+require separate per-architecture builds and are not supported by this configuration.
 
 Release builds enable native CPU tuning by default. To build a binary that can
 be moved between AVX2- and AVX-512-capable machines, configure with

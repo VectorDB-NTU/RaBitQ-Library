@@ -1,9 +1,8 @@
-#include <immintrin.h>
-
 #include <cstdint>
 
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/simd/x86_compat.hpp"
 
 namespace rabitqlib::fastscan::simd {
 

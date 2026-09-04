@@ -16,7 +16,10 @@ option(
     ON
 )
 
-find_package(OpenMP REQUIRED)
+option(RABITQ_ENABLE_OPENMP "Enable OpenMP parallel loops" ON)
+if(RABITQ_ENABLE_OPENMP)
+    find_package(OpenMP REQUIRED)
+endif()
 
 add_library(rabitq_compile_options INTERFACE)
 target_compile_features(rabitq_compile_options INTERFACE cxx_std_17)
@@ -24,7 +27,13 @@ target_compile_options(rabitq_compile_options INTERFACE
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-O3>
     $<$<AND:$<BOOL:${RABITQ_ENABLE_NATIVE_OPTIMIZATION}>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-march=native>
 )
-target_link_libraries(rabitq_compile_options INTERFACE OpenMP::OpenMP_CXX)
+if(RABITQ_ENABLE_OPENMP)
+    target_link_libraries(rabitq_compile_options INTERFACE OpenMP::OpenMP_CXX)
+else()
+    target_compile_options(rabitq_compile_options INTERFACE
+        $<$<COMPILE_LANG_AND_ID:CXX,AppleClang,Clang,GNU>:-Wno-unknown-pragmas>
+    )
+endif()
 
 function(rabitq_enable_warnings target)
     target_compile_options(${target} PRIVATE
@@ -70,39 +79,62 @@ set(RABITQ_HNSW_AVX512_POPCNT_SOURCES
     src/index/hnsw_search_avx512_popcnt.cpp
 )
 
-add_library(rabitq_core STATIC
-    ${RABITQ_COMMON_SOURCES}
-    ${RABITQ_AVX2_SOURCES}
-    ${RABITQ_AVX512_SOURCES}
-    ${RABITQ_AVX512_POPCNT_SOURCES}
-    ${RABITQ_HNSW_AVX2_SOURCES}
-    ${RABITQ_HNSW_AVX512_CORE_SOURCES}
-    ${RABITQ_HNSW_AVX512_POPCNT_SOURCES}
-)
+include(CheckCXXSourceCompiles)
+check_cxx_source_compiles("
+#if !defined(__aarch64__)
+#error Not an AArch64 target
+#endif
+int main() { return 0; }" RABITQ_TARGET_AARCH64)
+
+if(RABITQ_TARGET_AARCH64)
+    find_path(SIMDE_INCLUDE_DIR simde/x86/avx2.h)
+    if(NOT SIMDE_INCLUDE_DIR)
+        message(FATAL_ERROR "AArch64 builds require SIMDe headers. Set SIMDE_INCLUDE_DIR to the directory containing simde/.")
+    endif()
+    add_library(rabitq_core STATIC
+        ${RABITQ_COMMON_SOURCES}
+        ${RABITQ_AVX2_SOURCES}
+        ${RABITQ_HNSW_AVX2_SOURCES}
+        src/simd/fastscan_neon.cpp
+    )
+    target_include_directories(rabitq_core SYSTEM PRIVATE "${SIMDE_INCLUDE_DIR}")
+else()
+    add_library(rabitq_core STATIC
+        ${RABITQ_COMMON_SOURCES}
+        ${RABITQ_AVX2_SOURCES}
+        ${RABITQ_AVX512_SOURCES}
+        ${RABITQ_AVX512_POPCNT_SOURCES}
+        ${RABITQ_HNSW_AVX2_SOURCES}
+        ${RABITQ_HNSW_AVX512_CORE_SOURCES}
+        ${RABITQ_HNSW_AVX512_POPCNT_SOURCES}
+    )
+endif()
 
 target_include_directories(rabitq_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(rabitq_core PUBLIC rabitq_compile_options)
 set_target_properties(rabitq_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 rabitq_enable_warnings(rabitq_core)
 
-set_source_files_properties(${RABITQ_AVX2_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx2;-mfma"
-)
-set_source_files_properties(${RABITQ_AVX512_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mfma"
-)
-set_source_files_properties(${RABITQ_AVX512_POPCNT_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
-)
-set_source_files_properties(${RABITQ_HNSW_AVX2_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx2;-mfma"
-)
-set_source_files_properties(${RABITQ_HNSW_AVX512_CORE_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx2;-mfma"
-)
-set_source_files_properties(${RABITQ_HNSW_AVX512_POPCNT_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
-)
+if(NOT RABITQ_TARGET_AARCH64)
+    set_source_files_properties(${RABITQ_AVX2_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx2;-mfma"
+    )
+    set_source_files_properties(${RABITQ_AVX512_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mfma"
+    )
+    set_source_files_properties(${RABITQ_AVX512_POPCNT_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
+    )
+    set_source_files_properties(${RABITQ_HNSW_AVX2_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx2;-mfma"
+    )
+    set_source_files_properties(${RABITQ_HNSW_AVX512_CORE_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx2;-mfma"
+    )
+    set_source_files_properties(${RABITQ_HNSW_AVX512_POPCNT_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
+    )
+endif()
 
 add_library(rabitq_headers INTERFACE)
 target_include_directories(rabitq_headers INTERFACE ${PROJECT_SOURCE_DIR}/include)

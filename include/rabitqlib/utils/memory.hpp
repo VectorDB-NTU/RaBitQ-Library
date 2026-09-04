@@ -45,12 +45,26 @@ class AlignedAllocator {
         auto nbytes = round_up_to_multiple_of<size_t>(n * sizeof(T), Alignment);
         auto* ptr = std::aligned_alloc(Alignment, nbytes);
         if (HugePage) {
+#if defined(__linux__)
             madvise(ptr, nbytes, MADV_HUGEPAGE);
+#endif
         }
         return reinterpret_cast<T*>(ptr);
     }
 
     void deallocate(T* ptr, [[maybe_unused]] std::size_t n) { std::free(ptr); }
+
+    template <typename U>
+    constexpr bool operator==(const AlignedAllocator<U, Alignment, HugePage>&)
+        const noexcept {
+        return true;
+    }
+
+    template <typename U>
+    constexpr bool operator!=(const AlignedAllocator<U, Alignment, HugePage>&)
+        const noexcept {
+        return false;
+    }
 };
 
 template <typename T>
@@ -81,7 +95,9 @@ inline T* align_allocate(size_t nbytes) {
     auto size = round_up_to_multiple_of<size_t>(nbytes, Alignment);
     void* ptr = std::aligned_alloc(Alignment, size);
     if (HugePage) {
+#if defined(__linux__)
         madvise(ptr, size, MADV_HUGEPAGE);
+#endif
     }
     return static_cast<T*>(ptr);
 }

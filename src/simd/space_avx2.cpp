@@ -1,8 +1,8 @@
-#include <immintrin.h>
-
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
+#include "rabitqlib/simd/x86_compat.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::simd {
@@ -25,7 +25,8 @@ void scalar_quantize_uint8_avx2(
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
         __m128i i16 = _mm_packus_epi32(lo32, hi32);
         __m128i i8 = _mm_packus_epi16(i16, zero);
-        _mm_storel_epi64(reinterpret_cast<__m128i*>(&result[i]), i8);
+        const int64_t packed = _mm_cvtsi128_si64(i8);
+        std::memcpy(result + i, &packed, sizeof(packed));
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
@@ -65,10 +66,10 @@ void new_transpose_bin_avx2(
 
         // the first (16 - b_query) bits are empty
         const int shift = static_cast<int>(16 - b_query);
-        vec_00_to_15 = _mm256_slli_epi32(vec_00_to_15, shift);
-        vec_16_to_31 = _mm256_slli_epi32(vec_16_to_31, shift);
-        vec_32_to_47 = _mm256_slli_epi32(vec_32_to_47, shift);
-        vec_48_to_63 = _mm256_slli_epi32(vec_48_to_63, shift);
+        vec_00_to_15 = _mm256_sll_epi32(vec_00_to_15, _mm_cvtsi32_si128(shift));
+        vec_16_to_31 = _mm256_sll_epi32(vec_16_to_31, _mm_cvtsi32_si128(shift));
+        vec_32_to_47 = _mm256_sll_epi32(vec_32_to_47, _mm_cvtsi32_si128(shift));
+        vec_48_to_63 = _mm256_sll_epi32(vec_48_to_63, _mm_cvtsi32_si128(shift));
 
         for (size_t j = 0; j < b_query; ++j) {
             // pack two 16-bit vectors to 8-bit interleaved vectors

@@ -1,8 +1,6 @@
 // HNSW is developed from the [HNSW library](https://github.com/nmslib/hnswlib)
 #pragma once
 
-#include <omp.h>
-
 #include <atomic>
 #include <cassert>
 #include <cstddef>
@@ -22,6 +20,7 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/parallel.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -1110,6 +1109,9 @@ inline std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn(
     const float* rotated_query, size_t TOPK
 ) {
+#if defined(__aarch64__)
+    return detail::search_knn_avx2(*this, rotated_query, TOPK);
+#else
     if (rabitqlib::cpu::has_avx512_popcnt()) {
         return detail::search_knn_avx512_popcnt(*this, rotated_query, TOPK);
     }
@@ -1121,6 +1123,7 @@ inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn(
     }
 
     throw std::runtime_error("HNSW search requires AVX2/FMA or AVX512 support");
+#endif
 }
 
 template <class Kernel>

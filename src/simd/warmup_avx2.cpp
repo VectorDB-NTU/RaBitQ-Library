@@ -1,9 +1,9 @@
-#include <immintrin.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+
+#include "rabitqlib/simd/x86_compat.hpp"
 
 namespace rabitqlib::simd {
 

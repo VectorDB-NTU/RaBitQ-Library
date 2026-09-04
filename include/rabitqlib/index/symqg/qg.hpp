@@ -1,7 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +22,7 @@
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/parallel.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/visited_pool.hpp"

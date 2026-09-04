@@ -5,6 +5,10 @@
 
 namespace rabitqlib::fastscan::simd {
 
+void accumulate_neon(
+    const uint8_t* codes, const uint8_t* lut, uint16_t* result, size_t dim
+);
+
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,

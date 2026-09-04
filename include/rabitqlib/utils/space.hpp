@@ -1,7 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
 #include <array>
 #include <cassert>
 #include <cstdint>
@@ -13,6 +11,7 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/utils/parallel.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib {
@@ -175,7 +174,7 @@ inline std::vector<T> compute_centroid(
 
 #pragma omp parallel for schedule(dynamic) num_threads(thread_count)
     for (size_t i = 0; i < num_points; ++i) {
-        auto tid = omp_get_thread_num();
+        auto tid = parallel::thread_index();
         std::vector<T>& cur_results = all_results[tid];
         const T* cur_data = data + (dim * i);
         for (size_t k = 0; k < dim; ++k) {
@@ -219,7 +218,7 @@ inline PID exact_nn(
 
 #pragma omp parallel for schedule(dynamic) num_threads(thread_count)
     for (size_t i = 0; i < num_points; ++i) {
-        auto tid = omp_get_thread_num();
+        auto tid = parallel::thread_index();
         AnnCandidate<T, PID>& cur_entry = best_entries[tid];
         const T* cur_data = data + (dim * i);
 

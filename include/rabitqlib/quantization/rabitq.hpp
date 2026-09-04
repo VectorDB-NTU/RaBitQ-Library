@@ -1,7 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -10,6 +8,7 @@
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/rabitq_impl.hpp"
+#include "rabitqlib/utils/parallel.hpp"
 
 namespace rabitqlib::quant {
 
