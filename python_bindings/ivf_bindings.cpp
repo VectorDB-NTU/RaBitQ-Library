@@ -1,5 +1,6 @@
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <string>
@@ -105,32 +106,26 @@ class IvfIndex {
             std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
-        auto ids_buf = ids.mutable_unchecked<2>();
-        auto dists_buf = dists.mutable_unchecked<2>();
+        auto* ids_data = ids.mutable_data();
+        auto* dists_data = dists.mutable_data();
+        std::fill(ids_data, ids_data + ids.size(), rabitqlib::kPidMax);
+        std::fill(
+            dists_data, dists_data + dists.size(), std::numeric_limits<float>::infinity()
+        );
 
         rabitqlib::ivf::parallel_for(
             0,
             nq,
             num_threads,
             [&](size_t idx, size_t /*threadId*/) {
-                std::vector<rabitqlib::PID> row_ids(k, rabitqlib::kPidMax);
-                std::vector<float> row_dists(k, std::numeric_limits<float>::infinity());
-
                 index_->search(
                     query_array.data() + (idx * dim_),
                     k,
                     nprobe,
-                    row_ids.data(),
-                    row_dists.data(),
+                    ids_data + (idx * k),
+                    dists_data + (idx * k),
                     high_accuracy
                 );
-
-                for (size_t j = 0; j < k; ++j) {
-                    ids_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) =
-                        row_ids[j];
-                    dists_buf(static_cast<ssize_t>(idx), static_cast<ssize_t>(j)) =
-                        row_dists[j];
-                }
             }
         );
 

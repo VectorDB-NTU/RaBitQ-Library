@@ -39,7 +39,7 @@ class IVF {
     size_t num_cluster_ = 0;               // num of centroids (clusters)
     size_t ex_bits_ = 0;                   // total bits = ex_bits_ + 1
     RotatorType type_ = RotatorType::FhtKacRotator;  // type of rotator
-    Rotator<float>* rotator_ = nullptr;              // Data Rotator
+    std::unique_ptr<Rotator<float>> rotator_;        // Data Rotator
     std::vector<Cluster> cluster_lst_;               // List of clusters in ivf
     MetricType metric_type_ = rabitqlib::METRIC_L2;  // metric type
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
@@ -143,17 +143,14 @@ inline IVF::IVF(
         std::cerr.flush();
         exit(1);
     };
-    rotator_ = choose_rotator<float>(dim, type, round_up_to_multiple(dim_, 64));
+    rotator_.reset(choose_rotator<float>(dim, type, round_up_to_multiple(dim_, 64)));
     padded_dim_ = rotator_->size();
     /* check size */
     assert(padded_dim_ % 64 == 0);
     assert(padded_dim_ >= dim_);
 }
 
-inline IVF::~IVF() {
-    delete rotator_;
-    free_memory();
-}
+inline IVF::~IVF() { free_memory(); }
 
 /**
  * @brief Construct clusters in IVF
@@ -368,8 +365,7 @@ inline void IVF::load(const char* filename) {
     input.read(reinterpret_cast<char*>(&type_), sizeof(type_));
     input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
 
-    delete rotator_;
-    rotator_ = choose_rotator<float>(dim_, type_, round_up_to_multiple(dim_, 64));
+    rotator_.reset(choose_rotator<float>(dim_, type_, round_up_to_multiple(dim_, 64)));
     padded_dim_ = rotator_->size();
 
     /* Load number of vectors of each cluster */

@@ -9,6 +9,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <ostream>
 #include <stdexcept>
 #include <vector>
@@ -51,8 +52,8 @@ class QuantizedGraph {
             char,
             1 << 22,
             true>>
-        data_;                       // vectors + graph + quantization codes + factors
-    Rotator<T>* rotator_ = nullptr;  // data rotator
+        data_;                             // vectors + graph + quantization codes + factors
+    std::unique_ptr<Rotator<T>> rotator_;  // data rotator
     std::unique_ptr<VisitedListPool> visited_list_pool_ = nullptr;
 
     // Position of different data in each row (RawData + QuantizationCodes + Factors +
@@ -119,7 +120,7 @@ class QuantizedGraph {
 
     explicit QuantizedGraph() = default;
 
-    ~QuantizedGraph();
+    ~QuantizedGraph() = default;
 
     [[nodiscard]] auto num_vertices() const { return this->num_points_; }
 
@@ -140,7 +141,6 @@ class QuantizedGraph {
     void set_ef(size_t);
 
     /* search and copy results to KNN */
-    void search(const T* __restrict__ query, uint32_t knn, uint32_t* __restrict__ results);
     void search(
         const T* __restrict__ query,
         uint32_t knn,
@@ -181,11 +181,6 @@ inline void QuantizedGraph<T>::validate_configuration() const {
             "QuantizedGraph point count exceeds the search-buffer ID limit"
         );
     }
-}
-
-template <typename T>
-inline QuantizedGraph<T>::~QuantizedGraph() {
-    delete this->rotator_;
 }
 
 template <typename T>
@@ -268,52 +263,6 @@ inline void QuantizedGraph<T>::load(const char* filename) {
 template <typename T>
 inline void QuantizedGraph<T>::set_ef(size_t cur_ef) {
     this->ef_ = cur_ef;
-}
-
-/**
- * @brief search on qg
- *
- * @param query     unrotated query vector, dimension_ elements
- * @param knn       num of nearest neighbors
- * @param results   search result
- */
-template <typename T>
-inline void QuantizedGraph<T>::search(
-    const T* __restrict__ query, uint32_t k, uint32_t* __restrict__ results
-) {
-    std::vector<T> rotated_query(padded_dim_);
-    rotator_->rotate(query, rotated_query.data());
-
-    // init query
-    BatchQuery<T> q_obj(rotated_query.data(), padded_dim_);
-
-    buffer::SearchBuffer<T> search_pool(ef_);
-    // init search buffer
-    search_pool.insert(this->entry_point_, std::numeric_limits<T>::max());
-
-    buffer::SearchBuffer res_pool(k);  // result buffer
-    auto* vis = visited_list_pool_->get_free_vislist();
-
-    std::vector<T> est_dist(degree_bound_);  // estimated distances
-
-    while (search_pool.has_next()) {
-        PID cur_node = search_pool.pop();
-        if (vis->get(cur_node)) {
-            continue;
-        }
-        vis->set(cur_node);
-
-        q_obj.set_g_add(raw_dist_func_(query, get_vector(cur_node), dim_));
-
-        scan_neighbors(
-            q_obj, cur_node, est_dist.data(), search_pool, *vis, this->degree_bound_
-        );
-        res_pool.insert(cur_node, q_obj.g_add());
-    }
-
-    update_results(res_pool, *vis, query);
-    visited_list_pool_->release_vis_list(vis);
-    res_pool.copy_results(results);
 }
 
 template <typename T>
@@ -419,9 +368,9 @@ inline void QuantizedGraph<T>::update_results(
 // initialize const offsets & data array
 template <typename T>
 inline void QuantizedGraph<T>::initialize() {
-    delete rotator_;
-
-    rotator_ = choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64));
+    rotator_.reset(
+        choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64))
+    );
     padded_dim_ = rotator_->size();
 
     /* check size */
