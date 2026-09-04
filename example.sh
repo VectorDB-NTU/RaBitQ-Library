@@ -1,9 +1,6 @@
 # compiling
-mkdir -p build bin
-pushd build
-cmake ..
-make
-popd
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 
 # Download the dataset
 mkdir -p ./data/gist

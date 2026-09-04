@@ -1,3 +1,4 @@
+#include <exception>
 #include <iostream>
 
 #include "rabitqlib/defines.hpp"
@@ -11,7 +12,7 @@ using index_type = rabitqlib::symqg::QuantizedGraph<float>;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
     if (argc < 5) {
         std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3> <arg4>\n"
                   << "arg1: path for data file, format .fvecs\n"
@@ -20,7 +21,7 @@ int main(int argc, char** argv) {
                   << "arg4: path for saving index\n"
                   << "arg5: metric type (\"l2\" or \"ip\"), l2 by default\n"
                   << "arg6: vector quantization bits (0, 4, or 8), 0 by default\n";
-        exit(1);
+        return 1;
     }
 
     char* data_file = argv[1];
@@ -69,4 +70,13 @@ int main(int argc, char** argv) {
     qg.save(index_file);
 
     return 0;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }

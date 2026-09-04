@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <exception>
 #include <iostream>
 
 #include "rabitqlib/defines.hpp"
@@ -11,7 +12,7 @@ using index_type = rabitqlib::ivf::IVF;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
     if (argc < 6) {
         std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3> <arg4> <arg5>\n"
                   << "arg1: path for data file, format .fvecs\n"
@@ -22,7 +23,7 @@ int main(int argc, char** argv) {
                   << "arg6: metric type (\"l2\" or \"ip\"), l2 by default\n"
                   << "arg7: if use faster quantization (\"true\" or \"false\"), false by "
                      "default\n";
-        exit(1);
+        return 1;
     }
 
     rabitqlib::MetricType metric_type = rabitqlib::METRIC_L2;
@@ -79,4 +80,13 @@ int main(int argc, char** argv) {
     std::cout << "Indexing time " << miniutes << '\n';
 
     return 0;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }

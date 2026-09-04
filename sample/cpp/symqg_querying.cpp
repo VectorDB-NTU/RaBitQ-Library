@@ -1,3 +1,4 @@
+#include <exception>
 #include <iostream>
 
 #include "rabitqlib/defines.hpp"
@@ -33,13 +34,13 @@ std::vector<size_t> efs = {
 size_t test_round = 3;
 size_t topk = 10;
 
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
     if (argc != 4) {
         std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3>\n"
                   << "arg1: path for index \n"
                   << "arg2: path for query file, format .fvecs\n"
                   << "arg3: path for groundtruth file format .ivecs\n";
-        exit(1);
+        return 1;
     }
 
     char* index_file = argv[1];
@@ -106,4 +107,13 @@ int main(int argc, char** argv) {
     }
 
     return 0;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }

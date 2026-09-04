@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <exception>
 #include <iostream>
 
 #include "rabitqlib/index/hnsw/hnsw.hpp"
@@ -10,7 +11,7 @@ using index_type = rabitqlib::hnsw::HierarchicalNSW;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
-int main(int argc, char* argv[]) {
+int run(int argc, char* argv[]) {
     if (argc < 8) {
         std::cerr << "Usage: " << argv[0]
                   << " <arg1> <arg2> <arg3> <arg4> <arg5> <arg6> <arg7> <arg8>\n"
@@ -24,7 +25,7 @@ int main(int argc, char* argv[]) {
                   << "arg8: metric type (\"l2\" or \"ip\"), l2 by default\n"
                   << "arg9: if use faster quantization (\"true\" or \"false\"), false by "
                      "default\n";
-        exit(1);
+        return 1;
     }
 
     char* data_file = argv[1];
@@ -95,4 +96,13 @@ int main(int argc, char* argv[]) {
     std::cout << "index saved..." << '\n';
 
     return 0;
+}
+
+int main(int argc, char* argv[]) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }

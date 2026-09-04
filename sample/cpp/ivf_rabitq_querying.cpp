@@ -1,3 +1,4 @@
+#include <exception>
 #include <iostream>
 #include <vector>
 
@@ -22,7 +23,7 @@ static std::vector<size_t> get_nprobes(
 static size_t topk = 100;
 static size_t test_round = 5;
 
-int main(int argc, char** argv) {
+int run(int argc, char** argv) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3> <arg4>\n"
                   << "arg1: path for index \n"
@@ -30,7 +31,7 @@ int main(int argc, char** argv) {
                   << "arg3: path for groundtruth file format .ivecs\n"
                   << "arg4: whether use high accuracy fastscan, (\"true\" or \"false\"), "
                      "true by default\n\n";
-        exit(1);
+        return 1;
     }
 
     char* index_file = argv[1];
@@ -137,6 +138,15 @@ int main(int argc, char** argv) {
     }
 
     return 0;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }
 
 static std::vector<size_t> get_nprobes(

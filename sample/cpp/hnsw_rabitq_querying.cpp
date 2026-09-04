@@ -1,3 +1,4 @@
+#include <exception>
 #include <iostream>
 #include <vector>
 
@@ -16,13 +17,13 @@ using index_type = rabitqlib::hnsw::HierarchicalNSW;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
-int main(int argc, char* argv[]) {
-    if (argc < 3) {
+int run(int argc, char* argv[]) {
+    if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <arg1> <arg2> <arg3>\n"
                   << "arg1: path for index \n"
                   << "arg2: path for query file, format .fvecs\n"
                   << "arg3: path for groundtruth file format .ivecs\n";
-        exit(1);
+        return 1;
     }
 
     char* index_file = argv[1];
@@ -99,5 +100,16 @@ int main(int argc, char* argv[]) {
                  "\n";
     for (size_t i = 0; i < avg_qps.size(); ++i) {
         std::cout << efs[i] << '\t' << avg_qps[i] << '\t' << avg_recall[i] << '\t' << '\n';
+    }
+
+    return 0;
+}
+
+int main(int argc, char* argv[]) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
     }
 }

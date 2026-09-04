@@ -1,7 +1,10 @@
+#include <exception>
+#include <iostream>
+
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 
-int main() {
+int run() {
     // generate random data
     size_t dim = 128;
     size_t bit = 4;
@@ -47,4 +50,15 @@ int main() {
     delete[] rotated_data;
     delete[] code;
     delete[] reconstructed_data;
+
+    return 0;
+}
+
+int main() {
+    try {
+        return run();
+    } catch (const std::exception& error) {
+        std::cerr << "Error: " << error.what() << '\n';
+        return 1;
+    }
 }
