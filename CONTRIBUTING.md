@@ -65,13 +65,14 @@ sudo apt-get install clang-tidy-15 libomp-15-dev cmake ninja-build
 python -m pip install "numpy>=1.23" "pybind11>=2.12"
 ```
 
-Then configure the same tests and Python bindings analyzed by CI and run the
-check with the same compiler used by CMake:
+Then configure the same core library and Python binding targets analyzed by CI
+and run the check with the same compiler used by CMake:
 
 ```bash
 export pybind11_DIR="$(python -m pybind11 --cmakedir)"
 CXX=c++ cmake -S . -B build-tidy -G Ninja \
-    -DRABITQ_BUILD_TESTS=ON \
+    -DRABITQ_BUILD_SAMPLES=OFF \
+    -DRABITQ_BUILD_TESTS=OFF \
     -DRABITQ_BUILD_PYTHON_BINDINGS=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -Dpybind11_DIR="$pybind11_DIR"
@@ -108,6 +109,22 @@ Run ShellCheck after changing a contributor or automation script:
 sudo apt-get install shellcheck
 shellcheck scripts/*.sh
 ```
+
+## Pull request labels and release notes
+
+GitHub generates categorized release notes from merged pull requests. Before
+merging, maintainers should apply the label that best describes the change:
+
+| Label | Release note category |
+| --- | --- |
+| `enhancement` | Added |
+| `bug` | Fixed |
+| `documentation` | Documentation |
+| `python` | Python |
+| `dependencies` | Dependencies |
+
+Pull requests without one of these labels appear under `Other changes`. Pull
+requests labeled `duplicate` or `invalid` are omitted from release notes.
 
 ## Performance and compatibility
 
