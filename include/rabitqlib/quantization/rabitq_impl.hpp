@@ -3,11 +3,15 @@
 #include <omp.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <queue>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -285,94 +289,104 @@ constexpr std::array<float, 9> kTightStart = {
     0.81,
 };
 
+// Preconditions: magnitude >= 0 and finite; t >= 0 and finite; max_code >= 0.
+// Compare thresholds exactly as the queue does. Multiplication alone can round
+// to the wrong side of an event; adding a fixed epsilon can cross other events.
+inline int quantized_level_at_scale(double magnitude, double t, int max_code) {
+    if (magnitude == 0)
+        return 0;
+    int code = static_cast<int>(std::min(t * magnitude, static_cast<double>(max_code)));
+    // Clamping only bounds the code; correct rounding in either direction to match
+    // the queue's division-based thresholds.
+    if (code < max_code && (code + 1.0) / magnitude <= t)
+        ++code;
+    else if (code > 0 && static_cast<double>(code) / magnitude > t)
+        --code;
+    return code;
+}
+
+// Input is the library's finite, nonnegative normalized magnitude vector.
 template <typename T>
 inline double best_rescale_factor(const T* o_abs, size_t dim, size_t ex_bits) {
-    constexpr double kEps = 1e-5;
-    constexpr int kNEnum = 10;
-    double max_o = *std::max_element(o_abs, o_abs + dim);
-    if (max_o == 0) {
-        return 0;
+    if (ex_bits >= kTightStart.size()) {
+        throw std::invalid_argument("ex_bits exceeds the supported search table");
     }
+    if (dim == 0)
+        return 0;
+    const double max_o = static_cast<double>(*std::max_element(o_abs, o_abs + dim));
+    if (max_o == 0)
+        return 0;
 
-    double t_end = static_cast<double>(((1 << ex_bits) - 1) + kNEnum) / max_o;
-    double t_start = t_end * kTightStart[ex_bits];
+    const int max_code = (1 << ex_bits) - 1;
+    const double t_end = static_cast<double>(max_code + 10) / max_o;
+    const double t_start = t_end * kTightStart[ex_bits];
 
+    using Event = std::pair<double, size_t>;
+    std::priority_queue<Event, std::vector<Event>, std::greater<Event>> next_t;
     std::vector<int> cur_o_bar(dim);
     double sqr_denominator = static_cast<double>(dim) * 0.25;
     double numerator = 0;
 
+    auto enqueue_next = [&](size_t i) {
+        const double magnitude = static_cast<double>(o_abs[i]);
+        // Never increment a saturated coordinate; skip zero coordinates.
+        if (magnitude > 0 && cur_o_bar[i] < max_code) {
+            const double next = static_cast<double>(cur_o_bar[i] + 1) / magnitude;
+            if (next < t_end)
+                next_t.emplace(next, i);
+        }
+    };
+
     for (size_t i = 0; i < dim; ++i) {
-        int cur = static_cast<int>((t_start * o_abs[i]) + kEps);
+        const double magnitude = static_cast<double>(o_abs[i]);
+        const int cur = quantized_level_at_scale(magnitude, t_start, max_code);
         cur_o_bar[i] = cur;
         sqr_denominator += (cur * cur) + cur;
-        numerator += (cur + 0.5) * o_abs[i];
+        numerator += (cur + 0.5) * magnitude;
+        enqueue_next(i);
     }
 
-    std::priority_queue<
-        std::pair<double, size_t>,
-        std::vector<std::pair<double, size_t>>,
-        std::greater<>>
-        next_t;
-
-    for (size_t i = 0; i < dim; ++i) {
-        next_t.emplace(static_cast<double>(cur_o_bar[i] + 1) / o_abs[i], i);
-    }
-
-    double max_ip = 0;
-    double t = 0;
+    // The initial state may already be the best state inside the interval.
+    double max_ip = numerator / std::sqrt(sqr_denominator);
+    double best_t = t_start;
 
     while (!next_t.empty()) {
-        double cur_t = next_t.top().first;
-        size_t update_id = next_t.top().second;
-        next_t.pop();
+        const double cur_t = next_t.top().first;
+        // All coordinates crossing the same threshold change together.
+        do {
+            const size_t i = next_t.top().second;
+            next_t.pop();
+            ++cur_o_bar[i];
+            sqr_denominator += 2.0 * cur_o_bar[i];
+            numerator += static_cast<double>(o_abs[i]);
+            enqueue_next(i);
+        } while (!next_t.empty() && next_t.top().first == cur_t);
 
-        cur_o_bar[update_id]++;
-        int update_o_bar = cur_o_bar[update_id];
-        sqr_denominator += 2 * update_o_bar;
-        numerator += o_abs[update_id];
-
-        double cur_ip = numerator / std::sqrt(sqr_denominator);
+        const double cur_ip = numerator / std::sqrt(sqr_denominator);
         if (cur_ip > max_ip) {
             max_ip = cur_ip;
-            t = cur_t;
-        }
-
-        if (update_o_bar < (1 << ex_bits) - 1) {
-            double t_next = static_cast<double>(update_o_bar + 1) / o_abs[update_id];
-            if (t_next < t_end) {
-                next_t.emplace(t_next, update_id);
-            }
+            best_t = cur_t;
         }
     }
-
-    return t;
+    return best_t;
 }
 
 template <typename T, typename TP>
 inline T quantize_ex(const T* o_abs, TP* code, size_t dim, size_t ex_bits) {
-    constexpr double kEps = 1e-5;
-    double t = best_rescale_factor<T>(o_abs, dim, ex_bits);
+    const double t = best_rescale_factor<T>(o_abs, dim, ex_bits);
+    const int max_code = (1 << ex_bits) - 1;
     double ipnorm = 0;
-
-    std::vector<int> tmp_code(dim);
-    for (size_t i = 0; i < dim; i++) {
-        // compute and store code
-        tmp_code[i] = static_cast<int>((t * o_abs[i]) + kEps);
-        if (tmp_code[i] >= (1 << ex_bits)) {
-            tmp_code[i] = (1 << ex_bits) - 1;
-        }
-        code[i] = static_cast<TP>(tmp_code[i]);
-
-        // ip * norm = unnormalized ip
-        ipnorm += (tmp_code[i] + 0.5) * o_abs[i];
+    for (size_t i = 0; i < dim; ++i) {
+        const double magnitude = static_cast<double>(o_abs[i]);
+        // Emit precisely the legal state evaluated by the search.
+        const int value = quantized_level_at_scale(magnitude, t, max_code);
+        code[i] = static_cast<TP>(value);
+        ipnorm += (value + 0.5) * magnitude;
     }
-
-    T ipnorm_inv = static_cast<double>(1 / ipnorm);  // 1 / (ip*norm)
-    if (!std::isnormal(ipnorm_inv)) {
-        ipnorm_inv = 1.F;
-    }
-
-    return ipnorm_inv;
+    if (ipnorm == 0)
+        return static_cast<T>(1);
+    const T ipnorm_inv = static_cast<T>(1.0 / ipnorm);
+    return std::isnormal(ipnorm_inv) ? ipnorm_inv : static_cast<T>(1);
 }
 
 // For given dim and ex_bits, use random vectors to get the const rescale factor

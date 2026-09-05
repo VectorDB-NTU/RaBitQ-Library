@@ -11,6 +11,101 @@
 namespace rabitqlib::quant {
 namespace {
 
+TEST(RabitqQuantizedLevelTest, MatchesThresholdsAroundRoundingBoundaries) {
+    const std::array<double, 7> magnitudes = {
+        0.1,
+        0.3,
+        1.0 / 3.0,
+        std::nextafter(1.0, 0.0),
+        1.0,
+        static_cast<double>(std::numeric_limits<float>::denorm_min()),
+        std::numeric_limits<double>::max()};
+    for (int bits = 0; bits <= 8; ++bits) {
+        const int max_code = (1 << bits) - 1;
+        EXPECT_EQ(rabitq_impl::ex_bits::quantized_level_at_scale(0, 1, max_code), 0);
+        for (double magnitude : magnitudes) {
+            for (int level = 1; level <= max_code + 1; ++level) {
+                const double threshold = static_cast<double>(level) / magnitude;
+                for (double t :
+                     {std::nextafter(threshold, 0.0),
+                      threshold,
+                      std::nextafter(threshold, std::numeric_limits<double>::infinity())}) {
+                    // Enumerate crossed thresholds independently of t * magnitude.
+                    int expected = 0;
+                    for (int code = 1; code <= max_code; ++code) {
+                        if (static_cast<double>(code) / magnitude <= t) {
+                            expected = code;
+                        }
+                    }
+                    EXPECT_EQ(
+                        rabitq_impl::ex_bits::quantized_level_at_scale(
+                            magnitude, t, max_code
+                        ),
+                        expected
+                    ) << "bits="
+                      << bits << " magnitude=" << magnitude << " t=" << t;
+                }
+            }
+        }
+    }
+}
+
+TEST(RabitqRescaleSearchTest, SaturatedAndZeroCoordinatesHaveNoFurtherEvents) {
+    const std::array<double, 2> magnitudes = {1.0, 0.0};
+    std::array<int, 2> code{};
+    const double start = 17.0 * rabitq_impl::ex_bits::kTightStart[3];
+
+    EXPECT_DOUBLE_EQ(
+        rabitq_impl::ex_bits::best_rescale_factor(magnitudes.data(), magnitudes.size(), 3),
+        start
+    );
+    const double factor = rabitq_impl::ex_bits::quantize_ex(
+        magnitudes.data(), code.data(), magnitudes.size(), 3
+    );
+    EXPECT_EQ(code, (std::array<int, 2>{7, 0}));
+    EXPECT_DOUBLE_EQ(factor, 1.0 / 7.5);
+}
+
+TEST(RabitqRescaleSearchTest, KeepsInitialStateWhenLaterLegalStateIsWorse) {
+    const std::array<double, 2> magnitudes = {0.8, 0.6};
+    std::array<int, 2> code{};
+    const double start = (17.0 / 0.8) * rabitq_impl::ex_bits::kTightStart[3];
+
+    // The later event at 7 / 0.6 yields [7, 7], which has lower cosine similarity.
+    EXPECT_DOUBLE_EQ(
+        rabitq_impl::ex_bits::best_rescale_factor(magnitudes.data(), magnitudes.size(), 3),
+        start
+    );
+    const double factor = rabitq_impl::ex_bits::quantize_ex(
+        magnitudes.data(), code.data(), magnitudes.size(), 3
+    );
+    EXPECT_EQ(code, (std::array<int, 2>{7, 6}));
+    EXPECT_DOUBLE_EQ(factor, 1.0 / (7.5 * 0.8 + 6.5 * 0.6));
+}
+
+TEST(RabitqRescaleSearchTest, EmitsAllCoordinatesCrossingTheSelectedThreshold) {
+    for (size_t small_coordinate = 0; small_coordinate < 3; ++small_coordinate) {
+        std::array<double, 3> magnitudes = {2.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0};
+        magnitudes[small_coordinate] = 1.0 / 3.0;
+        std::array<int, 3> expected = {3, 3, 3};
+        expected[small_coordinate] = 1;
+        std::array<int, 3> code{};
+
+        // Both larger coordinates cross into level 3 at exactly t = 4.5.
+        EXPECT_DOUBLE_EQ(
+            rabitq_impl::ex_bits::best_rescale_factor(
+                magnitudes.data(), magnitudes.size(), 2
+            ),
+            4.5
+        );
+        const double factor = rabitq_impl::ex_bits::quantize_ex(
+            magnitudes.data(), code.data(), magnitudes.size(), 2
+        );
+        EXPECT_EQ(code, expected);
+        EXPECT_DOUBLE_EQ(factor, 6.0 / 31.0);
+    }
+}
+
 TEST(RabitqDegenerateInputTest, OneBitFactorsAreFiniteForZeroResidual) {
     constexpr size_t kDim = 64;
     std::array<float, kDim> data{};

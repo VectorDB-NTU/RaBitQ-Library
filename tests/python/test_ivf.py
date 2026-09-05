@@ -123,6 +123,42 @@ def test_high_accuracy_false(built_ivf, query_data):
     assert ids.shape == (N_QUERIES, _TOPK)
 
 
+@pytest.mark.parametrize("nbits", [4, 8])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_full_quantization_centroid_distances_roundtrip(nbits, metric, tmp_path):
+    # Exercise a tail batch and a padded dimension, including a zero residual.
+    rng = np.random.default_rng(42)
+    data = rng.standard_normal((33, 129)).astype(np.float32)
+    data[0] = 0
+    centroid = np.zeros((1, 129), dtype=np.float32)
+    idx = IvfIndex(129, len(data), 1, nbits=nbits, metric=metric)
+    idx.build(
+        data,
+        centroid,
+        np.zeros(len(data), dtype=np.uint32),
+        fast_quantization=False,
+        num_threads=1,
+    )
+
+    ids, distances = idx.search(centroid, k=len(data), nprobe=1, num_threads=1)
+    expected = (
+        np.einsum("ij,ij->i", data, data)
+        if metric == "l2"
+        else np.ones(len(data), dtype=np.float32)
+    )
+    np.testing.assert_array_equal(np.sort(ids[0]), np.arange(len(data)))
+    np.testing.assert_allclose(distances[0], expected[ids[0]], rtol=2e-5, atol=2e-5)
+
+    path = str(tmp_path / "quantized.index")
+    idx.save(path)
+    loaded = IvfIndex.load(path)
+    loaded_ids, loaded_distances = loaded.search(
+        centroid, k=len(data), nprobe=1, num_threads=1
+    )
+    np.testing.assert_array_equal(loaded_ids, ids)
+    np.testing.assert_array_equal(loaded_distances, distances)
+
+
 def test_multithreaded_search_matches_single(built_ivf, query_data):
     ids1, dists1 = built_ivf.search(
         query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=1
