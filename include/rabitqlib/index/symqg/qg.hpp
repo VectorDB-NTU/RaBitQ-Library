@@ -701,8 +701,14 @@ inline void QuantizedGraph<T>::update_qg(
     std::vector<T> rotated_data(cur_degree * padded_dim_);
     std::vector<T> rotated_centroid(padded_dim_);
     for (size_t i = 0; i < cur_degree; ++i) {
-        const T* neighbor_vec = get_build_vector(new_neighbors[i].id);
-        this->rotator_->rotate(neighbor_vec, &rotated_data[i * padded_dim_]);
+        if (quantization_bits_ == 0) {
+            const T* neighbor_vec = get_build_vector(new_neighbors[i].id);
+            this->rotator_->rotate(neighbor_vec, &rotated_data[i * padded_dim_]);
+        } else {
+            reconstruct_quantized_vector(
+                new_neighbors[i].id, &rotated_data[i * padded_dim_]
+            );
+        }
     }
     if (quantization_bits_ == 0) {
         this->rotator_->rotate(get_build_vector(cur_id), rotated_centroid.data());
