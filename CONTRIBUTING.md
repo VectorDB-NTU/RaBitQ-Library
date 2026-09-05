@@ -1,7 +1,85 @@
 # Contributing to RaBitQ
 
-Thank you for contributing to RaBitQ. Before submitting a pull request, build
-the library, run the relevant tests, and check the C++ formatting.
+Thank you for contributing to RaBitQ. Documentation improvements, runnable
+examples, bug reports, and code changes are all welcome.
+
+## Your first contribution
+
+1. **Choose one small task.** Start with the [starter tasks](#starter-tasks)
+   below or browse [existing issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues).
+   Check for an existing issue or PR before starting. If the scope is unclear,
+   ask in the issue; straightforward documentation fixes can go directly to a PR.
+2. **Get a checkout.** Fork the repository, clone your fork, and create a branch
+   for your change. Run the commands below from the repository root, using your
+   existing project Python environment.
+3. **Make and check the change.** Follow the matching path below. Start with
+   one relevant test, then run the checks required for the files you changed.
+4. **Open a pull request to `main`.** Explain the problem, what changed, and
+   which checks you ran, including any failures or unavailable checks. Link the
+   related issue if there is one. A draft PR is welcome when you need feedback.
+
+### Maintenance and feedback
+
+[Yutong Gou (@gouyt13)](https://github.com/gouyt13) currently handles
+issue triage and reviews for all paths in the repository. Review timing depends
+on availability. Keep questions and follow-up discussion in the relevant issue
+or PR so others can learn from the answers.
+
+See [maintenance and feedback](ROADMAP.md) for project contacts and releases.
+For bugs, proposals, or help getting started, choose the appropriate
+[issue form](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose).
+
+### Documentation changes
+
+For repository Markdown such as `README.md` or this guide, review accuracy,
+check local links, and run `git diff --check`. No C++ build or formatter is
+required for prose-only changes.
+
+For the documentation site under `docs/`, also install its development tools
+in your project environment and build it:
+
+```bash
+python -m pip install -r docs/requirements.txt
+python -m mkdocs build --strict --config-file docs/mkdocs.yml
+```
+
+Run any examples you add or change, even when they appear inside Markdown.
+
+### Python and C++ changes
+
+Use the [build prerequisites](tests/README.md#prerequisites) for source builds.
+For Python work, install the checkout and test dependencies in your project
+environment, then run a small test to verify the setup:
+
+```bash
+python -m pip install ".[test]"
+python -m pytest tests/python/test_ivf.py::test_search_output_shape -q
+```
+
+For C++ work, follow the [C++ build and test quick start](tests/README.md#quick-start).
+Add focused regression coverage when changing behavior. Use all matching rows
+below before submitting; see [verification guidance](AGENTS.md#verification-by-change-type)
+for shared code, SIMD, persistence, performance, and build changes.
+
+| Changed files or behavior | Checks to run |
+| --- | --- |
+| Python sources | [Python formatting and linting](#python-formatting-and-linting), plus affected tests with `python -m pytest` |
+| First-party C++ | [C++ formatting](#c-formatting), affected build/tests, and [static analysis](#static-analysis); focused analysis during iteration, full analysis before merging |
+| Bindings or Python-visible C++ behavior | Both rows above; rebuild/install the checkout before Python tests and verify the imported package and extension paths |
+| Examples | Run the changed example, plus the checks for its language |
+| Shell scripts | [ShellCheck](#shell-scripts) on affected scripts |
+
+### Starter tasks
+
+These are small contribution ideas, not reserved or assigned issues. Check
+the current files and open PRs first; if a task is already complete, choose
+another. Each task can be a separate PR.
+
+| Task | Where to start | Done when |
+| --- | --- | --- |
+| Explain Python search results | [Quick start](docs/docs/quick_start.md), [IVF binding](python_bindings/ivf_bindings.cpp), and [IVF tests](tests/python/test_ivf.py) | A short explanation covers result shapes, how IDs map to input rows, and what L2 distances represent, checked against the implementation. The example runs and the strict docs build passes. |
+| Add a self-contained IVF save/load example | [Python examples](sample/python/), [README quick start](README.md#python-quick-start), and [IVF tests](tests/python/test_ivf.py) | A deterministic script builds from synthetic data, saves to a temporary directory, reloads, and checks that search IDs and distances match. It needs no dataset download, cleans up its temporary files, passes Python checks, and is linked from the README. |
+| Explain the quick start's cluster assignment | [Quick start](docs/docs/quick_start.md) and [IVF guide](docs/docs/index/ivf.md) | The tutorial explains that its round-robin assignment is for a small runnable example, explains why real IVF workloads use clustering, and links to the existing clustering workflow. The strict docs build passes. |
 
 ## C++ formatting
 

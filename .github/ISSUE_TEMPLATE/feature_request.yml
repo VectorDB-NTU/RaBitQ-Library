@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a focused improvement or discuss project priorities.
+title: "[Feature]: "
+labels: [enhancement]
+assignees: [gouyt13]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to accomplish, and what is missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the behavior you would like, with a small usage example if helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and constraints
+      description: Mention workarounds you tried and relevant compatibility, memory, or performance requirements.

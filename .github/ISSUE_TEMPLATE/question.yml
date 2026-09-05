@@ -1,0 +1,17 @@
+name: Usage or contribution question
+description: Ask about using the library or getting started as a contributor.
+title: "[Question]: "
+assignees: [gouyt13]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: How can we help?
+      description: Describe your goal and where you are stuck. For a contribution question, link the task or relevant files.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you tried?
+      description: Include relevant code, documentation you followed, and your package version or commit. Remove credentials and private data.

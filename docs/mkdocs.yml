@@ -22,6 +22,8 @@ nav:
       - IVF + RaBitQ: index/ivf.md
       - HNSW + RaBitQ: index/hnsw.md
       - SymphonyQG: index/qg.md
+  - Integrations:
+      - Zvec: integrations/zvec.md
 
 theme:
   name: material

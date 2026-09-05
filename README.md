@@ -21,7 +21,8 @@
   <a href="https://vectordb-ntu.github.io/RaBitQ-Library/">Documentation</a> ·
   <a href="https://pypi.org/project/rabitqlib/">Python package</a> ·
   <a href="https://doi.org/10.1145/3725413">Paper</a> ·
-  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/releases">Releases</a>
+  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/releases">Releases</a> ·
+  <a href="ROADMAP.md">Maintenance</a>
 </p>
 
 </div>
@@ -43,7 +44,108 @@ pip install rabitqlib
 Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14. AVX2 + FMA is the
 portable CPU baseline; supported AVX-512 kernels are selected at runtime.
 
+## Python quick start
+
+The following complete example builds a small IVF index and searches it. It
+uses deterministic synthetic data, so no dataset download is required.
+
+```python
+import numpy as np
+from rabitqlib import IvfIndex
+
+rng = np.random.default_rng(42)
+data = rng.standard_normal((500, 64)).astype(np.float32)
+queries = rng.standard_normal((5, 64)).astype(np.float32)
+
+# Assign vectors to five clusters and calculate their centroids.
+cluster_ids = (np.arange(len(data)) % 5).astype(np.uint32)
+centroids = np.stack(
+    [data[cluster_ids == cluster].mean(axis=0) for cluster in range(5)]
+).astype(np.float32)
+
+index = IvfIndex(
+    dim=64,
+    max_elements=len(data),
+    num_clusters=5,
+    nbits=4,
+    metric="l2",
+)
+index.build(data, centroids, cluster_ids)
+
+ids, distances = index.search(queries, k=10, nprobe=5)
+print(ids.shape, distances.shape)  # (5, 10) (5, 10)
+print(ids[0])
+```
+
+Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
+[Python examples](sample/python/) for index construction, querying, and index
+persistence.
+
+<details>
+<summary>Build the Python bindings from source</summary>
+
+Source builds require a C++17 compiler, CMake 3.15 or newer, and OpenMP. On
+Ubuntu or Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake libomp-dev
+git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
+cd RaBitQ-Library
+python -m pip install .
+```
+
+</details>
+
+## Choose the right building block
+
+| Component | Best fit | Storage and search profile |
+| --- | --- | --- |
+| **Quantizer** | Integrating RaBitQ into an existing system | Low-level 1-bit or multi-bit encoding and distance estimation. |
+| **IVF** | Memory-efficient partitioned search | Stores quantized codes without retaining the raw dataset. |
+| **HNSW** | Graph search with compact vectors | Adds graph links and searches directly from quantized codes. |
+| **SymphonyQG** | Fast graph search with a configurable memory/accuracy tradeoff | Uses raw vectors by default, or optional packed 4-bit/8-bit RaBitQ vectors, alongside per-neighborhood quantization data. |
+
+IVF and SymphonyQG use [FastScan](https://arxiv.org/abs/1704.07355) for batched
+estimates, while HNSW uses single-code AVX2 or AVX-512 kernels.
+
+In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
+90%, 95%, and 99% recall, respectively, without reranking. Actual results
+depend on the dataset, index configuration, and search parameters.
+
+## Why RaBitQ?
+
+| | |
+| --- | --- |
+| **Compact by design** | Choose [1-bit](https://doi.org/10.1145/3654970) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
+| **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
+| **Fast on x86-64** | Dedicated AVX2 and AVX-512 kernels are selected through runtime CPU dispatch. |
+| **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
+
+The library supports Euclidean distance and inner product. Cosine search is
+available by normalizing vectors before using inner product.
+
+RaBitQ is developed by the
+[VectorDB group](https://vectordb-ntu.github.io/) at Nanyang Technological
+University, Singapore. A GPU implementation is also available in
+[cuvs_rabitq](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq).
+
+## Accuracy at a glance
+
+![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](docs/docs/assets/img/acc_bench.png)
+
+*Average and maximum relative estimation error across six datasets; lower is
+better. Results from the
+[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
+
 ## RaBitQ across the vector-search ecosystem
+
+The projects below illustrate adoption of RaBitQ techniques across vector
+search; this is not a list of direct dependencies on RaBitQ-Library.
+
+**Integration story:** [How zvec integrates RaBitQ-Library](docs/docs/integrations/zvec.md)
+traces its use of the library's quantizers and estimators inside zvec's IVF
+and HNSW implementations, with links to the source code.
 
 <table>
   <tr>
@@ -106,84 +208,6 @@ portable CPU baseline; supported AVX-512 kernels are selected at runtime.
     </td>
   </tr>
 </table>
-
-## Accuracy at a glance
-
-![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](docs/docs/assets/img/acc_bench.png)
-
-*Average and maximum relative estimation error across six datasets; lower is
-better. Results from the
-[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
-
-## Why RaBitQ?
-
-| | |
-| --- | --- |
-| **Compact by design** | Choose [1-bit](https://doi.org/10.1145/3654970) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
-| **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
-| **Fast on x86-64** | Dedicated AVX2 and AVX-512 kernels are selected through runtime CPU dispatch. |
-| **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
-
-The library supports Euclidean distance and inner product. Cosine search is
-available by normalizing vectors before using inner product.
-
-RaBitQ is developed by the
-[VectorDB group](https://vectordb-ntu.github.io/) at Nanyang Technological
-University, Singapore. A GPU implementation is also available in
-[cuvs_rabitq](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq).
-
-## Python quick start
-
-The following complete example builds a small IVF index and searches it. It
-uses deterministic synthetic data, so no dataset download is required.
-
-```python
-import numpy as np
-from rabitqlib import IvfIndex
-
-rng = np.random.default_rng(42)
-data = rng.standard_normal((500, 64)).astype(np.float32)
-queries = rng.standard_normal((5, 64)).astype(np.float32)
-
-# Assign vectors to five clusters and calculate their centroids.
-cluster_ids = (np.arange(len(data)) % 5).astype(np.uint32)
-centroids = np.stack(
-    [data[cluster_ids == cluster].mean(axis=0) for cluster in range(5)]
-).astype(np.float32)
-
-index = IvfIndex(
-    dim=64,
-    max_elements=len(data),
-    num_clusters=5,
-    nbits=4,
-    metric="l2",
-)
-index.build(data, centroids, cluster_ids)
-
-ids, distances = index.search(queries, k=10, nprobe=5)
-print(ids.shape, distances.shape)  # (5, 10) (5, 10)
-print(ids[0])
-```
-
-Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
-[Python examples](sample/python/) for index construction, querying, and index
-persistence.
-
-<details>
-<summary>Build the Python bindings from source</summary>
-
-Source builds require a C++17 compiler, CMake 3.15 or newer, and OpenMP. On
-Ubuntu or Debian:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libomp-dev
-git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
-cd RaBitQ-Library
-python -m pip install .
-```
-
-</details>
 
 ## C++ quick start
 
@@ -311,22 +335,6 @@ GoogleTest is downloaded during test configuration. For a full benchmark on
 the GIST dataset, see [`example.sh`](example.sh). More detailed API and
 algorithm guidance is available in the [documentation](docs/docs/index.md).
 
-## Choose the right building block
-
-| Component | Best fit | Storage and search profile |
-| --- | --- | --- |
-| **Quantizer** | Integrating RaBitQ into an existing system | Low-level 1-bit or multi-bit encoding and distance estimation. |
-| **IVF** | Memory-efficient partitioned search | Stores quantized codes without retaining the raw dataset. |
-| **HNSW** | Graph search with compact vectors | Adds graph links and searches directly from quantized codes. |
-| **SymphonyQG** | Fast graph search with a configurable memory/accuracy tradeoff | Uses raw vectors by default, or optional packed 4-bit/8-bit RaBitQ vectors, alongside per-neighborhood quantization data. |
-
-IVF and SymphonyQG use [FastScan](https://arxiv.org/abs/1704.07355) for batched
-estimates, while HNSW uses single-code AVX2 or AVX-512 kernels.
-
-In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
-90%, 95%, and 99% recall, respectively, without reranking. Actual results
-depend on the dataset, index configuration, and search parameters.
-
 ## Citation
 
 If RaBitQ helps your research or system, please cite:
@@ -350,8 +358,14 @@ If RaBitQ helps your research or system, please cite:
 
 ## Contributing
 
-Contributions are welcome. See the [contributing guide](CONTRIBUTING.md) for
-the build, formatting, pre-commit, and static-analysis workflows.
+Contributions are welcome, including documentation and examples. Start with
+[your first contribution](CONTRIBUTING.md#your-first-contribution) or choose a
+[small starter task](CONTRIBUTING.md#starter-tasks). The guide explains which
+build, test, and formatting checks apply to your change.
+
+See [maintenance and feedback](ROADMAP.md) for the current maintainer. Use
+[GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose)
+for bugs, feature requests, and usage or contribution questions.
 
 ## Acknowledgements
 

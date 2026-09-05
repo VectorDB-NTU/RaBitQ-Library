@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://vectordb-ntu.github.io/RaBitQ-Library/
+    about: Find installation instructions, examples, and index guides.
+  - name: Maintenance and feedback
+    url: https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/ROADMAP.md
+    about: Find the maintainer, contribution guide, and published releases.

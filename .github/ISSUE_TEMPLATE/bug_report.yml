@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a crash, incorrect result, or installation problem.
+title: "[Bug]: "
+labels: [bug]
+assignees: [gouyt13]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest script or commands that reproduce the problem. Prefer synthetic data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the package version or commit, OS, CPU model and AVX2/AVX-512 capabilities if known, Python version, and installation command. For source builds, include compiler, CMake version, and build flags.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      description: Include relevant errors or a backtrace, if available. Remove credentials and private data.
+      render: text

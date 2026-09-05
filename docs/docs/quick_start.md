@@ -7,9 +7,11 @@ a C++17 API for both indexes and low-level quantization.
 
 - An x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA
-- Python 3.11 or newer for the Python package
-- A C++17 compiler with OpenMP support
-- CMake 3.15 or newer
+- Linux x86-64 and CPython 3.11–3.14 for prebuilt Python wheels
+- For source builds: a C++17 compiler with OpenMP support and CMake 3.15 or newer
+
+<details>
+<summary>CPU dispatch details</summary>
 
 Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
 AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
@@ -17,27 +19,19 @@ available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
 AVX-512 core path also checks for AVX2 and FMA, and otherwise uses its AVX2
 path when available. AVX-512 translation units are compiled with FMA enabled.
 
+</details>
+
 ## Python
 
 ### Install
 
-The PyPI package currently builds the native extension during installation.
-On Ubuntu or Debian, install the build tools first:
-
 ```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libomp-dev
-python -m pip install --upgrade pip
 python -m pip install rabitqlib
 ```
 
-To install the current development version instead:
-
-```bash
-git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
-cd RaBitQ-Library
-python -m pip install .
-```
+Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14 and do not require
+a compiler or CMake. AVX2 + FMA is the portable CPU baseline; supported
+AVX-512 kernels are selected at runtime.
 
 ### Build and search an IVF index
 
@@ -79,6 +73,23 @@ query vectors first and use `metric="ip"`.
 Python bindings are also available for `HnswIndex` and `SymqgIndex`. The
 [Python examples](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/python)
 cover construction, querying, and index persistence.
+
+<details>
+<summary>Build the Python bindings from source</summary>
+
+Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.15 or
+newer, and OpenMP. To install the current development version on Ubuntu or
+Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake libomp-dev
+git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
+cd RaBitQ-Library
+python -m pip install .
+```
+
+</details>
 
 ## C++
 
