@@ -1,12 +1,15 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <atomic>
+#include <exception>
+#include <limits>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "bindings_common.hpp"
-#include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 
@@ -84,19 +87,44 @@ class SymqgIndex {
         std::fill(ids_data, ids_data + ids.size(), 0);
         std::fill(dists_data, dists_data + dists.size(), 0.0F);
 
-        rabitqlib::ivf::parallel_for(
-            0,
-            nq,
-            num_threads,
-            [&](size_t idx, size_t /*threadId*/) {
+        const auto* queries_data = query_array.data();
+        const size_t requested_threads =
+            num_threads == 0 ? std::thread::hardware_concurrency() : num_threads;
+        const auto workers = static_cast<int>(std::max<size_t>(
+            1,
+            std::min(
+                {requested_threads,
+                 nq,
+                 static_cast<size_t>(std::numeric_limits<int>::max())}
+            )
+        ));
+        std::atomic<bool> failed{false};
+        std::exception_ptr error;
+#pragma omp parallel for num_threads(workers) if (workers > 1) schedule(dynamic)
+        for (size_t idx = 0; idx < nq; ++idx) {
+            if (failed.load(std::memory_order_relaxed)) {
+                continue;
+            }
+            try {
                 index_->search(
-                    query_array.data() + (idx * dim_),
+                    queries_data + (idx * dim_),
                     static_cast<uint32_t>(k),
                     ids_data + (idx * k),
                     dists_data + (idx * k)
                 );
+            } catch (...) {
+#pragma omp critical(rabitq_symqg_search_error)
+                {
+                    if (!error) {
+                        error = std::current_exception();
+                    }
+                }
+                failed.store(true, std::memory_order_relaxed);
             }
-        );
+        }
+        if (error) {
+            std::rethrow_exception(error);
+        }
 
         return py::make_tuple(ids, dists);
     }

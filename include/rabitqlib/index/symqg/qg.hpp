@@ -26,7 +26,6 @@
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
-#include "rabitqlib/utils/visited_pool.hpp"
 #include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
@@ -84,7 +83,6 @@ class QuantizedGraph {
             true>>
         data_;  // vectors/codes + graph quantization data + edges
     std::unique_ptr<Rotator<T>> rotator_;  // data rotator
-    std::unique_ptr<VisitedListPool> visited_list_pool_ = nullptr;
 
     // Position of row data (raw vector or packed qg-quant vector), neighbor
     // quantization data, and neighbor IDs. Since every degree equals degree_bound_
@@ -452,7 +450,14 @@ inline void QuantizedGraph<T>::search(
     search_pool.insert(this->entry_point_, std::numeric_limits<T>::max());
 
     buffer::SearchBuffer res_pool(k);  // result buffer
-    auto* vis = visited_list_pool_->get_free_vislist();
+    thread_local VisitedSet visited;
+    thread_local size_t visited_size = 0;
+    if (visited_size != num_points_) {
+        visited.initialize(num_points_, num_points_ / 10);
+        visited_size = num_points_;
+    }
+    visited.clear();
+    auto* vis = &visited;
 
     std::vector<T> est_dist(degree_bound_);  // estimated distances
 
@@ -474,7 +479,6 @@ inline void QuantizedGraph<T>::search(
     }
 
     update_results(res_pool, *vis, query, quantized_query ? &*quantized_query : nullptr);
-    visited_list_pool_->release_vis_list(vis);
     res_pool.copy_results(results, dists);
 }
 
@@ -588,7 +592,6 @@ inline void QuantizedGraph<T>::initialize() {
         std::vector<size_t>{num_points_, row_offset_}
     );
 
-    visited_list_pool_ = std::make_unique<VisitedListPool>(1, num_points_);
     if (quantization_bits_ != 0) {
         quantized_ip_func_ = select_excode_ipfunc(quantization_bits_);
     }

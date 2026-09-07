@@ -167,5 +167,61 @@ TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
     }
 }
 
+TEST(QGSearchTest, ParallelQueriesMatchSerialAcrossIndexesAndSettings) {
+    constexpr size_t kNumQueries = 9;
+    constexpr size_t kTopK = 5;
+    for (size_t bits : {0U, 4U, 8U}) {
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            for (size_t dim : {65U, 128U}) {
+                const size_t num_points = dim + 64;
+                std::vector<float> data(num_points * dim);
+                std::vector<float> queries(kNumQueries * dim);
+                for (size_t i = 0; i < data.size(); ++i) {
+                    data[i] = std::sin(static_cast<float>(i) * 0.13F);
+                }
+                for (size_t i = 0; i < queries.size(); ++i) {
+                    queries[i] = std::cos(static_cast<float>(i) * 0.07F);
+                }
+                QuantizedGraph<float> graph(
+                    num_points, dim, 32, metric, RotatorType::FhtKacRotator, bits
+                );
+                {
+                    QGBuilder builder(graph, 64, data.data(), 1);
+                    builder.build(2);
+                }
+                for (size_t ef : {16U, 64U, 128U}) {
+                    graph.set_ef(ef);
+                    std::array<PID, kNumQueries * kTopK> serial_ids{};
+                    std::array<float, kNumQueries * kTopK> serial_distances{};
+                    for (size_t i = 0; i < kNumQueries; ++i) {
+                        graph.search(
+                            queries.data() + (i * dim),
+                            kTopK,
+                            serial_ids.data() + (i * kTopK),
+                            serial_distances.data() + (i * kTopK)
+                        );
+                    }
+                    for (int threads : {2, 4}) {
+                        SCOPED_TRACE(threads);
+                        std::array<PID, kNumQueries * kTopK> ids{};
+                        std::array<float, kNumQueries * kTopK> distances{};
+#pragma omp parallel for num_threads(threads) schedule(dynamic)
+                        for (size_t i = 0; i < kNumQueries; ++i) {
+                            graph.search(
+                                queries.data() + (i * dim),
+                                kTopK,
+                                ids.data() + (i * kTopK),
+                                distances.data() + (i * kTopK)
+                            );
+                        }
+                        EXPECT_EQ(ids, serial_ids);
+                        EXPECT_EQ(distances, serial_distances);
+                    }
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 }  // namespace rabitqlib::symqg
