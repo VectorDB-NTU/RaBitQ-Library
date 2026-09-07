@@ -111,6 +111,9 @@ class QuantizedGraph {
     }
 
     [[nodiscard]] const T* get_build_vector(PID data_id) const {
+        if (quantization_bits_ == 0) {
+            return get_vector(data_id);
+        }
         return build_data_ + (dim_ * data_id);
     }
 
