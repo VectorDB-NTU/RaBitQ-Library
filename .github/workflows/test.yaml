@@ -8,7 +8,12 @@ concurrency:
   group: ${{ github.head_ref || github.sha }}-${{ github.workflow }}
   cancel-in-progress: true
 jobs:
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   format:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     name: C++ formatting
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -22,6 +27,8 @@ jobs:
         run: ./scripts/check-format.sh
 
   clang-tidy:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     name: C++ static analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -49,6 +56,8 @@ jobs:
         run: ./scripts/check-tidy.sh build-tidy
 
   shellcheck:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.shell == 'true') }}
     name: Shell scripts
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -62,6 +71,8 @@ jobs:
         run: shellcheck scripts/*.sh
 
   ubuntu:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     name: Ubuntu
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -77,6 +88,8 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   sanitizers:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     name: ASan and UBSan
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -101,6 +114,8 @@ jobs:
         run: ctest --test-dir build-sanitizers --output-on-failure
 
   downstream-consumer:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
     name: Installed CMake consumer
     runs-on: ubuntu-latest
     timeout-minutes: 15

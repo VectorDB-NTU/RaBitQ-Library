@@ -69,6 +69,32 @@ for shared code, SIMD, persistence, performance, and build changes.
 | Examples | Run the changed example, plus the checks for its language |
 | Shell scripts | [ShellCheck](#shell-scripts) on affected scripts |
 
+### Checks selected by changed files
+
+CI starts a small changed-file check on each push or pull request, then runs
+only the affected job groups:
+
+| Changes | Checks |
+| --- | --- |
+| Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
+| C++ headers or library sources | C++ formatting, analysis, tests, sanitizers, consumer build, and Python wheels/tests |
+| C++ tests or examples | C++ checks |
+| Python bindings | Python checks and wheel tests; C++ checks for compiled binding files |
+| Python tests | Python checks and wheel tests |
+| Python scripts or examples | Python lint |
+| CMake or package configuration | C++ and Python build/test checks |
+| Shell scripts | ShellCheck and the checks driven by those scripts |
+
+Shared headers still trigger broad regression suites; CI does not infer
+individual test dependencies from C++ function changes. Unknown paths run all
+checks. Pushes compare the complete pushed range; pull requests compare against
+their base. Renames and deletions are included. Relevant jobs also run if
+change detection fails, so a detection error cannot silently waive a check.
+
+Release tags and manual wheel builds always run the full wheel build. An
+untagged version on `main` also forces full C++ and Python CI, even for a
+subsequent docs-only commit, before automatic publishing can proceed.
+
 ### Starter tasks
 
 These are small contribution ideas, not reserved or assigned issues. Check

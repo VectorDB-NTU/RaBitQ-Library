@@ -11,7 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   python-quality:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_quality == 'true') }}
     name: Python formatting and linting
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -33,6 +38,8 @@ jobs:
 
 
   python-build:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_build == 'true') }}
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:

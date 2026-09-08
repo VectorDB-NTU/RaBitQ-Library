@@ -1,0 +1,39 @@
+name: Changed files
+
+on:
+  workflow_call:
+    outputs:
+      cpp:
+        value: ${{ jobs.detect.outputs.cpp }}
+      python_quality:
+        value: ${{ jobs.detect.outputs.python_quality }}
+      python_build:
+        value: ${{ jobs.detect.outputs.python_build }}
+      shell:
+        value: ${{ jobs.detect.outputs.shell }}
+      wheels:
+        value: ${{ jobs.detect.outputs.wheels }}
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cpp: ${{ steps.paths.outputs.cpp }}
+      python_quality: ${{ steps.paths.outputs.python_quality }}
+      python_build: ${{ steps.paths.outputs.python_build }}
+      shell: ${{ steps.paths.outputs.shell }}
+      wheels: ${{ steps.paths.outputs.wheels }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Select affected checks
+        id: paths
+        run: python .github/scripts/ci_changes.py
