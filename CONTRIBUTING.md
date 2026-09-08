@@ -230,6 +230,35 @@ sudo apt-get install shellcheck
 shellcheck scripts/*.sh
 ```
 
+## Publishing a release
+
+Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt`,
+add a short README news entry, and merge into `main`. Once the `Test` and
+`Python Wheel` workflows succeed for the same commit, `Release wheels` checks
+whether that version is newer than the existing release tags. It then builds
+and tests the release wheels, pushes `vX.Y.Z` at that tested commit, publishes
+to PyPI, and creates a GitHub Release with generated notes and wheel assets.
+A later successful commit can release an untagged version if the version-bump
+commit failed CI. Ordinary commits with an already released version do not
+publish again.
+
+The workflow uses the repository token to create tags and the existing `pypi`
+environment with Trusted Publishing for PyPI. Repository tag rules and any
+required environment approvals still apply. Publishing runs in the same
+workflow as tag creation; it does not depend on a bot-created tag triggering
+another workflow.
+
+Manual `vX.Y.Z` tag pushes still build and publish, with a package-version
+check. Pull requests and **Run workflow** only build wheels. To recover a
+partial release, rerun the failed release jobs: existing tags must still point
+to the tested commit, and already uploaded PyPI files are skipped.
+
+Validate automation changes locally with:
+
+```bash
+python -m unittest discover -s .github/scripts -p 'test_*.py'
+```
+
 ## Pull request labels and release notes
 
 GitHub generates categorized release notes from merged pull requests. Before

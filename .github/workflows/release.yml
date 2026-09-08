@@ -7,42 +7,66 @@ on:
   pull_request:
     branches: ["main", "master"]
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Test", "Python Wheel"]
+    types: [completed]
+    branches: ["main"]
+
+concurrency:
+  group: release-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
+  prepare:
+    name: Check release eligibility
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      tag: ${{ steps.release.outputs.tag }}
+      build: ${{ steps.release.outputs.build }}
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Determine release version and check CI
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/prepare_release.py
+
   linux-wheels:
     name: Linux x86-64 wheels
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-
-      - name: Check tag matches package version
-        if: github.event_name == 'push'
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          python - <<'PY'
-          import os
-          import tomllib
-
-          with open("pyproject.toml", "rb") as file:
-              version = tomllib.load(file)["project"]["version"]
-
-          expected_tag = f"v{version}"
-          if os.environ["RELEASE_TAG"] != expected_tag:
-              raise SystemExit(
-                  f"release tag {os.environ['RELEASE_TAG']!r} does not match "
-                  f"package version {version!r}; expected {expected_tag!r}"
-              )
-          PY
 
       - name: Build and test PR wheel
         if: github.event_name == 'pull_request'
@@ -65,10 +89,34 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  release-tag:
+    name: Create version tag
+    needs: [prepare, linux-wheels]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+      - name: Create tag at the tested commit
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_SHA"
+          else
+            git tag "$RELEASE_TAG" "$RELEASE_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+
   pypi-publish:
     name: Publish wheels to PyPI
-    if: github.event_name == 'push'
-    needs: linux-wheels
+    if: needs.prepare.outputs.publish == 'true'
+    needs: [prepare, linux-wheels, release-tag]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -87,17 +135,20 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: wheelhouse
+          skip-existing: true
 
   github-release:
     name: Create GitHub release
-    if: github.event_name == 'push'
-    needs: [linux-wheels, pypi-publish]
+    if: needs.prepare.outputs.publish == 'true'
+    needs: [prepare, linux-wheels, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
@@ -108,5 +159,8 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" wheelhouse/*.whl --generate-notes --verify-tag
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" wheelhouse/*.whl --generate-notes --verify-tag
+          fi
