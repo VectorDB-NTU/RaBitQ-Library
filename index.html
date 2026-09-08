@@ -1208,8 +1208,9 @@ better. Results from the
 </tr>
 </tbody>
 </table>
-<p>IVF and HNSW store quantized vectors instead of accessing raw vectors during
-search. SymphonyQG uses additional memory and multiple codes per vector to
+<p>IVF stores quantized vectors by default, or retains original float32 vectors
+for reranking with <code>nbits=32</code>. HNSW searches quantized
+vectors instead of accessing raw vectors during search. SymphonyQG uses additional memory and multiple codes per vector to
 optimize its access pattern.</p>
 <p>These are typical relative profiles, not fixed guarantees. Actual memory,
 latency, and recall depend on vector dimension, quantization width, graph
