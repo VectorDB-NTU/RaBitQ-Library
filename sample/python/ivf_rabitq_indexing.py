@@ -79,7 +79,7 @@ if __name__ == "__main__":
         type=int,
         metavar="INT",
         default=TOTAL_BITS,
-        help="Total number of bits for quantization",
+        help="Quantization bits (1-9), or 32 to store raw vectors for reranking",
     )
     parser.add_argument(
         "--metric",

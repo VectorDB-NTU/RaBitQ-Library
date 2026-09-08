@@ -9,7 +9,6 @@ from utils import compute_recall, read_fvecs, read_ivecs
 # ──────────────────────────────────────────────
 # Default configuration
 # ──────────────────────────────────────────────
-USE_HACC = True  # use high accuracy fastscan
 TOPK = 100  # top-k results
 NUMBER_THREADS = 4  # number of threads for search
 TEST_ROUNDS = 3  # number of test rounds
@@ -23,7 +22,9 @@ def main(args=None) -> None:
     gt = read_ivecs(args.gt_file)
     nq = queries.shape[0]
     print(f"Queries: {queries.shape}, GT: {gt.shape}")
-    print(f"TopK: {args.topk}, use_hacc: {args.use_hacc}")
+    print(
+        f"TopK: {args.topk}, HACC: {args.use_hacc if args.use_hacc is not None else 'auto'}"
+    )
 
     # 2. Load index
     idx = IvfIndex.load(args.index_file)
@@ -82,7 +83,8 @@ if __name__ == "__main__":
         "--use-hacc",
         dest="use_hacc",
         action="store_true",
-        help="Use high accuracy fastscan method",
+        default=None,
+        help="Force high accuracy FastScan (default: automatic based on index bits)",
     )
     parser.add_argument(
         "--num-threads",

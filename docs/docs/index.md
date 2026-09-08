@@ -87,8 +87,9 @@ print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 | [HNSW + RaBitQ](index/hnsw.md) | General-purpose graph search | Moderate | Search candidate list size |
 | [SymphonyQG](index/qg.md) | Latency-focused graph search | Highest | Search window size |
 
-IVF and HNSW store quantized vectors instead of accessing raw vectors during
-search. SymphonyQG uses additional memory and multiple codes per vector to
+IVF stores quantized vectors by default, or retains original float32 vectors
+for reranking with `nbits=32`. HNSW searches quantized
+vectors instead of accessing raw vectors during search. SymphonyQG uses additional memory and multiple codes per vector to
 optimize its access pattern.
 
 These are typical relative profiles, not fixed guarantees. Actual memory,

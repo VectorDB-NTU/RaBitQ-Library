@@ -2,7 +2,7 @@
 
 [IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical
 clustering-based ANN method. This implementation stores RaBitQ codes and
-vector IDs rather than retaining the raw dataset after construction, and uses
+vector IDs, optionally retaining raw vectors for reranking, and uses
 [FastScan](https://dl.acm.org/doi/abs/10.1145/3078971.3078992) to estimate a
 batch of distances. Its actual memory, latency, and recall depend on the bit
 width, number of clusters, and `nprobe`.
@@ -46,7 +46,9 @@ rabitqlib::load_vecs<PID, gt_type>(cids_file, cids);
 
 Then initialize an IVF object with the number of data points, vector
 dimension, number of clusters, and total bits per dimension. The C++ index
-accepts total bit widths from 1 through 9.
+accepts total quantized bit widths from 1 through 9, or `total_bits=32`
+(Python `nbits=32`) to store raw float32 vectors for reranking. Raw storage
+and automatic FastScan precision selection are available starting with version 0.3.3.
 
 ```c++
 using index_type = rabitqlib::ivf::IVF;
@@ -80,24 +82,33 @@ For example:
 ivf.construct(data.data(), centroids.data(), cids.data(), true);
 ```
 
-During the construction phase, we quantize each cluster in parallel. For each cluster, we first rotate the centroid and
-vectors in this cluster using a random matrix, then compute the 1-bit codes and (total_bits - 1)-bit ex codes along with
-corresponding factors.
-The raw `data` input is used during construction but is not stored in the
-finished IVF index.
+During construction, we process clusters in parallel, rotate their centroids and
+vectors, and compute one-bit codes and factors. Quantized mode also computes
+`total_bits - 1` extra-bit codes and factors; raw mode stores the original
+float32 vectors instead. In raw mode, the index owns a copy of the input, so
+the original data can be released after construction.
 
 After construction, you can directly save the index file to disk:
 ```c++
 ivf.save(outoput_index_file);
 ```
+Raw-mode files use a magic/version header and include both the original vectors
+and the rotation state. Loading restores the mode automatically, so querying
+does not require an external dataset. Existing quantized files retain their
+format and remain compatible; versions before 0.3.3 cannot load raw-mode files.
+
 ### Data Layout
 The main data layout for our IVF is organized as follows:
 ```c++
 [batch data]    // 1-bit code and factors
-[ex_data]       // code for remaining bits
+[ex_data]       // code for remaining bits, or original float32 vectors
 [ids]           // PID of vectors (organized by clusters)
 [cluster_lst]   // List of clusters' metadata in IVF
 ```
+In raw mode, `ex_data` holds `4 * num_points * dim` bytes in cluster order,
+without padding or extra-bit factors. The one-bit filtering codes and factors
+are additional storage. `nbits()` (Python `nbits`) reports 32 in raw mode;
+the one-bit filtering code is not included in that value.
 
 ## Querying
 Currently, querying requires the index to be loaded in memory. If you want to use a previously saved index on the disk,  firstly load it into memory:
@@ -114,7 +125,7 @@ void IVF::search(
     size_t k, 
     size_t nprobe, 
     PID* __restrict__ results,
-    bool use_hacc
+    float* dists = nullptr
 ) const;
 ```
 
@@ -122,6 +133,31 @@ void IVF::search(
 - **k**: Top-k.
 - **nprobe**: The number of closest clusters to search.
 - **results**: Result buffer, size of k.
-- **use_hacc**: If use high accuracy FastScan, true by default. For data quantized by high number of bits (e.g., >3), we recommend to use high accuracy FastScan to reduce the error caused by FastScan. Also, user may disable it to improve the query efficiency.
+- **dists**: Optional distance buffer, size of `k`.
 
-During the search phase, we first rotate the query vector and compute distances between the query vector and the clusters' centroids. Then, we select the n (nprobe) clusters with the smallest distances for search. For each cluster, we first use FastScan to get the coarse distance. Then, if the accuracy of the coarse distance is insufficient, we access the remaining ex bits to boost the accuracy. The search terminates when all selected clusters are scanned and returns the top k nearest neighbours for the given query.
+FastScan precision is selected automatically: HACC for 4–9 quantized bits, and
+standard FastScan for 1–3 bits or raw vectors (`32`). HACC reduces lookup-table
+error carried into extra-bit distance estimation; raw reranking computes its
+final distances directly from floats. Existing C++ overloads with `use_hacc`
+and Python's `high_accuracy=True/False` still allow explicit overrides. Python
+uses automatic selection when `high_accuracy` is omitted or `None`.
+
+```cpp
+ivf.search(query, k, nprobe, ids, distances);         // Automatic
+ivf.search(query, k, nprobe, ids, distances, true);   // Force HACC
+ivf.search(query, k, nprobe, ids, distances, false);  // Force standard FastScan
+```
+
+The IDs-only overloads accept the same override without the `distances`
+argument. In Python, call `index.search(queries, k, nprobe)` for automatic
+selection, or pass `high_accuracy=True` / `False` to force either mode.
+The querying examples also default to automatic selection; Python's
+`--use-hacc` flag forces HACC, and the C++ example accepts an optional final
+`true` or `false` argument.
+
+During search, we rotate the query and select the `nprobe` closest centroids.
+FastScan filters candidates using one-bit codes, then reranking uses either the
+remaining quantized bits or the stored raw vectors. Raw reranking computes
+squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
+API is unchanged. Cluster selection and filtering remain approximate in both
+modes. Search returns the top `k` results after scanning the selected clusters.

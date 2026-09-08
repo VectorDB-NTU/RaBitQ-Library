@@ -66,6 +66,22 @@ print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 print(ids[0])
 ```
 
+For raw-vector reranking, use `nbits=32` in the constructor above. The index
+copies the original float32 vectors instead of storing extra-bit codes, while
+retaining one-bit codes for filtering. Build, search, and save/load use the
+same APIs; the original data can be released after construction.
+
+IVF selects FastScan precision automatically: HACC for 4–9-bit codes, standard
+FastScan for 1–3-bit codes and raw vectors. To override that choice:
+
+```python
+ids, distances = index.search(queries, k=10, nprobe=5, high_accuracy=True)
+ids, distances = index.search(queries, k=10, nprobe=5, high_accuracy=False)
+# Omit high_accuracy, or pass None, to use automatic selection.
+```
+
+See the [IVF guide](index/ivf.md) for storage costs and persistence compatibility.
+
 The `metric` argument accepts `"l2"` and `"ip"` (also spelled
 `"innerproduct"`). To search by cosine similarity, normalize database and
 query vectors first and use `metric="ip"`.

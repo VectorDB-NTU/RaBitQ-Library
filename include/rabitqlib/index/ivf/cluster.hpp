@@ -15,7 +15,7 @@ class Cluster {
    private:
     size_t num_;                  // Num of vectors in this cluster
     char* batch_data_ = nullptr;  // RaBitQ code and factors
-    char* ex_data_ = nullptr;     // Ex code and factors
+    char* ex_data_ = nullptr;     // Extra-bit codes/factors or original float32 vectors
     PID* ids_ = nullptr;          // PID of vectors
 
    public:

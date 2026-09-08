@@ -29,6 +29,11 @@
 
 ## News
 
+- **September 2026 — IVF raw-vector reranking:** Set `nbits=32` to store raw
+  float32 vectors for reranking. IVF now selects HACC automatically for 4–9-bit
+  codes, using standard FastScan for 1–3 bits and raw vectors; manual overrides
+  remain available. See the [IVF documentation](docs/docs/index/ivf.md).
+
 - **September 2026 — Quantized SymphonyQG:** SymphonyQG now supports optional
   4-bit and 8-bit RaBitQ vector storage. Select QG-quant with
   `quantization_bits=4` or `quantization_bits=8`; vanilla raw-vector QG remains
@@ -102,7 +107,7 @@ python -m pip install .
 | Component | Best fit | Storage and search profile |
 | --- | --- | --- |
 | **Quantizer** | Integrating RaBitQ into an existing system | Low-level 1-bit or multi-bit encoding and distance estimation. |
-| **IVF** | Memory-efficient partitioned search | Stores quantized codes without retaining the raw dataset. |
+| **IVF** | Memory-efficient partitioned search | Stores quantized codes, or one-bit codes plus raw vectors for reranking. |
 | **HNSW** | Graph search with compact vectors | Adds graph links and searches directly from quantized codes. |
 | **SymphonyQG** | Fast graph search with a configurable memory/accuracy tradeoff | Uses raw vectors by default, or optional packed 4-bit/8-bit RaBitQ vectors, alongside per-neighborhood quantization data. |
 

@@ -136,7 +136,11 @@ Recommended:
   logical point count from batch capacity.
 - Retain explicit zero-residual sign-convention tests and factor-finiteness, reconstruction,
   pack/unpack, and estimation coverage. Test both `METRIC_L2` and `METRIC_IP` where supported.
-- IVF/HNSW total bits are one sign bit plus `ex_bits`, with totals 1 through 9. SymphonyQG supports
+- IVF/HNSW quantized total bits are one sign bit plus `ex_bits`, with totals 1 through 9.
+  IVF also accepts `bits == 32`: one-bit filtering plus owned original float32 vectors
+  in place of extra-bit codes; its raw-mode persistence has a magic/version header.
+  IVF search defaults to HACC for 4–9 bits and standard FastScan for 1–3 bits or raw storage.
+  SymphonyQG supports
   raw storage (`quantization_bits == 0`) and quantized storage at 4 or 8 bits.
 
 ### Persistence and Python boundaries

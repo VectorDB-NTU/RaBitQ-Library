@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -84,7 +85,7 @@ class IvfIndex {
         py::handle queries,
         size_t k,
         size_t nprobe,
-        bool high_accuracy = true,
+        std::optional<bool> high_accuracy = std::nullopt,
         size_t num_threads = 1
     ) {
         auto query_array = ensure_2d_array<float>(queries, "queries");
@@ -118,14 +119,16 @@ class IvfIndex {
             nq,
             num_threads,
             [&](size_t idx, size_t /*threadId*/) {
-                index_->search(
-                    query_array.data() + (idx * dim_),
-                    k,
-                    nprobe,
-                    ids_data + (idx * k),
-                    dists_data + (idx * k),
-                    high_accuracy
-                );
+                const float* query = query_array.data() + (idx * dim_);
+                auto* result_ids = ids_data + (idx * k);
+                auto* result_dists = dists_data + (idx * k);
+                if (high_accuracy.has_value()) {
+                    index_->search(
+                        query, k, nprobe, result_ids, result_dists, *high_accuracy
+                    );
+                } else {
+                    index_->search(query, k, nprobe, result_ids, result_dists);
+                }
             }
         );
 
@@ -184,7 +187,9 @@ void register_ivf(py::module_& m) {
             py::arg("max_elements"),
             py::arg("num_clusters"),
             py::arg("nbits"),
-            py::arg("metric") = "l2"
+            py::arg("metric") = "l2",
+            "Create IVF with 1-9 quantization bits, or nbits=32 for owned raw-vector "
+            "reranking."
         )
         .def(
             "build",
@@ -201,7 +206,7 @@ void register_ivf(py::module_& m) {
             py::arg("queries"),
             py::arg("k"),
             py::arg("nprobe"),
-            py::arg("high_accuracy") = true,
+            py::arg("high_accuracy") = py::none(),
             py::arg("num_threads") = 1
         )
         .def("save", &IvfIndex::save, py::arg("path"))

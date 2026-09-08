@@ -1,5 +1,6 @@
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -30,18 +31,19 @@ int run(int argc, char** argv) {
                   << "arg2: path for query file, format .fvecs\n"
                   << "arg3: path for groundtruth file format .ivecs\n"
                   << "arg4: whether use high accuracy fastscan, (\"true\" or \"false\"), "
-                     "true by default\n\n";
+                     "automatic based on index bits by default\n\n";
         return 1;
     }
 
     char* index_file = argv[1];
     char* query_file = argv[2];
     char* gt_file = argv[3];
-    bool use_hacc = true;
+    std::optional<bool> use_hacc;
 
     if (argc > 4) {
         std::string hacc_str(argv[4]);
-        if (hacc_str == "false") {
+        use_hacc = hacc_str != "false";
+        if (!*use_hacc) {
             use_hacc = false;
             std::cout << "Do not use Hacc FastScan\n";
         }
@@ -97,13 +99,12 @@ int run(int argc, char** argv) {
             std::vector<PID> results(topk);
             for (size_t i = 0; i < nq; i++) {
                 stopw.reset();
-                ivf.search(
-                    &query(static_cast<Eigen::Index>(i), 0),
-                    topk,
-                    nprobe,
-                    results.data(),
-                    use_hacc
-                );
+                const float* vector = &query(static_cast<Eigen::Index>(i), 0);
+                if (use_hacc.has_value()) {
+                    ivf.search(vector, topk, nprobe, results.data(), *use_hacc);
+                } else {
+                    ivf.search(vector, topk, nprobe, results.data());
+                }
                 total_time += stopw.get_elapsed_micro();
                 for (size_t j = 0; j < topk; j++) {
                     for (size_t k = 0; k < topk; k++) {
