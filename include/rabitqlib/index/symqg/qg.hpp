@@ -525,17 +525,35 @@ void QuantizedGraph<T>::scan_neighbors(
     }
 
     const PID* ptr_nb = get_neighbors(data_id);
-    for (size_t i = 0; i < cur_degree; ++i) {
-        PID cur_neighbor = ptr_nb[i];
-        T dist = est_dist[i];
-
-        if (search_pool.is_full(dist) || vis.get(cur_neighbor)) {
-            continue;
+    for (size_t begin = 0; begin < cur_degree; begin += fastscan::kBatchSize) {
+        const T threshold = search_pool.top_dist();
+        uint32_t candidate_mask = 0;
+        for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
+            candidate_mask |= static_cast<uint32_t>(!(est_dist[begin + lane] > threshold))
+                              << lane;
         }
-        search_pool.insert(cur_neighbor, dist);  // update search buffer
-        memory::mem_prefetch_l2(
-            reinterpret_cast<const char*>(get_vector(search_pool.next_id())), 10
-        );
+
+        // Construction can leave a partial batch with stale IDs in its unused lanes.
+        const size_t remaining = cur_degree - begin;
+        if (remaining < fastscan::kBatchSize) {
+            candidate_mask &= (uint32_t{1} << remaining) - 1;
+        }
+
+        while (candidate_mask != 0) {
+            const auto lane = static_cast<size_t>(__builtin_ctz(candidate_mask));
+            candidate_mask &= candidate_mask - 1;
+            const size_t i = begin + lane;
+            PID cur_neighbor = ptr_nb[i];
+            T dist = est_dist[i];
+
+            if (search_pool.is_full(dist) || vis.get(cur_neighbor)) {
+                continue;
+            }
+            search_pool.insert(cur_neighbor, dist);  // update search buffer
+            memory::mem_prefetch_l2(
+                reinterpret_cast<const char*>(get_vector(search_pool.next_id())), 10
+            );
+        }
     }
 }
 
