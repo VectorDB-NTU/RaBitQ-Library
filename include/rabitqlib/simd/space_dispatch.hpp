@@ -4,6 +4,27 @@
 #include <cstdint>
 
 namespace rabitqlib::simd {
+// Raw float32 distances accept arbitrary dimensions and unaligned inputs.
+float euclidean_sqr(const float* a, const float* b, size_t dim);
+float dot_product(const float* a, const float* b, size_t dim);
+float dot_product_dis(const float* a, const float* b, size_t dim);
+float l2norm_sqr(const float* a, size_t dim);
+
+float euclidean_sqr_generic(const float* a, const float* b, size_t dim);
+float dot_product_generic(const float* a, const float* b, size_t dim);
+float dot_product_dis_generic(const float* a, const float* b, size_t dim);
+float l2norm_sqr_generic(const float* a, size_t dim);
+
+float euclidean_sqr_avx2(const float* a, const float* b, size_t dim);
+float dot_product_avx2(const float* a, const float* b, size_t dim);
+float dot_product_dis_avx2(const float* a, const float* b, size_t dim);
+float l2norm_sqr_avx2(const float* a, size_t dim);
+
+float euclidean_sqr_avx512(const float* a, const float* b, size_t dim);
+float dot_product_avx512(const float* a, const float* b, size_t dim);
+float dot_product_dis_avx512(const float* a, const float* b, size_t dim);
+float l2norm_sqr_avx512(const float* a, size_t dim);
+
 namespace excode_ipimpl {
 
 float ip16_fxu1_avx2(

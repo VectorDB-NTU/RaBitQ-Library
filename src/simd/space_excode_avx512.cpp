@@ -31,27 +31,31 @@ namespace {
 float ip16_fxu1_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    float result = 0;
-    __m512 sum = _mm512_setzero_ps();
-
-    for (size_t i = 0; i < dim; i += 16) {
-        __mmask16 mask = *reinterpret_cast<const __mmask16*>(compact_code);
-        __m512 q = _mm512_loadu_ps(query);
-
-        sum = _mm512_add_ps(_mm512_maskz_mov_ps(mask, q), sum);
-
-        compact_code += 2;
-        query += 16;
+    __m512 sum0 = _mm512_setzero_ps(), sum1 = sum0, sum2 = sum0, sum3 = sum0;
+    const auto load_query = [&](size_t k) {
+        __mmask16 mask = 0;
+        std::memcpy(&mask, compact_code + k / 8, sizeof(mask));
+        return _mm512_maskz_loadu_ps(mask, query + k);
+    };
+    size_t i = 0;
+    for (; i + 64 <= dim; i += 64) {
+        sum0 = _mm512_add_ps(sum0, load_query(i));
+        sum1 = _mm512_add_ps(sum1, load_query(i + 16));
+        sum2 = _mm512_add_ps(sum2, load_query(i + 32));
+        sum3 = _mm512_add_ps(sum3, load_query(i + 48));
     }
-    result = _mm512_reduce_add_ps(sum);
-
-    return result;
+    for (; i < dim; i += 16) {
+        sum0 = _mm512_add_ps(sum0, load_query(i));
+    }
+    return _mm512_reduce_add_ps(
+        _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3))
+    );
 }
 
 float ip64_fxu2_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
+    __m512 sum0 = _mm512_setzero_ps(), sum1 = sum0, sum2 = sum0, sum3 = sum0;
 
     float result = 0;
     const __m128i mask = _mm_set1_epi8(0b00000011);
@@ -68,24 +72,26 @@ float ip64_fxu2_avx512(
 
         q = _mm512_loadu_ps(&query[i]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum0 = _mm512_fmadd_ps(q, cf, sum0);
 
         q = _mm512_loadu_ps(&query[i + 16]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum1 = _mm512_fmadd_ps(q, cf, sum1);
 
         q = _mm512_loadu_ps(&query[i + 32]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum2 = _mm512_fmadd_ps(q, cf, sum2);
 
         q = _mm512_loadu_ps(&query[i + 48]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum3 = _mm512_fmadd_ps(q, cf, sum3);
 
         compact_code += 16;
     }
 
-    result = _mm512_reduce_add_ps(sum);
+    result = _mm512_reduce_add_ps(
+        _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3))
+    );
 
     return result;
 }
@@ -152,25 +158,29 @@ float ip64_fxu3_avx512(
 float ip16_fxu4_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
-
-    float result = 0.0F;
-    constexpr int64_t kMask = 0x0f0f0f0f0f0f0f0f;
-    for (size_t i = 0; i < dim; i += 16) {
-        int64_t compact = *reinterpret_cast<const int64_t*>(compact_code);
-        int64_t code0 = compact & kMask;
-        int64_t code1 = (compact >> 4) & kMask;
-
-        __m128i c8 = _mm_set_epi64x(code1, code0);
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(c8));
-        sum = _mm512_fmadd_ps(cf, q, sum);
-
-        compact_code += 8;
+    __m512 sum0 = _mm512_setzero_ps(), sum1 = sum0, sum2 = sum0, sum3 = sum0;
+    // Each eight-byte block stores dimensions 0-7 in low nibbles and 8-15 in high nibbles.
+    const auto unpack_code = [&](size_t k) {
+        __m128i bytes =
+            _mm_loadl_epi64(reinterpret_cast<const __m128i*>(compact_code + k / 2));
+        __m128i lo = _mm_and_si128(bytes, _mm_set1_epi8(15));
+        __m128i hi = _mm_and_si128(_mm_srli_epi16(bytes, 4), _mm_set1_epi8(15));
+        __m128i expanded = _mm_unpacklo_epi64(lo, hi);
+        return _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(expanded));
+    };
+    size_t i = 0;
+    for (; i + 64 <= dim; i += 64) {
+        sum0 = _mm512_fmadd_ps(unpack_code(i), _mm512_loadu_ps(query + i), sum0);
+        sum1 = _mm512_fmadd_ps(unpack_code(i + 16), _mm512_loadu_ps(query + i + 16), sum1);
+        sum2 = _mm512_fmadd_ps(unpack_code(i + 32), _mm512_loadu_ps(query + i + 32), sum2);
+        sum3 = _mm512_fmadd_ps(unpack_code(i + 48), _mm512_loadu_ps(query + i + 48), sum3);
     }
-    result = _mm512_reduce_add_ps(sum);
-
-    return result;
+    for (; i < dim; i += 16) {
+        sum0 = _mm512_fmadd_ps(unpack_code(i), _mm512_loadu_ps(query + i), sum0);
+    }
+    return _mm512_reduce_add_ps(
+        _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3))
+    );
 }
 
 float ip64_fxu5_avx512(
@@ -238,7 +248,7 @@ float ip64_fxu5_avx512(
 float ip64_fxu6_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
+    __m512 sum0 = _mm512_setzero_ps(), sum1 = sum0, sum2 = sum0, sum3 = sum0;
 
     float result = 0.0F;
     const __m128i mask6 = _mm_set1_epi8(0b00111111);
@@ -267,21 +277,23 @@ float ip64_fxu6_avx512(
 
         q = _mm512_loadu_ps(&query[i]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_00_to_15));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum0 = _mm512_fmadd_ps(q, cf, sum0);
 
         q = _mm512_loadu_ps(&query[i + 16]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_16_to_31));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum1 = _mm512_fmadd_ps(q, cf, sum1);
 
         q = _mm512_loadu_ps(&query[i + 32]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_32_to_47));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum2 = _mm512_fmadd_ps(q, cf, sum2);
 
         q = _mm512_loadu_ps(&query[i + 48]);
         cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(vec_48_to_63));
-        sum = _mm512_fmadd_ps(q, cf, sum);
+        sum3 = _mm512_fmadd_ps(q, cf, sum3);
     }
-    result = _mm512_reduce_add_ps(sum);
+    result = _mm512_reduce_add_ps(
+        _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3))
+    );
 
     return result;
 }
@@ -358,15 +370,25 @@ float ip64_fxu7_avx512(
 float ip16_fxu8_avx512(
     const float* __restrict__ query, const uint8_t* __restrict__ code, size_t dim
 ) {
-    __m512 sum = _mm512_setzero_ps();
-    for (size_t i = 0; i < dim; i += 16) {
-        __m128i c8 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(code));
-        __m512 q = _mm512_loadu_ps(&query[i]);
-        __m512 cf = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(c8));
-        sum = _mm512_fmadd_ps(cf, q, sum);
-        code += 16;
+    __m512 sum0 = _mm512_setzero_ps(), sum1 = sum0, sum2 = sum0, sum3 = sum0;
+    const auto unpack_code = [&](size_t k) {
+        return _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(code + k))
+        ));
+    };
+    size_t i = 0;
+    for (; i + 64 <= dim; i += 64) {
+        sum0 = _mm512_fmadd_ps(unpack_code(i), _mm512_loadu_ps(query + i), sum0);
+        sum1 = _mm512_fmadd_ps(unpack_code(i + 16), _mm512_loadu_ps(query + i + 16), sum1);
+        sum2 = _mm512_fmadd_ps(unpack_code(i + 32), _mm512_loadu_ps(query + i + 32), sum2);
+        sum3 = _mm512_fmadd_ps(unpack_code(i + 48), _mm512_loadu_ps(query + i + 48), sum3);
     }
-    return _mm512_reduce_add_ps(sum);
+    for (; i < dim; i += 16) {
+        sum0 = _mm512_fmadd_ps(unpack_code(i), _mm512_loadu_ps(query + i), sum0);
+    }
+    return _mm512_reduce_add_ps(
+        _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3))
+    );
 }
 
 }  // namespace rabitqlib::simd::excode_ipimpl

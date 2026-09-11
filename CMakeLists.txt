@@ -47,6 +47,7 @@ endfunction()
 set(RABITQ_COMMON_SOURCES
     src/utils/cpu_features.cpp
     src/simd/dispatch.cpp
+    src/simd/space_float.cpp
 )
 
 set(RABITQ_AVX2_SOURCES

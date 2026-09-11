@@ -2,10 +2,28 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 #include "rabitqlib/utils/space.hpp"
+#include "space_float_kernels.hpp"
 
 namespace rabitqlib::simd {
+
+float euclidean_sqr_avx2(const float* a, const float* b, size_t dim) {
+    return raw_float<FloatOperation::SquaredL2>(a, b, dim);
+}
+
+float dot_product_avx2(const float* a, const float* b, size_t dim) {
+    return raw_float<FloatOperation::Dot>(a, b, dim);
+}
+
+float dot_product_dis_avx2(const float* a, const float* b, size_t dim) {
+    return raw_float<FloatOperation::InnerProductDistance>(a, b, dim);
+}
+
+float l2norm_sqr_avx2(const float* a, size_t dim) {
+    return raw_float<FloatOperation::SquaredNorm>(a, a, dim);
+}
 
 void scalar_quantize_uint8_avx2(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
@@ -153,38 +171,45 @@ void new_transpose_bin_512_avx2(
 
 float mask_ip_x0_q_avx2(const float* query, const uint64_t* data, size_t padded_dim) {
     const size_t num_blk = padded_dim / 64;
-    const uint8_t* it_data = reinterpret_cast<const uint8_t*>(data);
+    const auto* it_data = reinterpret_cast<const uint8_t*>(data);
     const float* it_query = query;
-
-    __m256 sum = _mm256_setzero_ps();
-
-    __m256i bit_checker = _mm256_set_epi32(0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01);
+    const __m256i shifts0 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
+    const __m256i shifts1 = _mm256_setr_epi32(8, 9, 10, 11, 12, 13, 14, 15);
+    const __m256i shifts2 = _mm256_setr_epi32(16, 17, 18, 19, 20, 21, 22, 23);
+    const __m256i shifts3 = _mm256_setr_epi32(24, 25, 26, 27, 28, 29, 30, 31);
+    __m256 sum0 = _mm256_setzero_ps();
+    __m256 sum1 = _mm256_setzero_ps();
+    __m256 sum2 = _mm256_setzero_ps();
+    __m256 sum3 = _mm256_setzero_ps();
 
     for (size_t i = 0; i < num_blk; ++i) {
-        uint64_t bits = reverse_bits_u64(load_unaligned_u64(it_data));
-
-        // 64 bits / 8 floats = 8 iterations
-        for (int j = 0; j < 8; ++j) {
-            uint8_t current_byte = static_cast<uint8_t>(bits >> (j * 8));
-            __m256i v_byte = _mm256_set1_epi32(current_byte);
-            __m256i masked_bits = _mm256_and_si256(v_byte, bit_checker);
-            __m256i mask = _mm256_cmpgt_epi32(masked_bits, _mm256_setzero_si256());
-
-            __m256 q_vals = _mm256_loadu_ps(it_query);
-            __m256 masked = _mm256_and_ps(q_vals, _mm256_castsi256_ps(mask));
-
-            sum = _mm256_add_ps(sum, masked);
-
-            it_query += 8;
+        // Stored coordinates run from bit 63 to bit 0: high word first,
+        // with each selected bit shifted into a maskload lane's sign bit.
+        for (size_t half = 0; half < 2; ++half) {
+            int32_t word;
+            std::memcpy(&word, it_data + (1 - half) * sizeof(word), sizeof(word));
+            const __m256i bits = _mm256_set1_epi32(word);
+            sum0 = _mm256_add_ps(
+                sum0, _mm256_maskload_ps(it_query, _mm256_sllv_epi32(bits, shifts0))
+            );
+            sum1 = _mm256_add_ps(
+                sum1, _mm256_maskload_ps(it_query + 8, _mm256_sllv_epi32(bits, shifts1))
+            );
+            sum2 = _mm256_add_ps(
+                sum2, _mm256_maskload_ps(it_query + 16, _mm256_sllv_epi32(bits, shifts2))
+            );
+            sum3 = _mm256_add_ps(
+                sum3, _mm256_maskload_ps(it_query + 24, _mm256_sllv_epi32(bits, shifts3))
+            );
+            it_query += 32;
         }
         it_data += sizeof(uint64_t);
     }
 
-    float result = 0.0f;
-    for (int i = 0; i < 8; ++i) {
-        result += reinterpret_cast<float*>(&sum)[i];
-    }
-    return result;
+    const __m256 sum = _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3));
+    __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(sum), _mm256_extractf128_ps(sum, 1));
+    lanes = _mm_add_ps(lanes, _mm_movehl_ps(lanes, lanes));
+    return _mm_cvtss_f32(_mm_add_ss(lanes, _mm_movehdup_ps(lanes)));
 }
 
 }  // namespace rabitqlib::simd

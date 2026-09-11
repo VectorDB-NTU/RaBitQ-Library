@@ -83,31 +83,47 @@ inline void vec_rescale(T* data, size_t dim, T val) {
 
 template <typename T>
 inline T euclidean_sqr(const T* __restrict__ vec0, const T* __restrict__ vec1, size_t dim) {
-    ConstVectorMap<T> v0(vec0, dim);
-    ConstVectorMap<T> v1(vec1, dim);
-    return (v0 - v1).dot(v0 - v1);
+    if constexpr (std::is_same_v<T, float>) {
+        return simd::euclidean_sqr(vec0, vec1, dim);
+    } else {
+        ConstVectorMap<T> v0(vec0, dim);
+        ConstVectorMap<T> v1(vec1, dim);
+        return (v0 - v1).dot(v0 - v1);
+    }
 }
 
 template <typename T>
 inline T dot_product_dis(
     const T* __restrict__ vec0, const T* __restrict__ vec1, size_t dim
 ) {
-    ConstVectorMap<T> v0(vec0, dim);
-    ConstVectorMap<T> v1(vec1, dim);
-    return 1 - v0.dot(v1);
+    if constexpr (std::is_same_v<T, float>) {
+        return simd::dot_product_dis(vec0, vec1, dim);
+    } else {
+        ConstVectorMap<T> v0(vec0, dim);
+        ConstVectorMap<T> v1(vec1, dim);
+        return 1 - v0.dot(v1);
+    }
 }
 
 template <typename T>
 inline T l2norm_sqr(const T* __restrict__ vec0, size_t dim) {
-    ConstVectorMap<T> v0(vec0, dim);
-    return v0.dot(v0);
+    if constexpr (std::is_same_v<T, float>) {
+        return simd::l2norm_sqr(vec0, dim);
+    } else {
+        ConstVectorMap<T> v0(vec0, dim);
+        return v0.dot(v0);
+    }
 }
 
 template <typename T>
 inline T dot_product(const T* __restrict__ vec0, const T* __restrict__ vec1, size_t dim) {
-    ConstVectorMap<T> v0(vec0, dim);
-    ConstVectorMap<T> v1(vec1, dim);
-    return v0.dot(v1);
+    if constexpr (std::is_same_v<T, float>) {
+        return simd::dot_product(vec0, vec1, dim);
+    } else {
+        ConstVectorMap<T> v0(vec0, dim);
+        ConstVectorMap<T> v1(vec1, dim);
+        return v0.dot(v1);
+    }
 }
 
 template <typename T>
