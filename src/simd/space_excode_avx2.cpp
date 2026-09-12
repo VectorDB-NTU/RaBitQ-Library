@@ -172,7 +172,8 @@ float ip16_fxu4_avx2(
     float result = 0.0F;
     constexpr int64_t kMask = 0x0f0f0f0f0f0f0f0f;
     for (size_t i = 0; i < dim; i += 16) {
-        int64_t compact = *reinterpret_cast<const int64_t*>(compact_code);
+        int64_t compact;
+        std::memcpy(&compact, compact_code, sizeof(compact));
         int64_t code0 = compact & kMask;
         int64_t code1 = (compact >> 4) & kMask;
 
