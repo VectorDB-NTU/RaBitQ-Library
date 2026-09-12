@@ -1,16 +1,24 @@
 // HNSW is developed from the [HNSW library](https://github.com/nmslib/hnswlib)
 #pragma once
 
-#include <omp.h>
-
+#include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <functional>
+#include <ios>
 #include <memory>
 #include <mutex>
+#include <queue>
+#include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -21,10 +29,12 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 #include "rabitqlib/utils/visited_pool.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::hnsw {
 

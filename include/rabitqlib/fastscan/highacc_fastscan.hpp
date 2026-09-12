@@ -1,10 +1,7 @@
 #pragma once
 
-#include <cassert>
+#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
 namespace rabitqlib::fastscan {
 /**

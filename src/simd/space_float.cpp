@@ -1,3 +1,5 @@
+#include <cstddef>
+
 #include "rabitqlib/simd/space_dispatch.hpp"
 
 namespace rabitqlib::simd {

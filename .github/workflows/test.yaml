@@ -55,6 +55,44 @@ jobs:
       - name: Run clang-tidy
         run: ./scripts/check-tidy.sh build-tidy
 
+  includes:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
+    name: Include cleaner (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install clang-tidy and build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-tidy clang libomp-dev cmake ninja-build
+      - name: Configure compilation database
+        run: >-
+          cmake -S . -B build-includes -G Ninja
+          -DCMAKE_CXX_COMPILER=clang++
+          -DRABITQ_BUILD_SAMPLES=OFF
+          -DRABITQ_BUILD_TESTS=OFF
+          -DRABITQ_BUILD_PYTHON_BINDINGS=OFF
+          -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Analyze library includes
+        id: analysis
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ./scripts/check-includes.sh build-includes 2>&1 | tee include-report.txt
+      - name: Store include report
+        if: ${{ !cancelled() && steps.analysis.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: include-report
+          path: include-report.txt
+          if-no-files-found: error
+
   shellcheck:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.shell == 'true') }}

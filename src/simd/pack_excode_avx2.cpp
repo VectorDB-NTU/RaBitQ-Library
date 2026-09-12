@@ -1,3 +1,6 @@
+#include <cstddef>
+#include <cstdint>
+
 #include "pack_excode_kernels.hpp"
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 

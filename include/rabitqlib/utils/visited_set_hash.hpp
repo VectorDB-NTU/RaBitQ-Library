@@ -20,8 +20,7 @@
 
 #include <algorithm>
 #include <cassert>
-#include <climits>
-#include <cstring>
+#include <cstddef>
 #include <limits>
 #include <unordered_set>
 #include <vector>

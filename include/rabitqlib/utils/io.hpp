@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <stdexcept>
 #include <string>
 #include <type_traits>

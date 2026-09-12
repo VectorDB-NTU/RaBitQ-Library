@@ -20,8 +20,12 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <fstream>
+#include <memory>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "rabitqlib/utils/memory.hpp"
 

@@ -1,11 +1,26 @@
 #include <immintrin.h>
 
+#include <cstddef>
 #include <cstdint>
 
-#include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/simd/fastscan_dispatch.hpp"
 
 namespace rabitqlib::fastscan::simd {
+
+void pack_lut_avx512(size_t dim, const float* query, float* lut) {
+    for (size_t group = 0; group < dim / 4; ++group) {
+        // Lane n represents the subset selected by the four bits of n.
+        // Masked additions preserve both the coordinate order and the initial +0.
+        __m512 values = _mm512_setzero_ps();
+        values = _mm512_mask_add_ps(values, 0xFF00, values, _mm512_set1_ps(query[0]));
+        values = _mm512_mask_add_ps(values, 0xF0F0, values, _mm512_set1_ps(query[1]));
+        values = _mm512_mask_add_ps(values, 0xCCCC, values, _mm512_set1_ps(query[2]));
+        values = _mm512_mask_add_ps(values, 0xAAAA, values, _mm512_set1_ps(query[3]));
+        _mm512_storeu_ps(lut, values);
+        query += 4;
+        lut += 16;
+    }
+}
 
 void accumulate_avx512(
     const uint8_t* __restrict__ codes,

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cassert>
+#include <cstddef>
 
 #include "rabitqlib/defines.hpp"
 

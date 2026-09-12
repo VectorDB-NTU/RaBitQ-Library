@@ -5,8 +5,8 @@
 #endif
 #include <sys/mman.h>
 
+#include <cstddef>
 #include <cstdlib>
-#include <cstring>
 #include <limits>
 #include <new>
 #include <type_traits>
