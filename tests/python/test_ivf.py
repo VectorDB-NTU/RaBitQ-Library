@@ -230,19 +230,20 @@ def test_save_load_roundtrip(built_ivf, query_data, tmp_path):
     np.testing.assert_allclose(dists_orig, dists_load, rtol=1e-5)
 
 
+@pytest.mark.parametrize("dim", [65, 420, 960])
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 @pytest.mark.parametrize("high_accuracy", [False, True])
 @pytest.mark.parametrize("fast_quantization", [False, True])
-def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
+def test_raw_reranking(dim, metric, high_accuracy, fast_quantization, tmp_path):
     rng = np.random.default_rng(71)
-    data = rng.standard_normal((65, 65)).astype(np.float32)
+    data = rng.standard_normal((65, dim)).astype(np.float32)
     data[0] = 0  # zero residual, padded dimension, and tail batches
-    queries = rng.standard_normal((3, 65)).astype(np.float32)
-    idx = IvfIndex(65, len(data), 3, 32, metric)
+    queries = rng.standard_normal((3, dim)).astype(np.float32)
+    idx = IvfIndex(dim, len(data), 3, 32, metric)
     cluster_ids = np.arange(len(data), dtype=np.uint32) % 2  # empty third cluster
     idx.build(
         data,
-        np.zeros((3, 65), dtype=np.float32),
+        np.zeros((3, dim), dtype=np.float32),
         cluster_ids,
         fast_quantization=fast_quantization,
         num_threads=2,
@@ -258,7 +259,7 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     idx.save(str(path))
     loaded = IvfIndex.load(str(path))
     assert idx.nbits == loaded.nbits == 32
-    assert loaded.dim == 65
+    assert loaded.dim == dim
     assert loaded.metric == metric
     for k in (5, len(data)):
         ids, distances = idx.search(queries, k, 3, high_accuracy, 2)
@@ -282,8 +283,8 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     )
     order = np.argsort(cluster_ids, kind="stable")
     np.testing.assert_array_equal(stored.reshape(original.shape), original[order])
-    one_bit = IvfIndex(65, len(data), 3, 1, metric)
-    one_bit.build(original, np.zeros((3, 65), dtype=np.float32), cluster_ids)
+    one_bit = IvfIndex(dim, len(data), 3, 1, metric)
+    one_bit.build(original, np.zeros((3, dim), dtype=np.float32), cluster_ids)
     one_bit_path = tmp_path / "one-bit.index"
     one_bit.save(str(one_bit_path))
     assert len(payload) - one_bit_path.stat().st_size == raw_bytes + 12

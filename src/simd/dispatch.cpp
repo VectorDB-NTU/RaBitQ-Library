@@ -16,6 +16,33 @@
 
 namespace rabitqlib::simd {
 
+const auto kEuclideanSqrFn = cpu::has_avx512_core() ? euclidean_sqr_avx512
+                             : cpu::has_avx2()      ? euclidean_sqr_avx2
+                                                    : euclidean_sqr_generic;
+const auto kDotProductFn = cpu::has_avx512_core() ? dot_product_avx512
+                           : cpu::has_avx2()      ? dot_product_avx2
+                                                  : dot_product_generic;
+const auto kDotProductDisFn = cpu::has_avx512_core() ? dot_product_dis_avx512
+                              : cpu::has_avx2()      ? dot_product_dis_avx2
+                                                     : dot_product_dis_generic;
+const auto kL2normSqrFn = cpu::has_avx512_core() ? l2norm_sqr_avx512
+                          : cpu::has_avx2()      ? l2norm_sqr_avx2
+                                                 : l2norm_sqr_generic;
+
+float euclidean_sqr(const float* a, const float* b, size_t dim) {
+    return kEuclideanSqrFn(a, b, dim);
+}
+
+float dot_product(const float* a, const float* b, size_t dim) {
+    return kDotProductFn(a, b, dim);
+}
+
+float dot_product_dis(const float* a, const float* b, size_t dim) {
+    return kDotProductDisFn(a, b, dim);
+}
+
+float l2norm_sqr(const float* a, size_t dim) { return kL2normSqrFn(a, dim); }
+
 namespace detail {
 
 RescaleScratch& get_thread_local_rescale_scratch(size_t dim) {

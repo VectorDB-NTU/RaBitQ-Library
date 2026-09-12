@@ -4,8 +4,25 @@
 #include <cstdint>
 
 #include "rabitqlib/utils/space.hpp"
+#include "space_float_kernels.hpp"
 
 namespace rabitqlib::simd {
+
+float euclidean_sqr_avx512(const float* a, const float* b, size_t dim) {
+    return raw_float<FloatOperation::SquaredL2>(a, b, dim);
+}
+
+float dot_product_avx512(const float* a, const float* b, size_t dim) {
+    return raw_float<FloatOperation::Dot>(a, b, dim);
+}
+
+float dot_product_dis_avx512(const float* a, const float* b, size_t dim) {
+    return raw_float<FloatOperation::InnerProductDistance>(a, b, dim);
+}
+
+float l2norm_sqr_avx512(const float* a, size_t dim) {
+    return raw_float<FloatOperation::SquaredNorm>(a, a, dim);
+}
 
 void scalar_quantize_uint8_avx512(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
