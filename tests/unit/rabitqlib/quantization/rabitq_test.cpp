@@ -2,14 +2,140 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace rabitqlib::quant {
 namespace {
+
+int level_from_thresholds(double magnitude, double t, int max_code) {
+    int result = 0;
+    if (magnitude > 0) {
+        for (int level = 1; level <= max_code; ++level) {
+            if (static_cast<double>(level) / magnitude <= t)
+                result = level;
+        }
+    }
+    return result;
+}
+
+template <typename T>
+double sorted_event_rescale_factor(const std::vector<T>& magnitudes, size_t bits) {
+    if (magnitudes.empty())
+        return 0;
+    const double max_o = *std::max_element(magnitudes.begin(), magnitudes.end());
+    if (max_o == 0)
+        return 0;
+
+    const int max_code = (1 << bits) - 1;
+    const double end = static_cast<double>(max_code + 10) / max_o;
+    const double start = end * rabitq_impl::ex_bits::kTightStart[bits];
+    std::vector<int> levels(magnitudes.size());
+    std::vector<std::pair<double, size_t>> events;
+    double denominator = static_cast<double>(magnitudes.size()) * 0.25;
+    double numerator = 0;
+    for (size_t i = 0; i < magnitudes.size(); ++i) {
+        const double magnitude = magnitudes[i];
+        const int level = level_from_thresholds(magnitude, start, max_code);
+        levels[i] = level;
+        denominator += (level * level) + level;
+        numerator += (level + 0.5) * magnitude;
+        if (magnitude > 0) {
+            for (int next = level + 1; next <= max_code; ++next) {
+                const double threshold = static_cast<double>(next) / magnitude;
+                if (threshold < end)
+                    events.emplace_back(threshold, i);
+            }
+        }
+    }
+    // Sorting all legal events independently checks heap ordering, including ties.
+    std::sort(events.begin(), events.end());
+    double best_t = start;
+    double best_ip = numerator / std::sqrt(denominator);
+    for (size_t event = 0; event < events.size();) {
+        const double threshold = events[event].first;
+        do {
+            const size_t i = events[event++].second;
+            denominator += 2.0 * ++levels[i];
+            numerator += static_cast<double>(magnitudes[i]);
+        } while (event < events.size() && events[event].first == threshold);
+        const double ip = numerator / std::sqrt(denominator);
+        if (ip > best_ip) {
+            best_ip = ip;
+            best_t = threshold;
+        }
+    }
+    return best_t;
+}
+
+template <typename T>
+void check_rescale_search_against_sorted_events() {
+    for (size_t dim : {0U, 1U, 2U, 3U, 7U, 31U, 64U, 65U}) {
+        for (int pattern = 0; pattern < 4; ++pattern) {
+            std::vector<T> magnitudes(dim);
+            uint32_t state = 42;
+            double norm_sq = 0;
+            for (size_t i = 0; i < dim; ++i) {
+                double value = 0;
+                if (pattern == 1)
+                    value = i == dim / 2 ? 1 : 0;
+                else if (pattern == 2)
+                    value = static_cast<double>(i % 4);
+                else if (pattern == 3) {
+                    state = state * 1664525U + 1013904223U;
+                    value = i % 5 == 0 ? 0 : 1.0 + (state >> 16U);
+                }
+                magnitudes[i] = static_cast<T>(value);
+                norm_sq += value * value;
+            }
+            if (norm_sq > 0) {
+                const double norm = std::sqrt(norm_sq);
+                for (T& magnitude : magnitudes)
+                    magnitude = static_cast<T>(static_cast<double>(magnitude) / norm);
+            }
+            for (size_t bits = 0; bits <= 8; ++bits) {
+                SCOPED_TRACE(
+                    ::testing::Message() << "sizeof(T)=" << sizeof(T) << " dim=" << dim
+                                         << " pattern=" << pattern << " bits=" << bits
+                );
+                const double expected_t = sorted_event_rescale_factor(magnitudes, bits);
+                EXPECT_EQ(
+                    rabitq_impl::ex_bits::best_rescale_factor(magnitudes.data(), dim, bits),
+                    expected_t
+                );
+                std::vector<uint8_t> expected_code(dim);
+                double ipnorm = 0;
+                for (size_t i = 0; i < dim; ++i) {
+                    const double magnitude = magnitudes[i];
+                    const int level =
+                        level_from_thresholds(magnitude, expected_t, (1 << bits) - 1);
+                    expected_code[i] = static_cast<uint8_t>(level);
+                    ipnorm += (level + 0.5) * magnitude;
+                }
+                T expected_factor = ipnorm == 0 ? T{1} : static_cast<T>(1.0 / ipnorm);
+                if (!std::isnormal(expected_factor))
+                    expected_factor = T{1};
+                std::vector<uint8_t> code(dim, 0xFF);
+                const T factor = rabitq_impl::ex_bits::quantize_ex(
+                    magnitudes.data(), code.data(), dim, bits
+                );
+                EXPECT_EQ(code, expected_code);
+                EXPECT_EQ(factor, expected_factor);
+            }
+        }
+    }
+}
+
+TEST(RabitqRescaleSearchTest, MatchesSortedLegalEventsExactly) {
+    check_rescale_search_against_sorted_events<float>();
+    check_rescale_search_against_sorted_events<double>();
+}
 
 TEST(RabitqQuantizedLevelTest, MatchesThresholdsAroundRoundingBoundaries) {
     const std::array<double, 7> magnitudes = {
