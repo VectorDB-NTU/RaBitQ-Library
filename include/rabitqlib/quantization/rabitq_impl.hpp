@@ -9,8 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <queue>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -18,6 +18,7 @@
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/pack_excode.hpp"
+#include "rabitqlib/simd/quantization_dispatch.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::quant::rabitq_impl {
@@ -321,46 +322,90 @@ inline double best_rescale_factor(const T* o_abs, size_t dim, size_t ex_bits) {
     const double t_end = static_cast<double>(max_code + 10) / max_o;
     const double t_start = t_end * kTightStart[ex_bits];
 
+    // Both paths maximize cosine similarity between the input and quantized
+    // directions over the configured scale interval. Here a_i = o_abs[i] is a
+    // rotated, normalized residual magnitude, and q_i = code_i + 0.5.
+    // With ||a|| = 1, cosine(a, q) = dot(a, q / ||q||) = N / sqrt(S), where
+    // N = sum(a_i * q_i) and S = sum(q_i * q_i).
+    // SIMD evaluates whole vectors at selected scales and prunes intervals;
+    // its search and bounds are in src/simd/rescale_search.hpp.
+    if constexpr (std::is_same_v<T, float>) {
+        const double t = simd::best_rescale_factor(o_abs, dim, max_code, t_start, t_end);
+        if (t >= 0)
+            return t;
+    }
+
+    // Scalar event sweep, also used if SIMD is unavailable or cannot certify a
+    // winner within its work limit. Each heap entry holds a coordinate's next
+    // code-changing scale (code_i + 1) / a_i. Visiting only these events skips
+    // ranges with constant codes and updates N and S in O(1) per coordinate.
+    // Heap traversal is sequential and branch-dependent, so it offers little
+    // SIMD parallelism; the SIMD path instead prunes ranges of candidate codes.
     using Event = std::pair<double, size_t>;
-    std::priority_queue<Event, std::vector<Event>, std::greater<Event>> next_t;
+    std::vector<Event> next_t;
+    next_t.reserve(dim);
     std::vector<int> cur_o_bar(dim);
     double sqr_denominator = static_cast<double>(dim) * 0.25;
     double numerator = 0;
 
-    auto enqueue_next = [&](size_t i) {
-        const double magnitude = static_cast<double>(o_abs[i]);
-        // Never increment a saturated coordinate; skip zero coordinates.
-        if (magnitude > 0 && cur_o_bar[i] < max_code) {
-            const double next = static_cast<double>(cur_o_bar[i] + 1) / magnitude;
-            if (next < t_end)
-                next_t.emplace(next, i);
-        }
-    };
-
+    // init quantization codes for each coordinate by t_start
     for (size_t i = 0; i < dim; ++i) {
         const double magnitude = static_cast<double>(o_abs[i]);
         const int cur = quantized_level_at_scale(magnitude, t_start, max_code);
         cur_o_bar[i] = cur;
         sqr_denominator += (cur * cur) + cur;
         numerator += (cur + 0.5) * magnitude;
-        enqueue_next(i);
+        // Never increment a saturated coordinate; skip zero coordinates.
+        if (magnitude > 0 && cur < max_code) {
+            const double next = static_cast<double>(cur + 1) / magnitude;
+            if (next < t_end)
+                next_t.emplace_back(next, i);
+        }
     }
+    std::make_heap(next_t.begin(), next_t.end(), std::greater<Event>{});
 
     // The initial state may already be the best state inside the interval.
     double max_ip = numerator / std::sqrt(sqr_denominator);
     double best_t = t_start;
 
     while (!next_t.empty()) {
-        const double cur_t = next_t.top().first;
+        const double cur_t = next_t.front().first;
         // All coordinates crossing the same threshold change together.
         do {
-            const size_t i = next_t.top().second;
-            next_t.pop();
+            const size_t i = next_t.front().second;
             ++cur_o_bar[i];
+            // With the new code k, q changes from k-0.5 to k+0.5: delta S = 2k.
             sqr_denominator += 2.0 * cur_o_bar[i];
-            numerator += static_cast<double>(o_abs[i]);
-            enqueue_next(i);
-        } while (!next_t.empty() && next_t.top().first == cur_t);
+            const double magnitude = static_cast<double>(o_abs[i]);
+            numerator += magnitude;
+
+            Event next{t_end, i};
+            if (cur_o_bar[i] < max_code)
+                next.first = static_cast<double>(cur_o_bar[i] + 1) / magnitude;
+            if (next.first >= t_end) {
+                // No further event for this coordinate: fill the root's hole
+                // with the last heap entry, then restore the heap below.
+                next = next_t.back();
+                next_t.pop_back();
+            }
+            if (!next_t.empty()) {
+                // Replace the consumed root event with `next`. Its threshold
+                // cannot precede the old minimum, so one sift-down suffices;
+                // priority_queue pop() followed by push() would repair twice.
+                size_t parent = 0;
+                size_t child = 1;
+                while (child < next_t.size()) {
+                    if (child + 1 < next_t.size() && next_t[child + 1] < next_t[child])
+                        ++child;
+                    if (!(next_t[child] < next))
+                        break;
+                    next_t[parent] = next_t[child];
+                    parent = child;
+                    child = 2 * parent + 1;
+                }
+                next_t[parent] = next;
+            }
+        } while (!next_t.empty() && next_t.front().first == cur_t);
 
         const double cur_ip = numerator / std::sqrt(sqr_denominator);
         if (cur_ip > max_ip) {
