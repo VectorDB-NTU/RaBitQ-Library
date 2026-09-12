@@ -51,6 +51,7 @@ set(RABITQ_COMMON_SOURCES
 )
 
 set(RABITQ_AVX2_SOURCES
+    src/simd/quantization_avx2.cpp
     src/simd/pack_excode_avx2.cpp
     src/simd/space_excode_avx2.cpp
     src/simd/space_avx2.cpp
@@ -60,6 +61,7 @@ set(RABITQ_AVX2_SOURCES
 )
 
 set(RABITQ_AVX512_SOURCES
+    src/simd/quantization_avx512.cpp
     src/simd/pack_excode_avx512.cpp
     src/simd/space_excode_avx512.cpp
     src/simd/space_avx512.cpp
