@@ -14,12 +14,21 @@ code. All codes use the dataset's global centroid and are not combined with the
 one-bit neighbor codes. Pass `quantization_bits` as `4` or `8` to select
 QG-quant, or leave it at `0` for vanilla QG.
 
-During graph construction, candidate discovery uses a floating-point source
-vector against the stored qg-quant candidate codes. Those estimated distances
-are retained for candidate ordering and source-to-candidate pruning terms, while
-candidate-to-candidate pruning comparisons and graph refinement use the available
-raw build vectors. The raw vectors are not retained in the completed qg-quant
-index.
+After computing the centroid and encoding the input, quantized graph construction
+uses only the existing stored RaBitQ representation. A source is temporarily
+reconstructed in rotated coordinates, then the existing RaBitQ estimator scores
+target codes. This applies to candidate discovery, initial edges, pairwise pruning,
+refinement, and fallback edges. Reverse edges are rescored in their own direction
+because these estimates need not be symmetric. Entry-point selection scores the
+stored codes against the centroid. Neighbor FastScan encoding continues to use
+code reconstructions.
+
+No raw input pointer or full reconstructed-vector cache is retained. The caller
+can release the input after the synchronous C++ `QGBuilder` constructor finishes.
+The existing pruning rules operate on the estimated distances; this does not make
+them exact distances between reconstructed vectors. External queries, the 4/8-bit
+encoding and correction factors, neighbor FastScan layout, and version-1 file
+format are unchanged. Raw QG continues to construct using its owned raw vectors.
 
 Memory and performance depend on the dimension, degree, build window, and
 search window. See `sample/cpp/symqg_indexing.cpp` and

@@ -1,5 +1,7 @@
 """Tests for SymqgIndex: construction, search, properties, error handling, save/load."""
 
+import struct
+
 import numpy as np
 import pytest
 from conftest import DIM, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
@@ -155,3 +157,28 @@ def test_save_load_roundtrip(built_symqg, query_data, tmp_path):
     ids_load, dists_load = loaded.search(query_data, k=_TOPK, ef=_EF)
     np.testing.assert_array_equal(ids_orig, ids_load)
     np.testing.assert_allclose(dists_orig, dists_load, rtol=1e-5)
+
+
+@pytest.mark.parametrize("bits", [4, 8])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_code_only_build_preserves_v1_format(bits, metric, tmp_path):
+    rng = np.random.default_rng(851)
+    data = rng.normal(size=(65, 65)).astype(np.float32)
+    queries = rng.normal(size=(3, 65)).astype(np.float32)
+    index = SymqgIndex(65, max_degree=32, metric=metric, quantization_bits=bits)
+    index.build(data, ef_construction=64)
+    data.fill(np.nan)
+    path = tmp_path / "code_only.index"
+    index.save(str(path))
+    payload = path.read_bytes()
+    assert struct.unpack_from("<QI", payload) == (0x5147524142495451, 1)
+    # Existing v1 header, centroid, ExDataMap row, neighbor batches/IDs, FHT state.
+    row_bytes = 128 * bits // 8 + 8 + 128 * 4 + 256 + 128
+    assert len(payload) == 58 + 128 * 4 + 65 * row_bytes + 128 // 2
+    ids, distances = index.search(queries, 10, 64)
+    assert np.isfinite(distances).all()
+    assert all(len(set(row)) == 10 for row in ids)
+    loaded = SymqgIndex.load(str(path))
+    loaded_ids, loaded_distances = loaded.search(queries, 10, 64)
+    np.testing.assert_array_equal(loaded_ids, ids)
+    np.testing.assert_array_equal(loaded_distances, distances)

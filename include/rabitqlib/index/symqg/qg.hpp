@@ -62,6 +62,7 @@ class QuantizedQuery {
 template <typename T = float>
 class QuantizedGraph {
     friend class QGBuilder;
+    friend struct QGConstructionTestAccess;
 
    private:
     size_t num_points_ = 0;                           // num points
@@ -72,9 +73,8 @@ class QuantizedGraph {
     PID entry_point_ = 0;                             // Entry point of graph
     MetricType metric_type_ = MetricType::METRIC_L2;
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
-    size_t quantization_bits_ = 0;   // 0: raw vectors, 4/8: packed RaBitQ vectors
-    const T* build_data_ = nullptr;  // non-owning, used only while QGBuilder runs
-    std::vector<T> centroid_;        // rotated global centroid for qg-quant
+    size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
+    std::vector<T> centroid_;       // rotated global centroid for qg-quant
     ex_ipfunc quantized_ip_func_ = nullptr;
 
     Array<
@@ -111,13 +111,6 @@ class QuantizedGraph {
         return reinterpret_cast<const T*>(&data_.at(row_offset_ * data_id));
     }
 
-    [[nodiscard]] const T* get_build_vector(PID data_id) const {
-        if (quantization_bits_ == 0) {
-            return get_vector(data_id);
-        }
-        return build_data_ + (dim_ * data_id);
-    }
-
     [[nodiscard]] char* get_quantized_vector(PID data_id) {
         return &data_.at(row_offset_ * data_id);
     }
@@ -127,6 +120,9 @@ class QuantizedGraph {
     }
 
     void prepare_query(const T*, std::vector<T>&, std::optional<QuantizedQuery<T>>&) const;
+
+    const T* prepare_build_query(PID, std::vector<T>&, std::optional<QuantizedQuery<T>>&)
+        const;
 
     T point_distance(const T*, const QuantizedQuery<T>*, PID) const;
 
@@ -263,7 +259,6 @@ inline void QuantizedGraph<T>::validate_configuration() const {
 
 template <typename T>
 inline void QuantizedGraph<T>::copy_vectors(const T* data) {
-    build_data_ = data;
     if (quantization_bits_ != 0) {
         if constexpr (!std::is_same_v<T, float>) {
             throw std::logic_error("qg-quant currently requires float data");
@@ -670,6 +665,22 @@ inline void QuantizedGraph<T>::reconstruct_quantized_vector(PID data_id, T* reco
     );
 }
 
+// Construction sources come from owned raw rows or from the existing RaBitQ codes.
+// Reconstructed sources are already rotated; never pass them through prepare_query.
+template <typename T>
+inline const T* QuantizedGraph<T>::prepare_build_query(
+    PID id, std::vector<T>& rotated, std::optional<QuantizedQuery<T>>& prepared
+) const {
+    if (is_quantized()) {
+        rotated.resize(padded_dim_);
+        reconstruct_quantized_vector(id, rotated.data());
+        prepared.emplace(rotated.data(), centroid_.data(), padded_dim_, metric_type_);
+        return rotated.data();
+    }
+    prepared.reset();
+    return get_vector(id);
+}
+
 // find candidate neighbors for cur_id, exclude the vertex itself
 template <typename T>
 inline void QuantizedGraph<T>::find_candidates(
@@ -679,10 +690,12 @@ inline void QuantizedGraph<T>::find_candidates(
     VisitedSet& vis,
     const std::vector<uint32_t>& degrees
 ) const {
-    const T* query = get_build_vector(cur_id);
     std::vector<T> rotated_query(padded_dim_);
     std::optional<QuantizedQuery<T>> quantized_query;
-    prepare_query(query, rotated_query, quantized_query);
+    const T* query = prepare_build_query(cur_id, rotated_query, quantized_query);
+    if (!is_quantized()) {
+        rotator_->rotate(query, rotated_query.data());
+    }
     BatchQuery<T> q_obj(rotated_query.data(), padded_dim_);
 
     // insert entry point to initialize search buffer
@@ -729,7 +742,7 @@ inline void QuantizedGraph<T>::update_qg(
     std::vector<T> rotated_centroid(padded_dim_);
     for (size_t i = 0; i < cur_degree; ++i) {
         if (quantization_bits_ == 0) {
-            const T* neighbor_vec = get_build_vector(new_neighbors[i].id);
+            const T* neighbor_vec = get_vector(new_neighbors[i].id);
             this->rotator_->rotate(neighbor_vec, &rotated_data[i * padded_dim_]);
         } else {
             reconstruct_quantized_vector(
@@ -738,7 +751,7 @@ inline void QuantizedGraph<T>::update_qg(
         }
     }
     if (quantization_bits_ == 0) {
-        this->rotator_->rotate(get_build_vector(cur_id), rotated_centroid.data());
+        this->rotator_->rotate(get_vector(cur_id), rotated_centroid.data());
     } else {
         reconstruct_quantized_vector(cur_id, rotated_centroid.data());
     }
