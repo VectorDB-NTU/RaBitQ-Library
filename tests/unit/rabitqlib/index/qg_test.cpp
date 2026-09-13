@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -12,7 +13,97 @@
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 
 namespace rabitqlib::symqg {
+struct QGConstructionTestAccess {
+    static auto codes(const QuantizedGraph<float>& graph) {
+        std::vector<char> result;
+        for (PID id = 0; id < graph.num_points_; ++id) {
+            const char* code = graph.get_quantized_vector(id);
+            result.insert(result.end(), code, code + graph.batch_data_offset_);
+        }
+        return result;
+    }
+    static const auto& neighbors(const QGBuilder& builder) {
+        return builder.new_neighbors_;
+    }
+    static std::array<double, 2> estimate(
+        const QuantizedGraph<float>& graph, PID source, PID target
+    ) {
+        std::vector<float> query(graph.padded_dim_);
+        graph.reconstruct_quantized_vector(source, query.data());
+        ConstExDataMap<float> code(
+            graph.get_quantized_vector(target), graph.padded_dim_, graph.quantization_bits_
+        );
+        const double midpoint = ((1U << graph.quantization_bits_) - 1) / 2.0;
+        double dot = 0, add = code.f_add_ex(), magnitude = std::abs(add);
+        for (size_t d = 0; d < query.size(); ++d) {
+            const auto byte = graph.quantization_bits_ == 8
+                                  ? code.ex_code()[d]
+                                  : code.ex_code()[(d / 16) * 8 + d % 8];
+            const auto value = graph.quantization_bits_ == 8
+                                   ? byte
+                                   : ((d % 16 < 8) ? byte & 15U : byte >> 4);
+            dot += query[d] * (value - midpoint);
+            // The existing kernel subtracts uncentered float sums; include both
+            // operands in its rounding bound when the final distance is small.
+            magnitude += std::abs(code.f_rescale_ex() * query[d]) * (value + midpoint);
+            const double residual = static_cast<double>(query[d]) - graph.centroid_[d];
+            const double term = graph.metric_type_ == METRIC_L2
+                                    ? residual * residual
+                                    : -static_cast<double>(query[d]) * graph.centroid_[d];
+            add += term;
+            magnitude += std::abs(term);
+        }
+        return {
+            add + code.f_rescale_ex() * dot,
+            8 * std::numeric_limits<float>::epsilon() * std::max(1.0, magnitude)};
+    }
+};
+
 namespace {
+
+TEST(QGConstructionTest, BuildsAndPrunesAfterInputReleaseUsingExistingCodes) {
+    constexpr size_t kCount = 65, kDim = 65;
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {4U, 8U}) {
+            for (bool constant : {false, true}) {
+                SCOPED_TRACE(
+                    ::testing::Message() << metric << "/" << bits << "/" << constant
+                );
+                std::vector<float> data(kCount * kDim, 2.0F);
+                if (!constant) {
+                    for (size_t i = 0; i < data.size(); ++i) {
+                        data[i] += std::sin(static_cast<float>(i) * 0.13F) *
+                                   static_cast<float>(1 + (i / kDim) % 4);
+                    }
+                }
+                QuantizedGraph<float> graph(
+                    kCount, kDim, 32, metric, RotatorType::FhtKacRotator, bits
+                );
+                QGBuilder builder(graph, 64, data.data(), 1);
+                const auto codes = QGConstructionTestAccess::codes(graph);
+                std::fill(
+                    data.begin(), data.end(), std::numeric_limits<float>::quiet_NaN()
+                );
+                std::vector<float>().swap(data);
+                builder.build();
+                EXPECT_EQ(QGConstructionTestAccess::codes(graph), codes);
+                EXPECT_FALSE(builder.check_dup());
+                EXPECT_FLOAT_EQ(builder.avg_degree(), 32);
+                const auto& neighbors = QGConstructionTestAccess::neighbors(builder);
+                for (PID id = 0; id < kCount; ++id) {
+                    ASSERT_EQ(neighbors[id].size(), 32U);
+                    for (const auto& neighbor : neighbors[id]) {
+                        EXPECT_NE(neighbor.id, id);
+                        ASSERT_LT(neighbor.id, kCount);
+                        const auto expected =
+                            QGConstructionTestAccess::estimate(graph, id, neighbor.id);
+                        EXPECT_NEAR(neighbor.distance, expected[0], expected[1]);
+                    }
+                }
+            }
+        }
+    }
+}
 
 TEST(QuantizedGraphConfigurationTest, RejectsDegreeNotAlignedForFastScan) {
     EXPECT_THROW(

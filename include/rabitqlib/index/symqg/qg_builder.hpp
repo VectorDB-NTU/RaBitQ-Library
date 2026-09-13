@@ -10,6 +10,7 @@
 #include <limits>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <unordered_set>
 #include <vector>
@@ -30,6 +31,8 @@ using CandidateList = std::vector<AnnCandidate<float>>;
  *
  */
 class QGBuilder {
+    friend struct QGConstructionTestAccess;
+
    private:
     QuantizedGraph<float>& qg_;
     size_t ef_build_;      // size of search pool for indexing
@@ -83,16 +86,32 @@ class QGBuilder {
         qg_.set_quantization_centroid(centroid.data());
         qg_.copy_vectors(data);
 
-        PID entry_point = exact_nn(
-            data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
-        );
+        PID entry_point = 0;
+        if (qg_.is_quantized()) {
+            QuantizedQuery<float> query(
+                qg_.centroid_.data(),
+                qg_.centroid_.data(),
+                qg_.padded_dim_,
+                qg_.metric_type_
+            );
+            float best = std::numeric_limits<float>::max();
+            for (PID id = 0; id < num_nodes_; ++id) {
+                const float distance = qg_.quantized_distance(query, id);
+                if (distance < best) {
+                    best = distance;
+                    entry_point = id;
+                }
+            }
+        } else {
+            entry_point = exact_nn(
+                data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
+            );
+        }
 
         qg_.set_ep(entry_point);
 
         random_init();
     }
-
-    ~QGBuilder() { qg_.build_data_ = nullptr; }
 
     void build(size_t num_iter = 3) {
         if (num_iter < 2) {
@@ -144,10 +163,12 @@ inline void QGBuilder::add_pruned_edges(
         nei_set.emplace(nei.id);
     }
 
+    std::vector<float> reconstructed;
+    std::optional<QuantizedQuery<float>> prepared;
     while (new_result.size() < degree_bound_ && start < pruned_list.size()) {
         const auto& cur = pruned_list[start];
         bool occlude = false;
-        const float* cur_data = qg_.get_build_vector(cur.id);
+        const float* cur_data = qg_.prepare_build_query(cur.id, reconstructed, prepared);
         float dik_sqr = cur.distance;
 
         if (nei_set.find(cur.id) != nei_set.end()) {
@@ -160,7 +181,7 @@ inline void QGBuilder::add_pruned_edges(
                 break;
             }
             float djk_sqr =
-                qg_.raw_dist_func_(qg_.get_build_vector(nei.id), cur_data, dim_);
+                qg_.point_distance(cur_data, prepared ? &*prepared : nullptr, nei.id);
             float cosine =
                 (dik_sqr + dij_sqr - djk_sqr) / (2 * std::sqrt(dij_sqr * dik_sqr));
             if (cosine > threshold) {
@@ -199,6 +220,8 @@ inline void QGBuilder::heuristic_prune(
     );                 // bool vector to record if this neighbor is pruned
     size_t start = 0;  // start position
 
+    std::vector<float> reconstructed;
+    std::optional<QuantizedQuery<float>> prepared;
     while (pruned_results.size() < degree_bound_ && start < poolsize) {
         auto candidate_id = pool[start].id;
 
@@ -209,7 +232,8 @@ inline void QGBuilder::heuristic_prune(
         }
 
         pruned_results.emplace_back(pool[start]);  // add current candidate to result
-        const float* data_j = qg_.get_build_vector(candidate_id);
+        const float* data_j =
+            qg_.prepare_build_query(candidate_id, reconstructed, prepared);
 
         // i : current vertex
         // j : neighbor added in this iter
@@ -219,7 +243,8 @@ inline void QGBuilder::heuristic_prune(
                 continue;
             }
             float dik = pool[k].distance;
-            auto djk = qg_.raw_dist_func_(data_j, qg_.get_build_vector(pool[k].id), dim_);
+            auto djk =
+                qg_.point_distance(data_j, prepared ? &*prepared : nullptr, pool[k].id);
 
             if (djk < dik) {
                 if (refine && pruned_neighbors_[cur_id].size() < kMaxPrunedSize) {
@@ -305,6 +330,15 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
 #pragma omp parallel for schedule(dynamic)
     for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
         CandidateList& tmp_pool = reverse_buffer[data_id];
+        if (qg_.is_quantized() && !tmp_pool.empty()) {
+            // RaBitQ estimates are directional: score destination -> source afresh.
+            std::vector<float> reconstructed;
+            std::optional<QuantizedQuery<float>> prepared;
+            qg_.prepare_build_query(data_id, reconstructed, prepared);
+            for (auto& candidate : tmp_pool) {
+                candidate.distance = qg_.quantized_distance(*prepared, candidate.id);
+            }
+        }
         tmp_pool.reserve(tmp_pool.size() + degree_bound_);
         tmp_pool.insert(
             tmp_pool.end(), new_neighbors_[data_id].begin(), new_neighbors_[data_id].end()
@@ -328,12 +362,14 @@ inline void QGBuilder::random_init() {
             }
         }
 
-        const float* cur_data = qg_.get_build_vector(i);
+        std::vector<float> reconstructed;
+        std::optional<QuantizedQuery<float>> prepared;
+        const float* cur_data = qg_.prepare_build_query(i, reconstructed, prepared);
         new_neighbors_[i].reserve(degree_bound_);
         for (PID cur_neigh : neighbor_set) {
             new_neighbors_[i].emplace_back(
                 cur_neigh,
-                qg_.raw_dist_func_(cur_data, qg_.get_build_vector(cur_neigh), dim_)
+                qg_.point_distance(cur_data, prepared ? &*prepared : nullptr, cur_neigh)
             );
         }
 
@@ -388,14 +424,15 @@ inline void QGBuilder::graph_refine() {
             for (auto& neighbor : new_result) {
                 ids.emplace(neighbor.id);
             }
+            std::vector<float> reconstructed;
+            std::optional<QuantizedQuery<float>> prepared;
+            const float* source = qg_.prepare_build_query(i, reconstructed, prepared);
             while (new_result.size() < degree_bound_) {
                 PID rand_id = rand_integer<PID>(0, static_cast<PID>(num_nodes_) - 1);
                 if (rand_id != static_cast<PID>(i) && ids.find(rand_id) == ids.end()) {
                     new_result.emplace_back(
                         rand_id,
-                        qg_.raw_dist_func_(
-                            qg_.get_build_vector(rand_id), qg_.get_build_vector(i), dim_
-                        )
+                        qg_.point_distance(source, prepared ? &*prepared : nullptr, rand_id)
                     );
                     ids.emplace(rand_id);
                 }
