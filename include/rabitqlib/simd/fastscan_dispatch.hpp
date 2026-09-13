@@ -5,6 +5,10 @@
 
 namespace rabitqlib::fastscan::simd {
 
+void pack_lut_generic(size_t dim, const float* query, float* lut);
+void pack_lut_avx2(size_t dim, const float* query, float* lut);
+void pack_lut_avx512(size_t dim, const float* query, float* lut);
+
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,

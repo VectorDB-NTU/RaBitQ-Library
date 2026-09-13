@@ -5,11 +5,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
+#include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 
 #include "rabitqlib/defines.hpp"
 
@@ -82,36 +79,38 @@ static inline void get_column(
 inline void pack_codes(
     size_t padded_dim, const uint8_t* quantization_code, size_t num, uint8_t* blocks
 ) {
-    size_t num_rd = (num + 31) & ~31;  // round up num of vecs to multiple of batch size(32)
-
     // consider codes is a matrix
     // rows = number of vectors
     // cols = number of uint8_t of one vector's code
     size_t cols = padded_dim / 8;
 
-    std::array<uint8_t, 32> col;    // column of a batch of code, 8 bits
-    std::array<uint8_t, 32> col_0;  // upper 4 bits
-    std::array<uint8_t, 32> col_1;  // lower 4 bits
+    // Full batches can gather directly in output order, without a temporary column.
+    size_t row = 0;
+    for (; num - row >= kBatchSize; row += kBatchSize) {
+        for (size_t i = 0; i < cols; ++i) {
+            for (size_t j = 0; j < 16; ++j) {
+                const size_t first = row + kPerm0[j];
+                const uint8_t a = quantization_code[first * cols + i];
+                const uint8_t b = quantization_code[(first + 16) * cols + i];
+                blocks[j] = (a >> 4) | (b & 0xF0);
+                blocks[j + 16] = (a & 0x0F) | (b << 4);
+            }
+            blocks += 32;
+        }
+    }
 
-    // pack codes batch by batch
-    // each batch contain codes for 32 vectors
-    for (size_t row = 0; row < num_rd; row += kBatchSize) {
-        // get quantization codes for each column for each batch
-        // i.e., we get the codes for 8 dims of 32 vectors and reorganize the data layout
-        // based on the shuffle SIMD instruction used during querying
+    // Only the final partial batch needs a zero-padded column.
+    if (row < num) {
+        std::array<uint8_t, 32> col;
         for (size_t i = 0; i < cols; ++i) {
             get_column(quantization_code, num, cols, row, i, col);
-            for (size_t j = 0; j < 32; ++j) {
-                col_0[j] = col[j] >> 4;
-                col_1[j] = col[j] & 15;
-            }
             for (size_t j = 0; j < 16; ++j) {
                 // the lower 4 bits represent vector 0 to 15
                 // the upper 4 bits represent vector 16 to 31
-                uint8_t val0 = col_0[kPerm0[j]] | (col_0[kPerm0[j] + 16] << 4);
-                uint8_t val1 = col_1[kPerm0[j]] | (col_1[kPerm0[j] + 16] << 4);
-                blocks[j] = val0;
-                blocks[j + 16] = val1;
+                const uint8_t a = col[kPerm0[j]];
+                const uint8_t b = col[kPerm0[j] + 16];
+                blocks[j] = (a >> 4) | (b & 0xF0);
+                blocks[j + 16] = (a & 0x0F) | (b << 4);
             }
             blocks += 32;
         }
@@ -140,4 +139,7 @@ inline void pack_lut(size_t dim, const T* __restrict__ query, T* __restrict__ lu
         query += 4;
     }
 }
+// Float query tables use runtime SIMD dispatch; other types keep the generic path.
+template <>
+void pack_lut<float>(size_t dim, const float* __restrict__ query, float* __restrict__ lut);
 }  // namespace rabitqlib::fastscan

@@ -6,7 +6,7 @@
 #include <cstdint>
 
 #include "rabitqlib/index/query.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::hnsw::detail {
 

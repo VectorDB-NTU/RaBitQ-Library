@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -8,6 +9,8 @@
 #include <functional>
 #include <random>
 #include <stdexcept>
+#include <type_traits>
+#include <vector>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"

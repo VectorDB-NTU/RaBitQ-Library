@@ -1,10 +1,13 @@
 #include "rabitqlib/simd/dispatch.hpp"
 
-#include <array>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/fastscan/highacc_fastscan.hpp"
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/simd/quantization_dispatch.hpp"
@@ -12,6 +15,8 @@
 #include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/warmup_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/warmup_space.hpp"
 #include "rescale_search.hpp"
 
 namespace rabitqlib::simd {
@@ -414,6 +419,27 @@ float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) 
 }  // namespace rabitqlib
 
 namespace rabitqlib::fastscan {
+
+void simd::pack_lut_generic(size_t dim, const float* query, float* lut) {
+    for (size_t group = 0; group < dim / 4; ++group) {
+        lut[0] = 0;
+        for (size_t j = 1; j < 16; ++j) {
+            lut[j] = lut[j - LOWBIT(j)] + query[kPos[j]];
+        }
+        query += 4;
+        lut += 16;
+    }
+}
+
+using PackLutFn = void (*)(size_t, const float*, float*);
+const PackLutFn kPackLutFn = cpu::has_avx512_core() ? simd::pack_lut_avx512
+                             : cpu::has_avx2()      ? simd::pack_lut_avx2
+                                                    : simd::pack_lut_generic;
+
+template <>
+void pack_lut<float>(size_t dim, const float* __restrict__ query, float* __restrict__ lut) {
+    kPackLutFn(dim, query, lut);
+}
 
 using AccumulateFn = void (*)(const uint8_t*, const uint8_t*, uint16_t*, size_t);
 const AccumulateFn kAccumulateFn = [] {

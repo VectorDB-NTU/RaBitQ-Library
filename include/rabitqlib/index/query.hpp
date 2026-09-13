@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <numeric>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/lut.hpp"

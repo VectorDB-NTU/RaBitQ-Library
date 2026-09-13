@@ -1,10 +1,14 @@
 #pragma once
 
-#include <ctime>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <queue>
 #include <random>
 #include <thread>
 #include <type_traits>
+#include <vector>
 
 namespace rabitqlib {
 template <typename T>

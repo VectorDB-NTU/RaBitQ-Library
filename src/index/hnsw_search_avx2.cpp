@@ -1,4 +1,9 @@
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+
 #include "hnsw_search_avx2_kernels.hpp"
+#include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 
 namespace rabitqlib::hnsw::detail {

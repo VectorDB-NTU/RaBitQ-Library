@@ -2,8 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
-#include <iostream>
+
+#include "rabitqlib/simd/warmup_dispatch.hpp"
 
 namespace rabitqlib::simd {
 

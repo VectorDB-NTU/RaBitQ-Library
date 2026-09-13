@@ -1,7 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -91,13 +89,18 @@ inline void one_bit_code_with_factor(
     T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
-    // quantize
-    RowMajorArray<T> residual_arr = one_bit_code(data, centroid, dim, binary_code);
+    // Scratch stays private to each thread and is reused across vectors and batches.
+    thread_local RowMajorArray<T> residual_arr;
+    thread_local RowMajorArray<T> xu_cb;
+    ConstRowMajorArrayMap<T> data_arr(data, 1, dim);
+    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, dim);
+    residual_arr = data_arr - cent_arr;
+    RowMajorArrayMap<int> x_u(binary_code, 1, static_cast<long>(dim));
+    x_u = (residual_arr > 0).template cast<int>();
 
     // xu_cb = x_u + cb, xu_cb has same direction and different length with x_bar
     float cb = -((1 << 1) - 1) / 2.F;
-    RowMajorArrayMap<int> x_u(binary_code, 1, static_cast<long>(dim));
-    RowMajorArray<T> xu_cb = x_u.template cast<T>() + cb;
+    xu_cb = x_u.template cast<T>() + cb;
 
     // distance to centroid
     T l2_sqr = l2norm_sqr<T>(residual_arr.data(), dim);
@@ -186,8 +189,8 @@ inline void one_bit_compact_code(
     T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
-    // binary code
-    std::vector<int> binary_code(padded_dim);
+    thread_local std::vector<int> binary_code;
+    binary_code.resize(padded_dim);
 
     // get binary code
     one_bit_code_with_factor(
@@ -204,7 +207,7 @@ inline void one_bit_compact_code(
     pack_binary(binary_code.data(), compact_code, padded_dim);
 }
 
-// ! padded_dim % 64 == 0
+// Requires a positive padded_dim divisible by sizeof(TC) * 8.
 template <typename T, typename TC, bool Parallel = false>
 inline void one_bit_compact_codes(
     const T* data,
@@ -234,7 +237,8 @@ inline void one_bit_compact_codes(
     }
 }
 
-// ! padded_dim % 64 == 0
+// Encoding requires a positive padded_dim divisible by 8; index pipelines use 64.
+// packed_code needs ceil(num / 32) * 32 * (padded_dim / 8) bytes, including tail padding.
 template <typename T, bool Parallel = false>
 inline void one_bit_batch_code(
     const T* data,

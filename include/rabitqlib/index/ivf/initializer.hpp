@@ -1,11 +1,17 @@
 #pragma once
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <exception>
 #include <fstream>
+#include <mutex>
+#include <queue>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"

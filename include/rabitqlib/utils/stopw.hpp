@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <ratio>
 
 namespace rabitqlib {
 class StopW {

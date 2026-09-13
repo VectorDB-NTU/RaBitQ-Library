@@ -1,9 +1,11 @@
 #include <immintrin.h>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
+#include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "space_float_kernels.hpp"
 

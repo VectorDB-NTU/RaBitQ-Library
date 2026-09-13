@@ -1,8 +1,5 @@
 #pragma once
 
-#include <omp.h>
-
-#include <cmath>
 #include <cstddef>
 #include <vector>
 

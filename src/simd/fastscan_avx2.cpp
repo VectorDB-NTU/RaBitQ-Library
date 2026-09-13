@@ -1,11 +1,32 @@
 #include <immintrin.h>
 
+#include <cstddef>
 #include <cstdint>
 
-#include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/simd/fastscan_dispatch.hpp"
 
 namespace rabitqlib::fastscan::simd {
+
+void pack_lut_avx2(size_t dim, const float* query, float* lut) {
+    for (size_t group = 0; group < dim / 4; ++group) {
+        __m256 lo = _mm256_setzero_ps();
+        __m256 hi = _mm256_add_ps(lo, _mm256_set1_ps(query[0]));
+        const __m256 q1 = _mm256_set1_ps(query[1]);
+        const __m256 q2 = _mm256_set1_ps(query[2]);
+        const __m256 q3 = _mm256_set1_ps(query[3]);
+        // Select additions by subset bits, in the same order as the generic loop.
+        lo = _mm256_blend_ps(lo, _mm256_add_ps(lo, q1), 0xF0);
+        hi = _mm256_blend_ps(hi, _mm256_add_ps(hi, q1), 0xF0);
+        lo = _mm256_blend_ps(lo, _mm256_add_ps(lo, q2), 0xCC);
+        hi = _mm256_blend_ps(hi, _mm256_add_ps(hi, q2), 0xCC);
+        lo = _mm256_blend_ps(lo, _mm256_add_ps(lo, q3), 0xAA);
+        hi = _mm256_blend_ps(hi, _mm256_add_ps(hi, q3), 0xAA);
+        _mm256_storeu_ps(lut, lo);
+        _mm256_storeu_ps(lut + 8, hi);
+        query += 4;
+        lut += 16;
+    }
+}
 
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,

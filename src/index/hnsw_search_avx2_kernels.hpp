@@ -7,7 +7,6 @@
 #include <cstring>
 
 #include "rabitqlib/index/query.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
 
 namespace rabitqlib::hnsw::detail {
 

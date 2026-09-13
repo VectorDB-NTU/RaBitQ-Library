@@ -1,12 +1,13 @@
 #pragma once
 
-#include <omp.h>
-
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <ios>
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -19,6 +20,7 @@
 #include "rabitqlib/index/estimator.hpp"
 #include "rabitqlib/index/query.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/quantization/pack_excode.hpp"
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/array.hpp"
 #include "rabitqlib/utils/buffer.hpp"
@@ -26,6 +28,7 @@
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 #include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {

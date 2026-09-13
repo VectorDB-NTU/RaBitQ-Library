@@ -192,6 +192,65 @@ Focused clang-tidy checks on affected code are sufficient during iteration.
 For first-party C++ changes, run the full check above before merging and report
 whether validation was focused or complete.
 
+### Include dependency reports
+
+The **Include cleaner (advisory)** job uses clang-tidy's `misc-include-cleaner`
+check to report missing and unused includes. CI uses `ubuntu-latest` and
+unversioned distribution packages:
+
+```bash
+sudo apt-get update
+sudo apt-get install clang-tidy clang libomp-dev cmake ninja-build
+```
+
+Clang-tidy 17 or newer is required. On older distributions such as Ubuntu 22.04,
+use [LLVM's APT repository](https://apt.llvm.org/) to install a newer release.
+For example, install LLVM 22 and its matching analysis and OpenMP packages:
+
+```bash
+wget https://apt.llvm.org/llvm.sh
+sudo bash llvm.sh 22
+sudo apt-get install clang-tidy-22 libomp-22-dev cmake ninja-build
+export CLANG_TIDY=clang-tidy-22
+export CXX=clang++-22
+```
+
+Configure and run the same check locally (use a fresh build directory when
+changing compilers):
+
+```bash
+cmake -S . -B build-includes -G Ninja \
+  -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
+  -DRABITQ_BUILD_SAMPLES=OFF \
+  -DRABITQ_BUILD_TESTS=OFF \
+  -DRABITQ_BUILD_PYTHON_BINDINGS=OFF \
+  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+  -DCMAKE_BUILD_TYPE=Release
+./scripts/check-includes.sh build-includes
+```
+
+The script checks library sources using their compilation database and checks
+headers as main files, since this clang-tidy check does not report findings in
+included headers. Private headers are checked with AVX2 and AVX-512 flags.
+Vendored files are excluded. The script also ignores suggestions to include
+Eigen and hnswlib implementation headers behind their existing public headers;
+these vendor snapshots lack the export annotations needed by include-cleaner.
+`INCLUDE_JOBS` controls parallelism (default: 2).
+The script fails for findings or analyzer errors; CI keeps this step advisory
+and uploads the `include-report` artifact without modifying files.
+
+Review suggestions before applying them, especially for templates and public
+forwarding headers. For a source file, automatic fixes can be applied with:
+
+```bash
+"${CLANG_TIDY:-clang-tidy}" -p build-includes --config='{}' \
+  --checks='-*,misc-include-cleaner' --fix src/simd/dispatch.cpp
+```
+
+Review the diff, run formatting, and rebuild and test affected code after fixes.
+Findings can vary between LLVM releases. This include check is independent of
+the existing general clang-tidy job.
+
 ### Focused static analysis
 
 Use a temporary subset of the compilation database with the same wrapper to

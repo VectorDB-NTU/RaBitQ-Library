@@ -1,5 +1,6 @@
 #include <immintrin.h>
 
+#include <cstdint>
 #include <cstring>
 #include <limits>
 
