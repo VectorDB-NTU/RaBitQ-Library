@@ -441,7 +441,7 @@ inline void QuantizedGraph<T>::search(
     std::vector<T> rotated_query(padded_dim_);
     std::optional<QuantizedQuery<T>> quantized_query;
     prepare_query(query, rotated_query, quantized_query);
-    BatchQuery<T> q_obj(rotated_query.data(), padded_dim_);
+    BatchQuery<T> q_obj(rotated_query.data(), padded_dim_, metric_type_);
 
     buffer::SearchBuffer<T> search_pool(ef_);
     // init search buffer
@@ -466,14 +466,14 @@ inline void QuantizedGraph<T>::search(
         }
         vis->set(cur_node);
 
-        q_obj.set_g_add(
-            point_distance(query, quantized_query ? &*quantized_query : nullptr, cur_node)
-        );
+        const T vertex_distance =
+            point_distance(query, quantized_query ? &*quantized_query : nullptr, cur_node);
+        q_obj.set_g_add(vertex_distance);
 
         scan_neighbors(
             q_obj, cur_node, est_dist.data(), search_pool, *vis, this->degree_bound_
         );
-        res_pool.insert(cur_node, q_obj.g_add());
+        res_pool.insert(cur_node, vertex_distance);
     }
 
     update_results(res_pool, *vis, query, quantized_query ? &*quantized_query : nullptr);
@@ -696,7 +696,7 @@ inline void QuantizedGraph<T>::find_candidates(
     if (!is_quantized()) {
         rotator_->rotate(query, rotated_query.data());
     }
-    BatchQuery<T> q_obj(rotated_query.data(), padded_dim_);
+    BatchQuery<T> q_obj(rotated_query.data(), padded_dim_, metric_type_);
 
     // insert entry point to initialize search buffer
     buffer::SearchBuffer tmp_pool(search_ef);
@@ -711,12 +711,12 @@ inline void QuantizedGraph<T>::find_candidates(
         }
         vis.set(cur_candi);
         auto cur_degree = degrees[cur_candi];
-        q_obj.set_g_add(
-            point_distance(query, quantized_query ? &*quantized_query : nullptr, cur_candi)
-        );
+        const T vertex_distance =
+            point_distance(query, quantized_query ? &*quantized_query : nullptr, cur_candi);
+        q_obj.set_g_add(vertex_distance);
         scan_neighbors(q_obj, cur_candi, est_dist.data(), tmp_pool, vis, cur_degree);
         if (cur_candi != cur_id) {
-            results.emplace_back(cur_candi, q_obj.g_add());
+            results.emplace_back(cur_candi, vertex_distance);
         }
     }
 }
