@@ -22,9 +22,13 @@ class BatchQuery {
     Lut<T> lookup_table_;
     T G_add_ = 0;
     T G_k1xSumq_ = 0;  // G_k1xSumq
+    MetricType metric_type_;
 
    public:
-    explicit BatchQuery(const T* rotated_query, size_t padded_dim) {
+    explicit BatchQuery(
+        const T* rotated_query, size_t padded_dim, MetricType metric_type = METRIC_L2
+    )
+        : metric_type_(metric_type) {
         lookup_table_ = std::move(Lut<T>(rotated_query, padded_dim));
 
         float c_1 = -((1 << 1) - 1) / 2.F;
@@ -44,9 +48,8 @@ class BatchQuery {
     [[nodiscard]] T g_add() const { return G_add_; }
 
     void set_g_add(T dist) {
-        // For L2, dist is computed by euclidean_sqr().
-        // For IP, dist is computed by dot_product_dis(), i.e. 1 - dot_product().
-        G_add_ = dist;
+        // dist is squared L2 or 1 - dot_product; IP encoder factors already include 1.
+        G_add_ = metric_type_ == METRIC_IP ? dist - T{1} : dist;
     }
 
     [[nodiscard]] const uint8_t* lut() const { return lookup_table_.lut(); }

@@ -182,3 +182,21 @@ def test_code_only_build_preserves_v1_format(bits, metric, tmp_path):
     loaded_ids, loaded_distances = loaded.search(queries, 10, 64)
     np.testing.assert_array_equal(loaded_ids, ids)
     np.testing.assert_array_equal(loaded_distances, distances)
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_constant_vectors_preserve_returned_distance(metric, tmp_path):
+    """Neighbor corrections must not shift the vertex distances returned to Python."""
+    data = np.full((65, 64), 0.125, dtype=np.float32)
+    queries = np.full((2, 64), 0.0625, dtype=np.float32)
+    index = SymqgIndex(64, max_degree=32, metric=metric)
+    index.build(data, ef_construction=64)
+    ids, distances = index.search(queries, k=5, ef=64)
+    expected = 0.5 if metric == "ip" else 0.25
+    np.testing.assert_allclose(distances, expected, rtol=0, atol=1e-6)
+    assert np.all(ids < len(data))
+    path = str(tmp_path / "constant.symqg")
+    index.save(path)
+    loaded_ids, loaded_distances = SymqgIndex.load(path).search(queries, k=5, ef=64)
+    np.testing.assert_array_equal(loaded_ids, ids)
+    np.testing.assert_allclose(loaded_distances, expected, rtol=0, atol=1e-6)

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "rabitqlib/index/symqg/qg_builder.hpp"
+#include "rabitqlib/utils/cpu_features.hpp"
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
@@ -60,6 +61,48 @@ struct QGConstructionTestAccess {
 };
 
 namespace {
+
+TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "FastScan requires AVX2/FMA";
+    }
+    for (size_t dim : {64U, 1024U, 1088U}) {
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            SCOPED_TRACE(::testing::Message() << dim << "/" << metric);
+            std::vector<float> centroid(dim, 0.125F), query(dim, 0.0625F);
+            std::vector<float> data(fastscan::kBatchSize * dim);
+            for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
+                // Collinear residuals have exact codes, including the zero-residual case.
+                const float value = 0.125F + (static_cast<float>(i % 3) - 1.0F) * 0.03125F;
+                std::fill_n(data.data() + i * dim, dim, value);
+            }
+            std::vector<char> batch(QGBatchDataMap<float>::data_bytes(dim));
+            quant::quantize_qg_batch(
+                data.data(),
+                centroid.data(),
+                fastscan::kBatchSize,
+                dim,
+                batch.data(),
+                metric
+            );
+            const auto distance =
+                metric == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
+            const float vertex_distance = distance(query.data(), centroid.data(), dim);
+            BatchQuery<float> q_obj(query.data(), dim, metric);
+            q_obj.set_g_add(vertex_distance);
+            std::array<float, fastscan::kBatchSize> estimates{};
+            qg_batch_estdist(batch.data(), q_obj, dim, estimates.data());
+            EXPECT_FLOAT_EQ(
+                q_obj.g_add(), metric == METRIC_IP ? vertex_distance - 1 : vertex_distance
+            );
+            for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
+                EXPECT_NEAR(
+                    estimates[i], distance(query.data(), data.data() + i * dim, dim), 1e-5F
+                );
+            }
+        }
+    }
+}
 
 TEST(QGConstructionTest, BuildsAndPrunesAfterInputReleaseUsingExistingCodes) {
     constexpr size_t kCount = 65, kDim = 65;
