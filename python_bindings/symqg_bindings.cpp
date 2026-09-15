@@ -37,7 +37,19 @@ class SymqgIndex {
         }
     }
 
-    void build(py::handle data, size_t ef_construction, size_t num_threads = 1) {
+    void build(
+        py::handle data,
+        size_t ef_construction,
+        size_t num_threads = 1,
+        const std::string& init = "pipnn"
+    ) {
+        if (init != "random" && init != "pipnn") {
+            throw std::invalid_argument("init must be 'random' or 'pipnn'");
+        }
+        if (ef_construction == 0 ||
+            ef_construction > std::numeric_limits<uint32_t>::max()) {
+            throw std::invalid_argument("ef_construction must be positive and fit uint32");
+        }
         auto data_array = ensure_2d_array<float>(data, "data");
         if (static_cast<size_t>(data_array.shape(1)) != dim_) {
             throw std::invalid_argument("data dimension does not match index dim");
@@ -53,8 +65,14 @@ class SymqgIndex {
             quantization_bits_
         );
 
-        rabitqlib::symqg::QGBuilder builder(
-            *index_, ef_construction, data_array.data(), num_threads
+        const auto initialization = init == "pipnn" ? symqg::QGInitialization::PiPNN
+                                                    : symqg::QGInitialization::Random;
+        symqg::QGBuilder builder(
+            *index_,
+            static_cast<uint32_t>(ef_construction),
+            data_array.data(),
+            num_threads,
+            initialization
         );
         builder.build();
         built_ = true;
@@ -187,7 +205,8 @@ void register_symqg(py::module_& m) {
             &SymqgIndex::build,
             py::arg("data"),
             py::arg("ef_construction"),
-            py::arg("num_threads") = 1
+            py::arg("num_threads") = 1,
+            py::arg("init") = "pipnn"
         )
         .def(
             "search",

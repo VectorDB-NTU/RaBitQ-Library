@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/symqg/detail/pipnn.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -24,12 +25,9 @@
 namespace rabitqlib::symqg {
 constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
 using CandidateList = std::vector<AnnCandidate<float>>;
+enum class QGInitialization { PiPNN, Random };
 
-/**
- * @brief Builder of qg. Since we need to build the symphonyqg iteratively, which requires
- * to record a lot of temp data, we use a separate class as a builder for this purpose.
- *
- */
+// Owns temporary state for SymphonyQG initialization and refinement.
 class QGBuilder {
     friend struct QGConstructionTestAccess;
 
@@ -40,6 +38,7 @@ class QGBuilder {
     size_t num_nodes_;     // num of data points
     size_t dim_;           // dimension of data
     size_t degree_bound_;  // degree bound for qg, multiple of 32
+    bool seeded_ = true;
     static constexpr size_t kMaxCandidatePoolSize =
         750;  // max num of candidates for indexing
     static constexpr size_t kMaxPrunedSize =
@@ -58,62 +57,108 @@ class QGBuilder {
     void graph_refine();
     void iter(bool);
 
-   public:
-    explicit QGBuilder(
-        QuantizedGraph<float>& index,
-        uint32_t ef_build,
-        const float* data,
-        size_t num_threads = std::numeric_limits<size_t>::max()
-    )
+    void initialize_storage(const float* data);
+
+    QGBuilder(QuantizedGraph<float>& index, uint32_t ef_build, size_t num_threads)
         : qg_{index}
         , ef_build_{ef_build}
         , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
         , num_nodes_{qg_.num_vertices()}
         , dim_{qg_.dimension()}
-        , degree_bound_(qg_.degree_bound())
-        , new_neighbors_(qg_.num_vertices())
-        , pruned_neighbors_(qg_.num_vertices())
-        , visited_list_(
-              num_threads_,
-              VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
-          )
-        , degrees_(qg_.num_vertices(), degree_bound_) {
+        , degree_bound_(qg_.degree_bound()) {
         omp_set_num_threads(static_cast<int>(num_threads_));
-
-        std::vector<float> centroid =
-            compute_centroid(data, num_nodes_, dim_, num_threads_);
-
-        qg_.set_quantization_centroid(centroid.data());
-        qg_.copy_vectors(data);
-
-        PID entry_point = 0;
-        if (qg_.is_quantized()) {
-            QuantizedQuery<float> query(
-                qg_.centroid_.data(),
-                qg_.centroid_.data(),
-                qg_.padded_dim_,
-                qg_.metric_type_
-            );
-            float best = std::numeric_limits<float>::max();
-            for (PID id = 0; id < num_nodes_; ++id) {
-                const float distance = qg_.quantized_distance(query, id);
-                if (distance < best) {
-                    best = distance;
-                    entry_point = id;
-                }
-            }
-        } else {
-            entry_point = exact_nn(
-                data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
-            );
-        }
-
-        qg_.set_ep(entry_point);
-
-        random_init();
     }
 
-    void build(size_t num_iter = 3) {
+   public:
+    explicit QGBuilder(
+        QuantizedGraph<float>& index,
+        uint32_t ef_build,
+        const float* data,
+        size_t num_threads = std::numeric_limits<size_t>::max(),
+        QGInitialization init = QGInitialization::PiPNN
+    )
+        : QGBuilder(index, ef_build, num_threads) {
+        if (init == QGInitialization::PiPNN) {
+            auto seed = detail::build_initial_graph(
+                data, num_nodes_, dim_, degree_bound_, qg_.metric_type_, num_threads_
+            );
+            initialize_seed(data, seed.offsets, seed.neighbors);
+        } else if (init == QGInitialization::Random) {
+            seeded_ = false;
+            initialize_storage(data);
+            random_init();
+        } else {
+            throw std::invalid_argument("Unknown QG initialization");
+        }
+    }
+
+   private:
+    void initialize_seed(
+        const float* data,
+        const std::vector<size_t>& offsets,
+        const std::vector<PID>& neighbors
+    ) {
+        if (offsets.size() != num_nodes_ + 1 || offsets.front() != 0 ||
+            offsets.back() != neighbors.size()) {
+            throw std::invalid_argument("Seed graph offsets must delimit every vertex");
+        }
+        for (size_t i = 0; i < num_nodes_; ++i) {
+            if (offsets[i] > offsets[i + 1] || offsets[i + 1] > neighbors.size() ||
+                offsets[i + 1] - offsets[i] > degree_bound_) {
+                throw std::invalid_argument(
+                    "Seed graph row exceeds degree bound or has invalid offsets"
+                );
+            }
+            for (size_t j = offsets[i]; j < offsets[i + 1]; ++j) {
+                if (neighbors[j] >= num_nodes_ || neighbors[j] == i) {
+                    throw std::invalid_argument(
+                        "Seed graph IDs must be in range and exclude self"
+                    );
+                }
+            }
+        }
+        initialize_storage(data);
+#pragma omp parallel
+        {
+            CandidateList row;
+            row.reserve(degree_bound_);
+            std::vector<PID> ids;
+            ids.reserve(degree_bound_);
+#pragma omp for schedule(dynamic)
+            for (size_t i = 0; i < num_nodes_; ++i) {
+                row.clear();
+                ids.assign(
+                    neighbors.begin() + static_cast<ptrdiff_t>(offsets[i]),
+                    neighbors.begin() + static_cast<ptrdiff_t>(offsets[i + 1])
+                );
+                std::sort(ids.begin(), ids.end());
+                ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+                for (PID id : ids) {
+                    // Encoding only consumes IDs. Score surviving seed candidates
+                    // during search instead of retaining a second graph of scores.
+                    row.emplace_back(id, 0.0F);
+                }
+                degrees_[i] = row.size();
+                qg_.update_qg(i, row);
+            }
+        }
+    }
+
+   public:
+    // One complete search/prune/reverse-edge/degree-completion iteration. Call
+    // before serving a seeded graph: search() requires full final rows.
+    void refine() { iter(true); }
+
+    // One refinement for PiPNN initialization, three passes for random init.
+    void build() {
+        if (seeded_) {
+            refine();
+        } else {
+            build(3);
+        }
+    }
+
+    void build(size_t num_iter) {
         if (num_iter < 2) {
             throw std::invalid_argument(
                 "The number of QG build iterations must be at least 2"
@@ -146,6 +191,42 @@ class QGBuilder {
         return static_cast<float>(degrees) / static_cast<float>(num_nodes_);
     }
 };
+
+inline void QGBuilder::initialize_storage(const float* data) {
+    // Allocate refinement scratch only after PiPNN's dense workspace is released.
+    new_neighbors_.resize(num_nodes_);
+    pruned_neighbors_.resize(num_nodes_);
+    visited_list_ = std::vector<VisitedSet>(
+        num_threads_,
+        VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
+    );
+    degrees_.assign(num_nodes_, degree_bound_);
+    std::vector<float> centroid = compute_centroid(data, num_nodes_, dim_, num_threads_);
+
+    qg_.set_quantization_centroid(centroid.data());
+    qg_.copy_vectors(data);
+
+    PID entry_point = 0;
+    if (qg_.is_quantized()) {
+        QuantizedQuery<float> query(
+            qg_.centroid_.data(), qg_.centroid_.data(), qg_.padded_dim_, qg_.metric_type_
+        );
+        float best = std::numeric_limits<float>::max();
+        for (PID id = 0; id < num_nodes_; ++id) {
+            const float distance = qg_.quantized_distance(query, id);
+            if (distance < best) {
+                best = distance;
+                entry_point = id;
+            }
+        }
+    } else {
+        entry_point = exact_nn(
+            data, centroid.data(), num_nodes_, dim_, num_threads_, qg_.raw_dist_func_
+        );
+    }
+
+    qg_.set_ep(entry_point);
+}
 
 inline void QGBuilder::add_pruned_edges(
     const CandidateList& result,
@@ -274,7 +355,24 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
         vis.clear();
         qg_.find_candidates(cur_id, ef_build_, candidates, vis, degrees_);
 
-        // add current neighbors
+        // Seeded construction keeps its initial edges only in QG. Materialize
+        // their scores on demand, after the caller can release the input/CSR.
+        if (new_neighbors_[cur_id].empty() && degrees_[cur_id] != 0) {
+            std::vector<float> reconstructed;
+            std::optional<QuantizedQuery<float>> prepared;
+            const float* source = qg_.prepare_build_query(cur_id, reconstructed, prepared);
+            const PID* ids = qg_.get_neighbors(cur_id);
+            for (size_t j = 0; j < degrees_[cur_id]; ++j) {
+                if (ids[j] != cur_id && !vis.get(ids[j])) {
+                    candidates.emplace_back(
+                        ids[j],
+                        qg_.point_distance(source, prepared ? &*prepared : nullptr, ids[j])
+                    );
+                }
+            }
+        }
+
+        // Add current neighbors retained by preceding iterations.
         for (auto& nei : new_neighbors_[cur_id]) {
             auto neighbor_id = nei.id;
             if (neighbor_id != cur_id && !vis.get(neighbor_id)) {
@@ -291,6 +389,7 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
         candidates.resize(min_size);
 
         // prune and update qg
+        new_neighbors_[cur_id].reserve(degree_bound_);
         heuristic_prune(cur_id, candidates, new_neighbors_[cur_id], refine);
     }
 }
