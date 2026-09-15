@@ -16,10 +16,12 @@ TEST(MaskIpX0Q, BackendsMatchScalarAcrossBlocksAndAlignments) {
     if (!cpu::has_avx2()) {
         GTEST_SKIP() << "Binary dot product tests require AVX2/FMA";
     }
-    using Function = float (*)(const float*, const uint64_t*, size_t);
-    std::vector<Function> functions{simd::mask_ip_x0_q_avx2, mask_ip_x0_q};
+    using Function = float (*)(const float*, const uint8_t*, size_t);
+    std::vector<Function> functions{
+        static_cast<Function>(simd::mask_ip_x0_q_avx2),
+        static_cast<Function>(mask_ip_x0_q)};
     if (cpu::has_avx512_core()) {
-        functions.push_back(simd::mask_ip_x0_q_avx512);
+        functions.push_back(static_cast<Function>(simd::mask_ip_x0_q_avx512));
     }
 
     for (size_t dim : {0, 64, 128, 192, 256, 448, 576, 1024, 4096}) {
@@ -50,8 +52,7 @@ TEST(MaskIpX0Q, BackendsMatchScalarAcrossBlocksAndAlignments) {
                 if (dim != 0) {
                     std::memcpy(storage.data() + offset, words.data(), dim / 8);
                 }
-                const auto* codes =
-                    reinterpret_cast<const uint64_t*>(storage.data() + offset);
+                const auto* codes = storage.data() + offset;
                 for (auto function : functions) {
                     const float result = function(query.data() + 1, codes, dim);
                     EXPECT_NEAR(result, expected, 2e-6 * std::max(1.0, sum_abs));

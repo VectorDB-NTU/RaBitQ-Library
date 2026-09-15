@@ -135,14 +135,6 @@ RaBitQ is developed by the
 University, Singapore. A GPU implementation is also available in
 [cuvs_rabitq](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq).
 
-## Accuracy at a glance
-
-![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](docs/docs/assets/img/acc_bench.png)
-
-*Average and maximum relative estimation error across six datasets; lower is
-better. Results from the
-[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
-
 ## RaBitQ across the vector-search ecosystem
 
 The projects below illustrate adoption of RaBitQ techniques across vector

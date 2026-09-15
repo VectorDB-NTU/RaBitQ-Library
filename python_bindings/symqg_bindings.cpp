@@ -1,17 +1,27 @@
-#include <pybind11/stl.h>
+#include <pybind11/cast.h>
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
+#include <sys/types.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "bindings_common.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
+#include "rabitqlib/utils/rotator.hpp"
 
 namespace py = pybind11;
 
@@ -89,6 +99,9 @@ class SymqgIndex {
         if (ef == 0) {
             throw std::invalid_argument("ef must be positive");
         }
+        if (ef < k) {
+            throw std::invalid_argument("ef must be at least k");
+        }
         if (static_cast<size_t>(query_array.shape(1)) != dim_) {
             throw std::invalid_argument("query dimension does not match index dim");
         }
@@ -102,8 +115,6 @@ class SymqgIndex {
         auto dists = py::array_t<float>(shape);
         auto* ids_data = ids.mutable_data();
         auto* dists_data = dists.mutable_data();
-        std::fill(ids_data, ids_data + ids.size(), 0);
-        std::fill(dists_data, dists_data + dists.size(), 0.0F);
 
         const auto* queries_data = query_array.data();
         const size_t requested_threads =

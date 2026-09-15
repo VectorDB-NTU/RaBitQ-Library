@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -23,7 +24,14 @@ template <typename T = float>
 class SearchBuffer {
    private:
     std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>> data_;
-    size_t size_ = 0, cur_ = 0, capacity_;
+    size_t size_ = 0, cur_ = 0, capacity_ = 0;
+
+    [[nodiscard]] static size_t storage_size(size_t capacity) {
+        if (capacity == std::numeric_limits<size_t>::max()) {
+            throw std::length_error("SearchBuffer capacity is too large");
+        }
+        return capacity + 1;
+    }
 
     [[nodiscard]] auto binary_search(T dist) const {
         size_t lo = 0;
@@ -47,7 +55,8 @@ class SearchBuffer {
    public:
     SearchBuffer() = default;
 
-    explicit SearchBuffer(size_t capacity) : data_(capacity + 1), capacity_(capacity) {}
+    explicit SearchBuffer(size_t capacity)
+        : data_(storage_size(capacity)), capacity_(capacity) {}
 
     // insert a data point into buffer
     void insert(PID data_id, T dist) {
@@ -84,11 +93,14 @@ class SearchBuffer {
     [[nodiscard]] auto has_next() const -> bool { return cur_ < size_; }
 
     void resize(size_t new_size) {
-        this->capacity_ = new_size;
         data_ = std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>(
-            capacity_ + 1
+            storage_size(new_size)
         );
+        capacity_ = new_size;
+        clear();
     }
+
+    [[nodiscard]] size_t size() const { return size_; }
 
     void copy_results(PID* knn) const {
         for (size_t i = 0; i < size_; ++i) {

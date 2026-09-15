@@ -303,8 +303,6 @@ inline InitialGraph build_initial_graph(
     }
     using namespace pipnn_impl;
     const size_t threads = std::max<size_t>(1, std::min(num_threads, total_threads()));
-    // Match QGBuilder's thread setting, including Eigen when threads == 1.
-    omp_set_num_threads(static_cast<int>(threads));
     ScratchPool scratch(count, dim, threads);
     auto leaves = cluster(data, count, dim, metric, threads, scratch);
     RowMajorMatrix<float> projections(dim, kHashBits);

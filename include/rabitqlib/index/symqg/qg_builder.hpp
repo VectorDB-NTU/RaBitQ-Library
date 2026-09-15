@@ -65,9 +65,7 @@ class QGBuilder {
         , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
         , num_nodes_{qg_.num_vertices()}
         , dim_{qg_.dimension()}
-        , degree_bound_(qg_.degree_bound()) {
-        omp_set_num_threads(static_cast<int>(num_threads_));
-    }
+        , degree_bound_(qg_.degree_bound()) {}
 
    public:
     explicit QGBuilder(
@@ -78,6 +76,12 @@ class QGBuilder {
         QGInitialization init = QGInitialization::PiPNN
     )
         : QGBuilder(index, ef_build, num_threads) {
+        if (data == nullptr) {
+            throw std::invalid_argument("QGBuilder data must not be null");
+        }
+        if (init != QGInitialization::PiPNN && init != QGInitialization::Random) {
+            throw std::invalid_argument("Unknown QG initialization");
+        }
         if (init == QGInitialization::PiPNN) {
             auto seed = detail::build_initial_graph(
                 data, num_nodes_, dim_, degree_bound_, qg_.metric_type_, num_threads_
@@ -87,8 +91,6 @@ class QGBuilder {
             seeded_ = false;
             initialize_storage(data);
             random_init();
-        } else {
-            throw std::invalid_argument("Unknown QG initialization");
         }
     }
 
@@ -118,7 +120,7 @@ class QGBuilder {
             }
         }
         initialize_storage(data);
-#pragma omp parallel
+#pragma omp parallel num_threads(num_threads_)
         {
             CandidateList row;
             row.reserve(degree_bound_);
@@ -147,7 +149,11 @@ class QGBuilder {
    public:
     // One complete search/prune/reverse-edge/degree-completion iteration. Call
     // before serving a seeded graph: search() requires full final rows.
-    void refine() { iter(true); }
+    void refine() {
+        qg_.ready_ = false;
+        iter(true);
+        qg_.ready_ = true;
+    }
 
     // One refinement for PiPNN initialization, three passes for random init.
     void build() {
@@ -164,16 +170,18 @@ class QGBuilder {
                 "The number of QG build iterations must be at least 2"
             );
         }
+        qg_.ready_ = false;
         // for first iterations, we do not need to refine the graph structure
         for (size_t i = 0; i < num_iter - 1; ++i) {
             iter(false);
         }
         iter(true);
+        qg_.ready_ = true;
     }
 
     [[nodiscard]] bool check_dup() const {
         std::atomic<bool> flag(false);
-#pragma omp parallel for
+#pragma omp parallel for num_threads(num_threads_)
         for (size_t i = 0; i < num_nodes_; ++i) {
             std::unordered_set<PID> edges;
             for (auto nei : new_neighbors_[i]) {
@@ -193,6 +201,9 @@ class QGBuilder {
 };
 
 inline void QGBuilder::initialize_storage(const float* data) {
+    if (data == nullptr) {
+        throw std::invalid_argument("QGBuilder data must not be null");
+    }
     // Allocate refinement scratch only after PiPNN's dense workspace is released.
     new_neighbors_.resize(num_nodes_);
     pruned_neighbors_.resize(num_nodes_);
@@ -203,8 +214,9 @@ inline void QGBuilder::initialize_storage(const float* data) {
     degrees_.assign(num_nodes_, degree_bound_);
     std::vector<float> centroid = compute_centroid(data, num_nodes_, dim_, num_threads_);
 
+    qg_.ready_ = false;
     qg_.set_quantization_centroid(centroid.data());
-    qg_.copy_vectors(data);
+    qg_.copy_vectors(data, num_threads_);
 
     PID entry_point = 0;
     if (qg_.is_quantized()) {
@@ -345,7 +357,7 @@ inline void QGBuilder::heuristic_prune(
  * @param refine refine = true means recording pruned candidates
  */
 inline void QGBuilder::search_new_neighbors(bool refine) {
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
     for (size_t i = 0; i < num_nodes_; ++i) {
         PID cur_id = i;
         auto tid = omp_get_thread_num();
@@ -361,7 +373,7 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
             std::vector<float> reconstructed;
             std::optional<QuantizedQuery<float>> prepared;
             const float* source = qg_.prepare_build_query(cur_id, reconstructed, prepared);
-            const PID* ids = qg_.get_neighbors(cur_id);
+            const auto ids = qg_.get_neighbors(cur_id);
             for (size_t j = 0; j < degrees_[cur_id]; ++j) {
                 if (ids[j] != cur_id && !vis.get(ids[j])) {
                     candidates.emplace_back(
@@ -400,7 +412,7 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
 
     // Keep new_neighbors_ read-only while reverse candidates are collected. Mutating a
     // destination row here races with another worker reading that row as its source.
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
     for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
         for (const auto& nei : new_neighbors_[data_id]) {
             const PID destination = nei.id;
@@ -426,7 +438,7 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
         }
     }
 
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
     for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
         CandidateList& tmp_pool = reverse_buffer[data_id];
         if (qg_.is_quantized() && !tmp_pool.empty()) {
@@ -450,7 +462,7 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
 inline void QGBuilder::random_init() {
     const PID min_id = 0;
     const PID max_id = num_nodes_ - 1;
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
     for (size_t i = 0; i < num_nodes_; ++i) {
         std::unordered_set<PID> neighbor_set;
         neighbor_set.reserve(degree_bound_);
@@ -483,7 +495,7 @@ inline void QGBuilder::random_init() {
  *
  */
 inline void QGBuilder::graph_refine() {
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
     for (size_t i = 0; i < num_nodes_; ++i) {
         CandidateList& cur_neighbors = new_neighbors_[i];
         size_t cur_degree = cur_neighbors.size();
@@ -560,7 +572,7 @@ inline void QGBuilder::iter(bool refine) {
     }
 
     // update qg
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
     for (size_t i = 0; i < num_nodes_; ++i) {
         qg_.update_qg(i, new_neighbors_[i]);
         degrees_[i] = new_neighbors_[i].size();

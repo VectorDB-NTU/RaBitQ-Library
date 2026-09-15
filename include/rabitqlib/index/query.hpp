@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <numeric>
 #include <stdexcept>
-#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -28,9 +27,7 @@ class BatchQuery {
     explicit BatchQuery(
         const T* rotated_query, size_t padded_dim, MetricType metric_type = METRIC_L2
     )
-        : metric_type_(metric_type) {
-        lookup_table_ = std::move(Lut<T>(rotated_query, padded_dim));
-
+        : lookup_table_(rotated_query, padded_dim), metric_type_(metric_type) {
         float c_1 = -((1 << 1) - 1) / 2.F;
 
         T sumq =
@@ -74,11 +71,9 @@ class SplitBatchQuery {
         MetricType metric_type = METRIC_L2,
         bool use_hacc = true
     )
-        : rotated_query_(rotated_query) {
-        lookup_table_ = std::move(Lut<T>(rotated_query, padded_dim, use_hacc));
-
-        metric_type_ = (metric_type == METRIC_IP) ? METRIC_IP : METRIC_L2;
-
+        : rotated_query_(rotated_query)
+        , lookup_table_(rotated_query, padded_dim, use_hacc)
+        , metric_type_((metric_type == METRIC_IP) ? METRIC_IP : METRIC_L2) {
         float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
         float c_b = -static_cast<float>((1 << (ex_bits + 1)) - 1) / 2.F;
         T sumq =

@@ -77,11 +77,19 @@ inline void split_batch_estdist(
         }
     }
 
-    ConstRowMajorArrayMap<float> f_add_arr(cur_batch.f_add(), 1, fastscan::kBatchSize);
+    std::array<float, fastscan::kBatchSize> f_add_values;
+    std::array<float, fastscan::kBatchSize> f_rescale_values;
+    std::array<float, fastscan::kBatchSize> f_error_values;
+    cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
+    cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
+    cur_batch.f_error().copy_to(f_error_values.data(), f_error_values.size());
+    ConstRowMajorArrayMap<float> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
     ConstRowMajorArrayMap<float> f_rescale_arr(
-        cur_batch.f_rescale(), 1, fastscan::kBatchSize
+        f_rescale_values.data(), 1, fastscan::kBatchSize
     );
-    ConstRowMajorArrayMap<float> f_error_arr(cur_batch.f_error(), 1, fastscan::kBatchSize);
+    ConstRowMajorArrayMap<float> f_error_arr(
+        f_error_values.data(), 1, fastscan::kBatchSize
+    );
 
     RowMajorArrayMap<float> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
     RowMajorArrayMap<float> ip_x0_qr_arr(ip_x0_qr, 1, fastscan::kBatchSize);
@@ -145,7 +153,13 @@ inline void split_single_fulldist_direct(
     ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
 
     // [TODO: optimize this function]
-    ip_x0_qr = Kernel::mask_ip_x0_q(q_obj.rotated_query(), cur_bin.bin_code(), padded_dim);
+    // Direct HNSW kernels retain their legacy word-typed ABI. Generic kernels use the
+    // byte-oriented overload and do not manufacture a typed view of packed storage.
+    ip_x0_qr = Kernel::mask_ip_x0_q(
+        q_obj.rotated_query(),
+        reinterpret_cast<const uint64_t*>(cur_bin.bin_code()),
+        padded_dim
+    );
 
     est_dist =
         cur_ex.f_add_ex() + g_add +
@@ -176,9 +190,13 @@ inline void qg_batch_estdist(
         );
 
         ConstRowMajorArrayMap<TA> ip_arr(accu_res.data(), 1, fastscan::kBatchSize);
-        ConstRowMajorArrayMap<T> f_add_arr(cur_batch.f_add(), 1, fastscan::kBatchSize);
+        std::array<T, fastscan::kBatchSize> f_add_values;
+        std::array<T, fastscan::kBatchSize> f_rescale_values;
+        cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
+        cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
+        ConstRowMajorArrayMap<T> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
         ConstRowMajorArrayMap<T> f_rescale_arr(
-            cur_batch.f_rescale(), 1, fastscan::kBatchSize
+            f_rescale_values.data(), 1, fastscan::kBatchSize
         );
         RowMajorArrayMap<T> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
 
@@ -210,8 +228,14 @@ inline void qg_batch_estdist(
     }
 
     ConstRowMajorArrayMap<int32_t> ip_arr(accu_values.data(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<T> f_add_arr(cur_batch.f_add(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<T> f_rescale_arr(cur_batch.f_rescale(), 1, fastscan::kBatchSize);
+    std::array<T, fastscan::kBatchSize> f_add_values;
+    std::array<T, fastscan::kBatchSize> f_rescale_values;
+    cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
+    cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
+    ConstRowMajorArrayMap<T> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
+    ConstRowMajorArrayMap<T> f_rescale_arr(
+        f_rescale_values.data(), 1, fastscan::kBatchSize
+    );
 
     RowMajorArrayMap<T> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
 
@@ -294,8 +318,9 @@ inline void split_single_estdist_direct(
 ) {
     ConstBinDataMap<float> cur_bin(bin_data, padded_dim);
 
+    // Direct HNSW kernels retain their legacy word-typed ABI; see the note above.
     ip_x0_qr = Kernel::warmup_ip_x0_q_512(
-        cur_bin.bin_code(),
+        reinterpret_cast<const uint64_t*>(cur_bin.bin_code()),
         q_obj.query_bin(),
         q_obj.delta(),
         q_obj.vl(),

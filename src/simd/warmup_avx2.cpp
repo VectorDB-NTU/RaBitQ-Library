@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 #include "rabitqlib/simd/warmup_dispatch.hpp"
 
@@ -62,7 +63,7 @@ static inline __m256i popcount_avx2(__m256i v) {
 }
 
 float warmup_ip_x0_q_512_avx2(
-    const uint64_t* data,
+    const uint8_t* data,
     const uint64_t* query,
     float delta,
     float vl,
@@ -88,8 +89,8 @@ float warmup_ip_x0_q_512_avx2(
         // Load 64 bytes of data using paired 32-byte loads
         __m256i data_vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
         __m256i data_vec_hi =
-            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 4));
-        data += 8;  // Advance 8 x 64-bit ints (64 bytes)
+            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 32));
+        data += 64;
 
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_lo));
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_hi));
@@ -114,37 +115,25 @@ float warmup_ip_x0_q_512_avx2(
     size_t remaining_dim = padded_dim - i;
     if (remaining_dim > 0) {
         size_t num_chunks_64 = remaining_dim / 64;
-        size_t num_chunks_32 = remaining_dim / 32;
+        size_t remaining_bytes = num_chunks_64 * sizeof(uint64_t);
 
-        size_t chunks_lo = (num_chunks_32 > 8) ? 8 : num_chunks_32;
-        size_t chunks_hi = (num_chunks_32 > 8) ? (num_chunks_32 - 8) : 0;
-
-        // 1. Create a baseline sequence register
-        __m256i sequence = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-
-        // 2. Generate masks in-register using Greater-Than comparisons
-        // If chunks_lo is 3, limit will be [3,3,3,3,3,3,3,3].
-        // 3 > seq results in [-1, -1, -1, 0, 0, 0, 0, 0], which is the exact mask needed.
-        __m256i limit_lo = _mm256_set1_epi32(static_cast<int>(chunks_lo));
-        __m256i mask_lo = _mm256_cmpgt_epi32(limit_lo, sequence);
-
-        __m256i limit_hi = _mm256_set1_epi32(static_cast<int>(chunks_hi));
-        __m256i mask_hi = _mm256_cmpgt_epi32(limit_hi, sequence);
-
-        // 3. Vectorized execution continues with zero memory latency
+        alignas(32) uint8_t data_tail[64]{};
+        std::memcpy(data_tail, data, remaining_bytes);
         __m256i data_vec_lo =
-            _mm256_maskload_epi32(reinterpret_cast<const int*>(data), mask_lo);
+            _mm256_load_si256(reinterpret_cast<const __m256i*>(data_tail));
         __m256i data_vec_hi =
-            _mm256_maskload_epi32(reinterpret_cast<const int*>(data + 4), mask_hi);
+            _mm256_load_si256(reinterpret_cast<const __m256i*>(data_tail + 32));
 
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_lo));
         acc_ppc = _mm256_add_epi64(acc_ppc, popcount_avx2(data_vec_hi));
 
         for (size_t j = 0; j < b_query; ++j) {
+            alignas(32) uint8_t query_tail[64]{};
+            std::memcpy(query_tail, query, remaining_bytes);
             __m256i query_vec_lo =
-                _mm256_maskload_epi32(reinterpret_cast<const int*>(query), mask_lo);
+                _mm256_load_si256(reinterpret_cast<const __m256i*>(query_tail));
             __m256i query_vec_hi =
-                _mm256_maskload_epi32(reinterpret_cast<const int*>(query + 4), mask_hi);
+                _mm256_load_si256(reinterpret_cast<const __m256i*>(query_tail + 32));
             query += num_chunks_64;
 
             __m256i pop_lo = popcount_avx2(_mm256_and_si256(data_vec_lo, query_vec_lo));
@@ -172,6 +161,19 @@ float warmup_ip_x0_q_512_avx2(
     ppc_scalar += mm256_reduce_add_epi64(acc_ppc);
 
     return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
+}
+
+float warmup_ip_x0_q_512_avx2(
+    const uint64_t* data,
+    const uint64_t* query,
+    float delta,
+    float vl,
+    size_t padded_dim,
+    size_t b_query
+) {
+    return warmup_ip_x0_q_512_avx2(
+        reinterpret_cast<const uint8_t*>(data), query, delta, vl, padded_dim, b_query
+    );
 }
 
 }  // namespace rabitqlib::simd

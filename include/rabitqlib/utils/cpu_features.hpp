@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace rabitqlib::cpu {
 
 struct Features {
@@ -15,5 +17,13 @@ const Features& features();
 bool has_avx2();
 bool has_avx512_core();
 bool has_avx512_popcnt();
+
+namespace detail {
+
+Features filter_usable_features(
+    const Features& hardware, bool avx, bool osxsave, uint64_t xcr0
+);
+
+}  // namespace detail
 
 }  // namespace rabitqlib::cpu

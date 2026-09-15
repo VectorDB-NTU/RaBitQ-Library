@@ -130,7 +130,7 @@ static void missing_new_transpose_bin_512(const uint8_t*, uint64_t*, size_t, siz
     missing_feature("new_transpose_bin_512");
 }
 
-static float missing_mask_ip_x0_q(const float*, const uint64_t*, size_t) {
+static float missing_mask_ip_x0_q(const float*, const uint8_t*, size_t) {
     missing_feature("mask ip x0 q");
 }
 
@@ -149,7 +149,7 @@ static void missing_fastscan_accumulate_hacc(
 }
 
 static float missing_warmup_ip_x0_q_512(
-    const uint64_t*, const uint64_t*, float, float, size_t, size_t
+    const uint8_t*, const uint64_t*, float, float, size_t, size_t
 ) {
     missing_feature("warmup_ip_x0_q_512");
 }
@@ -341,12 +341,12 @@ const NewTransposeBin512Fn kNewTransposeBin512Fn = [] {
     }
 }();
 
-using MaskIpX0QFn = float (*)(const float*, const uint64_t*, size_t);
+using MaskIpX0QFn = float (*)(const float*, const uint8_t*, size_t);
 const MaskIpX0QFn kMaskIpX0QFn = [] {
     if (cpu::has_avx512_core()) {
-        return simd::mask_ip_x0_q_avx512;
+        return static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx512);
     } else if (cpu::has_avx2()) {
-        return simd::mask_ip_x0_q_avx2;
+        return static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx2);
     } else {
         return simd::missing_mask_ip_x0_q;
     }
@@ -412,8 +412,12 @@ void new_transpose_bin_512(
     kNewTransposeBin512Fn(q, tq, padded_dim, b_query);
 }
 
-float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) {
+float mask_ip_x0_q(const float* query, const uint8_t* data, size_t padded_dim) {
     return kMaskIpX0QFn(query, data, padded_dim);
+}
+
+float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) {
+    return mask_ip_x0_q(query, reinterpret_cast<const uint8_t*>(data), padded_dim);
 }
 
 }  // namespace rabitqlib
@@ -480,10 +484,18 @@ void accumulate(
     uint16_t* __restrict__ result,
     size_t dim
 ) {
+    if (dim == 0 || dim % 16 != 0) {
+        throw std::invalid_argument("FastScan dimension must be a positive multiple of 16");
+    }
     kAccumulateFn(codes, lp_table, result, dim);
 }
 
 void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
+    if (dim == 0 || dim % 16 != 0) {
+        throw std::invalid_argument(
+            "high-accuracy FastScan dimension must be a positive multiple of 16"
+        );
+    }
     kTransferLutHaccFn(lut, dim, hc_lut);
 }
 
@@ -493,6 +505,11 @@ void accumulate_hacc(
     int32_t* accu_res,
     size_t dim
 ) {
+    if (dim == 0 || dim % 16 != 0) {
+        throw std::invalid_argument(
+            "high-accuracy FastScan dimension must be a positive multiple of 16"
+        );
+    }
     kAccumulateHaccFn(codes, hc_lut, accu_res, dim);
 }
 
@@ -501,16 +518,27 @@ void accumulate_hacc(
 namespace rabitqlib {
 
 using WarmupIpX0Q512Fn =
-    float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t);
+    float (*)(const uint8_t*, const uint64_t*, float, float, size_t, size_t);
 const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
     if (rabitqlib::cpu::has_avx512_popcnt()) {
-        return rabitqlib::simd::warmup_ip_x0_q_512_avx512;
+        return static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512);
     } else if (rabitqlib::cpu::has_avx2()) {
-        return rabitqlib::simd::warmup_ip_x0_q_512_avx2;
+        return static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2);
     } else {
         return rabitqlib::simd::missing_warmup_ip_x0_q_512;
     }
 }();
+
+float warmup_ip_x0_q_512(
+    const uint8_t* data,
+    const uint64_t* query,
+    float delta,
+    float vl,
+    size_t padded_dim,
+    size_t b_query
+) {
+    return kWarmupIpX0Q512Fn(data, query, delta, vl, padded_dim, b_query);
+}
 
 float warmup_ip_x0_q_512(
     const uint64_t* data,
@@ -520,7 +548,9 @@ float warmup_ip_x0_q_512(
     size_t padded_dim,
     size_t b_query
 ) {
-    return kWarmupIpX0Q512Fn(data, query, delta, vl, padded_dim, b_query);
+    return warmup_ip_x0_q_512(
+        reinterpret_cast<const uint8_t*>(data), query, delta, vl, padded_dim, b_query
+    );
 }
 
 }  // namespace rabitqlib

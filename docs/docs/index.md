@@ -33,14 +33,6 @@ indexes backed by optimized AVX2 and AVX-512 kernels.
   </div>
 </div>
 
-## Accuracy at a glance
-
-![RaBitQ estimation error benchmark across MSong, YouTube, OpenAI embeddings, Word2Vec, and GIST](assets/img/acc_bench.png)
-
-*Average and maximum relative estimation error across six datasets; lower is
-better. Results from the
-[SIGMOD camera-ready paper](https://doi.org/10.1145/3725413).*
-
 ## Start with Python
 
 Install the latest release from PyPI:
