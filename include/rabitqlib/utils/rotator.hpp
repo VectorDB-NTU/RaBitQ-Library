@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <type_traits>
@@ -51,6 +52,9 @@ inline size_t padding_requirement(size_t dim, RotatorType type) {
         return dim;
     }
     if (type == RotatorType::FhtKacRotator) {
+        if (dim > std::numeric_limits<size_t>::max() - 63) {
+            throw std::invalid_argument("Rotator dimension is too large to pad");
+        }
         return round_up_to_multiple(dim, 64);
     }
     throw std::invalid_argument("Invalid rotator type in padding_requirement()");
@@ -273,8 +277,17 @@ template <typename T>
 Rotator<T>* choose_rotator(
     size_t dim, RotatorType type = RotatorType::FhtKacRotator, size_t padded_dim = 0
 ) {
+    if (dim == 0) {
+        throw std::invalid_argument("Rotator dimension must be positive");
+    }
     if (padded_dim == 0) {
         padded_dim = rotator_impl::padding_requirement(dim, type);
+    }
+
+    if (padded_dim < dim) {
+        throw std::invalid_argument(
+            "Padded rotator dimension must not be smaller than input"
+        );
     }
 
     if (padded_dim != rotator_impl::padding_requirement(padded_dim, type)) {

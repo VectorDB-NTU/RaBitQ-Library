@@ -1,5 +1,6 @@
 """Tests for SymqgIndex: construction, search, properties, error handling, save/load."""
 
+import os
 import struct
 
 import numpy as np
@@ -111,6 +112,11 @@ def test_search_before_build_raises():
         idx.search(queries, k=1, ef=_EF)
 
 
+def test_search_rejects_ef_smaller_than_k(built_symqg, query_data):
+    with pytest.raises(ValueError, match="ef must be at least k"):
+        built_symqg.search(query_data, k=10, ef=9)
+
+
 def test_invalid_degree_raises():
     with pytest.raises(Exception):
         SymqgIndex(DIM, max_degree=16)
@@ -119,6 +125,13 @@ def test_invalid_degree_raises():
 def test_invalid_quantization_bits_raises():
     with pytest.raises(Exception):
         SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=6)
+
+
+def test_save_propagates_write_failure(built_symqg):
+    if not os.path.exists("/dev/full"):
+        pytest.skip("requires a failing output device")
+    with pytest.raises(RuntimeError):
+        built_symqg.save("/dev/full")
 
 
 @pytest.mark.parametrize("bits", [4, 8])

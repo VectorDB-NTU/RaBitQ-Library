@@ -19,10 +19,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
 #include <fstream>
+#include <limits>
 #include <memory>
+#include <new>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -39,7 +40,12 @@ template <typename Dims>
     static_assert(std::is_same_v<typename Dims::value_type, size_t>);
 
     size_t res = 1;
-    std::for_each(dims.begin(), dims.end(), [&](auto cur_d) { res *= cur_d; });
+    for (const size_t cur_d : dims) {
+        if (cur_d != 0 && res > std::numeric_limits<size_t>::max() / cur_d) {
+            throw std::bad_array_new_length();
+        }
+        res *= cur_d;
+    }
     return res;
 }
 }  // namespace array_impl
@@ -56,7 +62,13 @@ class Array {
     [[nodiscard]] constexpr auto size() const -> size_t { return array_impl::size(dims_); }
 
     /// @brief num of bytes for all data objects
-    [[nodiscard]] constexpr auto bytes() const -> size_t { return sizeof(T) * size(); }
+    [[nodiscard]] constexpr auto bytes() const -> size_t {
+        const size_t num_elements = size();
+        if (num_elements > std::numeric_limits<size_t>::max() / sizeof(T)) {
+            throw std::bad_array_new_length();
+        }
+        return sizeof(T) * num_elements;
+    }
 
     void destroy() {
         size_t num_elements = size();

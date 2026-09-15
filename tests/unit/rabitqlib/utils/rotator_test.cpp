@@ -3,13 +3,14 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
-#include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include "test_data.hpp"
-#include "test_helpers.hpp"
 
 using namespace rabitqlib;
 using namespace rabitq_test;
@@ -39,6 +40,26 @@ TEST_F(RotatorTest, DefaultRotatorType) {
     size_t padded_dim = rotator->size();
     EXPECT_EQ(padded_dim % 64, 0);
     EXPECT_GE(padded_dim, dim);
+}
+
+TEST_F(RotatorTest, RejectsPaddedDimensionSmallerThanInput) {
+    EXPECT_THROW(
+        (choose_rotator<float>(dim, RotatorType::FhtKacRotator, dim / 2)),
+        std::invalid_argument
+    );
+    EXPECT_THROW(
+        (choose_rotator<float>(dim, RotatorType::MatrixRotator, dim / 2)),
+        std::invalid_argument
+    );
+}
+
+TEST_F(RotatorTest, RejectsZeroDimension) {
+    EXPECT_THROW(
+        (choose_rotator<float>(0, RotatorType::FhtKacRotator)), std::invalid_argument
+    );
+    EXPECT_THROW(
+        (choose_rotator<float>(0, RotatorType::MatrixRotator)), std::invalid_argument
+    );
 }
 
 uint8_t bitreverse8(uint8_t x) {

@@ -2,12 +2,21 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/index/estimator.hpp"
+#include "rabitqlib/index/lut.hpp"
+#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
@@ -163,6 +172,107 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                 );
             }
         }
+    }
+}
+
+TEST(FastScanHighAccuracyTest, RejectsDimensionsThatCannotFillASimdBlock) {
+    std::array<uint16_t, 16 * 3> lut{};
+    std::array<uint8_t, 16 * 3 * 2> packed_lut{};
+    std::array<uint8_t, 16 * 3> codes{};
+    std::array<uint16_t, 32> low_result{};
+    std::array<int32_t, 32> result{};
+
+    for (size_t dim : {0U, 4U, 8U, 12U, 20U}) {
+        EXPECT_THROW(
+            accumulate(codes.data(), packed_lut.data(), low_result.data(), dim),
+            std::invalid_argument
+        );
+        EXPECT_THROW(
+            transfer_lut_hacc(lut.data(), dim, packed_lut.data()), std::invalid_argument
+        );
+        EXPECT_THROW(
+            accumulate_hacc(codes.data(), packed_lut.data(), result.data(), dim),
+            std::invalid_argument
+        );
+        std::vector<float> query(dim);
+        EXPECT_THROW((Lut<float>(query.data(), dim, true)), std::invalid_argument);
+        EXPECT_THROW((Lut<float>(query.data(), dim, false)), std::invalid_argument);
+    }
+}
+
+TEST(FastScanHighAccuracyTest, Avx512TransferAcceptsUnalignedOutput) {
+    if (!cpu::has_avx512_core()) {
+        GTEST_SKIP() << "AVX512 is not supported on this CPU";
+    }
+
+    constexpr size_t kDim = 64;
+    std::array<uint16_t, kDim * 4> lut{};
+    for (size_t i = 0; i < lut.size(); ++i) {
+        lut[i] = static_cast<uint16_t>((i * 977U) & 0xffffU);
+    }
+
+    std::array<uint8_t, kDim * 8> expected{};
+    constexpr size_t kCodebooksPerRegister = 4;
+    constexpr size_t kBytesPerRegisterPair = 128;
+    constexpr size_t kBytesPerCodebook = 16;
+    constexpr size_t kHighByteOffset = 64;
+    for (size_t codebook = 0; codebook < kDim / 4; ++codebook) {
+        const size_t low_offset =
+            (codebook / kCodebooksPerRegister * kBytesPerRegisterPair) +
+            (codebook % kCodebooksPerRegister * kBytesPerCodebook);
+        for (size_t entry = 0; entry < 16; ++entry) {
+            const uint16_t value = lut[codebook * 16 + entry];
+            expected[low_offset + entry] = static_cast<uint8_t>(value);
+            expected[low_offset + kHighByteOffset + entry] =
+                static_cast<uint8_t>(value >> 8);
+        }
+    }
+
+    alignas(16) std::array<uint8_t, (kDim * 8) + 1> storage{};
+    ASSERT_NE(reinterpret_cast<uintptr_t>(storage.data() + 1) % 16, uintptr_t{0});
+    simd::transfer_lut_hacc_avx512(lut.data(), kDim, storage.data() + 1);
+    EXPECT_TRUE(std::equal(expected.begin(), expected.end(), storage.begin() + 1));
+}
+
+TEST(FastScanHighAccuracyTest, AccumulatesAcrossChunks) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "AVX2 is not supported on this CPU";
+    }
+
+    constexpr size_t kDim = 4096;
+    std::vector<float> query(kDim, 1.0F);
+    SplitBatchQuery<float> q_obj(query.data(), kDim, 3, METRIC_L2, true);
+
+    std::vector<char> batch_data(BatchDataMap<float>::data_bytes(kDim));
+    BatchDataMap<float> batch(batch_data.data(), kDim);
+    std::fill_n(batch.bin_code(), kDim * fastscan::kBatchSize / 8, uint8_t{0xff});
+    std::fill_n(batch.f_add(), fastscan::kBatchSize, 0.0F);
+    std::fill_n(batch.f_rescale(), fastscan::kBatchSize, 1.0F);
+    std::fill_n(batch.f_error(), fastscan::kBatchSize, 0.0F);
+
+    const int32_t scalar_accumulator = int32_t{65535} * static_cast<int32_t>(kDim / 4);
+    const float expected_ip =
+        q_obj.delta() * static_cast<float>(scalar_accumulator) + q_obj.sum_vl_lut();
+    const float expected_distance = expected_ip + q_obj.k1xsumq();
+
+    std::array<float, fastscan::kBatchSize> estimated{};
+    std::array<float, fastscan::kBatchSize> lower{};
+    std::array<float, fastscan::kBatchSize> inner_products{};
+    split_batch_estdist(
+        batch_data.data(),
+        q_obj,
+        kDim,
+        estimated.data(),
+        lower.data(),
+        inner_products.data(),
+        true
+    );
+
+    for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
+        EXPECT_TRUE(std::isfinite(estimated[lane]));
+        EXPECT_FLOAT_EQ(inner_products[lane], expected_ip);
+        EXPECT_FLOAT_EQ(estimated[lane], expected_distance);
+        EXPECT_FLOAT_EQ(lower[lane], expected_distance);
     }
 }
 

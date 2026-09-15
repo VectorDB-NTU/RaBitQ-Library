@@ -115,6 +115,23 @@ def test_recall_vs_brute_force(built_ivf, base_data, query_data):
     assert r >= 0.5, f"Recall {r:.3f} too low"
 
 
+def test_inner_product_routing_uses_inner_product():
+    data = np.zeros((2, DIM), dtype=np.float32)
+    data[0, 0] = 0.9
+    data[1, 0] = 100.0
+    centroids = data.copy()
+    cluster_ids = np.array([0, 1], dtype=np.uint32)
+    query = np.zeros((1, DIM), dtype=np.float32)
+    query[0, 0] = 1.0
+
+    idx = IvfIndex(DIM, 2, 2, nbits=32, metric="ip")
+    idx.build(data, centroids, cluster_ids, num_threads=1)
+    ids, distances = idx.search(query, k=1, nprobe=1, num_threads=1)
+
+    assert ids[0, 0] == 1
+    np.testing.assert_allclose(distances[0, 0], -99.0, rtol=0, atol=1e-5)
+
+
 # ── optional parameters ───────────────────────────────────────────────────────
 
 

@@ -13,6 +13,12 @@
 namespace rabitqlib::cpu {
 namespace {
 
+#if defined(_M_X64) || defined(_M_IX86) || defined(__x86_64__) || defined(__i386__)
+constexpr bool kIsX86 = true;
+#else
+constexpr bool kIsX86 = false;
+#endif
+
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 void cpuid(
     uint32_t leaf, uint32_t subleaf, uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d
@@ -34,32 +40,90 @@ void cpuid(
 void cpuid(uint32_t, uint32_t, uint32_t*, uint32_t*, uint32_t*, uint32_t*) {}
 #endif
 
-Features detect_features() {
-    Features detected{};
-
-#if defined(__x86_64__) || defined(__i386__)
-    // leaf 1: ECX[28]=AVX, ECX[12]=FMA, ECX[23]=POPCNT
-    uint32_t eax, ebx, ecx, edx;
-    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
-
-    // leaf 7 (subleaf 0): EBX[5]=AVX2, EBX[16]=AVX512F,
-    //                     EBX[17]=AVX512DQ, EBX[30]=AVX512BW,
-    //                     ECX[14]=AVX512_VPOPCNTDQ
-    uint32_t l7_eax, l7_ebx, l7_ecx, l7_edx;
-    cpuid(7, 0, &l7_eax, &l7_ebx, &l7_ecx, &l7_edx);
-
-    detected.fma = (ecx >> 12) & 1;
-    detected.avx2 = (l7_ebx >> 5) & 1;
-    detected.avx512f = (l7_ebx >> 16) & 1;
-    detected.avx512dq = (l7_ebx >> 17) & 1;
-    detected.avx512bw = (l7_ebx >> 30) & 1;
-    detected.avx512vpopcntdq = (l7_ecx >> 14) & 1;
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+uint64_t xgetbv(uint32_t index) { return _xgetbv(index); }
+#elif defined(__x86_64__) || defined(__i386__)
+uint64_t xgetbv(uint32_t index) {
+    uint32_t eax;
+    uint32_t edx;
+    __asm__ volatile("xgetbv" : "=a"(eax), "=d"(edx) : "c"(index));
+    return (static_cast<uint64_t>(edx) << 32) | eax;
+}
+#else
+uint64_t xgetbv(uint32_t) { return 0; }
 #endif
 
-    return detected;
+Features detect_features() {
+    Features hardware{};
+    if constexpr (!kIsX86) {
+        return hardware;
+    }
+
+    uint32_t eax = 0;
+    uint32_t ebx = 0;
+    uint32_t ecx = 0;
+    uint32_t edx = 0;
+    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    const uint32_t max_leaf = eax;
+    if (max_leaf < 1) {
+        return hardware;
+    }
+
+    // leaf 1: ECX[12]=FMA, ECX[27]=OSXSAVE, ECX[28]=AVX.
+    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    const bool fma = ((ecx >> 12) & 1U) != 0;
+    const bool osxsave = ((ecx >> 27) & 1U) != 0;
+    const bool avx = ((ecx >> 28) & 1U) != 0;
+    hardware.fma = fma;
+
+    if (max_leaf >= 7) {
+        // leaf 7 (subleaf 0): EBX[5]=AVX2, EBX[16]=AVX512F,
+        //                     EBX[17]=AVX512DQ, EBX[30]=AVX512BW,
+        //                     ECX[14]=AVX512_VPOPCNTDQ.
+        uint32_t l7_eax = 0;
+        uint32_t l7_ebx = 0;
+        uint32_t l7_ecx = 0;
+        uint32_t l7_edx = 0;
+        cpuid(7, 0, &l7_eax, &l7_ebx, &l7_ecx, &l7_edx);
+
+        hardware.avx2 = ((l7_ebx >> 5) & 1U) != 0;
+        hardware.avx512f = ((l7_ebx >> 16) & 1U) != 0;
+        hardware.avx512dq = ((l7_ebx >> 17) & 1U) != 0;
+        hardware.avx512bw = ((l7_ebx >> 30) & 1U) != 0;
+        hardware.avx512vpopcntdq = ((l7_ecx >> 14) & 1U) != 0;
+    }
+
+    const uint64_t xcr0 = avx && osxsave ? xgetbv(0) : 0;
+    return detail::filter_usable_features(hardware, avx, osxsave, xcr0);
 }
 
 }  // namespace
+
+namespace detail {
+
+Features filter_usable_features(
+    const Features& hardware, bool avx, bool osxsave, uint64_t xcr0
+) {
+    constexpr uint64_t kAvxStateMask = (uint64_t{1} << 1) | (uint64_t{1} << 2);
+    constexpr uint64_t kAvx512StateMask =
+        kAvxStateMask | (uint64_t{1} << 5) | (uint64_t{1} << 6) | (uint64_t{1} << 7);
+
+    const bool avx_state_enabled =
+        avx && osxsave && (xcr0 & kAvxStateMask) == kAvxStateMask;
+    const bool avx512_state_enabled =
+        avx_state_enabled && (xcr0 & kAvx512StateMask) == kAvx512StateMask;
+
+    Features usable{};
+    usable.fma = hardware.fma && avx_state_enabled;
+    usable.avx2 = hardware.avx2 && avx_state_enabled;
+    usable.avx512f = hardware.avx512f && avx512_state_enabled;
+    usable.avx512bw = hardware.avx512bw && avx512_state_enabled;
+    usable.avx512dq = hardware.avx512dq && avx512_state_enabled;
+    usable.avx512vpopcntdq = hardware.avx512vpopcntdq && avx512_state_enabled;
+    return usable;
+}
+
+}  // namespace detail
 
 const Features& features() {
     static const Features detected = detect_features();
@@ -73,7 +137,7 @@ bool has_avx2() {
 
 bool has_avx512_core() {
     const Features& detected = features();
-    return detected.avx512f && detected.avx512bw && detected.avx512dq;
+    return detected.fma && detected.avx512f && detected.avx512bw && detected.avx512dq;
 }
 
 bool has_avx512_popcnt() { return has_avx512_core() && features().avx512vpopcntdq; }

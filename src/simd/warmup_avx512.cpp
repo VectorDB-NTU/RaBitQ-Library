@@ -8,7 +8,7 @@
 namespace rabitqlib::simd {
 
 float warmup_ip_x0_q_512_avx512(
-    const uint64_t* data,
+    const uint8_t* data,
     const uint64_t* query,
     float delta,
     float vl,
@@ -31,7 +31,7 @@ float warmup_ip_x0_q_512_avx512(
 
     for (; i < dim_end_512; i += 512) {
         __m512i data_vec = _mm512_loadu_si512(data);
-        data += 8;
+        data += 64;
 
         acc_ppc = _mm512_add_epi64(acc_ppc, _mm512_popcnt_epi64(data_vec));
 
@@ -70,6 +70,19 @@ float warmup_ip_x0_q_512_avx512(
     ppc_scalar += static_cast<size_t>(_mm512_reduce_add_epi64(acc_ppc));
 
     return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
+}
+
+float warmup_ip_x0_q_512_avx512(
+    const uint64_t* data,
+    const uint64_t* query,
+    float delta,
+    float vl,
+    size_t padded_dim,
+    size_t b_query
+) {
+    return warmup_ip_x0_q_512_avx512(
+        reinterpret_cast<const uint8_t*>(data), query, delta, vl, padded_dim, b_query
+    );
 }
 
 }  // namespace rabitqlib::simd

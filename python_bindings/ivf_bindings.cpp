@@ -1,14 +1,24 @@
-#include <pybind11/stl.h>
+#include <pybind11/cast.h>
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
+#include <pybind11/stl.h>  // IWYU pragma: keep; registers std::optional casters
+#include <sys/types.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "bindings_common.hpp"
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/utils/rotator.hpp"
 
 namespace py = pybind11;
 

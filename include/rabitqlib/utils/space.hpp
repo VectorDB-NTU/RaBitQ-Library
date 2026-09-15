@@ -144,22 +144,31 @@ inline T normalize_vec(
     return static_cast<T>(dim) * value;
 }
 
-// pack 0/1 data to usigned integer
+// Pack 0/1 data into words without requiring the destination byte storage to
+// contain aligned, lifetime-started T objects.
 template <typename T>
-inline void pack_binary(
-    const int* __restrict__ binary_code, T* __restrict__ compact_code, size_t length
+inline void pack_binary_to_bytes(
+    const int* __restrict__ binary_code, uint8_t* __restrict__ compact_code, size_t length
 ) {
     constexpr size_t kTypeBits = sizeof(T) * 8;
-    auto* output = reinterpret_cast<uint8_t*>(compact_code);
 
     for (size_t i = 0; i < length; i += kTypeBits) {
         T cur = 0;
         for (size_t j = 0; j < kTypeBits; ++j) {
             cur |= (static_cast<T>(binary_code[i + j]) << (kTypeBits - 1 - j));
         }
-        std::memcpy(output, &cur, sizeof(cur));
-        output += sizeof(cur);
+        std::memcpy(compact_code, &cur, sizeof(cur));
+        compact_code += sizeof(cur);
     }
+}
+
+// Backward-compatible typed-output overload. The implementation remains
+// byte-oriented, so it does not dereference compact_code as T.
+template <typename T>
+inline void pack_binary(
+    const int* __restrict__ binary_code, T* __restrict__ compact_code, size_t length
+) {
+    pack_binary_to_bytes<T>(binary_code, reinterpret_cast<uint8_t*>(compact_code), length);
 }
 
 template <typename T>
@@ -324,6 +333,7 @@ void new_transpose_bin_512(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 );
 
+float mask_ip_x0_q(const float* query, const uint8_t* data, size_t padded_dim);
 float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim);
 
 inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t padded_dim) {

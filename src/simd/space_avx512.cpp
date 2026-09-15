@@ -127,9 +127,9 @@ void new_transpose_bin_512_avx512(
     }
 }
 
-float mask_ip_x0_q_avx512(const float* query, const uint64_t* data, size_t padded_dim) {
+float mask_ip_x0_q_avx512(const float* query, const uint8_t* data, size_t padded_dim) {
     const size_t num_blk = padded_dim / 64;
-    const uint8_t* it_data = reinterpret_cast<const uint8_t*>(data);
+    const uint8_t* it_data = data;
     const float* it_query = query;
 
     //    __m512 sum0 = _mm512_setzero_ps();
@@ -164,6 +164,10 @@ float mask_ip_x0_q_avx512(const float* query, const uint64_t* data, size_t padde
 
     //    __m512 sum = _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3));
     return _mm512_reduce_add_ps(sum);
+}
+
+float mask_ip_x0_q_avx512(const float* query, const uint64_t* data, size_t padded_dim) {
+    return mask_ip_x0_q_avx512(query, reinterpret_cast<const uint8_t*>(data), padded_dim);
 }
 
 }  // namespace rabitqlib::simd

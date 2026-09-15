@@ -11,8 +11,6 @@
 #include <new>
 #include <type_traits>
 
-#include "rabitqlib/utils/tools.hpp"
-
 namespace rabitqlib::memory {
 #define PORTABLE_ALIGN32 __attribute__((aligned(32)))
 #define PORTABLE_ALIGN64 __attribute__((aligned(64)))
@@ -21,13 +19,30 @@ template <typename T, size_t Alignment = 64, bool HugePage = false>
 class AlignedAllocator {
    private:
     static_assert(Alignment >= alignof(T));
+    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
+
+    template <typename U>
+    using ReboundAllocator = AlignedAllocator<U, Alignment, HugePage>;
+
+    [[nodiscard]] static constexpr size_t aligned_size(size_t nbytes) {
+        const size_t remainder = nbytes % Alignment;
+        if (remainder == 0) {
+            return nbytes;
+        }
+        const size_t padding = Alignment - remainder;
+        if (nbytes > std::numeric_limits<size_t>::max() - padding) {
+            throw std::bad_array_new_length();
+        }
+        return nbytes + padding;
+    }
 
    public:
     using value_type = T;
+    using is_always_equal = std::true_type;
 
     template <class U>
     struct rebind {
-        using other = AlignedAllocator<U, Alignment>;
+        using other = ReboundAllocator<U>;
     };
 
     constexpr AlignedAllocator() noexcept = default;
@@ -35,15 +50,32 @@ class AlignedAllocator {
     constexpr AlignedAllocator(const AlignedAllocator&) noexcept = default;
 
     template <typename U>
-    constexpr explicit AlignedAllocator(AlignedAllocator<U, Alignment> const&) noexcept {}
+    constexpr explicit AlignedAllocator(const ReboundAllocator<U>&) noexcept {}
+
+    friend constexpr bool
+    operator==(const AlignedAllocator&, const AlignedAllocator&) noexcept {
+        return true;
+    }
+
+    friend constexpr bool
+    operator!=(const AlignedAllocator&, const AlignedAllocator&) noexcept {
+        return false;
+    }
 
     [[nodiscard]] T* allocate(std::size_t n) {
         if (n > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
             throw std::bad_array_new_length();
         }
 
-        auto nbytes = round_up_to_multiple_of<size_t>(n * sizeof(T), Alignment);
+        if (n == 0) {
+            return nullptr;
+        }
+
+        const auto nbytes = aligned_size(n * sizeof(T));
         auto* ptr = std::aligned_alloc(Alignment, nbytes);
+        if (ptr == nullptr) {
+            throw std::bad_alloc();
+        }
         if (HugePage) {
             madvise(ptr, nbytes, MADV_HUGEPAGE);
         }
@@ -78,8 +110,23 @@ struct Allocator {
 
 template <size_t Alignment, typename T, bool HugePage = false>
 inline T* align_allocate(size_t nbytes) {
-    auto size = round_up_to_multiple_of<size_t>(nbytes, Alignment);
+    static_assert(Alignment >= alignof(T));
+    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
+
+    if (nbytes == 0) {
+        return nullptr;
+    }
+
+    const size_t remainder = nbytes % Alignment;
+    const size_t padding = remainder == 0 ? 0 : Alignment - remainder;
+    if (nbytes > std::numeric_limits<size_t>::max() - padding) {
+        throw std::bad_array_new_length();
+    }
+    const size_t size = nbytes + padding;
     void* ptr = std::aligned_alloc(Alignment, size);
+    if (ptr == nullptr) {
+        throw std::bad_alloc();
+    }
     if (HugePage) {
         madvise(ptr, size, MADV_HUGEPAGE);
     }

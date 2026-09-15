@@ -179,11 +179,11 @@ inline void one_bit_code_with_factor(
  * approximate distances between the original vectors.
  */
 template <typename T, typename TC>
-inline void one_bit_compact_code(
+inline void one_bit_compact_code_to_bytes(
     const T* data,
     const T* centroid,
     size_t padded_dim,
-    TC* compact_code,
+    uint8_t* compact_code,
     T& f_add,
     T& f_recale,
     T& f_error,
@@ -204,51 +204,91 @@ inline void one_bit_compact_code(
         metric_type
     );
 
-    pack_binary(binary_code.data(), compact_code, padded_dim);
+    pack_binary_to_bytes<TC>(binary_code.data(), compact_code, padded_dim);
+}
+
+template <typename T, typename TC>
+inline void one_bit_compact_code(
+    const T* data,
+    const T* centroid,
+    size_t padded_dim,
+    TC* compact_code,
+    T& f_add,
+    T& f_recale,
+    T& f_error,
+    MetricType metric_type = METRIC_L2
+) {
+    one_bit_compact_code_to_bytes<T, TC>(
+        data,
+        centroid,
+        padded_dim,
+        reinterpret_cast<uint8_t*>(compact_code),
+        f_add,
+        f_recale,
+        f_error,
+        metric_type
+    );
 }
 
 // Requires a positive padded_dim divisible by sizeof(TC) * 8.
-template <typename T, typename TC, bool Parallel = false>
+template <
+    typename T,
+    typename TC,
+    bool Parallel = false,
+    typename FAdd,
+    typename FRescale,
+    typename FError>
 inline void one_bit_compact_codes(
     const T* data,
     const T* centroid,
     size_t num,
     size_t padded_dim,
     TC* compact_code,
-    T* f_add,
-    T* f_rescale,
-    T* f_error,
+    FAdd f_add,
+    FRescale f_rescale,
+    FError f_error,
     MetricType metric_type = METRIC_L2
 ) {
     constexpr size_t kTypeBits = sizeof(TC) * 8;
 
 #pragma omp parallel for if (Parallel)
     for (size_t i = 0; i < num; ++i) {
+        T add;
+        T rescale;
+        T error;
         one_bit_compact_code(
             data + (padded_dim * i),
             centroid,
             padded_dim,
             compact_code + (padded_dim / kTypeBits * i),
-            f_add[i],
-            f_rescale[i],
-            f_error[i],
+            add,
+            rescale,
+            error,
             metric_type
         );
+        f_add[i] = add;
+        f_rescale[i] = rescale;
+        f_error[i] = error;
     }
 }
 
 // Encoding requires a positive padded_dim divisible by 8; index pipelines use 64.
 // packed_code needs ceil(num / 32) * 32 * (padded_dim / 8) bytes, including tail padding.
-template <typename T, bool Parallel = false>
+template <
+    typename T,
+    bool Parallel = false,
+    typename FAdd,
+    typename FRescale,
+    typename FError>
 inline void one_bit_batch_code(
     const T* data,
     const T* centroid,
     size_t num,
     size_t padded_dim,
     uint8_t* packed_code,
-    T* f_add,
-    T* f_recale,
-    T* f_error,
+    FAdd f_add,
+    FRescale f_recale,
+    FError f_error,
     MetricType metric_type = METRIC_L2
 ) {
     std::vector<uint8_t> compact_codes(num * padded_dim / 8);
@@ -873,17 +913,23 @@ inline void split_code_with_factor(
 
     // Base layer first: its factors describe the filter code on its own.
     BaseDataMap<T> base_map(base_data, dim, base_bits);
+    T f_add_base;
+    T f_rescale_base;
+    T f_error_base;
     code_factors<T>(
         residual,
         centroid,
         dim,
         base_code_int.data(),
         -(static_cast<float>((1U << base_bits) - 1) / 2.F),
-        base_map.f_add(),
-        base_map.f_rescale(),
-        base_map.f_error(),
+        f_add_base,
+        f_rescale_base,
+        f_error_base,
         metric_type
     );
+    base_map.f_add() = f_add_base;
+    base_map.f_rescale() = f_rescale_base;
+    base_map.f_error() = f_error_base;
     ex_bits::packing_rabitqplus_code(base_raw.data(), base_map.base_code(), dim, base_bits);
 
     if (ex_bits == 0) {
@@ -892,6 +938,8 @@ inline void split_code_with_factor(
 
     // Refine layer: the same derivation over the combined code.
     ExDataMap<T> ex_map(ex_data, dim, ex_bits);
+    T f_add_ex;
+    T f_rescale_ex;
     T f_error_ex = 0;
     code_factors<T>(
         residual,
@@ -899,11 +947,13 @@ inline void split_code_with_factor(
         dim,
         total_code.data(),
         -(static_cast<float>((1U << total_bits) - 1) / 2.F),
-        ex_map.f_add_ex(),
-        ex_map.f_rescale_ex(),
+        f_add_ex,
+        f_rescale_ex,
         f_error_ex,
         metric_type
     );
+    ex_map.f_add_ex() = f_add_ex;
+    ex_map.f_rescale_ex() = f_rescale_ex;
 
     ex_bits::packing_rabitqplus_code(ex_raw.data(), ex_map.ex_code(), dim, ex_bits);
 }

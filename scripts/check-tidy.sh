@@ -50,12 +50,14 @@ if [[ -n "${CLANG_RESOURCE_DIR:-}" ]]; then
     extra_args+=("-extra-arg-before=-resource-dir=$CLANG_RESOURCE_DIR")
 fi
 for include_dir in "${system_include_dirs[@]}"; do
+    # Append compiler defaults so dependency paths from the compilation database
+    # take precedence over system installations (for example, pybind11).
     if [[ "$include_dir" == */lib/gcc/*/include ]]; then
         # Keep Clang's intrinsic headers ahead of GCC's, while still making
         # compiler-provided headers such as omp.h available.
-        extra_args+=("-extra-arg-before=-idirafter$include_dir")
+        extra_args+=("-extra-arg=-idirafter$include_dir")
     else
-        extra_args+=("-extra-arg-before=-isystem$include_dir")
+        extra_args+=("-extra-arg=-isystem$include_dir")
     fi
 done
 

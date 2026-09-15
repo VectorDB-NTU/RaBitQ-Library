@@ -12,6 +12,7 @@
 #include <numeric>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -22,7 +23,6 @@
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/pack_excode.hpp"
 #include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/utils/array.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
@@ -65,26 +65,24 @@ class QuantizedGraph {
     friend struct QGConstructionTestAccess;
 
    private:
-    size_t num_points_ = 0;                           // num points
-    size_t degree_bound_ = 0;                         // degree bound
-    size_t dim_ = 0;                                  // dimension
-    size_t padded_dim_ = 0;                           // padded dimension
-    T (*raw_dist_func_)(const T*, const T*, size_t);  // dist func for raw vector
-    PID entry_point_ = 0;                             // Entry point of graph
+    size_t num_points_ = 0;                                     // num points
+    size_t degree_bound_ = 0;                                   // degree bound
+    size_t dim_ = 0;                                            // dimension
+    size_t padded_dim_ = 0;                                     // padded dimension
+    T (*raw_dist_func_)(const T*, const T*, size_t) = nullptr;  // raw-vector distance
+    PID entry_point_ = 0;                                       // Entry point of graph
     MetricType metric_type_ = MetricType::METRIC_L2;
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
     std::vector<T> centroid_;       // rotated global centroid for qg-quant
     ex_ipfunc quantized_ip_func_ = nullptr;
 
-    Array<
-        char,
-        std::vector<size_t>,
-        memory::AlignedAllocator<
-            char,
-            1 << 22,
-            true>>
-        data_;  // vectors/codes + graph quantization data + edges
+    using RowStorage = std::vector<T, memory::AlignedAllocator<T, 1 << 22, true>>;
+    // Complete rows are contiguous in both raw and quantized modes:
+    // vector/code, neighbor quantization data, then packed neighbor IDs.
+    // Typed storage establishes T lifetimes for raw vectors; packed portions
+    // are accessed only as bytes, never as T values.
+    RowStorage data_;
     std::unique_ptr<Rotator<T>> rotator_;  // data rotator
 
     // Position of row data (raw vector or packed qg-quant vector), neighbor
@@ -94,29 +92,56 @@ class QuantizedGraph {
     size_t neighbor_offset_ = 0;    // offset of neighbors
     size_t row_offset_ = 0;         // length of entire row
     size_t ef_ = 0;
+    bool ready_ = false;
+
+    [[nodiscard]] static size_t checked_add(size_t lhs, size_t rhs) {
+        if (lhs > std::numeric_limits<size_t>::max() - rhs) {
+            throw std::length_error("QuantizedGraph storage size exceeds size_t");
+        }
+        return lhs + rhs;
+    }
+
+    [[nodiscard]] static size_t checked_multiply(size_t lhs, size_t rhs) {
+        if (lhs != 0 && rhs > std::numeric_limits<size_t>::max() / lhs) {
+            throw std::length_error("QuantizedGraph storage size exceeds size_t");
+        }
+        return lhs * rhs;
+    }
+
+    [[nodiscard]] static size_t padded_dimension(size_t dim) {
+        return (checked_add(dim, 63) / 64) * 64;
+    }
 
     void validate_configuration() const;
 
+    void initialize_layout();
+
     void initialize();
 
-    void copy_vectors(const T*);
+    void copy_vectors(const T*, size_t);
 
     void set_quantization_centroid(const T* centroid);
 
+    [[nodiscard]] char* get_row_data(PID data_id) {
+        return reinterpret_cast<char*>(get_vector(data_id));
+    }
+
+    [[nodiscard]] const char* get_row_data(PID data_id) const {
+        return reinterpret_cast<const char*>(get_vector(data_id));
+    }
+
     [[nodiscard]] T* get_vector(PID data_id) {
-        return reinterpret_cast<T*>(&data_.at(row_offset_ * data_id));
+        return data_.data() + ((row_offset_ / sizeof(T)) * data_id);
     }
 
     [[nodiscard]] const T* get_vector(PID data_id) const {
-        return reinterpret_cast<const T*>(&data_.at(row_offset_ * data_id));
+        return data_.data() + ((row_offset_ / sizeof(T)) * data_id);
     }
 
-    [[nodiscard]] char* get_quantized_vector(PID data_id) {
-        return &data_.at(row_offset_ * data_id);
-    }
+    [[nodiscard]] char* get_quantized_vector(PID data_id) { return get_row_data(data_id); }
 
     [[nodiscard]] const char* get_quantized_vector(PID data_id) const {
-        return &data_.at(row_offset_ * data_id);
+        return get_row_data(data_id);
     }
 
     void prepare_query(const T*, std::vector<T>&, std::optional<QuantizedQuery<T>>&) const;
@@ -131,21 +156,23 @@ class QuantizedGraph {
     void reconstruct_quantized_vector(PID, T*) const;
 
     [[nodiscard]] char* get_batch_data(PID data_id) {
-        return &data_.at((row_offset_ * data_id) + batch_data_offset_);
+        return get_row_data(data_id) + batch_data_offset_;
     }
 
     [[nodiscard]] const char* get_batch_data(PID data_id) const {
-        return &data_.at((row_offset_ * data_id) + batch_data_offset_);
+        return get_row_data(data_id) + batch_data_offset_;
     }
 
-    [[nodiscard]] PID* get_neighbors(PID data_id) {
-        return reinterpret_cast<PID*>(&data_.at((row_offset_ * data_id) + neighbor_offset_)
+    [[nodiscard]] rabitqlib::detail::PackedArrayView<PID> get_neighbors(PID data_id) {
+        return rabitqlib::detail::PackedArrayView<PID>(
+            get_row_data(data_id) + neighbor_offset_
         );
     }
 
-    [[nodiscard]] const PID* get_neighbors(PID data_id) const {
-        return reinterpret_cast<const PID*>(
-            &data_.at((row_offset_ * data_id) + neighbor_offset_)
+    [[nodiscard]] rabitqlib::detail::ConstPackedArrayView<PID> get_neighbors(PID data_id
+    ) const {
+        return rabitqlib::detail::ConstPackedArrayView<PID>(
+            get_row_data(data_id) + neighbor_offset_
         );
     }
 
@@ -176,6 +203,11 @@ class QuantizedGraph {
 
     ~QuantizedGraph() = default;
 
+    QuantizedGraph(const QuantizedGraph&) = delete;
+    QuantizedGraph& operator=(const QuantizedGraph&) = delete;
+    QuantizedGraph(QuantizedGraph&&) noexcept = default;
+    QuantizedGraph& operator=(QuantizedGraph&&) noexcept = default;
+
     [[nodiscard]] auto num_vertices() const { return this->num_points_; }
 
     [[nodiscard]] auto dimension() const { return this->dim_; }
@@ -190,7 +222,12 @@ class QuantizedGraph {
 
     [[nodiscard]] bool is_quantized() const { return quantization_bits_ != 0; }
 
-    void set_ep(PID entry) { this->entry_point_ = entry; };
+    void set_ep(PID entry) {
+        if (entry >= num_points_) {
+            throw std::invalid_argument("QuantizedGraph entry point is out of range");
+        }
+        entry_point_ = entry;
+    }
 
     void save(const char*) const;
 
@@ -231,6 +268,13 @@ inline QuantizedGraph<T>::QuantizedGraph(
 template <typename T>
 inline void QuantizedGraph<T>::validate_configuration() const {
     validate_metric_type(metric_type_);
+    if (dim_ == 0) {
+        throw std::invalid_argument("QuantizedGraph dimension must be positive");
+    }
+    if (rotator_type_ != RotatorType::MatrixRotator &&
+        rotator_type_ != RotatorType::FhtKacRotator) {
+        throw std::invalid_argument("QuantizedGraph rotator type is invalid");
+    }
     if (degree_bound_ == 0 || degree_bound_ % fastscan::kBatchSize != 0) {
         throw std::invalid_argument(
             "QuantizedGraph degree bound must be a positive multiple of 32"
@@ -246,6 +290,9 @@ inline void QuantizedGraph<T>::validate_configuration() const {
             "QuantizedGraph point count exceeds the search-buffer ID limit"
         );
     }
+    if (entry_point_ >= num_points_) {
+        throw std::invalid_argument("QuantizedGraph entry point is out of range");
+    }
     if (quantization_bits_ != 0 && quantization_bits_ != 4 && quantization_bits_ != 8) {
         throw std::invalid_argument(
             "QuantizedGraph quantization bits must be 0 (vanilla), 4, or 8"
@@ -258,7 +305,8 @@ inline void QuantizedGraph<T>::validate_configuration() const {
 }
 
 template <typename T>
-inline void QuantizedGraph<T>::copy_vectors(const T* data) {
+inline void QuantizedGraph<T>::copy_vectors(const T* data, size_t num_threads) {
+    const int thread_count = static_cast<int>(num_threads);
     if (quantization_bits_ != 0) {
         if constexpr (!std::is_same_v<T, float>) {
             throw std::logic_error("qg-quant currently requires float data");
@@ -268,7 +316,7 @@ inline void QuantizedGraph<T>::copy_vectors(const T* data) {
                     "qg-quant centroid must be set before copying vectors"
                 );
             }
-#pragma omp parallel
+#pragma omp parallel num_threads(thread_count)
             {
                 std::vector<T> rotated_data(padded_dim_);
                 std::vector<uint8_t> quantized_data(padded_dim_);
@@ -278,6 +326,8 @@ inline void QuantizedGraph<T>::copy_vectors(const T* data) {
                     ExDataMap<T> output(
                         get_quantized_vector(i), padded_dim_, quantization_bits_
                     );
+                    T f_add;
+                    T f_rescale;
                     T unused_f_error = 0;
                     quant::quantize_full_single(
                         rotated_data.data(),
@@ -285,11 +335,13 @@ inline void QuantizedGraph<T>::copy_vectors(const T* data) {
                         padded_dim_,
                         quantization_bits_,
                         quantized_data.data(),
-                        output.f_add_ex(),
-                        output.f_rescale_ex(),
+                        f_add,
+                        f_rescale,
                         unused_f_error,
                         metric_type_
                     );
+                    output.f_add_ex() = f_add;
+                    output.f_rescale_ex() = f_rescale;
                     quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
                         quantized_data.data(),
                         output.ex_code(),
@@ -301,7 +353,7 @@ inline void QuantizedGraph<T>::copy_vectors(const T* data) {
             return;
         }
     }
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic) num_threads(thread_count)
     for (size_t i = 0; i < num_points_; ++i) {
         const T* src = data + (dim_ * i);
         T* dst = get_vector(i);
@@ -320,10 +372,17 @@ inline void QuantizedGraph<T>::set_quantization_centroid(const T* centroid) {
 
 template <typename T>
 inline void QuantizedGraph<T>::save(const char* filename) const {
+    if (!ready_ || rotator_ == nullptr) {
+        throw std::logic_error("QuantizedGraph must be built or loaded before save");
+    }
+    if (filename == nullptr || filename[0] == '\0') {
+        throw std::invalid_argument("QuantizedGraph save filename must not be empty");
+    }
     std::ofstream output(filename, std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("Cannot open quantized graph file for writing");
     }
+    output.exceptions(std::ios::badbit | std::ios::failbit);
 
     constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;  // "QGRABITQ"
     constexpr uint32_t kFormatVersion = 1;
@@ -352,16 +411,23 @@ inline void QuantizedGraph<T>::save(const char* filename) const {
     }
 
     /* Data */
-    data_.save(output);
+    output.write(
+        get_row_data(0),
+        static_cast<std::streamsize>(checked_multiply(num_points_, row_offset_))
+    );
 
     /* Rotator */
     this->rotator_->save(output);
 
+    output.flush();
     output.close();
 }
 
 template <typename T>
 inline void QuantizedGraph<T>::load(const char* filename) {
+    if (filename == nullptr || filename[0] == '\0') {
+        throw std::invalid_argument("QuantizedGraph load filename must not be empty");
+    }
     /* Check existence */
     if (!file_exists(filename)) {
         throw std::runtime_error("Quantized graph file does not exist");
@@ -372,13 +438,30 @@ inline void QuantizedGraph<T>::load(const char* filename) {
         throw std::runtime_error("Cannot open quantized graph file");
     }
 
+    auto read_exact = [&](void* destination, size_t bytes, const char* field) {
+        if (bytes > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+            throw std::runtime_error("QuantizedGraph field is too large to read");
+        }
+        input.read(
+            reinterpret_cast<char*>(destination), static_cast<std::streamsize>(bytes)
+        );
+        if (!input) {
+            throw std::runtime_error(
+                std::string("Truncated QuantizedGraph file while reading ") + field
+            );
+        }
+    };
+    auto read_value = [&](auto& value, const char* field) {
+        read_exact(&value, sizeof(value), field);
+    };
+
     constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;  // "QGRABITQ"
     constexpr uint32_t kFormatVersion = 1;
     uint64_t magic = 0;
-    input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    read_value(magic, "format marker");
     if (magic == kFormatMagic) {
         uint32_t version = 0;
-        input.read(reinterpret_cast<char*>(&version), sizeof(version));
+        read_value(version, "format version");
         if (version != kFormatVersion) {
             throw std::runtime_error("Unsupported QuantizedGraph file version");
         }
@@ -388,46 +471,88 @@ inline void QuantizedGraph<T>::load(const char* filename) {
         input.seekg(0);
     }
 
-    /* Basic variants */
-    input.read(reinterpret_cast<char*>(&num_points_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&degree_bound_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&dim_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&padded_dim_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&entry_point_), sizeof(PID));
-    input.read(reinterpret_cast<char*>(&rotator_type_), sizeof(RotatorType));
-    input.read(reinterpret_cast<char*>(&metric_type_), sizeof(MetricType));
+    QuantizedGraph loaded;
+    size_t stored_padded_dim = 0;
+    read_value(loaded.num_points_, "point count");
+    read_value(loaded.degree_bound_, "degree bound");
+    read_value(loaded.dim_, "dimension");
+    read_value(stored_padded_dim, "padded dimension");
+    read_value(loaded.entry_point_, "entry point");
+    read_value(loaded.rotator_type_, "rotator type");
+    read_value(loaded.metric_type_, "metric type");
     if (magic == kFormatMagic) {
-        input.read(
-            reinterpret_cast<char*>(&quantization_bits_), sizeof(quantization_bits_)
-        );
+        read_value(loaded.quantization_bits_, "quantization bits");
     } else {
-        quantization_bits_ = 0;
+        loaded.quantization_bits_ = 0;
     }
 
-    raw_dist_func_ = (metric_type_ == METRIC_IP) ? dot_product_dis<T> : euclidean_sqr<T>;
-
-    validate_configuration();
-    initialize();
-
-    if (quantization_bits_ != 0) {
-        centroid_.resize(padded_dim_);
-        input.read(reinterpret_cast<char*>(centroid_.data()), padded_dim_ * sizeof(T));
-    }
-
-    /* Data */
-    data_.load(input);
-
-    /* Rotator */
-    this->rotator_->load(input);
-    if (rotator_->size() != padded_dim_) {
+    loaded.raw_dist_func_ =
+        (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<T> : euclidean_sqr<T>;
+    loaded.validate_configuration();
+    loaded.padded_dim_ = padded_dimension(loaded.dim_);
+    if (stored_padded_dim != loaded.padded_dim_) {
         throw std::runtime_error("Invalid padded dimension in quantized graph file");
+    }
+    loaded.initialize_layout();
+
+    const size_t centroid_bytes = loaded.quantization_bits_ == 0
+                                      ? 0
+                                      : checked_multiply(loaded.padded_dim_, sizeof(T));
+    const size_t data_bytes = checked_multiply(loaded.num_points_, loaded.row_offset_);
+    const size_t rotator_bytes =
+        loaded.rotator_type_ == RotatorType::MatrixRotator
+            ? checked_multiply(checked_multiply(sizeof(T), loaded.dim_), loaded.padded_dim_)
+            : checked_multiply(loaded.padded_dim_, size_t{4}) / 8;
+    const size_t expected_payload_bytes =
+        checked_add(checked_add(centroid_bytes, data_bytes), rotator_bytes);
+
+    const auto payload_position = input.tellg();
+    if (payload_position < 0) {
+        throw std::runtime_error("Cannot determine QuantizedGraph payload position");
+    }
+    const size_t file_size = get_filesize(filename);
+    const size_t payload_offset = static_cast<size_t>(payload_position);
+    if (payload_offset > file_size ||
+        file_size - payload_offset != expected_payload_bytes) {
+        throw std::runtime_error("Invalid QuantizedGraph payload size");
+    }
+
+    loaded.initialize();
+
+    if (loaded.quantization_bits_ != 0) {
+        loaded.centroid_.resize(loaded.padded_dim_);
+        read_exact(loaded.centroid_.data(), centroid_bytes, "quantization centroid");
+    }
+
+    read_exact(loaded.get_row_data(0), data_bytes, "graph data");
+
+    for (PID source = 0; source < loaded.num_points_; ++source) {
+        const auto neighbors = loaded.get_neighbors(source);
+        for (size_t i = 0; i < loaded.degree_bound_; ++i) {
+            if (neighbors[i] >= loaded.num_points_) {
+                throw std::runtime_error("Invalid QuantizedGraph neighbor ID");
+            }
+        }
+    }
+
+    loaded.rotator_->load(input);
+    if (!input) {
+        throw std::runtime_error("Truncated QuantizedGraph file while reading rotator");
     }
 
     input.close();
+    // ef is a runtime search setting rather than persisted index state. Preserve
+    // the target object's value, matching the previous in-place load behavior.
+    loaded.ef_ = ef_;
+    loaded.ready_ = true;
+    *this = std::move(loaded);
 }
 
 template <typename T>
 inline void QuantizedGraph<T>::set_ef(size_t cur_ef) {
+    if (cur_ef == 0) {
+        throw std::invalid_argument("QuantizedGraph ef must be positive");
+    }
     this->ef_ = cur_ef;
 }
 
@@ -438,6 +563,19 @@ inline void QuantizedGraph<T>::search(
     uint32_t* __restrict__ results,
     T* __restrict__ dists
 ) {
+    if (!ready_ || rotator_ == nullptr) {
+        throw std::logic_error("QuantizedGraph must be built or loaded before search");
+    }
+    if (query == nullptr || results == nullptr || dists == nullptr) {
+        throw std::invalid_argument("QuantizedGraph search buffers must not be null");
+    }
+    if (k == 0 || k > num_points_) {
+        throw std::invalid_argument("QuantizedGraph k must be between 1 and num_points");
+    }
+    if (ef_ < k) {
+        throw std::invalid_argument("QuantizedGraph ef must be at least k");
+    }
+
     std::vector<T> rotated_query(padded_dim_);
     std::optional<QuantizedQuery<T>> quantized_query;
     prepare_query(query, rotated_query, quantized_query);
@@ -477,6 +615,9 @@ inline void QuantizedGraph<T>::search(
     }
 
     update_results(res_pool, *vis, query, quantized_query ? &*quantized_query : nullptr);
+    if (res_pool.size() != k) {
+        throw std::runtime_error("QuantizedGraph search could not produce k results");
+    }
     res_pool.copy_results(results, dists);
 }
 
@@ -522,7 +663,7 @@ void QuantizedGraph<T>::scan_neighbors(
         batch_data += QGBatchDataMap<T>::data_bytes(padded_dim_);
     }
 
-    const PID* ptr_nb = get_neighbors(data_id);
+    const auto neighbors = get_neighbors(data_id);
     for (size_t begin = 0; begin < cur_degree; begin += fastscan::kBatchSize) {
         const T threshold = search_pool.top_dist();
         uint32_t candidate_mask = 0;
@@ -541,16 +682,14 @@ void QuantizedGraph<T>::scan_neighbors(
             const auto lane = static_cast<size_t>(__builtin_ctz(candidate_mask));
             candidate_mask &= candidate_mask - 1;
             const size_t i = begin + lane;
-            PID cur_neighbor = ptr_nb[i];
+            PID cur_neighbor = neighbors[i];
             T dist = est_dist[i];
 
             if (search_pool.is_full(dist) || vis.get(cur_neighbor)) {
                 continue;
             }
             search_pool.insert(cur_neighbor, dist);  // update search buffer
-            memory::mem_prefetch_l2(
-                reinterpret_cast<const char*>(get_vector(search_pool.next_id())), 10
-            );
+            memory::mem_prefetch_l2(get_row_data(search_pool.next_id()), 10);
         }
     }
 }
@@ -566,11 +705,14 @@ inline void QuantizedGraph<T>::update_results(
         return;
     }
 
-    auto data = result_pool.data();
-    for (auto record : data) {
-        PID* ptr_nb = get_neighbors(record.id);
+    const auto& pool_data = result_pool.data();
+    const std::vector<AnnCandidate<T>> data(
+        pool_data.begin(), pool_data.begin() + static_cast<ptrdiff_t>(result_pool.size())
+    );
+    for (const auto& record : data) {
+        auto neighbors = get_neighbors(record.id);
         for (uint32_t i = 0; i < this->degree_bound_; ++i) {
-            PID cur_neighbor = ptr_nb[i];
+            PID cur_neighbor = neighbors[i];
             if (!vis.get(cur_neighbor)) {
                 vis.set(cur_neighbor);
                 result_pool.insert(
@@ -586,27 +728,40 @@ inline void QuantizedGraph<T>::update_results(
 
 // initialize const offsets & data array
 template <typename T>
-inline void QuantizedGraph<T>::initialize() {
-    rotator_.reset(
-        choose_rotator<float>(dim_, rotator_type_, round_up_to_multiple(dim_, 64))
-    );
-    padded_dim_ = rotator_->size();
+inline void QuantizedGraph<T>::initialize_layout() {
+    if (quantization_bits_ == 0) {
+        batch_data_offset_ = checked_multiply(dim_, sizeof(T));
+    } else {
+        const size_t code_bits = checked_multiply(padded_dim_, quantization_bits_);
+        batch_data_offset_ = checked_add(code_bits / 8, checked_multiply(sizeof(T), 2));
+    }
 
-    /* check size */
+    const size_t binary_batch_bytes =
+        checked_multiply(padded_dim_, fastscan::kBatchSize) / 8;
+    const size_t factor_bytes =
+        checked_multiply(checked_multiply(sizeof(T), fastscan::kBatchSize), size_t{2});
+    const size_t batch_bytes = checked_add(binary_batch_bytes, factor_bytes);
+    neighbor_offset_ = checked_add(
+        batch_data_offset_,
+        checked_multiply(batch_bytes, degree_bound_ / fastscan::kBatchSize)
+    );
+    row_offset_ =
+        checked_add(neighbor_offset_, checked_multiply(degree_bound_, sizeof(PID)));
+}
+
+template <typename T>
+inline void QuantizedGraph<T>::initialize() {
+    padded_dim_ = padded_dimension(dim_);
+    rotator_.reset(choose_rotator<float>(dim_, rotator_type_, padded_dim_));
+
     assert(padded_dim_ % 64 == 0);
     assert(padded_dim_ >= dim_);
 
-    this->batch_data_offset_ =
-        quantization_bits_ == 0 ? dim_ * sizeof(T)
-                                : ExDataMap<T>::data_bytes(padded_dim_, quantization_bits_);
-    this->neighbor_offset_ =
-        batch_data_offset_ + (QGBatchDataMap<T>::data_bytes(padded_dim_) *
-                              (degree_bound_ / fastscan::kBatchSize));
-    this->row_offset_ = neighbor_offset_ + (degree_bound_ * sizeof(PID));
+    initialize_layout();
 
-    data_ = Array<char, std::vector<size_t>, memory::AlignedAllocator<char, 1 << 22, true>>(
-        std::vector<size_t>{num_points_, row_offset_}
-    );
+    const size_t data_bytes = checked_multiply(num_points_, row_offset_);
+    assert(row_offset_ % sizeof(T) == 0);
+    data_ = RowStorage(data_bytes / sizeof(T));
 
     if (quantization_bits_ != 0) {
         quantized_ip_func_ = select_excode_ipfunc(quantization_bits_);
@@ -732,9 +887,9 @@ inline void QuantizedGraph<T>::update_qg(
         return;
     }
     // copy neighbors
-    PID* neighbor_ptr = get_neighbors(cur_id);
+    auto neighbors = get_neighbors(cur_id);
     for (size_t i = 0; i < cur_degree; ++i) {
-        neighbor_ptr[i] = new_neighbors[i].id;
+        neighbors[i] = new_neighbors[i].id;
     }
 
     // rotated data
@@ -758,18 +913,30 @@ inline void QuantizedGraph<T>::update_qg(
 
     // quantize batches for current vertex
     auto* batch_data = get_batch_data(cur_id);
-    const auto* data = rotated_data.data();
     for (size_t i = 0; i < cur_degree; i += fastscan::kBatchSize) {
+        const size_t batch_size = std::min(cur_degree - i, fastscan::kBatchSize);
         quant::quantize_qg_batch(
-            data,
+            rotated_data.data() + (i * padded_dim_),
             rotated_centroid.data(),
-            std::min(cur_degree - i, fastscan::kBatchSize),
+            batch_size,
             padded_dim_,
             batch_data,
             metric_type_
         );
+        if (batch_size < fastscan::kBatchSize) {
+            QGBatchDataMap<T> batch(batch_data, padded_dim_);
+            std::fill(
+                batch.f_add() + batch_size,
+                batch.f_add() + fastscan::kBatchSize,
+                static_cast<T>(0)
+            );
+            std::fill(
+                batch.f_rescale() + batch_size,
+                batch.f_rescale() + fastscan::kBatchSize,
+                static_cast<T>(0)
+            );
+        }
 
-        data += fastscan::kBatchSize * padded_dim_;
         batch_data += QGBatchDataMap<T>::data_bytes(padded_dim_);
     }
 }

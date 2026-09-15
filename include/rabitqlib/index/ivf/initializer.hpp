@@ -21,9 +21,13 @@
 namespace rabitqlib::ivf {
 template <class Function>
 inline void parallel_for(size_t start, size_t end, size_t numThreads, Function fn) {
-    if (numThreads <= 0) {
-        numThreads = std::thread::hardware_concurrency();
+    if (start >= end) {
+        return;
     }
+    if (numThreads == 0) {
+        numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    }
+    numThreads = std::min(numThreads, end - start);
 
     if (numThreads == 1) {
         for (size_t id = start; id < end; id++) {
@@ -38,36 +42,49 @@ inline void parallel_for(size_t start, size_t end, size_t numThreads, Function f
         std::exception_ptr last_exception = nullptr;
         std::mutex last_except_mutex;
 
-        threads.reserve(numThreads);
-        for (size_t thread_id = 0; thread_id < numThreads; ++thread_id) {
-            threads.push_back(std::thread([&, thread_id] {
-                while (true) {
-                    size_t id = current.fetch_add(1);
-
-                    if (id >= end) {
-                        break;
-                    }
-
-                    try {
-                        fn(id, thread_id);
-                    } catch (...) {
-                        std::unique_lock<std::mutex> last_except_lock(last_except_mutex);
-                        last_exception = std::current_exception();
-                        /*
-                         * This will work even when current is the largest value that
-                         * size_t can fit, because fetch_add returns the previous value
-                         * before the increment (what will result in overflow
-                         * and produce 0 instead of current + 1).
-                         */
-                        current = end;
-                        break;
-                    }
+        const auto join_threads = [&threads] {
+            for (auto& thread : threads) {
+                if (thread.joinable()) {
+                    thread.join();
                 }
-            }));
+            }
+        };
+
+        try {
+            threads.reserve(numThreads);
+            for (size_t thread_id = 0; thread_id < numThreads; ++thread_id) {
+                threads.emplace_back([&, thread_id] {
+                    while (true) {
+                        size_t id = current.fetch_add(1);
+
+                        if (id >= end) {
+                            break;
+                        }
+
+                        try {
+                            fn(id, thread_id);
+                        } catch (...) {
+                            std::unique_lock<std::mutex> last_except_lock(last_except_mutex
+                            );
+                            last_exception = std::current_exception();
+                            /*
+                             * This will work even when current is the largest value that
+                             * size_t can fit, because fetch_add returns the previous value
+                             * before the increment (what will result in overflow
+                             * and produce 0 instead of current + 1).
+                             */
+                            current = end;
+                            break;
+                        }
+                    }
+                });
+            }
+        } catch (...) {
+            current = end;
+            join_threads();
+            throw;
         }
-        for (auto& thread : threads) {
-            thread.join();
-        }
+        join_threads();
         if (last_exception) {
             std::rethrow_exception(last_exception);
         }
@@ -97,10 +114,15 @@ inline Initializer::~Initializer() {}
 class FlatInitializer : public Initializer {
    private:
     std::vector<float> centroids_;
+    MetricType metric_type_;
 
    public:
-    explicit FlatInitializer(size_t d, size_t k)
-        : Initializer(d, k), centroids_(num_cluster_ * dim_) {}
+    explicit FlatInitializer(
+        size_t d, size_t k, MetricType metric_type = MetricType::METRIC_L2
+    )
+        : Initializer(d, k), centroids_(num_cluster_ * dim_), metric_type_(metric_type) {
+        validate_metric_type(metric_type_);
+    }
 
     ~FlatInitializer() override = default;
 
@@ -118,7 +140,10 @@ class FlatInitializer : public Initializer {
         std::vector<AnnCandidate<float>> centroid_dist(this->num_cluster_);
         for (PID i = 0; i < num_cluster_; ++i) {
             centroid_dist[i].id = i;
-            centroid_dist[i].distance = std::sqrt(euclidean_sqr(query, centroid(i), dim_));
+            centroid_dist[i].distance =
+                metric_type_ == METRIC_IP
+                    ? dot_product_dis(query, centroid(i), dim_)
+                    : std::sqrt(euclidean_sqr(query, centroid(i), dim_));
         }
         std::partial_sort(
             centroid_dist.begin(),

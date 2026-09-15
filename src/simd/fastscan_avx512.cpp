@@ -110,8 +110,8 @@ void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
             );
         __m128i lo = _mm512_cvtepi32_epi8(tmp);
         __m128i hi = _mm512_cvtepi32_epi8(_mm512_srli_epi32(tmp, 8));
-        _mm_store_si128(reinterpret_cast<__m128i*>(fill_lo), lo);
-        _mm_store_si128(reinterpret_cast<__m128i*>(fill_hi), hi);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(fill_lo), lo);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(fill_hi), hi);
         lut += 16;
     }
 }

@@ -137,17 +137,23 @@ inline void quantize_compact_one_bit(
     MetricType metric_type = METRIC_L2
 ) {
     BinDataMap<T> cur_bin_data(bin_data, padded_dim);
+    T f_add;
+    T f_rescale;
+    T f_error;
 
-    rabitq_impl::one_bit::one_bit_compact_code(
+    rabitq_impl::one_bit::one_bit_compact_code_to_bytes<T, uint64_t>(
         data,
         centroid,
         padded_dim,
         cur_bin_data.bin_code(),
-        cur_bin_data.f_add(),
-        cur_bin_data.f_rescale(),
-        cur_bin_data.f_error(),
+        f_add,
+        f_rescale,
+        f_error,
         metric_type
     );
+    cur_bin_data.f_add() = f_add;
+    cur_bin_data.f_rescale() = f_rescale;
+    cur_bin_data.f_error() = f_error;
 }
 
 template <typename T, typename TC>
@@ -202,6 +208,8 @@ inline void quantize_compact_ex_bits(
     ExDataMap<T> cur_ex_data(ex_data, padded_dim, ex_bits);
 
     // we do not use this error factor here
+    T f_add_ex;
+    T f_rescale_ex;
     T ex_error;
 
     rabitq_impl::ex_bits::ex_bits_compact_code(
@@ -210,12 +218,14 @@ inline void quantize_compact_ex_bits(
         padded_dim,
         ex_bits,
         cur_ex_data.ex_code(),
-        cur_ex_data.f_add_ex(),
-        cur_ex_data.f_rescale_ex(),
+        f_add_ex,
+        f_rescale_ex,
         ex_error,
         metric_type,
         config.t_const
     );
+    cur_ex_data.f_add_ex() = f_add_ex;
+    cur_ex_data.f_rescale_ex() = f_rescale_ex;
 }
 
 inline void quantize_split_batch(

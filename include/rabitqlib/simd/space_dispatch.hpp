@@ -85,6 +85,7 @@ void new_transpose_bin_avx2(
 void new_transpose_bin_512_avx2(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 );
+float mask_ip_x0_q_avx2(const float* query, const uint8_t* data, size_t padded_dim);
 float mask_ip_x0_q_avx2(const float* query, const uint64_t* data, size_t padded_dim);
 void scalar_quantize_uint8_avx2(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
@@ -99,6 +100,7 @@ void new_transpose_bin_avx512(
 void new_transpose_bin_512_avx512(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 );
+float mask_ip_x0_q_avx512(const float* query, const uint8_t* data, size_t padded_dim);
 float mask_ip_x0_q_avx512(const float* query, const uint64_t* data, size_t padded_dim);
 void scalar_quantize_uint8_avx512(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
