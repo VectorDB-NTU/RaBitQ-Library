@@ -1,5 +1,9 @@
+#include <cstdint>
 #include <exception>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
@@ -20,7 +24,9 @@ int run(int argc, char** argv) {
                   << "arg3: ef for indexing \n"
                   << "arg4: path for saving index\n"
                   << "arg5: metric type (\"l2\" or \"ip\"), l2 by default\n"
-                  << "arg6: vector quantization bits (0, 4, or 8), 0 by default\n";
+                  << "arg6: vector quantization bits (0, 4, or 8), 0 by default\n"
+                  << "arg7: init (pipnn or random), pipnn by default\n"
+                  << "arg8: construction threads, all available by default\n";
         return 1;
     }
 
@@ -47,8 +53,19 @@ int run(int argc, char** argv) {
 
     rabitqlib::load_vecs<float, data_type>(data_file, data);
 
+    const std::string init = argc > 7 ? argv[7] : "pipnn";
+    if (init != "random" && init != "pipnn") {
+        throw std::invalid_argument("Init must be random or pipnn");
+    }
+    const bool pipnn = init == "pipnn";
+    const size_t threads = argc > 8 ? std::stoul(argv[8]) : rabitqlib::total_threads();
+    if (threads == 0 || ef == 0 || ef > std::numeric_limits<uint32_t>::max()) {
+        throw std::invalid_argument(
+            "Threads and construction ef must be positive; ef must fit uint32"
+        );
+    }
     rabitqlib::StopW stopw;
-
+    rabitqlib::StopW stage;
     index_type qg(
         data.rows(),
         data.cols(),
@@ -58,10 +75,22 @@ int run(int argc, char** argv) {
         quantization_bits
     );
 
-    rabitqlib::symqg::QGBuilder builder(qg, ef, data.data());
+    {
+        const auto initialization = pipnn ? rabitqlib::symqg::QGInitialization::PiPNN
+                                          : rabitqlib::symqg::QGInitialization::Random;
+        rabitqlib::symqg::QGBuilder builder(
+            qg, static_cast<uint32_t>(ef), data.data(), threads, initialization
+        );
+        std::cout << "Initialize and encode " << stage.get_elapsed_sec() << " secs\n";
 
-    // 3 iters, refine at last iter
-    builder.build();
+        // QG owns its vectors/codes now; release the input before refinement.
+        data = data_type();
+        stage.reset();
+        builder.build();
+        std::cout << (pipnn ? "One refinement " : "Three iterations ")
+                  << stage.get_elapsed_sec() << " secs\n";
+        std::cout << "Average degree " << builder.avg_degree() << '\n';
+    }  // Release builder scratch before saving.
 
     auto milisecs = stopw.get_elapsed_mili();
 

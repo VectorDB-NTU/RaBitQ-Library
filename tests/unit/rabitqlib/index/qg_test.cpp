@@ -8,6 +8,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "rabitqlib/index/symqg/qg_builder.hpp"
@@ -15,6 +16,18 @@
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
+    static QGBuilder from_graph(
+        QuantizedGraph<float>& graph,
+        uint32_t ef,
+        const float* data,
+        const std::vector<size_t>& offsets,
+        const std::vector<PID>& neighbors,
+        size_t threads
+    ) {
+        QGBuilder builder(graph, ef, threads);
+        builder.initialize_seed(data, offsets, neighbors);
+        return builder;
+    }
     static auto codes(const QuantizedGraph<float>& graph) {
         std::vector<char> result;
         for (PID id = 0; id < graph.num_points_; ++id) {
@@ -25,6 +38,25 @@ struct QGConstructionTestAccess {
     }
     static const auto& neighbors(const QGBuilder& builder) {
         return builder.new_neighbors_;
+    }
+    static const auto& degrees(const QGBuilder& builder) { return builder.degrees_; }
+    static void retain_seed_scores(QGBuilder& builder) {
+        auto& graph = builder.qg_;
+        for (PID i = 0; i < builder.num_nodes_; ++i) {
+            std::vector<float> reconstructed;
+            std::optional<QuantizedQuery<float>> prepared;
+            const float* source = graph.prepare_build_query(i, reconstructed, prepared);
+            for (size_t j = 0; j < builder.degrees_[i]; ++j) {
+                const PID id = graph.get_neighbors(i)[j];
+                builder.new_neighbors_[i].emplace_back(
+                    id, graph.point_distance(source, prepared ? &*prepared : nullptr, id)
+                );
+            }
+        }
+    }
+    static void search(QGBuilder& builder) { builder.search_new_neighbors(false); }
+    static const PID* encoded_neighbors(const QuantizedGraph<float>& graph, PID id) {
+        return graph.get_neighbors(id);
     }
     static std::array<double, 2> estimate(
         const QuantizedGraph<float>& graph, PID source, PID target
@@ -61,6 +93,18 @@ struct QGConstructionTestAccess {
 };
 
 namespace {
+
+static_assert(
+    !std::is_constructible_v<
+        QGBuilder,
+        QuantizedGraph<float>&,
+        uint32_t,
+        const float*,
+        const std::vector<size_t>&,
+        const std::vector<PID>&,
+        size_t>,
+    "Intermediate graph input must not be part of the public builder API"
+);
 
 TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
     if (!cpu::has_avx2()) {
@@ -146,6 +190,238 @@ TEST(QGConstructionTest, BuildsAndPrunesAfterInputReleaseUsingExistingCodes) {
             }
         }
     }
+}
+
+TEST(QGConstructionTest, EncodedSeedSearchMatchesRetainedScores) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "FastScan requires AVX2/FMA";
+    }
+    constexpr size_t kCount = 97, kDim = 65, kDegree = 32;
+    std::vector<float> data(kCount * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.13F);
+    }
+    std::vector<size_t> offsets{0};
+    std::vector<PID> edges;
+    for (PID i = 0; i < kCount; ++i) {
+        for (size_t j = 0; j < i % (kDegree + 1); ++j) {
+            edges.push_back((i + j + 1) % kCount);
+        }
+        offsets.push_back(edges.size());
+    }
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {0U, 4U, 8U}) {
+            SCOPED_TRACE(::testing::Message() << metric << "/" << bits);
+            QuantizedGraph<float> graph(
+                kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
+            );
+            // Both builders search the same immutable encoded graph/rotation.
+            auto compact = QGConstructionTestAccess::from_graph(
+                graph, 8, data.data(), offsets, edges, 2
+            );
+            auto retained = QGConstructionTestAccess::from_graph(
+                graph, 8, data.data(), offsets, edges, 2
+            );
+            QGConstructionTestAccess::retain_seed_scores(retained);
+            QGConstructionTestAccess::search(compact);
+            QGConstructionTestAccess::search(retained);
+            for (PID i = 0; i < kCount; ++i) {
+                const auto& actual = QGConstructionTestAccess::neighbors(compact)[i];
+                const auto& expected = QGConstructionTestAccess::neighbors(retained)[i];
+                ASSERT_EQ(actual.size(), expected.size());
+                for (size_t j = 0; j < actual.size(); ++j) {
+                    EXPECT_EQ(actual[j].id, expected[j].id);
+                    EXPECT_FLOAT_EQ(actual[j].distance, expected[j].distance);
+                }
+            }
+        }
+    }
+}
+
+TEST(QGConstructionTest, DefaultsToPipnnInitialization) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "FastScan requires AVX2/FMA";
+    }
+    constexpr size_t kCount = 97, kDim = 65, kDegree = 32;
+    std::vector<float> data(kCount * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.13F);
+    }
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        const auto seed =
+            detail::build_initial_graph(data.data(), kCount, kDim, kDegree, metric, 1);
+        for (size_t bits : {0U, 4U, 8U}) {
+            SCOPED_TRACE(::testing::Message() << metric << "/" << bits);
+            QuantizedGraph<float> graph(
+                kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
+            );
+            QGBuilder builder(graph, 64, data.data(), 1);
+            for (PID i = 0; i < kCount; ++i) {
+                std::vector<PID> expected(
+                    seed.neighbors.begin() + static_cast<ptrdiff_t>(seed.offsets[i]),
+                    seed.neighbors.begin() + static_cast<ptrdiff_t>(seed.offsets[i + 1])
+                );
+                std::sort(expected.begin(), expected.end());
+                ASSERT_EQ(QGConstructionTestAccess::degrees(builder)[i], expected.size());
+                EXPECT_TRUE(QGConstructionTestAccess::neighbors(builder)[i].empty());
+                const PID* actual = QGConstructionTestAccess::encoded_neighbors(graph, i);
+                EXPECT_TRUE(std::equal(expected.begin(), expected.end(), actual));
+            }
+            builder.build();
+            EXPECT_FLOAT_EQ(builder.avg_degree(), kDegree);
+            EXPECT_FALSE(builder.check_dup());
+        }
+    }
+}
+
+TEST(QGConstructionTest, SupportsExplicitRandomInitialization) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "FastScan requires AVX2/FMA";
+    }
+    std::vector<float> data(65 * 65, 0.5F);
+    QuantizedGraph<float> graph(65, 65, 32);
+    QGBuilder builder(graph, 64, data.data(), 1, QGInitialization::Random);
+    for (const auto& row : QGConstructionTestAccess::neighbors(builder)) {
+        EXPECT_EQ(row.size(), 32U);
+    }
+    builder.build();
+    EXPECT_FLOAT_EQ(builder.avg_degree(), 32);
+    EXPECT_FALSE(builder.check_dup());
+    EXPECT_THROW(builder.build(0), std::invalid_argument);
+    EXPECT_THROW(builder.build(1), std::invalid_argument);
+    EXPECT_THROW(
+        (QGBuilder(graph, 64, data.data(), 1, static_cast<QGInitialization>(255))),
+        std::invalid_argument
+    );
+}
+
+TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "FastScan requires AVX2/FMA";
+    }
+    constexpr size_t kCount = 97, kDim = 65, kDegree = 64;
+    constexpr std::array<size_t, 6> kDegrees{0, 1, 31, 32, 33, 64};
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {0U, 4U, 8U}) {
+            SCOPED_TRACE(::testing::Message() << metric << "/" << bits);
+            std::vector<float> data(kCount * kDim);
+            for (size_t i = 0; i < data.size(); ++i) {
+                data[i] = std::sin(static_cast<float>(i) * 0.13F);
+            }
+            const std::vector<float> query(data.begin(), data.begin() + kDim);
+            std::vector<size_t> offsets{0};
+            std::vector<PID> edges;
+            for (size_t i = 0; i < kCount; ++i) {
+                for (size_t j = 0; j < kDegrees[i % kDegrees.size()]; ++j) {
+                    // Repeated IDs exercise import deduplication, including full rows.
+                    edges.push_back((i + 1 + (i < kDegrees.size() ? j : j / 2)) % kCount);
+                }
+                offsets.push_back(edges.size());
+            }
+            QuantizedGraph<float> graph(
+                kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
+            );
+            auto builder = QGConstructionTestAccess::from_graph(
+                graph, 96, data.data(), offsets, edges, 2
+            );
+            const auto stored_vectors = QGConstructionTestAccess::codes(graph);
+            for (PID i = 0; i < kCount; ++i) {
+                std::vector<PID> expected(
+                    edges.begin() + static_cast<ptrdiff_t>(offsets[i]),
+                    edges.begin() + static_cast<ptrdiff_t>(offsets[i + 1])
+                );
+                std::sort(expected.begin(), expected.end());
+                expected.erase(
+                    std::unique(expected.begin(), expected.end()), expected.end()
+                );
+                ASSERT_EQ(QGConstructionTestAccess::degrees(builder)[i], expected.size());
+                const auto& row = QGConstructionTestAccess::neighbors(builder)[i];
+                EXPECT_EQ(row.capacity(), 0U);
+                for (size_t j = 0; j < expected.size(); ++j) {
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::encoded_neighbors(graph, i)[j],
+                        expected[j]
+                    );
+                }
+            }
+            std::vector<float>().swap(data);
+            std::vector<size_t>().swap(offsets);
+            std::vector<PID>().swap(edges);
+            builder.refine();
+            EXPECT_EQ(stored_vectors, QGConstructionTestAccess::codes(graph));
+            EXPECT_FALSE(builder.check_dup());
+            for (PID i = 0; i < kCount; ++i) {
+                const auto& row = QGConstructionTestAccess::neighbors(builder)[i];
+                ASSERT_EQ(row.size(), kDegree);
+                EXPECT_EQ(QGConstructionTestAccess::degrees(builder)[i], kDegree);
+                for (size_t j = 0; j < row.size(); ++j) {
+                    EXPECT_LT(row[j].id, kCount);
+                    EXPECT_NE(row[j].id, i);
+                    EXPECT_TRUE(std::isfinite(row[j].distance));
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::encoded_neighbors(graph, i)[j], row[j].id
+                    );
+                    if (bits != 0) {
+                        const auto expected =
+                            QGConstructionTestAccess::estimate(graph, i, row[j].id);
+                        EXPECT_NEAR(row[j].distance, expected[0], expected[1]);
+                    }
+                }
+            }
+            graph.set_ef(96);
+            std::array<PID, 10> ids{}, loaded_ids{};
+            std::array<float, 10> distances{}, loaded_distances{};
+            graph.search(query.data(), 10, ids.data(), distances.data());
+            for (size_t j = 0; j < ids.size(); ++j) {
+                EXPECT_LT(ids[j], kCount);
+                EXPECT_TRUE(std::isfinite(distances[j]));
+            }
+            const std::string path = ::testing::TempDir() + "rabitq_qg_seeded.index";
+            graph.save(path.c_str());
+            QuantizedGraph<float> loaded;
+            loaded.load(path.c_str());
+            loaded.set_ef(96);
+            loaded.search(query.data(), 10, loaded_ids.data(), loaded_distances.data());
+            EXPECT_EQ(ids, loaded_ids);
+            EXPECT_EQ(distances, loaded_distances);
+            EXPECT_EQ(graph.entry_point(), loaded.entry_point());
+            std::remove(path.c_str());
+        }
+    }
+}
+
+TEST(QGConstructionTest, RejectsInvalidSeedStructureAndIds) {
+    constexpr size_t kCount = 33, kDim = 64;
+    std::vector<float> data(kCount * kDim, 0.1F);
+    QuantizedGraph<float> graph(kCount, kDim, 32);
+    const auto reject = [&](const std::vector<size_t>& offsets,
+                            const std::vector<PID>& edges,
+                            const char* message) {
+        try {
+            auto builder = QGConstructionTestAccess::from_graph(
+                graph, 32, data.data(), offsets, edges, 1
+            );
+            FAIL() << "Invalid seed accepted";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(error.what(), message);
+        }
+    };
+    reject({}, {}, "Seed graph offsets must delimit every vertex");
+    std::vector<size_t> offsets(kCount + 1, 0);
+    offsets.back() = 1;
+    reject(offsets, {}, "Seed graph offsets must delimit every vertex");
+    offsets.back() = 0;
+    offsets[1] = 1;
+    reject(offsets, {}, "Seed graph row exceeds degree bound or has invalid offsets");
+    std::fill(offsets.begin() + 1, offsets.end(), 1);
+    reject(offsets, {kCount}, "Seed graph IDs must be in range and exclude self");
+    reject(offsets, {0}, "Seed graph IDs must be in range and exclude self");
+    std::fill(offsets.begin() + 1, offsets.end(), 33);
+    reject(
+        offsets,
+        std::vector<PID>(33, 1),
+        "Seed graph row exceeds degree bound or has invalid offsets"
+    );
 }
 
 TEST(QuantizedGraphConfigurationTest, RejectsDegreeNotAlignedForFastScan) {

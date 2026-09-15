@@ -200,3 +200,54 @@ def test_constant_vectors_preserve_returned_distance(metric, tmp_path):
     loaded_ids, loaded_distances = SymqgIndex.load(path).search(queries, k=5, ef=64)
     np.testing.assert_array_equal(loaded_ids, ids)
     np.testing.assert_allclose(loaded_distances, expected, rtol=0, atol=1e-6)
+
+
+@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("init", [None, "pipnn", "random"])
+def test_initialization_and_roundtrip(tmp_path, bits, metric, init):
+    rng = np.random.default_rng(17)
+    data = rng.standard_normal((160, 65)).astype(np.float32)
+    queries = rng.standard_normal((8, 65)).astype(np.float32)
+    index = SymqgIndex(65, max_degree=32, metric=metric, quantization_bits=bits)
+    kwargs = {} if init is None else {"init": init}
+    index.build(data, ef_construction=128, num_threads=2, **kwargs)
+    assert index.is_built
+    ids, distances = index.search(queries, k=10, ef=160, num_threads=2)
+    assert np.all(ids < len(data))
+    assert np.isfinite(distances).all()
+    assert all(len(set(row)) == 10 for row in ids)
+    exact = (
+        brute_force_knn(data, queries, 10)[0]
+        if metric == "l2"
+        else np.argsort(-(queries @ data.T), axis=1)[:, :10]
+    )
+    assert recall_at_k(ids, exact, 10) >= (0.7 if bits else 0.95)
+    if bits == 0:
+        expected = (
+            np.sum((queries[:, None, :] - data[ids]) ** 2, axis=2)
+            if metric == "l2"
+            else 1 - np.einsum("qd,qkd->qk", queries, data[ids])
+        )
+        np.testing.assert_allclose(distances, expected, rtol=1e-5, atol=1e-5)
+    path = str(tmp_path / "native_pipnn.index")
+    index.save(path)
+    restored = SymqgIndex.load(path)
+    restored_ids, restored_distances = restored.search(queries, k=10, ef=160)
+    np.testing.assert_array_equal(ids, restored_ids)
+    np.testing.assert_array_equal(distances, restored_distances)
+
+
+def test_native_pipnn_rejects_invalid_build_arguments(base_data):
+    index = SymqgIndex(DIM, max_degree=32)
+    with pytest.raises(ValueError, match="init must be 'random' or 'pipnn'"):
+        index.build(base_data, ef_construction=64, init="unknown")
+    with pytest.raises(
+        ValueError, match="ef_construction must be positive and fit uint32"
+    ):
+        index.build(base_data, ef_construction=0, init="pipnn")
+
+
+def test_default_initialization_is_pipnn():
+    # pybind11 generates this signature from the actual Python argument defaults.
+    assert "init: str = 'pipnn'" in SymqgIndex.build.__doc__

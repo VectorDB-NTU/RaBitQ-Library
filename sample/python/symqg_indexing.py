@@ -13,6 +13,7 @@ EF_CONSTRUCTION = 200  # ef for indexing
 METRIC = "l2"  # "l2" or "ip"
 QUANTIZATION_BITS = 0  # 0 for vanilla QG, or 4/8 for QG-quant
 NUM_THREADS = 16  # number of threads for build
+INIT = "pipnn"  # "pipnn" or "random" initialization of SymphonyQG
 # ──────────────────────────────────────────────
 
 
@@ -26,7 +27,7 @@ def main(args=None) -> None:
     print(
         f"\nBuilding SymphonyQG index: n={n}, dim={dim}, MaxDegree={args.max_degree}, "
         f"ef={args.ef_construction}, metric={args.metric}, "
-        f"quantization_bits={args.quantization_bits}"
+        f"quantization_bits={args.quantization_bits}, init={args.init}"
     )
 
     idx = SymqgIndex(
@@ -37,7 +38,12 @@ def main(args=None) -> None:
     )
 
     t0 = time()
-    idx.build(data, ef_construction=args.ef_construction, num_threads=args.num_threads)
+    idx.build(
+        data,
+        ef_construction=args.ef_construction,
+        num_threads=args.num_threads,
+        init=args.init,
+    )
     print(f"Indexing time: {time() - t0:.2f}s")
 
     idx.save(args.index_file)
@@ -79,6 +85,12 @@ if __name__ == "__main__":
         choices=[0, 4, 8],
         default=QUANTIZATION_BITS,
         help="Vector quantization bits: 0 for vanilla QG, or 4/8 for QG-quant",
+    )
+    parser.add_argument(
+        "--init",
+        choices=["pipnn", "random"],
+        default=INIT,
+        help="SymphonyQG initialization (default: pipnn)",
     )
     parser.add_argument(
         "--num-threads",

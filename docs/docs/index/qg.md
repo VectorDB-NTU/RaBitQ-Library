@@ -1,133 +1,110 @@
 # QG + RaBitQ (SymphonyQG)
 
-[QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0)
-is a graph-based index originating from the
-[NGT library](https://github.com/yahoojapan/NGT). This implementation comes
-from the [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) project. For
-each vertex vanilla QG stores the raw vector, a fixed-size neighbor list, and batched
-one-bit RaBitQ data for those neighbors. This layout uses more memory than the
-raw vectors alone, but lets graph traversal estimate a group of neighbor
-distances with FastScan while computing exact distances for visited vertices.
+[SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) combines the graph search
+of [QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0),
+from [NGT](https://github.com/yahoojapan/NGT), with batched RaBitQ distance estimation.
+FastScan estimates neighbor distances; visited vertices are scored using stored
+raw vectors or quantized codes.
 
-QG-quant replaces each raw vector with an independent packed 4- or 8-bit RaBitQ
-code. All codes use the dataset's global centroid and are not combined with the
-one-bit neighbor codes. Pass `quantization_bits` as `4` or `8` to select
-QG-quant, or leave it at `0` for vanilla QG.
-
-After computing the centroid and encoding the input, quantized graph construction
-uses only the existing stored RaBitQ representation. A source is temporarily
-reconstructed in rotated coordinates, then the existing RaBitQ estimator scores
-target codes. This applies to candidate discovery, initial edges, pairwise pruning,
-refinement, and fallback edges. Reverse edges are rescored in their own direction
-because these estimates need not be symmetric. Entry-point selection scores the
-stored codes against the centroid. Neighbor FastScan encoding continues to use
-code reconstructions.
-
-No raw input pointer or full reconstructed-vector cache is retained. The caller
-can release the input after the synchronous C++ `QGBuilder` constructor finishes.
-The existing pruning rules operate on the estimated distances; this does not make
-them exact distances between reconstructed vectors. External queries, the 4/8-bit
-encoding and correction factors, neighbor FastScan layout, and version-1 file
-format are unchanged. Raw QG continues to construct using its owned raw vectors.
-
-Memory and performance depend on the dimension, degree, build window, and
-search window. See `sample/cpp/symqg_indexing.cpp` and
-`sample/cpp/symqg_querying.cpp` for complete programs.
+Set `quantization_bits=0` for raw vectors (default), or `4`/`8` for QG-quant.
+Quantized vectors share a rotated global centroid. Refinement temporarily
+reconstructs source vectors and estimates distances to stored target codes;
+reverse edges are rescored because these estimates are directional. Raw refinement
+uses owned raw vectors. No full reconstructed-vector cache is retained.
 
 ## Index Construction
 
-We build the QG by iteratively refining the graph structure.
-Since the QG is more complicated than other indices, we need a QGBuilder to help us construct the index.
+[PiPNN](https://dl.acm.org/doi/abs/10.1145/3770855.3817891) is the default initializer
+for fast indexing, followed by one SymphonyQG refinement iteration. Random
+initialization remains available and uses three iterations by default.
 
-At the beginning, we need to intialize a QG and a QGBuilder by following construtor.
-```cpp
-QuantizedGraph::QuantizedGraph(
-        size_t num,
-        size_t dim,
-        size_t max_deg,
-        MetricType metric_type = METRIC_L2,
-        RotatorType rotator_type = RotatorType::FhtKacRotator,
-        size_t quantization_bits = 0
-    );
+### Python
 
-QGBuilder::QGBuilder(
-        QuantizedGraph<float>& index,
-        uint32_t ef_build,
-        const float* data,
-        size_t num_threads = std::numeric_limits<size_t>::max()
-    )
-```
-- **num**: Number of vertices (vectors) in the dataset.  
-- **dim**: Dimension of the dataset.  
-- **max_deg**: Degree bound of QG, must be a multiple of 32.  
-- **quantization_bits**: `0` for vanilla QG, or `4`/`8` for QG-quant.
-- **index**: Previously initialized QG.  
-- **ef_build**: Search window size during indexing.  
-- **data**: Pointer to the dataset, size of num * dim.  
-- **num_threads**: Number of threads to use (default: std::numeric_limits<size_t>::max(), which auto-selects).  
-```cpp
-size_t rows = 1000000;
-size_t cols = 128;
-size_t degree = 32;
-size_t ef = 200;
+```python
+from rabitqlib import SymqgIndex
 
-std::vector<float> data(rows * cols); // populate with the dataset
+# data and queries are float32 arrays with shape (count, dim).
+index = SymqgIndex(dim=data.shape[1], max_degree=32, metric="l2", quantization_bits=0)
+index.build(data, ef_construction=200, num_threads=32, init="pipnn")
+index.save("qg_example.index")
 
-QuantizedGraph<float> qg(rows, cols, degree);
-
-QGBuilder builder(qg, ef, data.data());
+loaded = SymqgIndex.load("qg_example.index")
+ids, distances = loaded.search(queries, k=10, ef=100, num_threads=1)
 ```
 
-Then, we can use the builder to construct the index. Then we can save the index.
-```cpp
-builder.build();    // build index interatively
+`init` defaults to `"pipnn"`; use `"random"` for random initialization.
+Supported metrics are `"l2"` and `"ip"`. `max_degree` must be a multiple of 32
+and smaller than the point count. `ef_construction` controls the build search
+window; `ef` controls the query search window. Python defaults to one thread.
 
-const char* index_file = "./qg_example.index";
-qg.save(index_file);    // save index
+### C++
+
+The C++ API uses `rabitqlib::symqg::QuantizedGraph` and `QGBuilder`:
+
+```cpp
+QuantizedGraph<float>(
+    size_t num, size_t dim, size_t max_deg,
+    MetricType metric_type = METRIC_L2,
+    RotatorType rotator_type = RotatorType::FhtKacRotator,
+    size_t quantization_bits = 0
+);
+QGBuilder(
+    QuantizedGraph<float>& index, uint32_t ef_build, const float* data,
+    size_t num_threads = std::numeric_limits<size_t>::max(),
+    QGInitialization init = QGInitialization::PiPNN
+);
 ```
+
+`data` contains `num * dim` floats; `max_deg` has the same constraints as Python's
+`max_degree`. C++ defaults to all available threads. Pass
+`QGInitialization::Random` as the final builder argument to use random initialization.
+The builder handles initialization internally.
+
+```cpp
+using namespace rabitqlib::symqg;
+
+// data contains rows * cols floats.
+QuantizedGraph<float> qg(rows, cols, 32);
+{
+    QGBuilder builder(qg, 200, data.data(), 32, QGInitialization::PiPNN);
+    builder.build();
+} // release builder scratch before saving
+qg.save("qg_example.index");
+```
+
+The caller can release input vectors after the `QGBuilder` constructor returns.
+Python retains the caller's array during `build`. Complete the build before
+querying or saving. Initialization does not change query-distance conventions or
+save/load formats.
 
 ### Data Layout
 
-Each indexed element is stored in the following layout.
-```
-[Raw data vector]
-[Batch data for QG]
-[Edges]
+Each row contains:
+
+```text
+[Raw vector or packed 4/8-bit code + factors]
+[One-bit neighbor codes + factors]
+[Neighbor IDs]
 ```
 
-For QG-quant, the first block becomes `[Packed 4/8-bit RaBitQ code + factors]`.
-The index also stores one rotated global centroid shared by all rows.
-
-`Batch data for QG` contains one-bit codes and estimator factors for the
-element's neighbors, organized in FastScan batches of 32. Consequently,
-`max_deg` must be a multiple of 32.
+Neighbor codes use FastScan batches of 32, which determines the degree alignment.
+Quantized storage reduces each vector's size but not its neighborhood codes;
+those codes and temporary refinement pools still consume substantial memory.
 
 ## Querying
 
-For querying, code is pretty simple.
-```cpp
-void QuantizedGraph::search(
-    const T* __restrict__ query,
-    uint32_t k,
-    uint32_t* __restrict__ results,
-    T* __restrict__ dists);
-```
-- **query**: Query vector.  
-- **k**: Top-k.  
-- **results**: Result buffer, size of k.  
-- **dists**: Distance buffer, size of k.
-Then we can use a pre-constructed index to search.
+C++ search accepts one vector in the original input dimension and writes `k` IDs
+and distances:
+
 ```cpp
 QuantizedGraph<float> qg;
-qg.load("./qg_example.index"); // load pre-constructed index
+qg.load("qg_example.index");
+qg.set_ef(100);
 
-
-size_t ef = 100;
-size_t topk = 10;
-std::vector<PID> results(topk); // result buffer
-std::vector<float> dists(topk); // distance buffer
-std::vector<float> query(cols); // populate with a query vector
-
-qg.set_ef(ef);  // set search window size
-qg.search(query.data(), topk, results.data(), dists.data());
+std::vector<rabitqlib::PID> ids(10);
+std::vector<float> distances(10);
+qg.search(query.data(), 10, ids.data(), distances.data());
 ```
+
+See `sample/cpp/symqg_indexing.cpp`, `sample/cpp/symqg_querying.cpp`, and their
+Python counterparts for complete examples.
