@@ -43,7 +43,7 @@
 ## Install
 
 ```bash
-pip install rabitqlib
+python -m pip install --upgrade rabitqlib
 ```
 
 Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14. AVX2 + FMA is the
