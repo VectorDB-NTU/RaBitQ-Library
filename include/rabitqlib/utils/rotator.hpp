@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
-#include <functional>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -14,8 +13,8 @@
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
+#include "rabitqlib/simd/matrix_dispatch.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"
-#include "rabitqlib/utils/fht_avx.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
@@ -113,9 +112,18 @@ class MatrixRotator : public Rotator<T> {
     }
 
     void rotate(const T* vec, T* rotated_vec) const override {
-        ConstRowMajorMatrixMap<T> v(vec, 1, this->dim_);
-        RowMajorMatrixMap<T> rv(rotated_vec, 1, this->padded_dim_);
-        rv = v * this->rand_mat_;
+        if constexpr (std::is_same_v<T, float>) {
+            // Match Eigen's alias-safe assignment: callers may rotate in place.
+            std::vector<float> result(this->padded_dim_);
+            simd::matrix_product(
+                vec, rand_mat_.data(), result.data(), 1, this->dim_, this->padded_dim_
+            );
+            std::copy(result.begin(), result.end(), rotated_vec);
+        } else {
+            ConstRowMajorMatrixMap<T> v(vec, 1, this->dim_);
+            RowMajorMatrixMap<T> rv(rotated_vec, 1, this->padded_dim_);
+            rv = v * this->rand_mat_;
+        }
     }
 };
 
@@ -126,7 +134,6 @@ static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
 class FhtKacRotator : public Rotator<float> {
    private:
     std::vector<uint8_t> flip_;
-    std::function<void(float*)> fht_float_ = helper_float_6;
     size_t trunc_dim_ = 0;
     float fac_ = 0;
 
@@ -152,28 +159,8 @@ class FhtKacRotator : public Rotator<float> {
         trunc_dim_ = 1 << bottom_log_dim;
         fac_ = 1.0F / std::sqrt(static_cast<float>(trunc_dim_));
 
-        switch (bottom_log_dim) {
-            case 6:
-                this->fht_float_ = helper_float_6;
-                break;
-            case 7:
-                this->fht_float_ = helper_float_7;
-                break;
-            case 8:
-                this->fht_float_ = helper_float_8;
-                break;
-            case 9:
-                this->fht_float_ = helper_float_9;
-                break;
-            case 10:
-                this->fht_float_ = helper_float_10;
-                break;
-            case 11:
-                this->fht_float_ = helper_float_11;
-                break;
-            default:
-                // TODO(lib): should we do more?
-                throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
+        if (bottom_log_dim < 6 || bottom_log_dim > 11) {
+            throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
         }
     }
     FhtKacRotator() = default;
@@ -207,7 +194,6 @@ class FhtKacRotator : public Rotator<float> {
         this->dim_ = other.dim_;
         this->padded_dim_ = other.padded_dim_;
         this->flip_ = other.flip_;
-        this->fht_float_ = other.fht_float_;
         this->trunc_dim_ = other.trunc_dim_;
         this->fac_ = other.fac_;
         return *this;
@@ -216,58 +202,9 @@ class FhtKacRotator : public Rotator<float> {
     static void kacs_walk(float* data, size_t len) { simd::kacs_walk(data, len); }
 
     void rotate(const float* data, float* rotated_vec) const override {
-        std::memcpy(rotated_vec, data, sizeof(float) * dim_);
-        std::fill(rotated_vec + dim_, rotated_vec + padded_dim_, 0);
-
-        if (trunc_dim_ == padded_dim_) {
-            flip_sign(flip_.data(), rotated_vec, padded_dim_);
-            fht_float_(rotated_vec);
-            vec_rescale(rotated_vec, trunc_dim_, fac_);
-
-            flip_sign(flip_.data() + (padded_dim_ / kByteLen), rotated_vec, padded_dim_);
-            fht_float_(rotated_vec);
-            vec_rescale(rotated_vec, trunc_dim_, fac_);
-
-            flip_sign(
-                flip_.data() + (2 * padded_dim_ / kByteLen), rotated_vec, padded_dim_
-            );
-            fht_float_(rotated_vec);
-            vec_rescale(rotated_vec, trunc_dim_, fac_);
-
-            flip_sign(
-                flip_.data() + (3 * padded_dim_ / kByteLen), rotated_vec, padded_dim_
-            );
-            fht_float_(rotated_vec);
-            vec_rescale(rotated_vec, trunc_dim_, fac_);
-
-            return;
-        }
-
-        size_t start = padded_dim_ - trunc_dim_;
-
-        flip_sign(flip_.data(), rotated_vec, padded_dim_);
-        fht_float_(rotated_vec);
-        vec_rescale(rotated_vec, trunc_dim_, fac_);
-        kacs_walk(rotated_vec, padded_dim_);
-
-        flip_sign(flip_.data() + (padded_dim_ / kByteLen), rotated_vec, padded_dim_);
-        fht_float_(rotated_vec + start);
-        vec_rescale(rotated_vec + start, trunc_dim_, fac_);
-        kacs_walk(rotated_vec, padded_dim_);
-
-        flip_sign(flip_.data() + (2 * padded_dim_ / kByteLen), rotated_vec, padded_dim_);
-        fht_float_(rotated_vec);
-        vec_rescale(rotated_vec, trunc_dim_, fac_);
-        kacs_walk(rotated_vec, padded_dim_);
-
-        flip_sign(flip_.data() + (3 * padded_dim_ / kByteLen), rotated_vec, padded_dim_);
-        fht_float_(rotated_vec + start);
-        vec_rescale(rotated_vec + start, trunc_dim_, fac_);
-        kacs_walk(rotated_vec, padded_dim_);
-
-        // This can be removed if we don't care about the absolute value of
-        // similarities.
-        vec_rescale(rotated_vec, padded_dim_, 0.25F);
+        simd::fht_rotate(
+            data, rotated_vec, dim_, padded_dim_, trunc_dim_, fac_, flip_.data()
+        );
     }
 };
 }  // namespace rotator_impl

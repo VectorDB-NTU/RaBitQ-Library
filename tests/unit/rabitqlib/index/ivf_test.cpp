@@ -22,6 +22,20 @@
 namespace rabitqlib::ivf {
 namespace {
 
+TEST(IvfSearchTest, BatchCandidatesPreserveTiesAndTailCount) {
+    buffer::SearchBuffer<float> knns(3);
+    const std::array<PID, 6> ids{0, 1, 2, 3, 4, 5};
+    const std::array<float, 6> distances{3, 1, 2, 1, 4, -100};
+    detail::insert_candidates(knns, ids.data(), distances.data(), 3);
+    detail::insert_candidates(knns, ids.data() + 3, distances.data() + 3, 2);
+    detail::insert_candidates(knns, ids.data(), distances.data(), 0);
+    std::array<PID, 3> results{};
+    std::array<float, 3> result_distances{};
+    knns.copy_results(results.data(), result_distances.data());
+    EXPECT_EQ(results, (std::array<PID, 3>{3, 1, 2}));
+    EXPECT_EQ(result_distances, (std::array<float, 3>{1, 1, 2}));
+}
+
 TEST(IvfConfigurationTest, RejectsUnsupportedMetric) {
     EXPECT_THROW(
         (IVF(8, 64, 1, 1, static_cast<MetricType>(255), RotatorType::MatrixRotator)),

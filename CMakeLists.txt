@@ -45,9 +45,15 @@ function(rabitq_enable_warnings target)
 endfunction()
 
 set(RABITQ_COMMON_SOURCES
+    src/index/ivf_search.cpp
+    src/index/qg.cpp
     src/utils/cpu_features.cpp
     src/simd/dispatch.cpp
-    src/simd/space_float.cpp
+    src/simd/space_generic.cpp
+    src/simd/fastscan_generic.cpp
+    src/simd/quantization_generic.cpp
+    src/simd/estimator_generic.cpp
+    src/simd/matrix_generic.cpp
 )
 
 set(RABITQ_AVX2_SOURCES
@@ -56,6 +62,8 @@ set(RABITQ_AVX2_SOURCES
     src/simd/space_excode_avx2.cpp
     src/simd/space_avx2.cpp
     src/simd/fastscan_avx2.cpp
+    src/simd/estimator_avx2.cpp
+    src/simd/matrix_avx2.cpp
     src/simd/warmup_avx2.cpp
     src/simd/rotator_avx2.cpp
 )
@@ -66,6 +74,8 @@ set(RABITQ_AVX512_SOURCES
     src/simd/space_excode_avx512.cpp
     src/simd/space_avx512.cpp
     src/simd/fastscan_avx512.cpp
+    src/simd/estimator_avx512.cpp
+    src/simd/matrix_avx512.cpp
     src/simd/rotator_avx512.cpp
 )
 

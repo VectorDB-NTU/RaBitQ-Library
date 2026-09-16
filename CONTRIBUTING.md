@@ -231,7 +231,8 @@ cmake -S . -B build-includes -G Ninja \
 
 The script checks library sources using their compilation database and checks
 headers as main files, since this clang-tidy check does not report findings in
-included headers. Private headers are checked with AVX2 and AVX-512 flags.
+included headers. Private headers are checked with AVX2 and AVX-512 flags. New
+untracked files are included, and tracked files deleted from the working tree are skipped.
 Vendored files are excluded. The script also ignores suggestions to include
 Eigen and hnswlib implementation headers behind their existing public headers;
 these vendor snapshots lack the export annotations needed by include-cleaner.
@@ -398,6 +399,51 @@ requests labeled `duplicate` or `invalid` are omitted from release notes.
 
 Never execute a high-ISA implementation merely to test whether that ISA is supported; detection
 must happen in generic code first.
+
+#### Dispatch conventions and coverage
+
+- Keep backend-neutral declarations in `include/rabitqlib/simd/*_dispatch.hpp` and
+  implementations in `src/simd/*_{generic,avx2,avx512}.cpp`. HNSW keeps its existing
+  `src/index/` implementations and compatibility namespaces.
+- Select a cached function pointer through `resolve_kernel` in `src/simd/dispatch.cpp`.
+  The order is AVX-512, AVX2/FMA, then the existing generic implementation or a descriptive
+  unsupported-operation exception. Public wrappers do not repeat feature checks.
+- Preserve stricter predicates: population-count kernels need AVX512_VPOPCNTDQ, and HNSW's
+  AVX-512 core variant also needs AVX2 for its warmup implementation. Do not infer support
+  from a backend name or from `__AVX*__` macros in a public header.
+- Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
+  headers use internal linkage so independently compiled backends retain their own bodies.
+  Include the FFHT implementation inside the private kernel namespace for the same reason.
+- Pass ordinary pointers, sizes, and library-owned query state across ISA boundaries. Never
+  pass Eigen matrix/packet objects between backends. The private matrix implementation
+  header includes Eigen under a namespace selected by each backend translation unit.
+  Otherwise, Eigen emits identically named out-of-line template helpers, which the linker
+  can merge across incompatible ISA builds.
+  Keep this isolation when adding matrix kernels; do not modify the vendor snapshot.
+- Preserve existing public names and namespaces, including legacy functions with `_avx` in
+  their name that now dispatch at runtime. The explicit `_avx2` and `_avx512` entry points
+  are for selected kernels and capability-guarded backend tests.
+
+The current first-party kernel audit is summarized below. Dispatching an index operation
+covers its arithmetic kernels, not every scalar loop in construction and search.
+
+| Area | Dispatch coverage / deliberate boundary |
+| --- | --- |
+| Raw float distances, norms, packed-code products | Runtime AVX2/AVX-512 selection; generic raw-float fallback |
+| Quantizer rescale search | SIMD bounded search; the certified scalar event sweep remains the fallback |
+| Integer scalar quantization, extra-code packing, transpose, sign masks | Existing runtime selection; byte layouts and rounding rules are unchanged |
+| Standard and high-accuracy FastScan | Runtime selection; generic LUT construction stays separate from selection |
+| IVF and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
+| FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; imported FFHT AVX butterflies are unchanged |
+| Float matrix rotation and PiPNN construction | Matrix products, row norms, and lower-triangle pairwise distances use isolated matrix backends |
+| HNSW search and IVF centroid routing | Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher |
+| Quantization orchestration, reconstruction, non-float utilities | Template/control code remains generic; no blanket native tuning or reduction-order rewrite |
+| Graph scheduling, candidate queues, I/O, allocation, random initialization | Generic control code; IVF one-bit candidate insertion stays in a small compiled function to avoid inlining-induced register spills; thread scheduling and seeds remain caller-owned |
+| Example KMeans training | Uses external FAISS, whose build and dispatch are independent of this package |
+
+Portable wheels continue to disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. Adding an optimized
+backend does not add support for generic-CPU quantized search or AArch64; those require
+complete implementations and separate compatibility validation.
 
 ### Change quantization or packing
 

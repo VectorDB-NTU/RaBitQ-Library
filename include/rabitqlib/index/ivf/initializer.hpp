@@ -172,12 +172,33 @@ class FlatInitializer : public Initializer {
     }
 };
 
+// Keep centroid routing on the same runtime-selected distance kernels as flat IVF.
+class CentroidL2Space : public hnswlib::SpaceInterface<float> {
+   private:
+    size_t dim_;
+
+    static float distance(const void* a, const void* b, const void* dim) {
+        return euclidean_sqr(
+            static_cast<const float*>(a),
+            static_cast<const float*>(b),
+            *static_cast<const size_t*>(dim)
+        );
+    }
+
+   public:
+    explicit CentroidL2Space(size_t dim) : dim_(dim) {}
+
+    size_t get_data_size() override { return dim_ * sizeof(float); }
+    hnswlib::DISTFUNC<float> get_dist_func() override { return distance; }
+    void* get_dist_func_param() override { return &dim_; }
+};
+
 class HNSWInitializer : public Initializer {
    private:
     int M_ = 16;
     int ef_construction_ = 400;
     hnswlib::HierarchicalNSW<float>* alg_hnsw_ = nullptr;
-    hnswlib::L2Space space_;
+    CentroidL2Space space_;
 
    public:
     explicit HNSWInitializer(size_t d, size_t k) : Initializer(d, k), space_(d) {

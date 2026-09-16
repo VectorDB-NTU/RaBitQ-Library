@@ -32,7 +32,7 @@ class QGBuilder {
     friend struct QGConstructionTestAccess;
 
    private:
-    QuantizedGraph<float>& qg_;
+    QuantizedGraph& qg_;
     size_t ef_build_;      // size of search pool for indexing
     size_t num_threads_;   // number of threads used for indexing
     size_t num_nodes_;     // num of data points
@@ -59,7 +59,7 @@ class QGBuilder {
 
     void initialize_storage(const float* data);
 
-    QGBuilder(QuantizedGraph<float>& index, uint32_t ef_build, size_t num_threads)
+    QGBuilder(QuantizedGraph& index, uint32_t ef_build, size_t num_threads)
         : qg_{index}
         , ef_build_{ef_build}
         , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
@@ -69,7 +69,7 @@ class QGBuilder {
 
    public:
     explicit QGBuilder(
-        QuantizedGraph<float>& index,
+        QuantizedGraph& index,
         uint32_t ef_build,
         const float* data,
         size_t num_threads = std::numeric_limits<size_t>::max(),
@@ -220,7 +220,7 @@ inline void QGBuilder::initialize_storage(const float* data) {
 
     PID entry_point = 0;
     if (qg_.is_quantized()) {
-        QuantizedQuery<float> query(
+        QuantizedQuery query(
             qg_.centroid_.data(), qg_.centroid_.data(), qg_.padded_dim_, qg_.metric_type_
         );
         float best = std::numeric_limits<float>::max();
@@ -257,7 +257,7 @@ inline void QGBuilder::add_pruned_edges(
     }
 
     std::vector<float> reconstructed;
-    std::optional<QuantizedQuery<float>> prepared;
+    std::optional<QuantizedQuery> prepared;
     while (new_result.size() < degree_bound_ && start < pruned_list.size()) {
         const auto& cur = pruned_list[start];
         bool occlude = false;
@@ -314,7 +314,7 @@ inline void QGBuilder::heuristic_prune(
     size_t start = 0;  // start position
 
     std::vector<float> reconstructed;
-    std::optional<QuantizedQuery<float>> prepared;
+    std::optional<QuantizedQuery> prepared;
     while (pruned_results.size() < degree_bound_ && start < poolsize) {
         auto candidate_id = pool[start].id;
 
@@ -371,7 +371,7 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
         // their scores on demand, after the caller can release the input/CSR.
         if (new_neighbors_[cur_id].empty() && degrees_[cur_id] != 0) {
             std::vector<float> reconstructed;
-            std::optional<QuantizedQuery<float>> prepared;
+            std::optional<QuantizedQuery> prepared;
             const float* source = qg_.prepare_build_query(cur_id, reconstructed, prepared);
             const auto ids = qg_.get_neighbors(cur_id);
             for (size_t j = 0; j < degrees_[cur_id]; ++j) {
@@ -444,7 +444,7 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
         if (qg_.is_quantized() && !tmp_pool.empty()) {
             // RaBitQ estimates are directional: score destination -> source afresh.
             std::vector<float> reconstructed;
-            std::optional<QuantizedQuery<float>> prepared;
+            std::optional<QuantizedQuery> prepared;
             qg_.prepare_build_query(data_id, reconstructed, prepared);
             for (auto& candidate : tmp_pool) {
                 candidate.distance = qg_.quantized_distance(*prepared, candidate.id);
@@ -474,7 +474,7 @@ inline void QGBuilder::random_init() {
         }
 
         std::vector<float> reconstructed;
-        std::optional<QuantizedQuery<float>> prepared;
+        std::optional<QuantizedQuery> prepared;
         const float* cur_data = qg_.prepare_build_query(i, reconstructed, prepared);
         new_neighbors_[i].reserve(degree_bound_);
         for (PID cur_neigh : neighbor_set) {
@@ -536,7 +536,7 @@ inline void QGBuilder::graph_refine() {
                 ids.emplace(neighbor.id);
             }
             std::vector<float> reconstructed;
-            std::optional<QuantizedQuery<float>> prepared;
+            std::optional<QuantizedQuery> prepared;
             const float* source = qg_.prepare_build_query(i, reconstructed, prepared);
             while (new_result.size() < degree_bound_) {
                 PID rand_id = rand_integer<PID>(0, static_cast<PID>(num_nodes_) - 1);

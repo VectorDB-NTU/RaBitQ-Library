@@ -35,7 +35,7 @@
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
-    static void check_contiguous_rows(QuantizedGraph<float>& graph) {
+    static void check_contiguous_rows(QuantizedGraph& graph) {
         const size_t vector_bytes =
             graph.is_quantized()
                 ? ExDataMap<float>::data_bytes(graph.padded_dim_, graph.quantization_bits_)
@@ -70,7 +70,7 @@ struct QGConstructionTestAccess {
     }
 
     static QGBuilder from_graph(
-        QuantizedGraph<float>& graph,
+        QuantizedGraph& graph,
         uint32_t ef,
         const float* data,
         const std::vector<size_t>& offsets,
@@ -81,7 +81,7 @@ struct QGConstructionTestAccess {
         builder.initialize_seed(data, offsets, neighbors);
         return builder;
     }
-    static auto codes(const QuantizedGraph<float>& graph) {
+    static auto codes(const QuantizedGraph& graph) {
         std::vector<char> result;
         for (PID id = 0; id < graph.num_points_; ++id) {
             const char* code = graph.is_quantized()
@@ -99,7 +99,7 @@ struct QGConstructionTestAccess {
         auto& graph = builder.qg_;
         for (PID i = 0; i < builder.num_nodes_; ++i) {
             std::vector<float> reconstructed;
-            std::optional<QuantizedQuery<float>> prepared;
+            std::optional<QuantizedQuery> prepared;
             const float* source = graph.prepare_build_query(i, reconstructed, prepared);
             for (size_t j = 0; j < builder.degrees_[i]; ++j) {
                 const PID id = graph.get_neighbors(i)[j];
@@ -110,39 +110,35 @@ struct QGConstructionTestAccess {
         }
     }
     static void search(QGBuilder& builder) { builder.search_new_neighbors(false); }
-    static auto encoded_neighbors(const QuantizedGraph<float>& graph, PID id) {
+    static auto encoded_neighbors(const QuantizedGraph& graph, PID id) {
         return graph.get_neighbors(id);
     }
     static void set_encoded_neighbor(
-        QuantizedGraph<float>& graph, PID source, size_t lane, PID target
+        QuantizedGraph& graph, PID source, size_t lane, PID target
     ) {
         graph.get_neighbors(source)[lane] = target;
     }
-    static void copy_vectors(
-        QuantizedGraph<float>& graph, const float* data, size_t threads
-    ) {
+    static void copy_vectors(QuantizedGraph& graph, const float* data, size_t threads) {
         graph.copy_vectors(data, threads);
     }
     static void update(
-        QuantizedGraph<float>& graph,
-        PID source,
-        const std::vector<AnnCandidate<float>>& neighbors
+        QuantizedGraph& graph, PID source, const std::vector<AnnCandidate<float>>& neighbors
     ) {
         graph.update_qg(source, neighbors);
     }
-    static void fill_batch_factors(QuantizedGraph<float>& graph, PID source, float value) {
+    static void fill_batch_factors(QuantizedGraph& graph, PID source, float value) {
         QGBatchDataMap<float> batch(graph.get_batch_data(source), graph.padded_dim_);
         std::fill_n(batch.f_add(), fastscan::kBatchSize, value);
         std::fill_n(batch.f_rescale(), fastscan::kBatchSize, value);
     }
     static std::pair<float, float> batch_factors(
-        const QuantizedGraph<float>& graph, PID source, size_t lane
+        const QuantizedGraph& graph, PID source, size_t lane
     ) {
         ConstQGBatchDataMap<float> batch(graph.get_batch_data(source), graph.padded_dim_);
         return {batch.f_add()[lane], batch.f_rescale()[lane]};
     }
     static std::array<double, 2> estimate(
-        const QuantizedGraph<float>& graph, PID source, PID target
+        const QuantizedGraph& graph, PID source, PID target
     ) {
         std::vector<float> query(graph.padded_dim_);
         graph.reconstruct_quantized_vector(source, query.data());
@@ -180,9 +176,7 @@ namespace {
 TEST(QuantizedGraphLayoutTest, KeepsVectorsCodesAndNeighborsInContiguousRows) {
     for (size_t bits : {0U, 4U, 8U}) {
         SCOPED_TRACE(bits);
-        QuantizedGraph<float> graph(
-            33, 65, 32, METRIC_L2, RotatorType::FhtKacRotator, bits
-        );
+        QuantizedGraph graph(33, 65, 32, METRIC_L2, RotatorType::FhtKacRotator, bits);
         QGConstructionTestAccess::check_contiguous_rows(graph);
     }
 }
@@ -193,7 +187,7 @@ static_assert(std::is_move_constructible_v<Lut<float>>);
 static_assert(
     !std::is_constructible_v<
         QGBuilder,
-        QuantizedGraph<float>&,
+        QuantizedGraph&,
         uint32_t,
         const float*,
         const std::vector<size_t>&,
@@ -231,6 +225,22 @@ TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
             BatchQuery<float> q_obj(query.data(), dim, metric);
             q_obj.set_g_add(vertex_distance);
             std::array<float, fastscan::kBatchSize> estimates{};
+            std::vector<decltype(&simd::qg_batch_estdist)> backends{
+                simd::qg_batch_estdist_generic, simd::qg_batch_estdist};
+            if (cpu::has_avx2())
+                backends.push_back(simd::qg_batch_estdist_avx2);
+            if (cpu::has_avx512_core())
+                backends.push_back(simd::qg_batch_estdist_avx512);
+            for (auto backend : backends) {
+                backend(batch.data(), q_obj, dim, estimates.data());
+                for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
+                    EXPECT_NEAR(
+                        estimates[i],
+                        distance(query.data(), data.data() + i * dim, dim),
+                        1e-5F
+                    );
+                }
+            }
             qg_batch_estdist(batch.data(), q_obj, dim, estimates.data());
             EXPECT_FLOAT_EQ(
                 q_obj.g_add(), metric == METRIC_IP ? vertex_distance - 1 : vertex_distance
@@ -241,6 +251,22 @@ TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
                 );
             }
         }
+    }
+}
+
+TEST(QGEstimatorTest, CandidateMaskBackendsMatchScalarOrdering) {
+    std::array<float, fastscan::kBatchSize> distances{};
+    for (size_t lane = 0; lane < distances.size(); ++lane) {
+        distances[lane] = static_cast<float>(lane % 7) - 2.0F;
+    }
+    distances[3] = std::numeric_limits<float>::quiet_NaN();
+    distances[17] = std::numeric_limits<float>::infinity();
+    distances[29] = -std::numeric_limits<float>::infinity();
+
+    constexpr float kThreshold = 2.0F;
+    const uint32_t expected = simd::qg_candidate_mask_generic(distances.data(), kThreshold);
+    if (cpu::has_avx2()) {
+        EXPECT_EQ(simd::qg_candidate_mask_avx2(distances.data(), kThreshold), expected);
     }
 }
 
@@ -259,7 +285,7 @@ TEST(QGConstructionTest, BuildsAndPrunesAfterInputReleaseUsingExistingCodes) {
                                    static_cast<float>(1 + (i / kDim) % 4);
                     }
                 }
-                QuantizedGraph<float> graph(
+                QuantizedGraph graph(
                     kCount, kDim, 32, metric, RotatorType::FhtKacRotator, bits
                 );
                 QGBuilder builder(graph, 64, data.data(), 1);
@@ -308,7 +334,7 @@ TEST(QGConstructionTest, EncodedSeedSearchMatchesRetainedScores) {
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {0U, 4U, 8U}) {
             SCOPED_TRACE(::testing::Message() << metric << "/" << bits);
-            QuantizedGraph<float> graph(
+            QuantizedGraph graph(
                 kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
             );
             // Both builders search the same immutable encoded graph/rotation.
@@ -348,7 +374,7 @@ TEST(QGConstructionTest, DefaultsToPipnnInitialization) {
             detail::build_initial_graph(data.data(), kCount, kDim, kDegree, metric, 1);
         for (size_t bits : {0U, 4U, 8U}) {
             SCOPED_TRACE(::testing::Message() << metric << "/" << bits);
-            QuantizedGraph<float> graph(
+            QuantizedGraph graph(
                 kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
             );
             QGBuilder builder(graph, 64, data.data(), 1);
@@ -377,7 +403,7 @@ TEST(QGConstructionTest, SupportsExplicitRandomInitialization) {
         GTEST_SKIP() << "FastScan requires AVX2/FMA";
     }
     std::vector<float> data(65 * 65, 0.5F);
-    QuantizedGraph<float> graph(65, 65, 32);
+    QuantizedGraph graph(65, 65, 32);
     QGBuilder builder(graph, 64, data.data(), 1, QGInitialization::Random);
     for (const auto& row : QGConstructionTestAccess::neighbors(builder)) {
         EXPECT_EQ(row.size(), 32U);
@@ -394,7 +420,7 @@ TEST(QGConstructionTest, SupportsExplicitRandomInitialization) {
 }
 
 TEST(QGConstructionTest, RejectsNullDataForEveryInitializationMode) {
-    QuantizedGraph<float> graph(33, 64, 32);
+    QuantizedGraph graph(33, 64, 32);
     EXPECT_THROW(
         (QGBuilder(graph, 32, nullptr, 1, QGInitialization::PiPNN)), std::invalid_argument
     );
@@ -411,8 +437,8 @@ TEST(QGConstructionTest, UsesExplicitThreadCountsWithoutChangingCallerState) {
     std::vector<float> data(kCount * kDim, 0.25F);
     const int caller_threads = omp_get_max_threads();
 
-    QuantizedGraph<float> first(kCount, kDim, 32);
-    QuantizedGraph<float> second(kCount, kDim, 32);
+    QuantizedGraph first(kCount, kDim, 32);
+    QuantizedGraph second(kCount, kDim, 32);
     QGBuilder first_builder(first, 32, data.data(), 1, QGInitialization::Random);
     EXPECT_EQ(omp_get_max_threads(), caller_threads);
     QGBuilder second_builder(second, 32, data.data(), 2, QGInitialization::PiPNN);
@@ -432,7 +458,7 @@ TEST(QGConstructionTest, InitializesUnusedPartialBatchFactors) {
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = std::sin(static_cast<float>(i) * 0.17F);
     }
-    QuantizedGraph<float> graph(kCount, kDim, 32);
+    QuantizedGraph graph(kCount, kDim, 32);
     QGConstructionTestAccess::copy_vectors(graph, data.data(), 1);
     QGConstructionTestAccess::fill_batch_factors(
         graph, 0, std::numeric_limits<float>::quiet_NaN()
@@ -474,7 +500,7 @@ TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
                 }
                 offsets.push_back(edges.size());
             }
-            QuantizedGraph<float> graph(
+            QuantizedGraph graph(
                 kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
             );
             auto builder = QGConstructionTestAccess::from_graph(
@@ -534,7 +560,7 @@ TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
             }
             const std::string path = ::testing::TempDir() + "rabitq_qg_seeded.index";
             graph.save(path.c_str());
-            QuantizedGraph<float> loaded;
+            QuantizedGraph loaded;
             loaded.load(path.c_str());
             loaded.set_ef(96);
             loaded.search(query.data(), 10, loaded_ids.data(), loaded_distances.data());
@@ -549,7 +575,7 @@ TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
 TEST(QGConstructionTest, RejectsInvalidSeedStructureAndIds) {
     constexpr size_t kCount = 33, kDim = 64;
     std::vector<float> data(kCount * kDim, 0.1F);
-    QuantizedGraph<float> graph(kCount, kDim, 32);
+    QuantizedGraph graph(kCount, kDim, 32);
     const auto reject = [&](const std::vector<size_t>& offsets,
                             const std::vector<PID>& edges,
                             const char* message) {
@@ -582,37 +608,31 @@ TEST(QGConstructionTest, RejectsInvalidSeedStructureAndIds) {
 
 TEST(QuantizedGraphConfigurationTest, RejectsDegreeNotAlignedForFastScan) {
     EXPECT_THROW(
-        (QuantizedGraph<float>(64, 64, 16, METRIC_L2, RotatorType::MatrixRotator)),
+        (QuantizedGraph(64, 64, 16, METRIC_L2, RotatorType::MatrixRotator)),
         std::invalid_argument
     );
 }
 
 TEST(QuantizedGraphConfigurationTest, RejectsDegreeThatCannotExcludeSelf) {
     EXPECT_THROW(
-        (QuantizedGraph<float>(32, 64, 32, METRIC_L2, RotatorType::MatrixRotator)),
+        (QuantizedGraph(32, 64, 32, METRIC_L2, RotatorType::MatrixRotator)),
         std::invalid_argument
     );
 }
 
 TEST(QuantizedGraphConfigurationTest, AcceptsOnlySupportedVectorQuantizationBits) {
-    EXPECT_NO_THROW(
-        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 0))
-    );
-    EXPECT_NO_THROW(
-        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 4))
-    );
-    EXPECT_NO_THROW(
-        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 8))
-    );
+    EXPECT_NO_THROW((QuantizedGraph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 0)));
+    EXPECT_NO_THROW((QuantizedGraph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 4)));
+    EXPECT_NO_THROW((QuantizedGraph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 8)));
     EXPECT_THROW(
-        (QuantizedGraph<float>(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 6)),
+        (QuantizedGraph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator, 6)),
         std::invalid_argument
     );
 }
 
 TEST(QuantizedGraphConfigurationTest, RejectsUnsupportedMetric) {
     EXPECT_THROW(
-        (QuantizedGraph<float>(
+        (QuantizedGraph(
             33, 64, 32, static_cast<MetricType>(255), RotatorType::MatrixRotator
         )),
         std::invalid_argument
@@ -621,13 +641,13 @@ TEST(QuantizedGraphConfigurationTest, RejectsUnsupportedMetric) {
 
 TEST(QuantizedGraphConfigurationTest, RejectsZeroDimension) {
     EXPECT_THROW(
-        (QuantizedGraph<float>(33, 0, 32, METRIC_L2, RotatorType::MatrixRotator)),
+        (QuantizedGraph(33, 0, 32, METRIC_L2, RotatorType::MatrixRotator)),
         std::invalid_argument
     );
 }
 
 TEST(QuantizedGraphConfigurationTest, RejectsOutOfRangeEntryPoint) {
-    QuantizedGraph<float> graph(33, 64, 32);
+    QuantizedGraph graph(33, 64, 32);
     EXPECT_NO_THROW(graph.set_ep(32));
     EXPECT_THROW(graph.set_ep(33), std::invalid_argument);
     EXPECT_EQ(graph.entry_point(), 32U);
@@ -638,14 +658,14 @@ TEST(QuantizedGraphPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget
     constexpr size_t kDim = 64;
     constexpr size_t kDegree = 32;
     std::vector<float> data(kNumPoints * kDim, 0.25F);
-    QuantizedGraph<float> source(
+    QuantizedGraph source(
         kNumPoints, kDim, kDegree, METRIC_L2, RotatorType::MatrixRotator, 4
     );
     QGBuilder builder(source, kDegree, data.data(), 1);
     builder.build(2);
 
     const std::string path = ::testing::TempDir() + "rabitq_qg_malformed.index";
-    QuantizedGraph<float> target(65, kDim, kDegree, METRIC_IP);
+    QuantizedGraph target(65, kDim, kDegree, METRIC_IP);
 
     source.save(path.c_str());
     std::filesystem::resize_file(path, std::filesystem::file_size(path) - 1);
@@ -700,7 +720,7 @@ TEST(QuantizedGraphPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget
 }
 
 TEST(QuantizedGraphLifecycleTest, DestroysConcreteRotatorThroughBasePointer) {
-    QuantizedGraph<float> graph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator);
+    QuantizedGraph graph(33, 64, 32, METRIC_L2, RotatorType::MatrixRotator);
     EXPECT_EQ(graph.num_vertices(), 33U);
 }
 
@@ -711,13 +731,13 @@ TEST(QuantizedGraphLifecycleTest, RejectsSearchAndSaveBeforeBuild) {
     std::array<PID, 1> ids{};
     std::array<float, 1> distances{};
 
-    QuantizedGraph<float> empty;
+    QuantizedGraph empty;
     EXPECT_THROW(empty.save(path.c_str()), std::logic_error);
     EXPECT_THROW(
         empty.search(query.data(), 1, ids.data(), distances.data()), std::logic_error
     );
 
-    QuantizedGraph<float> configured(33, 64, 32);
+    QuantizedGraph configured(33, 64, 32);
     configured.set_ef(1);
     EXPECT_THROW(configured.save(path.c_str()), std::logic_error);
     EXPECT_THROW(
@@ -743,7 +763,7 @@ TEST(QuantizedGraphLifecycleTest, BuilderDoesNotPublishPartialGraph) {
         SCOPED_TRACE(static_cast<int>(init));
         const std::string path = ::testing::TempDir() + "rabitq_qg_partial.index";
         std::remove(path.c_str());
-        QuantizedGraph<float> graph(kNumPoints, kDim, kDegree);
+        QuantizedGraph graph(kNumPoints, kDim, kDegree);
         QGBuilder builder(graph, kDegree, data.data(), 1, init);
         graph.set_ef(1);
         EXPECT_THROW(graph.save(path.c_str()), std::logic_error);
@@ -773,9 +793,7 @@ TEST(QGBuilderMetricTest, UsesInnerProductDistanceToChooseEntryPoint) {
     ASSERT_EQ(expected, 0U);
     ASSERT_NE(euclidean_entry, expected);
 
-    QuantizedGraph<float> graph(
-        kNumPoints, kDim, kDegree, METRIC_IP, RotatorType::MatrixRotator
-    );
+    QuantizedGraph graph(kNumPoints, kDim, kDegree, METRIC_IP, RotatorType::MatrixRotator);
     QGBuilder builder(graph, kDegree, data.data(), 1);
 
     EXPECT_EQ(graph.entry_point(), expected);
@@ -830,7 +848,7 @@ TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
 
     for (size_t bits : {4U, 8U}) {
         SCOPED_TRACE(bits);
-        QuantizedGraph<float> graph(
+        QuantizedGraph graph(
             kNumPoints, kDim, kDegree, METRIC_L2, RotatorType::MatrixRotator, bits
         );
         {
@@ -850,7 +868,7 @@ TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
         const std::string path =
             ::testing::TempDir() + "rabitq_qg_quant_" + std::to_string(bits) + ".index";
         graph.save(path.c_str());
-        QuantizedGraph<float> loaded;
+        QuantizedGraph loaded;
         loaded.set_ef(kNumPoints);
         loaded.load(path.c_str());
         EXPECT_TRUE(loaded.is_quantized());
@@ -876,7 +894,7 @@ TEST(QGSearchTest, RejectsInvalidKAndEfInsteadOfReturningPartialResults) {
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = std::sin(static_cast<float>(i) * 0.11F);
     }
-    QuantizedGraph<float> graph(kNumPoints, kDim, kDegree);
+    QuantizedGraph graph(kNumPoints, kDim, kDegree);
     QGBuilder builder(graph, kDegree, data.data(), 1, QGInitialization::Random);
     builder.build(2);
 
@@ -945,7 +963,7 @@ TEST(QGSearchTest, ParallelQueriesMatchSerialAcrossIndexesAndSettings) {
                 for (size_t i = 0; i < queries.size(); ++i) {
                     queries[i] = std::cos(static_cast<float>(i) * 0.07F);
                 }
-                QuantizedGraph<float> graph(
+                QuantizedGraph graph(
                     num_points, dim, 32, metric, RotatorType::FhtKacRotator, bits
                 );
                 {

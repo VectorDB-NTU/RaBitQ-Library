@@ -21,6 +21,8 @@ fi
 
 check_file() {
     local file="$1"
+    # Tracked deletions remain in git ls-files until staged.
+    [[ -f "$file" ]] || return 0
     local status=0
     local report
     report="$(mktemp)"
@@ -59,7 +61,8 @@ export -f check_file
 
 # The child shell expands its positional argument.
 # shellcheck disable=SC2016
-git ls-files -z -- 'src/*.cpp' 'src/*.hpp' 'include/rabitqlib/*.hpp' \
+git ls-files --cached --others --exclude-standard -z -- 'src/*.cpp' 'src/*.hpp' 'include/rabitqlib/*.hpp' \
     ':(exclude)include/rabitqlib/third/**' \
     ':(exclude)include/rabitqlib/utils/fht_avx.hpp' \
+    | sort -zu \
     | xargs -0 -r -n 1 -P "${INCLUDE_JOBS:-2}" bash -c 'check_file "$1"' _
