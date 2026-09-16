@@ -2,13 +2,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <queue>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/simd/estimator_dispatch.hpp"
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
+#include "rabitqlib/simd/hnsw_dispatch.hpp"
+#include "rabitqlib/simd/matrix_dispatch.hpp"
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/simd/quantization_dispatch.hpp"
 #include "rabitqlib/simd/rotator_dispatch.hpp"
@@ -17,22 +22,144 @@
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"
-#include "rescale_search.hpp"
 
 namespace rabitqlib::simd {
+namespace {
+// Resolve once during static initialization; wrappers never repeat CPU checks.
+// The override is used only by kernels needing a stricter AVX-512 subset.
+template <typename Function>
+Function resolve_kernel(
+    Function avx512,
+    Function avx2,
+    Function fallback,
+    bool avx512_supported = cpu::has_avx512_core()
+) {
+    if (avx512_supported) {
+        return avx512;
+    }
+    if (cpu::has_avx2()) {
+        return avx2;
+    }
+    return fallback;
+}
 
-const auto kEuclideanSqrFn = cpu::has_avx512_core() ? euclidean_sqr_avx512
-                             : cpu::has_avx2()      ? euclidean_sqr_avx2
-                                                    : euclidean_sqr_generic;
-const auto kDotProductFn = cpu::has_avx512_core() ? dot_product_avx512
-                           : cpu::has_avx2()      ? dot_product_avx2
-                                                  : dot_product_generic;
-const auto kDotProductDisFn = cpu::has_avx512_core() ? dot_product_dis_avx512
-                              : cpu::has_avx2()      ? dot_product_dis_avx2
-                                                     : dot_product_dis_generic;
-const auto kL2normSqrFn = cpu::has_avx512_core() ? l2norm_sqr_avx512
-                          : cpu::has_avx2()      ? l2norm_sqr_avx2
-                                                 : l2norm_sqr_generic;
+template <typename Function>
+Function resolve_kernel(Function avx2, Function fallback) {
+    if (cpu::has_avx2()) {
+        return avx2;
+    }
+    return fallback;
+}
+
+}  // namespace
+
+const auto kMatrixProductFn =
+    resolve_kernel(matrix_product_avx512, matrix_product_avx2, matrix_product_generic);
+
+void matrix_product(
+    const float* left,
+    const float* right,
+    float* result,
+    size_t rows,
+    size_t inner,
+    size_t cols
+) {
+    kMatrixProductFn(left, right, result, rows, inner, cols);
+}
+
+const auto kMatrixProductTransposedFn = resolve_kernel(
+    matrix_product_transposed_avx512,
+    matrix_product_transposed_avx2,
+    matrix_product_transposed_generic
+);
+
+void matrix_product_transposed(
+    const float* left,
+    const float* right,
+    float* result,
+    size_t rows,
+    size_t inner,
+    size_t cols
+) {
+    kMatrixProductTransposedFn(left, right, result, rows, inner, cols);
+}
+
+const auto kRowNormsFn =
+    resolve_kernel(row_norms_avx512, row_norms_avx2, row_norms_generic);
+
+void row_norms(const float* data, float* result, size_t rows, size_t dim) {
+    kRowNormsFn(data, result, rows, dim);
+}
+
+const auto kPairwiseDistancesLowerFn = resolve_kernel(
+    pairwise_distances_lower_avx512,
+    pairwise_distances_lower_avx2,
+    pairwise_distances_lower_generic
+);
+
+void pairwise_distances_lower(
+    const float* data,
+    float* result,
+    float* norms_data,
+    size_t size,
+    size_t dim,
+    bool inner_product
+) {
+    kPairwiseDistancesLowerFn(data, result, norms_data, size, dim, inner_product);
+}
+
+const auto kQgBatchEstdistFn = resolve_kernel(
+    qg_batch_estdist_avx512, qg_batch_estdist_avx2, qg_batch_estdist_generic
+);
+
+void qg_batch_estdist(
+    const char* batch_data,
+    const BatchQuery<float>& q_obj,
+    size_t padded_dim,
+    float* est_distance
+) {
+    kQgBatchEstdistFn(batch_data, q_obj, padded_dim, est_distance);
+}
+
+const auto kQgBatchEstdistMaskFn =
+    resolve_kernel(qg_batch_estdist_mask_avx2, qg_batch_estdist_mask_generic);
+
+uint32_t qg_batch_estdist_mask(
+    const char* batch_data,
+    const BatchQuery<float>& q_obj,
+    size_t padded_dim,
+    float* est_distance,
+    float threshold
+) {
+    return kQgBatchEstdistMaskFn(batch_data, q_obj, padded_dim, est_distance, threshold);
+}
+
+const auto kSplitBatchEstdistFn = resolve_kernel(
+    split_batch_estdist_avx512, split_batch_estdist_avx2, split_batch_estdist_generic
+);
+
+void split_batch_estdist(
+    const char* batch_data,
+    const SplitBatchQuery<float>& q_obj,
+    size_t padded_dim,
+    float* est_distance,
+    float* low_distance,
+    float* ip_x0_qr,
+    bool use_hacc
+) {
+    kSplitBatchEstdistFn(
+        batch_data, q_obj, padded_dim, est_distance, low_distance, ip_x0_qr, use_hacc
+    );
+}
+
+const auto kEuclideanSqrFn =
+    resolve_kernel(euclidean_sqr_avx512, euclidean_sqr_avx2, euclidean_sqr_generic);
+const auto kDotProductFn =
+    resolve_kernel(dot_product_avx512, dot_product_avx2, dot_product_generic);
+const auto kDotProductDisFn =
+    resolve_kernel(dot_product_dis_avx512, dot_product_dis_avx2, dot_product_dis_generic);
+const auto kL2normSqrFn =
+    resolve_kernel(l2norm_sqr_avx512, l2norm_sqr_avx2, l2norm_sqr_generic);
 
 float euclidean_sqr(const float* a, const float* b, size_t dim) {
     return kEuclideanSqrFn(a, b, dim);
@@ -47,22 +174,6 @@ float dot_product_dis(const float* a, const float* b, size_t dim) {
 }
 
 float l2norm_sqr(const float* a, size_t dim) { return kL2normSqrFn(a, dim); }
-
-namespace detail {
-
-RescaleScratch& get_thread_local_rescale_scratch(size_t dim) {
-    // Search evaluation is synchronous and does not re-enter the quantizer.
-    // Retain the largest buffers on each worker; smaller vectors overwrite only
-    // their active prefix without shrinking or zero-initializing the storage.
-    thread_local RescaleScratch scratch;
-    if (scratch.magnitudes.size() < dim)
-        scratch.magnitudes.resize(dim);
-    if (scratch.reciprocals.size() < dim)
-        scratch.reciprocals.resize(dim);
-    return scratch;
-}
-
-}  // namespace detail
 
 [[noreturn]] static void missing_feature(const char* feature_name) {
     throw std::runtime_error(
@@ -79,25 +190,34 @@ static float ip_fxu0(
     return 0.0F;
 }
 
-static double request_scalar_rescale_search(const float*, size_t, int, double, double) {
-    return -1;
-}
-
-using BestRescaleFactorFn = double (*)(const float*, size_t, int, double, double);
-const BestRescaleFactorFn kBestRescaleFactorFn = [] {
-    if (cpu::has_avx512_core()) {
-        return best_rescale_factor_avx512;
-    } else if (cpu::has_avx2()) {
-        return best_rescale_factor_avx2;
-    } else {
-        return request_scalar_rescale_search;
-    }
-}();
+const auto kBestRescaleFactorFn = resolve_kernel(
+    best_rescale_factor_avx512, best_rescale_factor_avx2, best_rescale_factor_generic
+);
 
 double best_rescale_factor(
     const float* magnitudes, size_t dim, int max_code, double start, double end
 ) {
     return kBestRescaleFactorFn(magnitudes, dim, max_code, start, end);
+}
+
+static void
+missing_fht_rotate(const float*, float*, size_t, size_t, size_t, float, const uint8_t*) {
+    missing_feature("sign flip");
+}
+
+const auto kFhtRotateFn =
+    resolve_kernel(fht_rotate_avx512, fht_rotate_avx2, missing_fht_rotate);
+
+void fht_rotate(
+    const float* data,
+    float* rotated_vec,
+    size_t dim,
+    size_t padded_dim,
+    size_t trunc_dim,
+    float fac,
+    const uint8_t* flip
+) {
+    kFhtRotateFn(data, rotated_vec, dim, padded_dim, trunc_dim, fac, flip);
 }
 
 static float missing_excode_ip(const float*, const uint8_t*, size_t) {
@@ -155,8 +275,8 @@ static float missing_warmup_ip_x0_q_512(
 }
 
 ExcodeIpTable resolve_excode_ip_table() {
-    if (cpu::has_avx512_core()) {
-        return {
+    return resolve_kernel(
+        ExcodeIpTable{
             ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx512,
             excode_ipimpl::ip64_fxu2_avx512,
@@ -166,9 +286,8 @@ ExcodeIpTable resolve_excode_ip_table() {
             excode_ipimpl::ip64_fxu6_avx512,
             excode_ipimpl::ip64_fxu7_avx512,
             excode_ipimpl::ip16_fxu8_avx512,
-        };
-    } else if (cpu::has_avx2()) {
-        return {
+        },
+        ExcodeIpTable{
             ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx2,
             excode_ipimpl::ip64_fxu2_avx2,
@@ -178,9 +297,8 @@ ExcodeIpTable resolve_excode_ip_table() {
             excode_ipimpl::ip64_fxu6_avx2,
             excode_ipimpl::ip64_fxu7_avx2,
             excode_ipimpl::ip16_fxu8_avx2,
-        };
-    } else {
-        return {
+        },
+        ExcodeIpTable{
             ip_fxu0,
             missing_excode_ip,
             missing_excode_ip,
@@ -190,78 +308,44 @@ ExcodeIpTable resolve_excode_ip_table() {
             missing_excode_ip,
             missing_excode_ip,
             missing_excode_ip,
-        };
-    }
+        }
+    );
 }
 
-using FlipSignFn = void (*)(const uint8_t*, float*, size_t);
-const FlipSignFn kFlipSignFn = [] {
-    if (cpu::has_avx512_core()) {
-        return flip_sign_avx512;
-    } else if (cpu::has_avx2()) {
-        return flip_sign_avx2;
-    } else {
-        return missing_flip_sign;
-    }
-}();
+const auto kFlipSignFn =
+    resolve_kernel(flip_sign_avx512, flip_sign_avx2, missing_flip_sign);
 
-using KacsWalkFn = void (*)(float*, size_t);
-const KacsWalkFn kKacsWalkFn = [] {
-    if (cpu::has_avx512_core()) {
-        return kacs_walk_avx512;
-    } else if (cpu::has_avx2()) {
-        return kacs_walk_avx2;
-    } else {
-        return missing_kacs_walk;
-    }
-}();
+const auto kKacsWalkFn =
+    resolve_kernel(kacs_walk_avx512, kacs_walk_avx2, missing_kacs_walk);
 
-using ScalarQuantizeUint8Fn = void (*)(uint8_t*, const float*, size_t, float, float);
-const ScalarQuantizeUint8Fn kScalarQuantizeUint8Fn = [] {
-    if (cpu::has_avx512_core()) {
-        return scalar_quantize_uint8_avx512;
-    } else if (cpu::has_avx2()) {
-        return scalar_quantize_uint8_avx2;
-    } else {
-        return missing_scalar_quantize_uint8;
-    }
-}();
+const auto kScalarQuantizeUint8Fn = resolve_kernel(
+    scalar_quantize_uint8_avx512, scalar_quantize_uint8_avx2, missing_scalar_quantize_uint8
+);
 
-using ScalarQuantizeUint16Fn = void (*)(uint16_t*, const float*, size_t, float, float);
-const ScalarQuantizeUint16Fn kScalarQuantizeUint16Fn = [] {
-    if (cpu::has_avx512_core()) {
-        return scalar_quantize_uint16_avx512;
-    } else if (cpu::has_avx2()) {
-        return scalar_quantize_uint16_avx2;
-    } else {
-        return missing_scalar_quantize_uint16;
-    }
-}();
+const auto kScalarQuantizeUint16Fn = resolve_kernel(
+    scalar_quantize_uint16_avx512,
+    scalar_quantize_uint16_avx2,
+    missing_scalar_quantize_uint16
+);
 
-using PackExcodeFn = void (*)(const uint8_t*, uint8_t*, size_t);
-
-static PackExcodeFn resolve_pack_excode_fn(PackExcodeFn avx512_fn, PackExcodeFn avx2_fn) {
-    if (cpu::has_avx512_core()) {
-        return avx512_fn;
-    } else if (cpu::has_avx2()) {
-        return avx2_fn;
-    } else {
-        return missing_pack_excode;
-    }
-}
-
-const PackExcodeFn kPacking2BitExcodeFn =
-    resolve_pack_excode_fn(packing_2bit_excode_avx512, packing_2bit_excode_avx2);
-const PackExcodeFn kPacking3BitExcodeFn =
-    resolve_pack_excode_fn(packing_3bit_excode_avx512, packing_3bit_excode_avx2);
-const PackExcodeFn kPacking4BitExcodeFn =
-    resolve_pack_excode_fn(packing_4bit_excode_avx512, packing_4bit_excode_avx2);
-const PackExcodeFn kPacking5BitExcodeFn =
-    resolve_pack_excode_fn(packing_5bit_excode_avx512, packing_5bit_excode_avx2);
-const PackExcodeFn kPacking6BitExcodeFn =
-    resolve_pack_excode_fn(packing_6bit_excode_avx512, packing_6bit_excode_avx2);
-const PackExcodeFn kPacking7BitExcodeFn =
-    resolve_pack_excode_fn(packing_7bit_excode_avx512, packing_7bit_excode_avx2);
+const auto kPacking2BitExcodeFn = resolve_kernel(
+    packing_2bit_excode_avx512, packing_2bit_excode_avx2, missing_pack_excode
+);
+const auto kPacking3BitExcodeFn = resolve_kernel(
+    packing_3bit_excode_avx512, packing_3bit_excode_avx2, missing_pack_excode
+);
+const auto kPacking4BitExcodeFn = resolve_kernel(
+    packing_4bit_excode_avx512, packing_4bit_excode_avx2, missing_pack_excode
+);
+const auto kPacking5BitExcodeFn = resolve_kernel(
+    packing_5bit_excode_avx512, packing_5bit_excode_avx2, missing_pack_excode
+);
+const auto kPacking6BitExcodeFn = resolve_kernel(
+    packing_6bit_excode_avx512, packing_6bit_excode_avx2, missing_pack_excode
+);
+const auto kPacking7BitExcodeFn = resolve_kernel(
+    packing_7bit_excode_avx512, packing_7bit_excode_avx2, missing_pack_excode
+);
 
 void flip_sign(const uint8_t* flip, float* data, size_t dim) {
     kFlipSignFn(flip, data, dim);
@@ -319,38 +403,24 @@ const ex_ipfunc kIp64Fxu5AvxFn = kExcodeIpTable[5];
 const ex_ipfunc kIp64Fxu6AvxFn = kExcodeIpTable[6];
 const ex_ipfunc kIp64Fxu7AvxFn = kExcodeIpTable[7];
 
-using NewTransposeBinFn = void (*)(const uint16_t*, uint64_t*, size_t, size_t);
-const NewTransposeBinFn kNewTransposeBinFn = [] {
-    if (cpu::has_avx512_core()) {
-        return simd::new_transpose_bin_avx512;
-    } else if (cpu::has_avx2()) {
-        return simd::new_transpose_bin_avx2;
-    } else {
-        return simd::missing_new_transpose_bin;
-    }
-}();
+const auto kNewTransposeBinFn = rabitqlib::simd::resolve_kernel(
+    simd::new_transpose_bin_avx512,
+    simd::new_transpose_bin_avx2,
+    simd::missing_new_transpose_bin
+);
 
-using NewTransposeBin512Fn = void (*)(const uint8_t*, uint64_t*, size_t, size_t);
-const NewTransposeBin512Fn kNewTransposeBin512Fn = [] {
-    if (cpu::has_avx512_core()) {
-        return simd::new_transpose_bin_512_avx512;
-    } else if (cpu::has_avx2()) {
-        return simd::new_transpose_bin_512_avx2;
-    } else {
-        return simd::missing_new_transpose_bin_512;
-    }
-}();
+const auto kNewTransposeBin512Fn = rabitqlib::simd::resolve_kernel(
+    simd::new_transpose_bin_512_avx512,
+    simd::new_transpose_bin_512_avx2,
+    simd::missing_new_transpose_bin_512
+);
 
 using MaskIpX0QFn = float (*)(const float*, const uint8_t*, size_t);
-const MaskIpX0QFn kMaskIpX0QFn = [] {
-    if (cpu::has_avx512_core()) {
-        return static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx512);
-    } else if (cpu::has_avx2()) {
-        return static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx2);
-    } else {
-        return simd::missing_mask_ip_x0_q;
-    }
-}();
+const MaskIpX0QFn kMaskIpX0QFn = rabitqlib::simd::resolve_kernel<MaskIpX0QFn>(
+    static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx512),
+    static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx2),
+    simd::missing_mask_ip_x0_q
+);
 
 ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
     if (ex_bits <= 8) {
@@ -424,59 +494,32 @@ float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) 
 
 namespace rabitqlib::fastscan {
 
-void simd::pack_lut_generic(size_t dim, const float* query, float* lut) {
-    for (size_t group = 0; group < dim / 4; ++group) {
-        lut[0] = 0;
-        for (size_t j = 1; j < 16; ++j) {
-            lut[j] = lut[j - LOWBIT(j)] + query[kPos[j]];
-        }
-        query += 4;
-        lut += 16;
-    }
-}
-
-using PackLutFn = void (*)(size_t, const float*, float*);
-const PackLutFn kPackLutFn = cpu::has_avx512_core() ? simd::pack_lut_avx512
-                             : cpu::has_avx2()      ? simd::pack_lut_avx2
-                                                    : simd::pack_lut_generic;
+const auto kPackLutFn = rabitqlib::simd::resolve_kernel(
+    simd::pack_lut_avx512, simd::pack_lut_avx2, simd::pack_lut_generic
+);
 
 template <>
 void pack_lut<float>(size_t dim, const float* __restrict__ query, float* __restrict__ lut) {
     kPackLutFn(dim, query, lut);
 }
 
-using AccumulateFn = void (*)(const uint8_t*, const uint8_t*, uint16_t*, size_t);
-const AccumulateFn kAccumulateFn = [] {
-    if (cpu::has_avx512_core()) {
-        return simd::accumulate_avx512;
-    } else if (cpu::has_avx2()) {
-        return simd::accumulate_avx2;
-    } else {
-        return rabitqlib::simd::missing_fastscan_accumulate;
-    }
-}();
+const auto kAccumulateFn = rabitqlib::simd::resolve_kernel(
+    simd::accumulate_avx512,
+    simd::accumulate_avx2,
+    rabitqlib::simd::missing_fastscan_accumulate
+);
 
-using TransferLutHaccFn = void (*)(const uint16_t*, size_t, uint8_t*);
-const TransferLutHaccFn kTransferLutHaccFn = [] {
-    if (cpu::has_avx512_core()) {
-        return simd::transfer_lut_hacc_avx512;
-    } else if (cpu::has_avx2()) {
-        return simd::transfer_lut_hacc_avx2;
-    } else {
-        return rabitqlib::simd::missing_fastscan_transfer_lut_hacc;
-    }
-}();
+const auto kTransferLutHaccFn = rabitqlib::simd::resolve_kernel(
+    simd::transfer_lut_hacc_avx512,
+    simd::transfer_lut_hacc_avx2,
+    rabitqlib::simd::missing_fastscan_transfer_lut_hacc
+);
 
-using AccumulateHaccFn = void (*)(const uint8_t*, const uint8_t*, int32_t*, size_t);
-const AccumulateHaccFn kAccumulateHaccFn = [] {
-    if (cpu::has_avx512_core()) {
-        return simd::accumulate_hacc_avx512;
-    } else if (cpu::has_avx2()) {
-        return simd::accumulate_hacc_avx2;
-    } else {
-        return rabitqlib::simd::missing_fastscan_accumulate_hacc;
-    }
-}();
+const auto kAccumulateHaccFn = rabitqlib::simd::resolve_kernel(
+    simd::accumulate_hacc_avx512,
+    simd::accumulate_hacc_avx2,
+    rabitqlib::simd::missing_fastscan_accumulate_hacc
+);
 
 void accumulate(
     const uint8_t* __restrict__ codes,
@@ -519,15 +562,13 @@ namespace rabitqlib {
 
 using WarmupIpX0Q512Fn =
     float (*)(const uint8_t*, const uint64_t*, float, float, size_t, size_t);
-const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = [] {
-    if (rabitqlib::cpu::has_avx512_popcnt()) {
-        return static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512);
-    } else if (rabitqlib::cpu::has_avx2()) {
-        return static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2);
-    } else {
-        return rabitqlib::simd::missing_warmup_ip_x0_q_512;
-    }
-}();
+const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn =
+    rabitqlib::simd::resolve_kernel<WarmupIpX0Q512Fn>(
+        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512),
+        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2),
+        rabitqlib::simd::missing_warmup_ip_x0_q_512,
+        cpu::has_avx512_popcnt()
+    );
 
 float warmup_ip_x0_q_512(
     const uint8_t* data,
@@ -554,3 +595,29 @@ float warmup_ip_x0_q_512(
 }
 
 }  // namespace rabitqlib
+
+namespace rabitqlib::hnsw::detail {
+namespace {
+using SearchKnnFn =
+    std::priority_queue<std::pair<float, PID>> (*)(HierarchicalNSW&, const float*, size_t);
+std::priority_queue<std::pair<float, PID>> missing_search_knn(
+    HierarchicalNSW&, const float*, size_t
+) {
+    throw std::runtime_error("HNSW search requires AVX2/FMA or AVX512 support");
+}
+// The core variant uses AVX2 warmup; the popcount variant has its own stricter tier.
+const SearchKnnFn kSearchKnnFn = cpu::has_avx512_popcnt()
+                                     ? search_knn_avx512_popcnt
+                                     : rabitqlib::simd::resolve_kernel(
+                                           search_knn_avx512_core,
+                                           search_knn_avx2,
+                                           missing_search_knn,
+                                           cpu::has_avx512_core() && cpu::has_avx2()
+                                       );
+}  // namespace
+std::priority_queue<std::pair<float, PID>> search_knn(
+    HierarchicalNSW& index, const float* query, size_t topk
+) {
+    return kSearchKnnFn(index, query, topk);
+}
+}  // namespace rabitqlib::hnsw::detail

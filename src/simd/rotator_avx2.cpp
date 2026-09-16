@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "rabitqlib/simd/rotator_dispatch.hpp"
+#include "rotator_kernels.hpp"
 
 namespace rabitqlib::simd {
 
@@ -50,6 +51,20 @@ void kacs_walk_avx2(float* data, size_t len) {
         _mm256_storeu_ps(&data[i], new_x);
         _mm256_storeu_ps(&data[i + (len / 2)], new_y);
     }
+}
+
+void fht_rotate_avx2(
+    const float* data,
+    float* rotated_vec,
+    size_t dim,
+    size_t padded_dim,
+    size_t trunc_dim,
+    float fac,
+    const uint8_t* flip
+) {
+    fht_rotate_impl<flip_sign_avx2, kacs_walk_avx2>(
+        data, rotated_vec, dim, padded_dim, trunc_dim, fac, flip
+    );
 }
 
 }  // namespace rabitqlib::simd

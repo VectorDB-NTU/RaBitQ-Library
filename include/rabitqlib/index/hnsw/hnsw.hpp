@@ -27,8 +27,8 @@
 #include "rabitqlib/index/query.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/simd/hnsw_dispatch.hpp"
 #include "rabitqlib/utils/buffer.hpp"
-#include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -43,22 +43,6 @@ using maxheap = std::priority_queue<T>;
 
 template <typename T>
 using minheap = std::priority_queue<T, std::vector<T>, std::greater<T>>;
-
-class HierarchicalNSW;
-
-namespace detail {
-
-maxheap<std::pair<float, PID>> search_knn_avx2(HierarchicalNSW&, const float*, size_t);
-
-maxheap<std::pair<float, PID>> search_knn_avx512_core(
-    HierarchicalNSW&, const float*, size_t
-);
-
-maxheap<std::pair<float, PID>> search_knn_avx512_popcnt(
-    HierarchicalNSW&, const float*, size_t
-);
-
-}  // namespace detail
 
 class HierarchicalNSW {
    public:
@@ -1108,17 +1092,7 @@ inline std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn(
     const float* rotated_query, size_t TOPK
 ) {
-    if (rabitqlib::cpu::has_avx512_popcnt()) {
-        return detail::search_knn_avx512_popcnt(*this, rotated_query, TOPK);
-    }
-    if (rabitqlib::cpu::has_avx512_core() && rabitqlib::cpu::has_avx2()) {
-        return detail::search_knn_avx512_core(*this, rotated_query, TOPK);
-    }
-    if (rabitqlib::cpu::has_avx2()) {
-        return detail::search_knn_avx2(*this, rotated_query, TOPK);
-    }
-
-    throw std::runtime_error("HNSW search requires AVX2/FMA or AVX512 support");
+    return detail::search_knn(*this, rotated_query, TOPK);
 }
 
 template <class Kernel>

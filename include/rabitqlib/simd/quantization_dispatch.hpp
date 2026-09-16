@@ -10,6 +10,9 @@ namespace rabitqlib::simd {
 double best_rescale_factor(
     const float* magnitudes, size_t dim, int max_code, double start, double end
 );
+double best_rescale_factor_generic(
+    const float* magnitudes, size_t dim, int max_code, double start, double end
+);
 double best_rescale_factor_avx2(
     const float* magnitudes, size_t dim, int max_code, double start, double end
 );

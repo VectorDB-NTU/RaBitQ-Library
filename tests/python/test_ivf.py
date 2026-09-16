@@ -388,3 +388,26 @@ def test_automatic_high_accuracy(nbits, tmp_path):
         ):
             np.testing.assert_array_equal(actual[0], expected[0])
             np.testing.assert_array_equal(actual[1], expected[1])
+
+
+def test_hnsw_centroid_routing_roundtrip(tmp_path):
+    # 20,000 clusters selects HNSW centroid routing rather than the flat router.
+    # One vector per centroid makes nearest-centroid IDs and distances exact.
+    rng = np.random.default_rng(314)
+    count, dim = 20000, 64
+    centroids = rng.standard_normal((count, dim)).astype(np.float32)
+    labels = np.arange(count, dtype=np.uint32)
+    idx = IvfIndex(dim, count, count, nbits=1)
+    idx.build(centroids, centroids, labels, num_threads=1)
+    selected = np.array([0, 17, 1023, count - 1])
+    queries = centroids[selected]
+    ids, distances = idx.search(queries, k=1, nprobe=4, num_threads=1)
+    np.testing.assert_array_equal(ids[:, 0], selected)
+    np.testing.assert_allclose(distances, 0, rtol=0, atol=1e-5)
+
+    path = str(tmp_path / "large_centroid.index")
+    idx.save(path)
+    loaded = IvfIndex.load(path)
+    loaded_ids, loaded_distances = loaded.search(queries, k=1, nprobe=4, num_threads=1)
+    np.testing.assert_array_equal(loaded_ids, ids)
+    np.testing.assert_array_equal(loaded_distances, distances)

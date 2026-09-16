@@ -18,7 +18,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/index/{query,estimator}.hpp` | Query state and distance estimation |
 | `include/rabitqlib/simd/`, `src/simd/` | Kernel declarations, implementations, and dispatch |
-| `src/index/` | Compiled HNSW search kernels |
+| `src/index/` | Compiled SymphonyQG implementation, HNSW search kernels, and IVF candidate insertion |
 | `src/utils/cpu_features.cpp` | Generic x86 feature detection |
 | `include/rabitqlib/utils/` | Rotation, allocation, buffers, I/O, and helpers |
 | `python_bindings/` | pybind11 extension and index wrappers |
@@ -110,6 +110,9 @@ Recommended:
 - Public/generic code calls centralized dispatch entry points. Keep ISA-specific translation units
   and their flags in `CMakeLists.txt` synchronized with feature predicates in
   `src/simd/dispatch.cpp` and detection in `src/utils/cpu_features.cpp`, including HNSW source groups.
+- Use the shared resolver in `src/simd/dispatch.cpp` for cached selection, including HNSW.
+  Keep calculations in backend source files; see the dispatch coverage table in
+  [CONTRIBUTING.md](CONTRIBUTING.md#dispatch-conventions-and-coverage).
 - Dispatch resolves function pointers during static initialization. Detection must use safe generic
   code; never execute a high-ISA kernel to find out whether the CPU supports it.
 - Semantic kernel changes must cover every implementation and a backend-independent reference

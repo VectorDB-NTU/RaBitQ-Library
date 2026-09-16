@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -29,6 +30,10 @@
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
+namespace detail {
+void insert_candidates(buffer::SearchBuffer<float>&, const PID*, const float*, size_t);
+}  // namespace detail
+
 class IVF {
    private:
     using ByteStorage =
@@ -717,11 +722,7 @@ inline void IVF::scan_one_batch(
 
     // Without reranking data, return the one-bit estimates directly.
     if (ex_bits_ == 0 && !raw_reranking_) {
-        for (size_t i = 0; i < num_points; ++i) {
-            PID id = ids[i];
-            float ex_dist = est_distance[i];
-            knns.insert(id, ex_dist);
-        }
+        detail::insert_candidates(knns, ids, est_distance.data(), num_points);
         return;
     }
 

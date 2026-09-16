@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
+#include "rabitqlib/simd/matrix_dispatch.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -88,20 +89,9 @@ inline void gather(const float* data, size_t dim, const Bucket& ids, Workspace& 
 }
 
 inline void pairwise(Workspace& work, size_t size, size_t dim, MetricType metric) {
-    const auto count = static_cast<Eigen::Index>(size);
-    RowMajorMatrixMap<float> points(work.points, count, static_cast<Eigen::Index>(dim));
-    RowMajorMatrixMap<float> distances(work.distances, count, count);
-    VectorMap<float> norms(work.norms, count);
-    distances.setZero();
-    distances.template selfadjointView<Eigen::Lower>().rankUpdate(points);
-    norms = points.rowwise().squaredNorm();
-    for (Eigen::Index i = 0; i < count; ++i) {
-        for (Eigen::Index j = 0; j <= i; ++j) {
-            const float dot = distances(i, j);
-            distances(i, j) =
-                metric == METRIC_L2 ? std::max(0.0F, norms[i] + norms[j] - 2 * dot) : -dot;
-        }
-    }
+    simd::pairwise_distances_lower(
+        work.points, work.distances, work.norms, size, dim, metric == METRIC_IP
+    );
 }
 
 inline std::vector<Bucket> partition(
@@ -130,7 +120,8 @@ inline std::vector<Bucket> partition(
     for (size_t i = 0; i < leader_count; ++i) {
         std::copy_n(data + leaders[i] * dim, dim, leader_data.data() + i * dim);
     }
-    const Vector<float> leader_norms = leader_data.rowwise().squaredNorm();
+    Vector<float> leader_norms(leader_count);
+    simd::row_norms(leader_data.data(), leader_norms.data(), leader_count, dim);
     std::vector<PID> assignments(ids.size() * fanout);
     const auto assign_tile = [&](size_t begin, Workspace& work) {
         const size_t count = std::min(kTileSize, ids.size() - begin);
@@ -146,8 +137,10 @@ inline std::vector<Bucket> partition(
         for (size_t i = 0; i < count; ++i) {
             std::copy_n(data + ids[begin + i] * dim, dim, points.data() + i * dim);
         }
-        distances.noalias() = points * leader_data.transpose();
-        norms = points.rowwise().squaredNorm();
+        simd::matrix_product_transposed(
+            points.data(), leader_data.data(), distances.data(), count, dim, leader_count
+        );
+        simd::row_norms(points.data(), norms.data(), count, dim);
         work.candidates.resize(leader_count);
         for (size_t i = 0; i < count; ++i) {
             for (size_t j = 0; j < leader_count; ++j) {
@@ -315,14 +308,14 @@ inline InitialGraph build_initial_graph(
 #pragma omp parallel for num_threads(threads) schedule(static)
     for (size_t begin = 0; begin < count; begin += kTileSize) {
         const size_t rows = std::min(kTileSize, count - begin);
-        ConstRowMajorMatrixMap<float> points(
+        simd::matrix_product(
             data + begin * dim,
-            static_cast<Eigen::Index>(rows),
-            static_cast<Eigen::Index>(dim)
+            projections.data(),
+            sketches.data() + begin * kHashBits,
+            rows,
+            dim,
+            kHashBits
         );
-        sketches
-            .middleRows(static_cast<Eigen::Index>(begin), static_cast<Eigen::Index>(rows))
-            .noalias() = points * projections;
     }
     const size_t capacity = degree * 5 / 2;
     std::vector<Candidate> table(count * capacity);

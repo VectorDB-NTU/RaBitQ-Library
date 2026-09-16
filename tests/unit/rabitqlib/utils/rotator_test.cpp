@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "rabitqlib/utils/cpu_features.hpp"
 #include "test_data.hpp"
 
 using namespace rabitqlib;
@@ -96,5 +97,94 @@ TEST(FlipSignTest, FlipWorks) {
             ASSERT_EQ(static_cast<uint8_t>(signs & 0xFF), expected);
             signs = 0;
         }
+    }
+}
+
+TEST(FhtDispatchTest, BackendsMatchScalarButterfliesAndPadding) {
+    std::vector<decltype(&simd::fht_rotate)> backends;
+    if (cpu::has_avx2()) {
+        backends.push_back(simd::fht_rotate_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        backends.push_back(simd::fht_rotate_avx512);
+    }
+    if (backends.empty()) {
+        GTEST_SKIP() << "FHT rotation requires AVX2/FMA or AVX512";
+    }
+    backends.push_back(simd::fht_rotate);
+    for (size_t dim : {64U, 65U, 127U, 128U, 129U, 192U, 256U, 512U, 1024U, 2048U, 2049U}) {
+        SCOPED_TRACE(dim);
+        const size_t padded = (dim + 63) / 64 * 64;
+        size_t trunc = 1;
+        while (trunc * 2 <= dim) {
+            trunc *= 2;
+        }
+        const float fac = 1.0F / std::sqrt(static_cast<float>(trunc));
+        std::vector<uint8_t> flip(4 * padded / 8);
+        for (size_t i = 0; i < flip.size(); ++i) {
+            flip[i] = static_cast<uint8_t>(i * 73 + 13);
+        }
+        std::vector<float> data(dim + 1), expected(padded, 0);
+        for (size_t i = 0; i < dim; ++i) {
+            data[i + 1] = std::sin(static_cast<float>(i) * 0.13F);
+            expected[i] = data[i + 1];
+        }
+        for (size_t pass = 0; pass < 4; ++pass) {
+            for (size_t i = 0; i < padded; ++i) {
+                if ((flip[pass * padded / 8 + i / 8] >> (i % 8)) & 1) {
+                    expected[i] = -expected[i];
+                }
+            }
+            const size_t start = pass % 2 == 0 ? 0 : padded - trunc;
+            for (size_t width = 1; width < trunc; width *= 2) {
+                for (size_t block = 0; block < trunc; block += width * 2) {
+                    for (size_t i = 0; i < width; ++i) {
+                        const size_t x = start + block + i, y = x + width;
+                        const float a = expected[x], b = expected[y];
+                        expected[x] = a + b;
+                        expected[y] = a - b;
+                    }
+                }
+            }
+            for (size_t i = start; i < start + trunc; ++i) {
+                expected[i] *= fac;
+            }
+            if (padded != trunc) {
+                for (size_t i = 0; i < padded / 2; ++i) {
+                    const float a = expected[i], b = expected[i + padded / 2];
+                    expected[i] = a + b;
+                    expected[i + padded / 2] = a - b;
+                }
+            }
+        }
+        if (padded != trunc) {
+            for (float& value : expected) {
+                value *= 0.25F;
+            }
+        }
+        for (auto backend : backends) {
+            std::vector<float> actual(padded + 2, 12345);
+            backend(
+                data.data() + 1, actual.data() + 1, dim, padded, trunc, fac, flip.data()
+            );
+            for (size_t i = 0; i < padded; ++i) {
+                EXPECT_NEAR(actual[i + 1], expected[i], 2e-5F);
+            }
+            EXPECT_EQ(actual.front(), 12345);
+            EXPECT_EQ(actual.back(), 12345);
+        }
+    }
+}
+
+TEST(MatrixRotatorTest, PreservesOverlappingInputAndOutput) {
+    rotator_impl::MatrixRotator<float> rotator(3, 3);
+    const float matrix[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    rotator.load(reinterpret_cast<const char*>(matrix));
+    for (size_t offset : {0U, 1U}) {
+        float data[] = {1, 2, 3, 0};
+        rotator.rotate(data, data + offset);
+        EXPECT_FLOAT_EQ(data[offset], 30);
+        EXPECT_FLOAT_EQ(data[offset + 1], 36);
+        EXPECT_FLOAT_EQ(data[offset + 2], 42);
     }
 }
