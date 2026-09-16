@@ -35,7 +35,11 @@ class QuantizedQuery {
     [[nodiscard]] float g_add() const;
 };
 
-class QuantizedGraph {
+template <typename T = float>
+class QuantizedGraph;
+
+template <>
+class QuantizedGraph<float> {
     friend class QGBuilder;
     friend struct QGConstructionTestAccess;
 
@@ -186,5 +190,17 @@ class QuantizedGraph {
         float* __restrict__ dists
     );
 };
+
+// Preserve C++17 deduction for callers that omit the float template argument.
+QuantizedGraph()->QuantizedGraph<float>;
+QuantizedGraph(
+    size_t,
+    size_t,
+    size_t,
+    MetricType = METRIC_L2,
+    RotatorType = RotatorType::FhtKacRotator,
+    size_t = 0
+)
+    ->QuantizedGraph<float>;
 
 }  // namespace rabitqlib::symqg

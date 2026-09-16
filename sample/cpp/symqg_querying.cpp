@@ -7,7 +7,7 @@
 #include "rabitqlib/utils/stopw.hpp"
 
 using PID = rabitqlib::PID;
-using index_type = rabitqlib::symqg::QuantizedGraph;
+using index_type = rabitqlib::symqg::QuantizedGraph<float>;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 

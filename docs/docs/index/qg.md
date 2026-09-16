@@ -40,18 +40,19 @@ window; `ef` controls the query search window. Python defaults to one thread.
 ### C++
 
 The C++ API uses the float-only `rabitqlib::symqg::QuantizedGraph` and `QGBuilder`.
-`QuantizedGraph` is a non-template class; use `QuantizedGraph` instead of
-`QuantizedGraph<float>`. Its implementation is compiled in `src/index/qg.cpp`:
+`QuantizedGraph<float>` retains the C++ template API, with its implementation
+compiled in `src/index/qg.cpp`. C++17 variable declarations can also omit `<float>`
+through class template argument deduction:
 
 ```cpp
-QuantizedGraph(
+QuantizedGraph<float>(
     size_t num, size_t dim, size_t max_deg,
     MetricType metric_type = METRIC_L2,
     RotatorType rotator_type = RotatorType::FhtKacRotator,
     size_t quantization_bits = 0
 );
 QGBuilder(
-    QuantizedGraph& index, uint32_t ef_build, const float* data,
+    QuantizedGraph<float>& index, uint32_t ef_build, const float* data,
     size_t num_threads = std::numeric_limits<size_t>::max(),
     QGInitialization init = QGInitialization::PiPNN
 );
@@ -66,7 +67,7 @@ The builder handles initialization internally.
 using namespace rabitqlib::symqg;
 
 // data contains rows * cols floats.
-QuantizedGraph qg(rows, cols, 32);
+QuantizedGraph<float> qg(rows, cols, 32);
 {
     QGBuilder builder(qg, 200, data.data(), 32, QGInitialization::PiPNN);
     builder.build();
@@ -99,7 +100,7 @@ C++ search accepts one vector in the original input dimension and writes `k` IDs
 and distances:
 
 ```cpp
-QuantizedGraph qg;
+QuantizedGraph<float> qg;
 qg.load("qg_example.index");
 qg.set_ef(100);
 

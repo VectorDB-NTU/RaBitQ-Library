@@ -32,7 +32,7 @@ class QGBuilder {
     friend struct QGConstructionTestAccess;
 
    private:
-    QuantizedGraph& qg_;
+    QuantizedGraph<float>& qg_;
     size_t ef_build_;      // size of search pool for indexing
     size_t num_threads_;   // number of threads used for indexing
     size_t num_nodes_;     // num of data points
@@ -59,7 +59,7 @@ class QGBuilder {
 
     void initialize_storage(const float* data);
 
-    QGBuilder(QuantizedGraph& index, uint32_t ef_build, size_t num_threads)
+    QGBuilder(QuantizedGraph<float>& index, uint32_t ef_build, size_t num_threads)
         : qg_{index}
         , ef_build_{ef_build}
         , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
@@ -69,7 +69,7 @@ class QGBuilder {
 
    public:
     explicit QGBuilder(
-        QuantizedGraph& index,
+        QuantizedGraph<float>& index,
         uint32_t ef_build,
         const float* data,
         size_t num_threads = std::numeric_limits<size_t>::max(),
