@@ -66,7 +66,7 @@ class SymqgIndex {
         }
 
         num_points_ = static_cast<size_t>(data_array.shape(0));
-        index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph>(
+        index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>(
             num_points_,
             dim_,
             max_degree_,
@@ -167,7 +167,7 @@ class SymqgIndex {
 
     static SymqgIndex load(const std::string& path) {
         SymqgIndex wrapper;
-        wrapper.index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph>();
+        wrapper.index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>();
         wrapper.index_->load(path.c_str());
         wrapper.num_points_ = wrapper.index_->num_vertices();
         wrapper.dim_ = wrapper.index_->dimension();
@@ -194,7 +194,7 @@ class SymqgIndex {
     rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
     size_t quantization_bits_ = 0;
     bool built_ = false;
-    std::unique_ptr<rabitqlib::symqg::QuantizedGraph> index_;
+    std::unique_ptr<rabitqlib::symqg::QuantizedGraph<float>> index_;
 };
 
 }  // namespace rabitqlib::python_bindings

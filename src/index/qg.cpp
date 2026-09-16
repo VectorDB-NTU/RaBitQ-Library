@@ -46,97 +46,101 @@ const float* QuantizedQuery::rotated_query() const { return rotated_query_; }
 float QuantizedQuery::k1xsumq() const { return k1xsumq_; }
 float QuantizedQuery::g_add() const { return g_add_; }
 
-size_t QuantizedGraph::checked_add(size_t lhs, size_t rhs) {
+size_t QuantizedGraph<float>::checked_add(size_t lhs, size_t rhs) {
     if (lhs > std::numeric_limits<size_t>::max() - rhs) {
         throw std::length_error("QuantizedGraph storage size exceeds size_t");
     }
     return lhs + rhs;
 }
 
-size_t QuantizedGraph::checked_multiply(size_t lhs, size_t rhs) {
+size_t QuantizedGraph<float>::checked_multiply(size_t lhs, size_t rhs) {
     if (lhs != 0 && rhs > std::numeric_limits<size_t>::max() / lhs) {
         throw std::length_error("QuantizedGraph storage size exceeds size_t");
     }
     return lhs * rhs;
 }
 
-size_t QuantizedGraph::padded_dimension(size_t dim) {
+size_t QuantizedGraph<float>::padded_dimension(size_t dim) {
     return (checked_add(dim, 63) / 64) * 64;
 }
 
-char* QuantizedGraph::get_row_data(PID data_id) {
+char* QuantizedGraph<float>::get_row_data(PID data_id) {
     return reinterpret_cast<char*>(get_vector(data_id));
 }
 
-const char* QuantizedGraph::get_row_data(PID data_id) const {
+const char* QuantizedGraph<float>::get_row_data(PID data_id) const {
     return reinterpret_cast<const char*>(get_vector(data_id));
 }
 
-float* QuantizedGraph::get_vector(PID data_id) {
+float* QuantizedGraph<float>::get_vector(PID data_id) {
     return data_.data() + ((row_offset_ / sizeof(float)) * data_id);
 }
 
-const float* QuantizedGraph::get_vector(PID data_id) const {
+const float* QuantizedGraph<float>::get_vector(PID data_id) const {
     return data_.data() + ((row_offset_ / sizeof(float)) * data_id);
 }
 
-char* QuantizedGraph::get_quantized_vector(PID data_id) { return get_row_data(data_id); }
-
-const char* QuantizedGraph::get_quantized_vector(PID data_id) const {
+char* QuantizedGraph<float>::get_quantized_vector(PID data_id) {
     return get_row_data(data_id);
 }
 
-char* QuantizedGraph::get_batch_data(PID data_id) {
+const char* QuantizedGraph<float>::get_quantized_vector(PID data_id) const {
+    return get_row_data(data_id);
+}
+
+char* QuantizedGraph<float>::get_batch_data(PID data_id) {
     return get_row_data(data_id) + batch_data_offset_;
 }
 
-const char* QuantizedGraph::get_batch_data(PID data_id) const {
+const char* QuantizedGraph<float>::get_batch_data(PID data_id) const {
     return get_row_data(data_id) + batch_data_offset_;
 }
 
-rabitqlib::detail::PackedArrayView<PID> QuantizedGraph::get_neighbors(PID data_id) {
+rabitqlib::detail::PackedArrayView<PID> QuantizedGraph<float>::get_neighbors(PID data_id) {
     return rabitqlib::detail::PackedArrayView<PID>(
         get_row_data(data_id) + neighbor_offset_
     );
 }
 
-rabitqlib::detail::ConstPackedArrayView<PID> QuantizedGraph::get_neighbors(PID data_id
+rabitqlib::detail::ConstPackedArrayView<PID> QuantizedGraph<float>::get_neighbors(
+    PID data_id
 ) const {
     return rabitqlib::detail::ConstPackedArrayView<PID>(
         get_row_data(data_id) + neighbor_offset_
     );
 }
 
-size_t QuantizedGraph::num_vertices() const { return this->num_points_; }
+size_t QuantizedGraph<float>::num_vertices() const { return this->num_points_; }
 
-size_t QuantizedGraph::dimension() const { return this->dim_; }
+size_t QuantizedGraph<float>::dimension() const { return this->dim_; }
 
-size_t QuantizedGraph::degree_bound() const { return this->degree_bound_; }
+size_t QuantizedGraph<float>::degree_bound() const { return this->degree_bound_; }
 
-PID QuantizedGraph::entry_point() const { return this->entry_point_; }
+PID QuantizedGraph<float>::entry_point() const { return this->entry_point_; }
 
-MetricType QuantizedGraph::metric_type() const { return this->metric_type_; }
+MetricType QuantizedGraph<float>::metric_type() const { return this->metric_type_; }
 
-size_t QuantizedGraph::quantization_bits() const { return this->quantization_bits_; }
+size_t QuantizedGraph<float>::quantization_bits() const { return this->quantization_bits_; }
 
-bool QuantizedGraph::is_quantized() const { return quantization_bits_ != 0; }
+bool QuantizedGraph<float>::is_quantized() const { return quantization_bits_ != 0; }
 
-void QuantizedGraph::set_ep(PID entry) {
+void QuantizedGraph<float>::set_ep(PID entry) {
     if (entry >= num_points_) {
         throw std::invalid_argument("QuantizedGraph entry point is out of range");
     }
     entry_point_ = entry;
 }
 
-QuantizedGraph::QuantizedGraph() = default;
+QuantizedGraph<float>::QuantizedGraph() = default;
 
-QuantizedGraph::~QuantizedGraph() = default;
+QuantizedGraph<float>::~QuantizedGraph() = default;
 
-QuantizedGraph::QuantizedGraph(QuantizedGraph&&) noexcept = default;
+QuantizedGraph<float>::QuantizedGraph(QuantizedGraph<float>&&) noexcept = default;
 
-QuantizedGraph& QuantizedGraph::operator=(QuantizedGraph&&) noexcept = default;
+QuantizedGraph<float>& QuantizedGraph<float>::operator=(QuantizedGraph<float>&&) noexcept =
+    default;
 
-QuantizedGraph::QuantizedGraph(
+QuantizedGraph<float>::QuantizedGraph(
     size_t num,
     size_t dim,
     size_t max_deg,
@@ -156,7 +160,7 @@ QuantizedGraph::QuantizedGraph(
     initialize();
 }
 
-void QuantizedGraph::validate_configuration() const {
+void QuantizedGraph<float>::validate_configuration() const {
     validate_metric_type(metric_type_);
     if (dim_ == 0) {
         throw std::invalid_argument("QuantizedGraph dimension must be positive");
@@ -190,7 +194,7 @@ void QuantizedGraph::validate_configuration() const {
     }
 }
 
-void QuantizedGraph::copy_vectors(const float* data, size_t num_threads) {
+void QuantizedGraph<float>::copy_vectors(const float* data, size_t num_threads) {
     const int thread_count = static_cast<int>(num_threads);
     if (quantization_bits_ != 0) {
         if (centroid_.size() != padded_dim_) {
@@ -237,7 +241,7 @@ void QuantizedGraph::copy_vectors(const float* data, size_t num_threads) {
     }
 }
 
-void QuantizedGraph::set_quantization_centroid(const float* centroid) {
+void QuantizedGraph<float>::set_quantization_centroid(const float* centroid) {
     if (quantization_bits_ == 0) {
         return;
     }
@@ -245,7 +249,7 @@ void QuantizedGraph::set_quantization_centroid(const float* centroid) {
     rotator_->rotate(centroid, centroid_.data());
 }
 
-void QuantizedGraph::save(const char* filename) const {
+void QuantizedGraph<float>::save(const char* filename) const {
     if (!ready_ || rotator_ == nullptr) {
         throw std::logic_error("QuantizedGraph must be built or loaded before save");
     }
@@ -298,7 +302,7 @@ void QuantizedGraph::save(const char* filename) const {
     output.close();
 }
 
-void QuantizedGraph::load(const char* filename) {
+void QuantizedGraph<float>::load(const char* filename) {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("QuantizedGraph load filename must not be empty");
     }
@@ -345,7 +349,7 @@ void QuantizedGraph::load(const char* filename) {
         input.seekg(0);
     }
 
-    QuantizedGraph loaded;
+    QuantizedGraph<float> loaded;
     size_t stored_padded_dim = 0;
     read_value(loaded.num_points_, "point count");
     read_value(loaded.degree_bound_, "degree bound");
@@ -424,14 +428,14 @@ void QuantizedGraph::load(const char* filename) {
     *this = std::move(loaded);
 }
 
-void QuantizedGraph::set_ef(size_t cur_ef) {
+void QuantizedGraph<float>::set_ef(size_t cur_ef) {
     if (cur_ef == 0) {
         throw std::invalid_argument("QuantizedGraph ef must be positive");
     }
     this->ef_ = cur_ef;
 }
 
-void QuantizedGraph::search(
+void QuantizedGraph<float>::search(
     const float* __restrict__ query,
     uint32_t k,
     uint32_t* __restrict__ results,
@@ -495,7 +499,7 @@ void QuantizedGraph::search(
     res_pool.copy_results(results, dists);
 }
 
-void QuantizedGraph::prepare_query(
+void QuantizedGraph<float>::prepare_query(
     const float* query,
     std::vector<float>& rotated_query,
     std::optional<QuantizedQuery>& quantized_query
@@ -509,7 +513,7 @@ void QuantizedGraph::prepare_query(
     }
 }
 
-float QuantizedGraph::point_distance(
+float QuantizedGraph<float>::point_distance(
     const float* raw_query, const QuantizedQuery* quantized_query, PID data_id
 ) const {
     if (quantized_query != nullptr) {
@@ -520,7 +524,7 @@ float QuantizedGraph::point_distance(
 
 // Scan a data row and store estimated neighbor distances. The caller scores the current
 // vertex from either its raw vector (vanilla QG) or its 4/8-bit code (qg-quant).
-void QuantizedGraph::scan_neighbors(
+void QuantizedGraph<float>::scan_neighbors(
     const BatchQuery<float>& q_obj,
     PID data_id,
     float* est_dist,
@@ -559,7 +563,7 @@ void QuantizedGraph::scan_neighbors(
     }
 }
 
-void QuantizedGraph::update_results(
+void QuantizedGraph<float>::update_results(
     buffer::SearchBuffer<float>& result_pool,
     VisitedSet& vis,
     const float* query,
@@ -591,7 +595,7 @@ void QuantizedGraph::update_results(
 }
 
 // initialize const offsets & data array
-void QuantizedGraph::initialize_layout() {
+void QuantizedGraph<float>::initialize_layout() {
     if (quantization_bits_ == 0) {
         batch_data_offset_ = checked_multiply(dim_, sizeof(float));
     } else {
@@ -612,7 +616,7 @@ void QuantizedGraph::initialize_layout() {
         checked_add(neighbor_offset_, checked_multiply(degree_bound_, sizeof(PID)));
 }
 
-void QuantizedGraph::initialize() {
+void QuantizedGraph<float>::initialize() {
     padded_dim_ = padded_dimension(dim_);
     rotator_.reset(choose_rotator<float>(dim_, rotator_type_, padded_dim_));
 
@@ -630,7 +634,8 @@ void QuantizedGraph::initialize() {
     }
 }
 
-float QuantizedGraph::quantized_distance(const QuantizedQuery& query, PID data_id) const {
+float QuantizedGraph<float>::quantized_distance(const QuantizedQuery& query, PID data_id)
+    const {
     ConstExDataMap<float> data(
         get_quantized_vector(data_id), padded_dim_, quantization_bits_
     );
@@ -647,7 +652,8 @@ float QuantizedGraph::quantized_distance(const QuantizedQuery& query, PID data_i
     );
 }
 
-void QuantizedGraph::reconstruct_quantized_vector(PID data_id, float* reconstructed) const {
+void QuantizedGraph<float>::reconstruct_quantized_vector(PID data_id, float* reconstructed)
+    const {
     ConstExDataMap<float> data(
         get_quantized_vector(data_id), padded_dim_, quantization_bits_
     );
@@ -678,7 +684,7 @@ void QuantizedGraph::reconstruct_quantized_vector(PID data_id, float* reconstruc
 
 // Construction sources come from owned raw rows or from the existing RaBitQ codes.
 // Reconstructed sources are already rotated; never pass them through prepare_query.
-const float* QuantizedGraph::prepare_build_query(
+const float* QuantizedGraph<float>::prepare_build_query(
     PID id, std::vector<float>& rotated, std::optional<QuantizedQuery>& prepared
 ) const {
     if (is_quantized()) {
@@ -692,7 +698,7 @@ const float* QuantizedGraph::prepare_build_query(
 }
 
 // find candidate neighbors for cur_id, exclude the vertex itself
-void QuantizedGraph::find_candidates(
+void QuantizedGraph<float>::find_candidates(
     PID cur_id,
     size_t search_ef,
     std::vector<AnnCandidate<float>>& results,
@@ -731,7 +737,7 @@ void QuantizedGraph::find_candidates(
 }
 
 // based on new neighbor lists to update quantization code and factors
-void QuantizedGraph::update_qg(
+void QuantizedGraph<float>::update_qg(
     PID cur_id, const std::vector<AnnCandidate<float>>& new_neighbors
 ) {
     size_t cur_degree = new_neighbors.size();
