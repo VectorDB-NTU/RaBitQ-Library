@@ -130,13 +130,12 @@ inline void one_bit_code_with_factor(
     // We use unnormalized vector to get error factor. To be more specific,
     // sqrt((1 - <o, o_bar>^2) / <o, o_bar>^2) / sqrt(dim - 1) = 3rd item in following
     // expression
-    T tmp_error =
-        l2_norm * kConstEpsilon *
-        std::sqrt(
-            (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
-             1) /
-            (dim - 1)
-        );
+    // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
+    const T normalized_error =
+        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1
+        ) /
+        (dim - 1);
+    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
 
     // 3 factors used for distance estimation, please refer to document for more info.
     // For f_rescale and 2nd item of f_add, we use the dot product of raw residual (rather
@@ -611,13 +610,12 @@ inline void ex_bits_code_with_factor(
     // A nonzero residual and its quantized code have a strictly positive inner product.
     assert(ip_resi_xucb > 0);
 
-    T tmp_error =
-        l2_norm * kConstEpsilon *
-        std::sqrt(
-            (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
-             1) /
-            (dim - 1)
-        );
+    // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
+    const T normalized_error =
+        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1
+        ) /
+        (dim - 1);
+    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
 
     if (metric_type == METRIC_L2) {
         f_add_ex = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);

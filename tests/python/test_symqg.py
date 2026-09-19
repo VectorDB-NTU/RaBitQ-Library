@@ -117,6 +117,70 @@ def test_search_rejects_ef_smaller_than_k(built_symqg, query_data):
         built_symqg.search(query_data, k=10, ef=9)
 
 
+@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("replacement_points", [0, _MAX_DEGREE])
+def test_failed_rebuild_preserves_index(
+    base_data, query_data, tmp_path, bits, metric, replacement_points
+):
+    data = base_data[:40]
+    queries = query_data[:3]
+    index = SymqgIndex(
+        DIM, max_degree=_MAX_DEGREE, metric=metric, quantization_bits=bits
+    )
+    index.build(data, ef_construction=_EF_BUILD)
+    expected_ids, expected_distances = index.search(queries, k=5, ef=_EF)
+    before_path = tmp_path / "before.index"
+    index.save(str(before_path))
+
+    with pytest.raises(
+        ValueError,
+        match="QuantizedGraph degree bound must be smaller than the number of points",
+    ):
+        index.build(data[:replacement_points], ef_construction=_EF_BUILD)
+
+    assert index.is_built
+    assert index.num_points == len(data)
+    assert index.dim == DIM
+    assert index.max_degree == _MAX_DEGREE
+    assert index.metric == metric
+    assert index.quantization_bits == bits
+    ids, distances = index.search(queries, k=5, ef=_EF)
+    np.testing.assert_array_equal(ids, expected_ids)
+    np.testing.assert_array_equal(distances, expected_distances)
+
+    after_path = tmp_path / "after.index"
+    index.save(str(after_path))
+    assert after_path.read_bytes() == before_path.read_bytes()
+    restored = SymqgIndex.load(str(after_path))
+    assert restored.num_points == len(data)
+    restored_ids, restored_distances = restored.search(queries, k=5, ef=_EF)
+    np.testing.assert_array_equal(restored_ids, expected_ids)
+    np.testing.assert_array_equal(restored_distances, expected_distances)
+
+
+@pytest.mark.parametrize("bits", [0, 4, 8])
+def test_successful_rebuild_replaces_index(base_data, tmp_path, bits):
+    index = SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=bits)
+    index.build(base_data[:40], ef_construction=_EF_BUILD)
+    replacement = base_data[40:88] + 10
+    index.build(replacement, ef_construction=_EF_BUILD)
+
+    assert index.is_built
+    assert index.num_points == len(replacement)
+    assert index.quantization_bits == bits
+    ids, distances = index.search(replacement[:3], k=1, ef=_EF)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(3))
+
+    path = str(tmp_path / "rebuilt.index")
+    index.save(path)
+    restored = SymqgIndex.load(path)
+    assert restored.num_points == len(replacement)
+    restored_ids, restored_distances = restored.search(replacement[:3], k=1, ef=_EF)
+    np.testing.assert_array_equal(restored_ids, ids)
+    np.testing.assert_array_equal(restored_distances, distances)
+
+
 def test_invalid_degree_raises():
     with pytest.raises(Exception):
         SymqgIndex(DIM, max_degree=16)

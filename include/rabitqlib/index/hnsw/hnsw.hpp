@@ -442,6 +442,9 @@ inline HierarchicalNSW::~HierarchicalNSW() { free_memory(); }
 
 inline void HierarchicalNSW::save(const char* filename) const {
     std::ofstream output(filename, std::ios::binary);
+    if (!output.is_open()) {
+        throw std::runtime_error("HNSW: cannot open index file for writing");
+    }
 
     output.write(reinterpret_cast<const char*>(&max_elements_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&cur_element_count_), sizeof(size_t));
@@ -491,6 +494,9 @@ inline void HierarchicalNSW::save(const char* filename) const {
 
     rotator_->save(output);
     output.close();
+    if (!output) {
+        throw std::runtime_error("HNSW: failed to write index file");
+    }
 }
 
 inline void HierarchicalNSW::load(const char* filename) {
@@ -644,6 +650,7 @@ inline void HierarchicalNSW::add_point(
     std::unique_lock<std::mutex> lock_label(get_lable_op_mutex(label));
 
     int level = -1;
+    int curlevel = 0;
     PID cur_c = 0;
     {
         std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
@@ -661,10 +668,10 @@ inline void HierarchicalNSW::add_point(
         cur_c = cur_element_count_;
         cur_element_count_++;
         label_lookup_[label] = cur_c;
+        curlevel = get_random_level(mult_);
     }
 
     std::unique_lock<std::mutex> lock_el(link_list_locks_[cur_c]);
-    int curlevel = get_random_level(mult_);
     if (level > 0) {
         curlevel = level;
     }
