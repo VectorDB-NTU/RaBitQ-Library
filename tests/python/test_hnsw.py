@@ -1,5 +1,7 @@
 """Tests for HnswIndex: construction, search, properties, error handling, save/load."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from conftest import DIM, N_CLUSTERS, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
@@ -40,6 +42,15 @@ def test_fast_quantization_builds(base_data, clusters):
     centroids, cluster_ids = clusters
     idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
     assert idx.is_built
+
+
+def test_parallel_build_preserves_self_retrieval(base_data, clusters):
+    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    centroids, cluster_ids = clusters
+    idx.build(base_data, centroids, cluster_ids, num_threads=8)
+    ids, distances = idx.search(base_data[:10], k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(10))
+    assert np.isfinite(distances).all()
 
 
 # ── search output shape and dtype ─────────────────────────────────────────────
@@ -122,6 +133,17 @@ def test_search_before_build_raises(query_data):
 
 
 # ── save / load roundtrip ─────────────────────────────────────────────────────
+
+
+def test_save_rejects_unopenable_destination(built_hnsw, tmp_path):
+    with pytest.raises(RuntimeError, match="HNSW: cannot open index file for writing"):
+        built_hnsw.save(str(tmp_path / "missing" / "hnsw.index"))
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="/dev/full is unavailable")
+def test_save_reports_write_or_close_failure(built_hnsw):
+    with pytest.raises(RuntimeError, match="HNSW: failed to write index file"):
+        built_hnsw.save("/dev/full")
 
 
 def test_save_load_roundtrip(built_hnsw, query_data, tmp_path):

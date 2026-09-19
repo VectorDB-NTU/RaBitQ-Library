@@ -17,6 +17,7 @@
 #include "rabitqlib/index/lut.hpp"
 #include "rabitqlib/index/query.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/simd/estimator_dispatch.hpp"
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
@@ -233,6 +234,57 @@ TEST(FastScanHighAccuracyTest, Avx512TransferAcceptsUnalignedOutput) {
     ASSERT_NE(reinterpret_cast<uintptr_t>(storage.data() + 1) % 16, uintptr_t{0});
     simd::transfer_lut_hacc_avx512(lut.data(), kDim, storage.data() + 1);
     EXPECT_TRUE(std::equal(expected.begin(), expected.end(), storage.begin() + 1));
+}
+
+TEST(BatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
+    if (!cpu::has_avx2() && !cpu::has_avx512_core()) {
+        GTEST_SKIP() << "FastScan requires AVX2/FMA or AVX512";
+    }
+    using Estimator = decltype(&rabitqlib::simd::split_batch_estdist);
+    std::vector<Estimator> backends{
+        rabitqlib::simd::split_batch_estdist, rabitqlib::simd::split_batch_estdist_generic};
+    if (cpu::has_avx2()) {
+        backends.push_back(rabitqlib::simd::split_batch_estdist_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        backends.push_back(rabitqlib::simd::split_batch_estdist_avx512);
+    }
+
+    constexpr size_t kDim = 512;
+    std::array<float, kDim> data;
+    data.fill(0.1F);
+    const std::array<float, kDim> centroid{};
+    for (MetricType metric : {METRIC_L2, METRIC_IP}) {
+        std::vector<char> storage(BatchDataMap<float>::data_bytes(kDim), 0);
+        quant::quantize_one_batch(
+            data.data(), centroid.data(), 1, kDim, storage.data(), metric
+        );
+        for (bool hacc : {false, true}) {
+            SCOPED_TRACE(
+                ::testing::Message()
+                << "metric=" << static_cast<int>(metric) << " hacc=" << hacc
+            );
+            SplitBatchQuery<float> query(data.data(), kDim, 3, metric, hacc);
+            query.set_g_add(std::sqrt(static_cast<float>(kDim)) * 0.1F);
+            for (auto backend : backends) {
+                std::array<float, kBatchSize> distance{}, lower{}, ip{};
+                backend(
+                    storage.data(),
+                    query,
+                    kDim,
+                    distance.data(),
+                    lower.data(),
+                    ip.data(),
+                    hacc
+                );
+                EXPECT_TRUE(std::isfinite(distance[0]));
+                EXPECT_TRUE(std::isfinite(lower[0]));
+                EXPECT_LE(lower[0], distance[0]);
+                // IVF must be able to admit this candidate into an empty search buffer.
+                EXPECT_LT(lower[0], std::numeric_limits<float>::max());
+            }
+        }
+    }
 }
 
 TEST(BatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTailBatches) {

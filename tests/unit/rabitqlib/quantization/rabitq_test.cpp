@@ -356,6 +356,43 @@ TEST(RabitqDegenerateInputTest, ExtraBitFactorsAreFiniteForZeroResidual) {
     EXPECT_FLOAT_EQ(f_error, 0.0F);
 }
 
+TEST(RabitqDegenerateInputTest, FullFactorsAreFiniteForCollinearResidual) {
+    constexpr size_t kDim = 512;
+    std::array<float, kDim> data;
+    data.fill(0.1F);
+    const std::array<float, kDim> centroid{};
+    std::array<uint16_t, kDim> code{};
+
+    // Equal coordinates make the residual and quantized direction collinear.
+    // Their theoretically zero error must remain finite despite norm/dot rounding.
+    for (MetricType metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits = 1; bits <= 9; ++bits) {
+            SCOPED_TRACE(
+                ::testing::Message()
+                << "metric=" << static_cast<int>(metric) << " bits=" << bits
+            );
+            float f_add = 0;
+            float f_rescale = 0;
+            float f_error = 0;
+            quantize_full_single(
+                data.data(),
+                centroid.data(),
+                kDim,
+                bits,
+                code.data(),
+                f_add,
+                f_rescale,
+                f_error,
+                metric
+            );
+            EXPECT_TRUE(std::isfinite(f_add));
+            EXPECT_TRUE(std::isfinite(f_rescale));
+            EXPECT_TRUE(std::isfinite(f_error));
+            EXPECT_GE(f_error, 0.0F);
+        }
+    }
+}
+
 TEST(RabitqDegenerateInputTest, ScalarQuantizationReconstructsZeroVector) {
     constexpr size_t kDim = 64;
     std::array<float, kDim> data{};

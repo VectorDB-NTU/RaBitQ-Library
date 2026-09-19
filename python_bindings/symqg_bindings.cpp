@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "bindings_common.hpp"
@@ -65,9 +66,9 @@ class SymqgIndex {
             throw std::invalid_argument("data dimension does not match index dim");
         }
 
-        num_points_ = static_cast<size_t>(data_array.shape(0));
-        index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>(
-            num_points_,
+        const size_t num_points = static_cast<size_t>(data_array.shape(0));
+        auto index = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>(
+            num_points,
             dim_,
             max_degree_,
             metric_,
@@ -78,13 +79,15 @@ class SymqgIndex {
         const auto initialization = init == "pipnn" ? symqg::QGInitialization::PiPNN
                                                     : symqg::QGInitialization::Random;
         symqg::QGBuilder builder(
-            *index_,
+            *index,
             static_cast<uint32_t>(ef_construction),
             data_array.data(),
             num_threads,
             initialization
         );
         builder.build();
+        index_ = std::move(index);
+        num_points_ = num_points;
         built_ = true;
     }
 
