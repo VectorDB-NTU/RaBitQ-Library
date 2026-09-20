@@ -1,17 +1,11 @@
-name: Usage or contribution question
-description: Ask about using the library or getting started as a contributor.
-title: "[Question]: "
+name: Question
+description: Ask about using RaBitQ or contributing.
 assignees: [gouyt13]
 body:
   - type: textarea
     id: question
     attributes:
       label: How can we help?
-      description: Describe your goal and where you are stuck. For a contribution question, link the task or relevant files.
+      description: Ask your question. Add code or context if useful.
     validations:
       required: true
-  - type: textarea
-    id: context
-    attributes:
-      label: What have you tried?
-      description: Include relevant code, documentation you followed, and your package version or commit. Remove credentials and private data.

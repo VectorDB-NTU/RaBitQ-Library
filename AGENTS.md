@@ -26,8 +26,8 @@ factors estimate L2 distance or inner product.
 | `tests/unit/`, `tests/integration/`, `tests/python/` | C++ and Python tests |
 | `docs/docs/` | MkDocs site sources |
 
-See [README.md](README.md) for usage, [CONTRIBUTING.md](CONTRIBUTING.md) for tool setup and
-[implementation recipes](CONTRIBUTING.md#implementation-recipes), and
+See [README.md](README.md) for usage, [DEVELOPMENT.md](DEVELOPMENT.md) for tool setup and
+[implementation recipes](DEVELOPMENT.md#implementation-recipes), and
 [tests/README.md](tests/README.md) for build and test commands.
 
 ## Required working boundaries
@@ -52,7 +52,7 @@ See [README.md](README.md) for usage, [CONTRIBUTING.md](CONTRIBUTING.md) for too
 Run the smallest relevant check first, then broaden for shared contracts and regression risk.
 Apply all matching rows; these are conditional requirements, not a checklist for every edit.
 Run tests in the foreground. Use the existing project interpreter wherever commands say `python`.
-Tool versions and installation instructions are maintained in [CONTRIBUTING.md](CONTRIBUTING.md).
+Tool versions and installation instructions are maintained in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 | Change | Required verification |
 | --- | --- |
@@ -73,7 +73,7 @@ If a required tool, dependency, or supported CPU is unavailable, report the bloc
 still needed; do not silently skip it or replace the user's environment.
 When a check fails, determine whether the change caused it. Fix introduced failures; report
 unrelated baseline failures without expanding scope. Preserve user edits when comparing baselines.
-For focused static analysis, use the recipe in [CONTRIBUTING.md](CONTRIBUTING.md#focused-static-analysis).
+For focused static analysis, use the recipe in [DEVELOPMENT.md](DEVELOPMENT.md#focused-static-analysis).
 
 Behavior changes require focused regression coverage. Python-visible core changes normally need
 both an underlying C++ test and a Python boundary test; Python-only changes need Python coverage.
@@ -112,7 +112,7 @@ Recommended:
   `src/simd/dispatch.cpp` and detection in `src/utils/cpu_features.cpp`, including HNSW source groups.
 - Use the shared resolver in `src/simd/dispatch.cpp` for cached selection, including HNSW.
   Keep calculations in backend source files; see the dispatch coverage table in
-  [CONTRIBUTING.md](CONTRIBUTING.md#dispatch-conventions-and-coverage).
+  [DEVELOPMENT.md](DEVELOPMENT.md#dispatch-conventions-and-coverage).
 - Dispatch resolves function pointers during static initialization. Detection must use safe generic
   code; never execute a high-ISA kernel to find out whether the CPU supports it.
 - Semantic kernel changes must cover every implementation and a backend-independent reference

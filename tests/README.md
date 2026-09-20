@@ -5,10 +5,10 @@ binding tests for RaBitQ Library.
 
 ## Prerequisites
 
-- CMake 3.15 or newer
+- CMake 3.20 or newer for the `ctest --test-dir` commands below
 - A GCC- or Clang-compatible C++17 compiler with OpenMP support
 - An x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 runtime dispatch
-- Network access during the first configuration so CMake can download
+- Git and network access during the first configuration so CMake can download
   GoogleTest 1.14.0
 
 The current CMake configuration uses GCC/Clang command-line options and does
@@ -18,7 +18,7 @@ On Ubuntu or Debian, install the required build tools with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake libomp-dev
+sudo apt-get install -y git build-essential cmake libomp-dev
 ```
 
 ## Building and Running Tests

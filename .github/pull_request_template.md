@@ -1,14 +1,9 @@
-## Problem and change
+## Summary
 
-<!-- Explain the problem and resulting behavior. Link a related issue if applicable. -->
+<!-- What changed and why? Link a related issue if there is one.
+Mention any API, saved-index format, or dependency changes if applicable. -->
 
-## Validation
+## Testing
 
-<!-- List commands run and results, including failures or unavailable checks.
-See CONTRIBUTING.md for checks that apply to your change. Prose-only changes
-do not require a C++ build. For behavior changes, describe regression coverage.
-For performance claims, include reproducible benchmark settings and results. -->
-
-## Compatibility
-
-<!-- Mention any API, index-format, or dependency changes; otherwise write "No changes". -->
+<!-- What did you check, and what were the results? Note any checks you couldn't run.
+See CONTRIBUTING.md for required checks; include benchmark results for performance claims. -->

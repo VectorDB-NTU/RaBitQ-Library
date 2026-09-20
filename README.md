@@ -27,6 +27,12 @@
 
 </div>
 
+> **Contributors welcome!** Help shape RaBitQ by reporting bugs, asking questions,
+> suggesting features, or contributing code, tests, documentation, and examples.
+> First-time contributors are welcome—[open an issue](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose)
+> or start with our [contribution guide](CONTRIBUTING.md#your-first-contribution)
+> and [starter tasks](CONTRIBUTING.md#starter-tasks).
+
 ## News
 
 - **September 2026 — IVF raw-vector reranking:** Set `nbits=32` to store raw
@@ -89,7 +95,7 @@ persistence.
 <details>
 <summary>Build the Python bindings from source</summary>
 
-Source builds require a C++17 compiler, CMake 3.15 or newer, and OpenMP. On
+Source builds require a C++17 compiler, CMake 3.20 or newer, and OpenMP. On
 Ubuntu or Debian:
 
 ```bash
@@ -210,7 +216,7 @@ and HNSW implementations, with links to the source code.
 
 ### Requirements
 
-- CMake 3.15 or newer
+- CMake 3.20 or newer
 - a C++17 compiler with OpenMP support
 - an x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA

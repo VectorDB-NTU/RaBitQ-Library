@@ -1,33 +1,22 @@
 name: Bug report
-description: Report a crash, incorrect result, or installation problem.
-title: "[Bug]: "
+description: Report a bug or installation problem.
 labels: [bug]
 assignees: [gouyt13]
 body:
   - type: textarea
     id: behavior
     attributes:
-      label: What happened?
-      description: Describe the actual behavior and what you expected instead.
+      label: What went wrong?
+      description: Tell us what happened and what you expected. Include any error message.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: Minimal reproduction
-      description: Include the smallest script or commands that reproduce the problem. Prefer synthetic data.
-    validations:
-      required: true
+      label: How can we reproduce it? (optional)
+      description: Share steps or a small code example, if available.
   - type: textarea
     id: environment
     attributes:
-      label: Environment
-      description: Include the package version or commit, OS, CPU model and AVX2/AVX-512 capabilities if known, Python version, and installation command. For source builds, include compiler, CMake version, and build flags.
-    validations:
-      required: true
-  - type: textarea
-    id: logs
-    attributes:
-      label: Logs or stack trace
-      description: Include relevant errors or a backtrace, if available. Remove credentials and private data.
-      render: text
+      label: Environment (optional)
+      description: Share your RaBitQ version, OS, and how you installed it. Add Python or compiler details if relevant.
