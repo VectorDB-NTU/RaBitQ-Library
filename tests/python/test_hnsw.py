@@ -45,7 +45,9 @@ def test_fast_quantization_builds(base_data, clusters):
 
 
 def test_parallel_build_preserves_self_retrieval(base_data, clusters):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    # Keep every neighbor so insertion-order-dependent pruning cannot isolate a
+    # point. This checks parallel construction, not sparse-graph recall.
+    idx = HnswIndex(DIM, N_VECTORS, M=N_VECTORS, ef_construction=N_VECTORS, nbits=4)
     centroids, cluster_ids = clusters
     idx.build(base_data, centroids, cluster_ids, num_threads=8)
     ids, distances = idx.search(base_data[:10], k=1, ef=N_VECTORS)
