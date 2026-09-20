@@ -1,25 +1,17 @@
 name: Feature request
-description: Propose a focused improvement or discuss project priorities.
-title: "[Feature]: "
+description: Suggest an improvement.
 labels: [enhancement]
 assignees: [gouyt13]
 body:
   - type: textarea
     id: problem
     attributes:
-      label: Problem or use case
-      description: What are you trying to accomplish, and what is missing today?
+      label: What would you like to improve?
+      description: Describe what you want to do and how the change would help.
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed outcome
-      description: Describe the behavior you would like, with a small usage example if helpful.
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives and constraints
-      description: Mention workarounds you tried and relevant compatibility, memory, or performance requirements.
+      label: Any ideas? (optional)
+      description: Share a possible solution or example if you have one.

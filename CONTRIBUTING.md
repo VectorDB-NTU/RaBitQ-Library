@@ -1,101 +1,158 @@
 # Contributing to RaBitQ
 
-Thank you for contributing to RaBitQ. Documentation improvements, runnable
-examples, bug reports, and code changes are all welcome.
+Documentation improvements, examples, bug reports, and code changes are welcome.
+You do not need to understand the quantization internals to make a useful contribution.
 
 ## Your first contribution
 
-1. **Choose one small task.** Start with the [starter tasks](#starter-tasks)
-   below or browse [existing issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues).
-   Check for an existing issue or PR before starting. If the scope is unclear,
-   ask in the issue; straightforward documentation fixes can go directly to a PR.
-2. **Get a checkout.** Fork the repository, clone your fork, and create a branch
-   for your change. Run the commands below from the repository root, using your
-   existing project Python environment.
-3. **Make and check the change.** Follow the matching path below. Start with
-   one relevant test, then run the checks required for the files you changed.
-4. **Open a pull request to `main`.** Explain the problem, what changed, and
-   which checks you ran, including any failures or unavailable checks. Link the
-   related issue if there is one. A draft PR is welcome when you need feedback.
+1. **Choose a small task.** Browse the [starter tasks](#starter-tasks) or
+   [existing issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues).
+   Check for an existing issue or PR first. Ask in the issue if the scope is
+   unclear; straightforward documentation fixes can go directly to a PR.
+2. **Fork and clone the repository**, then create a branch for your change.
+   Run the commands in this guide from the repository root.
+3. **Follow one setup path below:** [documentation](#documentation-changes),
+   [Python](#python-changes), or [C++](#c-changes).
+4. **Make a focused change**, run the [matching checks](#before-opening-a-pull-request),
+   and open a PR against `main`. Draft PRs are welcome when you need feedback.
 
-### Maintenance and feedback
-
-[Yutong Gou (@gouyt13)](https://github.com/gouyt13) currently handles
-issue triage and reviews for all paths in the repository. Review timing depends
-on availability. Keep questions and follow-up discussion in the relevant issue
-or PR so others can learn from the answers.
-
-See [maintenance and feedback](ROADMAP.md) for project contacts and releases.
-For bugs, proposals, or help getting started, choose the appropriate
-[issue form](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose).
-
-### Documentation changes
+## Documentation changes
 
 For repository Markdown such as `README.md` or this guide, review accuracy,
-check local links, and run `git diff --check`. No C++ build or formatter is
-required for prose-only changes.
+check local links, and run:
 
-For the documentation site under `docs/`, also install its development tools
-in your project environment and build it:
+```bash
+git diff --check
+```
+
+No C++ build or formatter is required for prose-only changes.
+For the documentation site under `docs/`, use a [Python environment](#python-environment)
+and also run:
 
 ```bash
 python -m pip install -r docs/requirements.txt
 python -m mkdocs build --strict --config-file docs/mkdocs.yml
 ```
 
-Run any examples you add or change, even when they appear inside Markdown.
+Run any examples you add or change, including examples inside Markdown.
 
-### Python and C++ changes
+## Setup for code changes
 
-Use the [build prerequisites](tests/README.md#prerequisites) for source builds.
-For Python work, install the checkout and test dependencies in your project
-environment, then run a small test to verify the setup:
+Source builds need an x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 dispatch,
+CMake 3.20 or newer for the commands below, and a GCC- or Clang-compatible C++17 compiler with OpenMP.
+The current build does not support MSVC or AArch64 (including Apple Silicon).
+Documentation-only contributions do not need this hardware or compiler setup.
+
+On Ubuntu or Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git build-essential cmake libomp-dev
+```
+
+### Python environment
+
+Use Python 3.11 or newer (`python3 --version` to check). On Ubuntu/Debian,
+install the matching Python development headers and venv package if needed
+(for the distribution Python: `sudo apt-get install python3-dev python3-venv`).
+If the distribution Python is older than 3.11, use an installed Python 3.11+
+interpreter in place of `python3` below. Activate your existing project environment if you
+have one. Otherwise, you can create a local environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+Use that same environment for installs, linting, and tests.
+
+### Python changes
+
+Install the checkout and test dependencies, then run one test to check your setup:
 
 ```bash
 python -m pip install ".[test]"
 python -m pytest tests/python/test_ivf.py::test_search_output_shape -q
 ```
 
-For C++ work, follow the [C++ build and test quick start](tests/README.md#quick-start).
-Add focused regression coverage when changing behavior. Use all matching rows
-below before submitting; see [verification guidance](AGENTS.md#verification-by-change-type)
-for shared code, SIMD, persistence, performance, and build changes.
+This builds the C++ extension, so the source-build prerequisites above apply.
+Re-run the install command after changing package sources, bindings, or C++ code;
+this is not an editable install. Tests should use the newly installed package.
 
-| Changed files or behavior | Checks to run |
+### C++ changes
+
+Configure, build, and run the tests:
+
+```bash
+cmake -S . -B build -DRABITQ_BUILD_TESTS=ON \
+    -DRABITQ_BUILD_SAMPLES=OFF -DCMAKE_BUILD_TYPE=Release \
+    -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+cmake --build build --parallel 2
+ctest --test-dir build --output-on-failure
+```
+
+The first configuration needs Git and network access to download GoogleTest.
+Increase `--parallel 2` if your machine has enough memory for more compiler jobs.
+Native CPU tuning is disabled here so the build can run on other supported
+x86-64 machines. See [the test guide](tests/README.md) for test layout and options.
+
+## Before opening a pull request
+
+Keep changes focused and follow the surrounding code style. Add a small,
+deterministic regression test when changing behavior. Start with an affected
+test during development, then apply every matching row below before submitting.
+
+| Your change | Local checks |
 | --- | --- |
-| Python sources | [Python formatting and linting](#python-formatting-and-linting), plus affected tests with `python -m pytest` |
-| First-party C++ | [C++ formatting](#c-formatting), affected build/tests, and [static analysis](#static-analysis); focused analysis during iteration, full analysis before merging |
-| Bindings or Python-visible C++ behavior | Both rows above; rebuild/install the checkout before Python tests and verify the imported package and extension paths |
-| Examples | Run the changed example, plus the checks for its language |
-| Shell scripts | [ShellCheck](#shell-scripts) on affected scripts |
+| Repository Markdown | Check accuracy and local links; `git diff --check` |
+| Documentation site | Above, plus the strict MkDocs build shown above |
+| Python sources | [Python lint and formatting](DEVELOPMENT.md#python-formatting-and-linting), plus affected tests with `python -m pytest` |
+| First-party C++ | [C++ formatting](DEVELOPMENT.md#c-formatting), affected build/tests, and [static analysis](DEVELOPMENT.md#static-analysis); focused analysis is sufficient during iteration |
+| Bindings or Python-visible C++ behavior | Both Python and C++ checks; reinstall before testing and verify package/extension paths as described below |
+| Examples | Run the example and its language checks |
+| Shell scripts | [ShellCheck](DEVELOPMENT.md#shell-scripts) on affected scripts |
 
-### Checks selected by changed files
+For shared code or changes affecting multiple indexes, run the full relevant
+C++ or Python suite. Changes to SIMD, metrics, packing, persistence, hot paths,
+or build configuration also need the applicable
+[specialized checks](AGENTS.md#verification-by-change-type). Consult the
+[implementation recipes](DEVELOPMENT.md#implementation-recipes) before changing
+these contracts; preserve public APIs and stored index formats unless a breaking
+change has been agreed on.
 
-CI starts a small changed-file check on each push or pull request, then runs
-only the affected job groups:
+In your PR, describe:
 
-| Changes | Checks |
+- The problem and what your change does; link an issue if there is one.
+- The commands you ran and their results, including failures or unavailable checks.
+- Any compatibility implications or performance measurements relevant to the change.
+
+**CI and merge requirements:** CI selects jobs from the changed files and may
+run broader checks than your focused local tests. Before merging a C++ change,
+the full [static analysis check](DEVELOPMENT.md#static-analysis) is required.
+If a tool or supported CPU is unavailable, explain that in the PR so the
+maintainer can help arrange validation. See [CI routing](MAINTAINING.md#checks-selected-by-changed-files)
+for details.
+
+## If setup fails
+
+| Problem | What to check |
 | --- | --- |
-| Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
-| C++ headers or library sources | C++ formatting, analysis, tests, sanitizers, consumer build, and Python wheels/tests |
-| C++ tests or examples | C++ checks |
-| Python bindings | Python checks and wheel tests; C++ checks for compiled binding files |
-| Python tests | Python checks and wheel tests |
-| Python scripts or examples | Python lint |
-| CMake or package configuration | C++ and Python build/test checks |
-| Shell scripts | ShellCheck and the checks driven by those scripts |
+| CMake cannot find OpenMP or a compiler | Install the source-build prerequisites above. Include the compiler version and CMake error when asking for help. |
+| Unsupported CPU or architecture | Code tests require a supported x86-64 CPU; disabling native tuning does not add AArch64 or generic-CPU quantized search support. Report your CPU model in the issue or PR. |
+| Tests do not reflect your Python or C++ edits | Re-run `python -m pip install ".[test]"` in the active environment, then check the import paths below. Re-run the regression test that exercises your change. |
+| Formatting or analysis reports the wrong tool version | Use the pinned versions and executable overrides in the [development reference](DEVELOPMENT.md). |
 
-Shared headers still trigger broad regression suites; CI does not infer
-individual test dependencies from C++ function changes. Unknown paths run all
-checks. Pushes compare the complete pushed range; pull requests compare against
-their base. Renames and deletions are included. Relevant jobs also run if
-change detection fails, so a detection error cannot silently waive a check.
+Check which installed package and extension Python imports:
 
-Release tags and manual wheel builds always run the full wheel build. An
-untagged version on `main` also forces full C++ and Python CI, even for a
-subsequent docs-only commit, before automatic publishing can proceed.
+```bash
+python -c "import rabitqlib; import rabitqlib._rabitqlib as ext; print(rabitqlib.__file__); print(ext.__file__)"
+```
 
-### Starter tasks
+For help, use the appropriate
+[issue form](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose)
+and include the command, error output, operating system, and relevant tool versions.
+
+## Starter tasks
 
 These are small contribution ideas, not reserved or assigned issues. Check
 the current files and open PRs first; if a task is already complete, choose
@@ -107,378 +164,13 @@ another. Each task can be a separate PR.
 | Add a self-contained IVF save/load example | [Python examples](sample/python/), [README quick start](README.md#python-quick-start), and [IVF tests](tests/python/test_ivf.py) | A deterministic script builds from synthetic data, saves to a temporary directory, reloads, and checks that search IDs and distances match. It needs no dataset download, cleans up its temporary files, passes Python checks, and is linked from the README. |
 | Explain the quick start's cluster assignment | [Quick start](docs/docs/quick_start.md) and [IVF guide](docs/docs/index/ivf.md) | The tutorial explains that its round-robin assignment is for a small runnable example, explains why real IVF workloads use clustering, and links to the existing clustering workflow. The strict docs build passes. |
 
-## C++ formatting
-
-RaBitQ uses the repository's `.clang-format` configuration and clang-format
-15. Install that version on Ubuntu or Debian with:
-
-```bash
-sudo apt-get install clang-format-15
-```
-
-Format all project-maintained C and C++ files:
-
-```bash
-./scripts/apply-format.sh
-```
-
-Verify formatting without changing files:
-
-```bash
-./scripts/check-format.sh
-```
-
-The scripts intentionally exclude vendored Eigen code and the imported FFHT
-implementation. To use a nonstandard executable name, set `CLANG_FORMAT`; it
-must still identify itself as clang-format 15.
-
-clangd embeds its own formatter, so use clangd 15 in editors such as VS Code
-if format-on-save must exactly match CI. If another clangd version is required,
-disable format-on-save and run the repository scripts before submitting.
-
-To format only lines changed in the staged files, use:
-
-```bash
-./scripts/format-changed.sh --staged
-```
-
-The complete-file formatter remains useful before the initial formatting pass
-or after changing `.clang-format`; CI always checks complete files.
-
-## Optional pre-commit hook
-
-Install [pre-commit](https://pre-commit.com/) and enable the repository hook:
-
-```bash
-python -m pip install pre-commit
-pre-commit install
-```
-
-The hook formats only staged C and C++ files. CI runs the read-only formatting
-check over the complete project-maintained source tree.
-
-## Static analysis
-
-clang-tidy performs semantic checks and is kept separate from clang-format.
-The required baseline contains focused correctness, portability, and
-performance checks. Install the pinned analyzer and the dependencies needed to
-configure every first-party target:
-
-```bash
-sudo apt-get install clang-tidy-15 libomp-15-dev cmake ninja-build
-python -m pip install "numpy>=1.23" "pybind11>=2.12"
-```
-
-Then configure the same core library and Python binding targets analyzed by CI
-and run the check with the same compiler used by CMake:
-
-```bash
-export pybind11_DIR="$(python -m pybind11 --cmakedir)"
-CXX=c++ cmake -S . -B build-tidy -G Ninja \
-    -DRABITQ_BUILD_SAMPLES=OFF \
-    -DRABITQ_BUILD_TESTS=OFF \
-    -DRABITQ_BUILD_PYTHON_BINDINGS=ON \
-    -DCMAKE_BUILD_TYPE=Release \
-    -Dpybind11_DIR="$pybind11_DIR"
-CXX=c++ ./scripts/check-tidy.sh build-tidy
-```
-
-The wrapper supplies clang-tidy with that compiler's standard-library include
-paths and reports diagnostics only for first-party files. Vendored Eigen,
-hnswlib, and the imported FFHT implementation are excluded. New checks should
-be added incrementally after their existing first-party findings are fixed.
-
-Focused clang-tidy checks on affected code are sufficient during iteration.
-For first-party C++ changes, run the full check above before merging and report
-whether validation was focused or complete.
-
-### Include dependency reports
-
-The **Include cleaner (advisory)** job uses clang-tidy's `misc-include-cleaner`
-check to report missing and unused includes. CI uses `ubuntu-latest` and
-unversioned distribution packages:
-
-```bash
-sudo apt-get update
-sudo apt-get install clang-tidy clang libomp-dev cmake ninja-build
-```
-
-Clang-tidy 17 or newer is required. On older distributions such as Ubuntu 22.04,
-use [LLVM's APT repository](https://apt.llvm.org/) to install a newer release.
-For example, install LLVM 22 and its matching analysis and OpenMP packages:
-
-```bash
-wget https://apt.llvm.org/llvm.sh
-sudo bash llvm.sh 22
-sudo apt-get install clang-tidy-22 libomp-22-dev cmake ninja-build
-export CLANG_TIDY=clang-tidy-22
-export CXX=clang++-22
-```
-
-Configure and run the same check locally (use a fresh build directory when
-changing compilers):
-
-```bash
-cmake -S . -B build-includes -G Ninja \
-  -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
-  -DRABITQ_BUILD_SAMPLES=OFF \
-  -DRABITQ_BUILD_TESTS=OFF \
-  -DRABITQ_BUILD_PYTHON_BINDINGS=OFF \
-  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
-  -DCMAKE_BUILD_TYPE=Release
-./scripts/check-includes.sh build-includes
-```
-
-The script checks library sources using their compilation database and checks
-headers as main files, since this clang-tidy check does not report findings in
-included headers. Private headers are checked with AVX2 and AVX-512 flags. New
-untracked files are included, and tracked files deleted from the working tree are skipped.
-Vendored files are excluded. The script also ignores suggestions to include
-Eigen and hnswlib implementation headers behind their existing public headers;
-these vendor snapshots lack the export annotations needed by include-cleaner.
-`INCLUDE_JOBS` controls parallelism (default: 2).
-The script fails for findings or analyzer errors; CI keeps this step advisory
-and uploads the `include-report` artifact without modifying files.
-
-Review suggestions before applying them, especially for templates and public
-forwarding headers. For a source file, automatic fixes can be applied with:
-
-```bash
-"${CLANG_TIDY:-clang-tidy}" -p build-includes --config='{}' \
-  --checks='-*,misc-include-cleaner' --fix src/simd/dispatch.cpp
-```
-
-Review the diff, run formatting, and rebuild and test affected code after fixes.
-Findings can vary between LLVM releases. This include check is independent of
-the existing general clang-tidy job.
-
-### Focused static analysis
-
-Use a temporary subset of the compilation database with the same wrapper to
-retain its compiler include paths and vendored-header exclusions. After the
-configuration above, run this example from the repository root using the
-existing project Python environment:
-
-```bash
-python - <<'PY'
-import json
-from pathlib import Path
-import subprocess
-import tempfile
-
-selected = {Path("src/utils/cpu_features.cpp").resolve()}
-database = json.loads(Path("build-tidy/compile_commands.json").read_text())
-entries = [
-    entry for entry in database
-    if (Path(entry["directory"]) / entry["file"]).resolve() in selected
-]
-found = {(Path(entry["directory"]) / entry["file"]).resolve() for entry in entries}
-if found != selected:
-    raise SystemExit("Selected files are missing from the compilation database")
-with tempfile.TemporaryDirectory(prefix="rabitq-tidy-") as subset:
-    Path(subset, "compile_commands.json").write_text(json.dumps(entries))
-    subprocess.run(["./scripts/check-tidy.sh", subset], check=True)
-PY
-```
-
-Replace `selected` with the affected `.cpp` paths. For a changed header, select
-translation units that include it directly or transitively, covering affected
-template instantiations and ISA variants. Configure any required test/sample
-targets first if they are absent from the database. Do not analyze a header as
-a standalone translation unit. If the consumer set is unclear, run the full
-check. Keep `CXX` set to the compiler used for configuration when it is not `c++`.
-The wrapper's success message covers only the selected database entries in this
-mode; it does not mean the full pre-merge check passed.
-
-## Python formatting and linting
-
-Python sources, examples, and tests use Ruff 0.16.1:
-
-```bash
-python -m pip install "ruff==0.16.1"
-./scripts/check-python.sh
-```
-
-To apply Python formatting and safe automatic lint fixes before running the
-check:
-
-```bash
-ruff check --fix python python_bindings sample/python tests/python
-ruff format python python_bindings sample/python tests/python
-```
-
-## Shell scripts
-
-Run ShellCheck after changing a contributor or automation script:
-
-```bash
-sudo apt-get install shellcheck
-shellcheck scripts/*.sh
-```
-
-## Publishing a release
-
-Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt`,
-add a short README news entry, and merge into `main`. Once the `Test` and
-`Python Wheel` workflows succeed for the same commit, `Release wheels` checks
-whether that version is newer than the existing release tags. It then builds
-and tests the release wheels, pushes `vX.Y.Z` at that tested commit, publishes
-to PyPI, and creates a GitHub Release with generated notes and wheel assets.
-A later successful commit can release an untagged version if the version-bump
-commit failed CI. Ordinary commits with an already released version do not
-publish again.
-
-The workflow uses the repository token to create tags and the existing `pypi`
-environment with Trusted Publishing for PyPI. Repository tag rules and any
-required environment approvals still apply. Publishing runs in the same
-workflow as tag creation; it does not depend on a bot-created tag triggering
-another workflow.
-
-Manual `vX.Y.Z` tag pushes still build and publish, with a package-version
-check. Pull requests and **Run workflow** only build wheels. To recover a
-partial release, rerun the failed release jobs: existing tags must still point
-to the tested commit, and already uploaded PyPI files are skipped.
-
-Validate automation changes locally with:
-
-```bash
-python -m unittest discover -s .github/scripts -p 'test_*.py'
-```
-
-## Pull request labels and release notes
-
-GitHub generates categorized release notes from merged pull requests. Before
-merging, maintainers should apply the label that best describes the change:
-
-| Label | Release note category |
-| --- | --- |
-| `enhancement` | Added |
-| `bug` | Fixed |
-| `documentation` | Documentation |
-| `python` | Python |
-| `dependencies` | Dependencies |
-
-Pull requests without one of these labels appear under `Other changes`. Pull
-requests labeled `duplicate` or `invalid` are omitted from release notes.
-
-## Performance and compatibility
-
-- Use fixed-width integer types for serialized values and persisted index data.
-- Preserve existing public headers, aliases, and index formats unless a change
-  is explicitly documented as breaking.
-- Add backend-independent tests when introducing or changing SIMD kernels.
-- Keep scalar, AVX2, and AVX-512 implementations behaviorally equivalent.
-- Benchmark allocations or algorithm changes in search and quantization hot
-  paths, and substantiate performance claims with benchmarks. Run correctness
-  tests first and include commands, dataset, CPU, compiler, ISA, thread count,
-  latency/throughput, and quality results in the pull request. Correctness fixes
-  may omit benchmarks with a documented justification; do not make unmeasured
-  performance claims.
-- Preserve estimated-distance semantics. Before comparing recall, state the
-  metric, workload, and acceptable recall tolerance, using repeated baseline
-  measurements where relevant. Keep inputs, seeds, and search parameters fixed.
-  Evaluate distance-estimate numerical error separately with justified numerical
-  tolerances; deterministic SIMD backends need not produce bitwise-identical
-  floating-point results. Report observed differences. Agree on intentional
-  speed–quality tradeoffs before implementation; measurement tolerance does not
-  authorize a quality reduction.
-- Avoid unrelated refactoring or formatting in performance-sensitive changes.
-
-## Implementation recipes
-
-### Add or change a SIMD kernel
-
-1. Define the backend-neutral entry point under `include/rabitqlib/simd/`.
-2. Update all applicable declarations and AVX2/AVX-512 implementations in `src/simd/` or
-   `src/index/`.
-3. Register selection and unsupported-CPU behavior in `src/simd/dispatch.cpp` when dispatched.
-4. If adding a translation unit, put it in the correct ISA source group and flags in
-   `CMakeLists.txt`.
-5. Add differential tests against a scalar or simple reference, including boundary dimensions,
-   degenerate inputs, and every supported bit width.
-
-Never execute a high-ISA implementation merely to test whether that ISA is supported; detection
-must happen in generic code first.
-
-#### Dispatch conventions and coverage
-
-- Keep backend-neutral declarations in `include/rabitqlib/simd/*_dispatch.hpp` and
-  implementations in `src/simd/*_{generic,avx2,avx512}.cpp`. HNSW keeps its existing
-  `src/index/` implementations and compatibility namespaces.
-- Select a cached function pointer through `resolve_kernel` in `src/simd/dispatch.cpp`.
-  The order is AVX-512, AVX2/FMA, then the existing generic implementation or a descriptive
-  unsupported-operation exception. Public wrappers do not repeat feature checks.
-- Preserve stricter predicates: population-count kernels need AVX512_VPOPCNTDQ, and HNSW's
-  AVX-512 core variant also needs AVX2 for its warmup implementation. Do not infer support
-  from a backend name or from `__AVX*__` macros in a public header.
-- Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
-  headers use internal linkage so independently compiled backends retain their own bodies.
-  Include the FFHT implementation inside the private kernel namespace for the same reason.
-- Pass ordinary pointers, sizes, and library-owned query state across ISA boundaries. Never
-  pass Eigen matrix/packet objects between backends. The private matrix implementation
-  header includes Eigen under a namespace selected by each backend translation unit.
-  Otherwise, Eigen emits identically named out-of-line template helpers, which the linker
-  can merge across incompatible ISA builds.
-  Keep this isolation when adding matrix kernels; do not modify the vendor snapshot.
-- Preserve existing public names and namespaces, including legacy functions with `_avx` in
-  their name that now dispatch at runtime. The explicit `_avx2` and `_avx512` entry points
-  are for selected kernels and capability-guarded backend tests.
-
-The current first-party kernel audit is summarized below. Dispatching an index operation
-covers its arithmetic kernels, not every scalar loop in construction and search.
-
-| Area | Dispatch coverage / deliberate boundary |
-| --- | --- |
-| Raw float distances, norms, packed-code products | Runtime AVX2/AVX-512 selection; generic raw-float fallback |
-| Quantizer rescale search | SIMD bounded search; the certified scalar event sweep remains the fallback |
-| Integer scalar quantization, extra-code packing, transpose, sign masks | Existing runtime selection; byte layouts and rounding rules are unchanged |
-| Standard and high-accuracy FastScan | Runtime selection; generic LUT construction stays separate from selection |
-| IVF and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
-| FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; imported FFHT AVX butterflies are unchanged |
-| Float matrix rotation and PiPNN construction | Matrix products, row norms, and lower-triangle pairwise distances use isolated matrix backends |
-| HNSW search and IVF centroid routing | Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher |
-| Quantization orchestration, reconstruction, non-float utilities | Template/control code remains generic; no blanket native tuning or reduction-order rewrite |
-| Graph scheduling, candidate queues, I/O, allocation, random initialization | Generic control code; IVF one-bit candidate insertion stays in a small compiled function to avoid inlining-induced register spills; thread scheduling and seeds remain caller-owned |
-| Example KMeans training | Uses external FAISS, whose build and dispatch are independent of this package |
-
-Portable wheels continue to disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. Adding an optimized
-backend does not add support for generic-CPU quantized search or AArch64; those require
-complete implementations and separate compatibility validation.
-
-### Change quantization or packing
-
-Check all of these together:
-
-- `quantization/rabitq.hpp` and `quantization/rabitq_impl.hpp`;
-- `quantization/data_layout.hpp` and `quantization/pack_excode.hpp`;
-- SIMD pack, inner-product, and FastScan kernels;
-- query-side factors in `index/query.hpp`;
-- estimators in `index/estimator.hpp`;
-- IVF, HNSW, and SymphonyQG consumers;
-- C++ tests for factor finiteness, reconstruction, sign convention, pack/unpack, and estimates.
-
-Test both `METRIC_L2` and `METRIC_IP` where supported. In IVF and HNSW, total bits are represented
-as one sign bit plus `ex_bits`; accepted total bit counts are 1 through 9. SymphonyQG raw storage is
-`quantization_bits == 0`; its quantized storage currently accepts only 4 or 8 bits.
-
-### Change an index API
-
-Update the C++ declaration/implementation, the corresponding file in `python_bindings/`, Python
-tests, samples, and the relevant page under `docs/docs/index/`. Preserve public signatures where
-possible; add a forwarding overload when evolving an API compatibly.
-
-### Change persistence
-
-Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
-serialized fields for new formats, validate sizes before allocation, check every read, and retain a
-compatibility test fixture or an explicit rejection path. IVF, HNSW, and SymphonyQG have separate
-formats and must each be reviewed. SymphonyQG includes a versioned quantized format plus a legacy
-raw-format fallback; preserve both unless a breaking change is explicitly requested.
-
-### Change Python bindings
-
-Shared NumPy and string conversion helpers live in `python_bindings/bindings_common.hpp`. Register
-index-specific APIs in their own binding file and export public classes from
-`python_bindings/__init__.py`. Validate rank, dimensionality, state, and parameter ranges before
-entering the core. Be deliberate about `py::array::forcecast`: it permits dtype/layout copies and
-must not be used where callers expect in-place mutation or pointer identity.
+## Feedback and further reading
+
+[Yutong Gou (@gouyt13)](https://github.com/gouyt13) handles issue triage and
+reviews. Review timing depends on availability; keep questions in the relevant
+issue or PR so others can learn from the answers.
+
+- [Development reference](DEVELOPMENT.md): formatters, analysis,
+  performance requirements, and implementation recipes.
+- [Maintainer reference](MAINTAINING.md): CI routing, releases, and PR labels.
+- [Roadmap and project contacts](ROADMAP.md).
