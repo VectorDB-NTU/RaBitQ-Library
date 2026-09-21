@@ -1,7 +1,11 @@
 #include <immintrin.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <stdexcept>
 
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 
@@ -28,10 +32,17 @@ void pack_lut_avx2(size_t dim, const float* query, float* lut) {
     }
 }
 
-void accumulate_avx2(
+namespace {
+
+// After removing packed high-byte terms, each byte-plane sum is at most
+// 255 * (1024 / 4) = 65280, below the 16-bit reduction limit.
+constexpr size_t kChunkDim = 1024;
+constexpr size_t kBatchSize = 32;
+
+void accumulate_chunk_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,
-    uint16_t* __restrict__ result,
+    int32_t* __restrict__ result,
     size_t dim
 ) {
     size_t code_length = dim << 2;
@@ -76,14 +87,59 @@ void accumulate_avx2(
         _mm256_permute2f128_si256(accu0, accu1, 0x21),
         _mm256_blend_epi32(accu0, accu1, 0xF0)
     );
-    _mm256_storeu_si256((__m256i*)result, dis0);
+    _mm256_storeu_si256(
+        (__m256i*)result, _mm256_cvtepu16_epi32(_mm256_castsi256_si128(dis0))
+    );
+    _mm256_storeu_si256(
+        (__m256i*)(result + 8), _mm256_cvtepu16_epi32(_mm256_extracti128_si256(dis0, 1))
+    );
 
     accu2 = _mm256_sub_epi16(accu2, _mm256_slli_epi16(accu3, 8));
     __m256i dis1 = _mm256_add_epi16(
         _mm256_permute2f128_si256(accu2, accu3, 0x21),
         _mm256_blend_epi32(accu2, accu3, 0xF0)
     );
-    _mm256_storeu_si256((__m256i*)&result[16], dis1);
+    _mm256_storeu_si256(
+        (__m256i*)(result + 16), _mm256_cvtepu16_epi32(_mm256_castsi256_si128(dis1))
+    );
+    _mm256_storeu_si256(
+        (__m256i*)(result + 24), _mm256_cvtepu16_epi32(_mm256_extracti128_si256(dis1, 1))
+    );
+}
+
+}  // namespace
+
+void accumulate_avx2(
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ lp_table,
+    int32_t* __restrict__ result,
+    size_t dim
+) {
+    if (dim <= kChunkDim) {
+        accumulate_chunk_avx2(codes, lp_table, result, dim);
+        return;
+    }
+
+    std::array<int64_t, kBatchSize> totals{};
+    std::array<int32_t, kBatchSize> chunk_result;
+    for (size_t offset = 0; offset < dim;) {
+        const size_t chunk_dim = std::min(kChunkDim, dim - offset);
+        accumulate_chunk_avx2(
+            codes + offset * 4, lp_table + offset * 4, chunk_result.data(), chunk_dim
+        );
+        for (size_t lane = 0; lane < kBatchSize; ++lane) {
+            totals[lane] += chunk_result[lane];
+        }
+        offset += chunk_dim;
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        if (totals[lane] > std::numeric_limits<int32_t>::max()) {
+            throw std::overflow_error("FastScan result exceeds int32_t");
+        }
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        result[lane] = static_cast<int32_t>(totals[lane]);
+    }
 }
 
 void transfer_lut_hacc_avx2(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
@@ -113,7 +169,9 @@ void transfer_lut_hacc_avx2(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
     }
 }
 
-void accumulate_hacc_avx2(
+namespace {
+
+void accumulate_hacc_chunk_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
     int32_t* accu_res,
@@ -187,6 +245,41 @@ void accumulate_hacc_avx2(
     _mm256_storeu_si256((__m256i*)(accu_res + 8), res[1]);
     _mm256_storeu_si256((__m256i*)(accu_res + 16), res[2]);
     _mm256_storeu_si256((__m256i*)(accu_res + 24), res[3]);
+}
+
+}  // namespace
+
+void accumulate_hacc_avx2(
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ hc_lut,
+    int32_t* accu_res,
+    size_t dim
+) {
+    if (dim <= kChunkDim) {
+        accumulate_hacc_chunk_avx2(codes, hc_lut, accu_res, dim);
+        return;
+    }
+
+    std::array<int64_t, kBatchSize> totals{};
+    std::array<int32_t, kBatchSize> chunk_result;
+    for (size_t offset = 0; offset < dim;) {
+        const size_t chunk_dim = std::min(kChunkDim, dim - offset);
+        accumulate_hacc_chunk_avx2(
+            codes + offset * 4, hc_lut + offset * 8, chunk_result.data(), chunk_dim
+        );
+        for (size_t lane = 0; lane < kBatchSize; ++lane) {
+            totals[lane] += chunk_result[lane];
+        }
+        offset += chunk_dim;
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        if (totals[lane] > std::numeric_limits<int32_t>::max()) {
+            throw std::overflow_error("high-accuracy FastScan result exceeds int32_t");
+        }
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        accu_res[lane] = static_cast<int32_t>(totals[lane]);
+    }
 }
 
 }  // namespace rabitqlib::fastscan::simd

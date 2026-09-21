@@ -398,16 +398,38 @@ def test_hnsw_centroid_routing_roundtrip(tmp_path):
     centroids = rng.standard_normal((count, dim)).astype(np.float32)
     labels = np.arange(count, dtype=np.uint32)
     idx = IvfIndex(dim, count, count, nbits=1)
-    idx.build(centroids, centroids, labels, num_threads=1)
+    idx.build(centroids, centroids, labels, num_threads=4)
     selected = np.array([0, 17, 1023, count - 1])
     queries = centroids[selected]
-    ids, distances = idx.search(queries, k=1, nprobe=4, num_threads=1)
+    ids, distances = idx.search(queries, k=1, nprobe=4, num_threads=4)
     np.testing.assert_array_equal(ids[:, 0], selected)
     np.testing.assert_allclose(distances, 0, rtol=0, atol=1e-5)
 
     path = str(tmp_path / "large_centroid.index")
     idx.save(path)
     loaded = IvfIndex.load(path)
-    loaded_ids, loaded_distances = loaded.search(queries, k=1, nprobe=4, num_threads=1)
+    loaded_ids, loaded_distances = loaded.search(queries, k=1, nprobe=4, num_threads=4)
     np.testing.assert_array_equal(loaded_ids, ids)
     np.testing.assert_array_equal(loaded_distances, distances)
+
+
+def test_hnsw_inner_product_routing_roundtrip(tmp_path):
+    count, dim = 20000, 64
+    centroids = np.zeros((count, dim), dtype=np.float32)
+    centroids[:, 0] = 0.5
+    centroids[0, 0] = 100.0
+    data = centroids[:1].copy()
+    query = np.zeros((4, dim), dtype=np.float32)
+    query[:, 0] = 1.0
+    idx = IvfIndex(dim, 1, count, nbits=32, metric="ip")
+    idx.build(data, centroids, np.array([0], dtype=np.uint32), num_threads=4)
+
+    path = str(tmp_path / "large_ip_centroid.index")
+    ids, distances = idx.search(query, k=1, nprobe=1, num_threads=4)
+    assert np.all(ids == 0)
+    np.testing.assert_allclose(distances, -99.0, rtol=0, atol=1e-5)
+    idx.save(path)
+    loaded = IvfIndex.load(path)
+    ids, distances = loaded.search(query, k=1, nprobe=1, num_threads=4)
+    assert np.all(ids == 0)
+    np.testing.assert_allclose(distances, -99.0, rtol=0, atol=1e-5)

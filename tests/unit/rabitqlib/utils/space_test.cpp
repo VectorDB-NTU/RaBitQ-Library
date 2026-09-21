@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <vector>
 
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
@@ -206,6 +207,46 @@ TEST(ScalarQuantize, Uint16MatchesRoundedScalar) {
     scalar_quantize<uint16_t>(result.data(), input.data(), dim, lo, delta);
 
     ASSERT_EQ(result, expected);
+}
+
+TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
+    constexpr size_t dim = 33;
+    const std::array<float, 9> values{
+        0.5F,
+        1.5F,
+        2.5F,
+        3.5F,
+        4.5F,
+        std::nextafter(2.5F, 0.0F),
+        std::nextafter(2.5F, std::numeric_limits<float>::infinity()),
+        125.5F,
+        126.5F,
+    };
+    std::array<float, dim> input{};
+    std::array<uint8_t, dim> expected8{};
+    std::array<uint16_t, dim> expected16{};
+    for (size_t i = 0; i < dim; ++i) {
+        input[i] = (i == 8 || i == 16 || i == 32) ? 2.5F : values[i % values.size()];
+        expected8[i] = static_cast<uint8_t>(std::round(input[i]));
+        expected16[i] = static_cast<uint16_t>(std::round(input[i]));
+    }
+
+    const auto check = [&](auto quantize8, auto quantize16) {
+        std::array<uint8_t, dim> actual8{};
+        std::array<uint16_t, dim> actual16{};
+        quantize8(actual8.data(), input.data(), dim, 0.0F, 1.0F);
+        quantize16(actual16.data(), input.data(), dim, 0.0F, 1.0F);
+        EXPECT_EQ(actual8, expected8);
+        EXPECT_EQ(actual16, expected16);
+    };
+
+    check(simd::scalar_quantize_uint8, simd::scalar_quantize_uint16);
+    if (cpu::has_avx2()) {
+        check(simd::scalar_quantize_uint8_avx2, simd::scalar_quantize_uint16_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        check(simd::scalar_quantize_uint8_avx512, simd::scalar_quantize_uint16_avx512);
+    }
 }
 
 TEST(ip16_fxu1_avx, ip_works) {

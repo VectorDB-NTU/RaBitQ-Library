@@ -12,7 +12,7 @@ void pack_lut_avx512(size_t dim, const float* query, float* lut);
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,
-    uint16_t* __restrict__ result,
+    int32_t* __restrict__ result,
     size_t dim
 );
 void transfer_lut_hacc_avx2(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
@@ -26,7 +26,7 @@ void accumulate_hacc_avx2(
 void accumulate_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,
-    uint16_t* __restrict__ result,
+    int32_t* __restrict__ result,
     size_t dim
 );
 void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut);

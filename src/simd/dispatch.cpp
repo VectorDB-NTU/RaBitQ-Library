@@ -254,7 +254,7 @@ static float missing_mask_ip_x0_q(const float*, const uint8_t*, size_t) {
     missing_feature("mask ip x0 q");
 }
 
-static void missing_fastscan_accumulate(const uint8_t*, const uint8_t*, uint16_t*, size_t) {
+static void missing_fastscan_accumulate(const uint8_t*, const uint8_t*, int32_t*, size_t) {
     missing_feature("fastscan accumulate");
 }
 
@@ -524,7 +524,7 @@ const auto kAccumulateHaccFn = rabitqlib::simd::resolve_kernel(
 void accumulate(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,
-    uint16_t* __restrict__ result,
+    int32_t* __restrict__ result,
     size_t dim
 ) {
     if (dim == 0 || dim % 16 != 0) {

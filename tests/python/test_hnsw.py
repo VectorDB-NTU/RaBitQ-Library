@@ -122,6 +122,15 @@ def test_wrong_data_dim_raises(clusters):
         idx.build(bad_data, centroids, cluster_ids)
 
 
+def test_out_of_range_cluster_id_raises(base_data, clusters):
+    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    centroids, cluster_ids = clusters
+    invalid_ids = cluster_ids.copy()
+    invalid_ids[0] = len(centroids)
+    with pytest.raises(ValueError, match="cluster_ids contains an out-of-range value"):
+        idx.build(base_data, centroids, invalid_ids)
+
+
 def test_wrong_query_dim_raises(built_hnsw):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
     with pytest.raises(Exception):
@@ -161,3 +170,12 @@ def test_save_load_roundtrip(built_hnsw, query_data, tmp_path):
     ids_load, dists_load = loaded.search(query_data, k=_TOPK, ef=_EF)
     np.testing.assert_array_equal(ids_orig, ids_load)
     np.testing.assert_allclose(dists_orig, dists_load, rtol=1e-5)
+
+
+def test_load_rejects_count_larger_than_capacity(built_hnsw, tmp_path):
+    path = tmp_path / "hnsw-invalid-count.index"
+    built_hnsw.save(str(path))
+    with path.open("r+b") as index_file:
+        index_file.write((1).to_bytes(np.dtype(np.uintp).itemsize, byteorder="little"))
+    with pytest.raises(RuntimeError, match="HNSW"):
+        HnswIndex.load(str(path))

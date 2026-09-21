@@ -11,6 +11,20 @@
 
 namespace rabitqlib::simd {
 
+namespace {
+
+__m256 round_away_from_zero(__m256 value) {
+    const __m256 truncated = _mm256_round_ps(value, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC);
+    const __m256 sign = _mm256_set1_ps(-0.0F);
+    const __m256 fraction = _mm256_andnot_ps(sign, _mm256_sub_ps(value, truncated));
+    const __m256 round_mask = _mm256_cmp_ps(fraction, _mm256_set1_ps(0.5F), _CMP_GE_OQ);
+    const __m256 signed_one =
+        _mm256_or_ps(_mm256_and_ps(value, sign), _mm256_set1_ps(1.0F));
+    return _mm256_add_ps(truncated, _mm256_and_ps(round_mask, signed_one));
+}
+
+}  // namespace
+
 float euclidean_sqr_avx2(const float* a, const float* b, size_t dim) {
     return raw_float<FloatOperation::SquaredL2>(a, b, dim);
 }
@@ -40,7 +54,7 @@ void scalar_quantize_uint8_avx2(
     for (; i < mul8; i += 8) {
         __m256 cur = _mm256_loadu_ps(&vec0[i]);
         cur = _mm256_mul_ps(_mm256_sub_ps(cur, lo256), od256);
-        __m256i i32 = _mm256_cvtps_epi32(cur);
+        __m256i i32 = _mm256_cvttps_epi32(round_away_from_zero(cur));
         __m128i lo32 = _mm256_castsi256_si128(i32);
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
         __m128i i16 = _mm_packus_epi32(lo32, hi32);
@@ -63,7 +77,7 @@ void scalar_quantize_uint16_avx2(
     for (; i < mul8; i += 8) {
         __m256 cur = _mm256_loadu_ps(&vec0[i]);
         cur = _mm256_mul_ps(_mm256_sub_ps(cur, lo256), ow256);
-        __m256i i32 = _mm256_cvtps_epi32(cur);
+        __m256i i32 = _mm256_cvttps_epi32(round_away_from_zero(cur));
         __m128i lo32 = _mm256_castsi256_si128(i32);
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
         __m128i i16 = _mm_packus_epi32(lo32, hi32);

@@ -137,7 +137,7 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                 lut[i] = static_cast<uint8_t>((i * 7 + i / 16) % 32);
                 lut_hacc[i] = static_cast<uint16_t>((i * 37 + i / 16) % 4096);
             }
-            std::array<uint16_t, 32> expected{};
+            std::array<int32_t, 32> expected{};
             std::array<int32_t, 32> expected_hacc{};
             for (size_t row = 0; row < 32; ++row) {
                 for (size_t group = 0; group < dim / 4; ++group) {
@@ -148,7 +148,7 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                 }
             }
             auto check_backend = [&](auto accumulate_fn, auto transfer_fn, auto hacc_fn) {
-                std::array<uint16_t, 32> actual{};
+                std::array<int32_t, 32> actual{};
                 std::array<int32_t, 32> actual_hacc{};
                 alignas(64) std::array<uint8_t, kMaxDim * 8> packed_lut{};
                 accumulate_fn(packed.data(), lut.data(), actual.data(), dim);
@@ -177,11 +177,126 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
     }
 }
 
+TEST(FastScanPackingTest, AccumulatesLargeDimensionsWithoutLaneOverflow) {
+    for (size_t dim : {1024U, 1040U, 2064U, 5120U}) {
+        SCOPED_TRACE(::testing::Message() << "dim=" << dim);
+        std::vector<uint8_t> input(kBatchSize * dim / 8);
+        for (size_t i = 0; i < input.size(); ++i) {
+            input[i] = static_cast<uint8_t>(i * 73 + i / 7);
+        }
+        std::vector<uint8_t> packed(dim * 4);
+        pack_codes(dim, input.data(), kBatchSize, packed.data());
+
+        std::vector<uint8_t> lut(dim * 4);
+        for (size_t i = 0; i < lut.size(); ++i) {
+            lut[i] = dim <= 1040 ? uint8_t{255}
+                                 : static_cast<uint8_t>(255 - (i * 7 + i / 16) % 32);
+        }
+        std::array<int32_t, kBatchSize> expected{};
+        for (size_t row = 0; row < kBatchSize; ++row) {
+            for (size_t group = 0; group < dim / 4; ++group) {
+                const uint8_t byte = input[row * dim / 8 + group / 2];
+                const size_t code = (byte >> (group % 2 == 0 ? 4 : 0)) & 15;
+                expected[row] += lut[group * 16 + code];
+            }
+        }
+
+        auto check_backend = [&](auto accumulate_fn) {
+            std::array<int32_t, kBatchSize> actual{};
+            accumulate_fn(packed.data(), lut.data(), actual.data(), dim);
+            EXPECT_EQ(actual, expected);
+        };
+        check_backend(accumulate);
+        if (cpu::has_avx2()) {
+            SCOPED_TRACE("AVX2");
+            check_backend(simd::accumulate_avx2);
+        }
+        if (cpu::has_avx512_core()) {
+            SCOPED_TRACE("AVX512");
+            check_backend(simd::accumulate_avx512);
+        }
+    }
+}
+
+TEST(FastScanHighAccuracyTest, AccumulatesLargeDimensionsWithoutLaneOverflow) {
+    for (size_t dim : {1024U, 1040U, 2064U, 5120U}) {
+        for (bool uniform_lut : {false, true}) {
+            SCOPED_TRACE(
+                ::testing::Message() << "dim=" << dim << " uniform=" << uniform_lut
+            );
+            std::vector<uint8_t> input(kBatchSize * dim / 8);
+            for (size_t i = 0; i < input.size(); ++i) {
+                input[i] = static_cast<uint8_t>(i * 73 + i / 7);
+            }
+            std::vector<uint8_t> packed(dim * 4);
+            pack_codes(dim, input.data(), kBatchSize, packed.data());
+
+            std::vector<uint16_t> lut(dim * 4);
+            for (size_t i = 0; i < lut.size(); ++i) {
+                lut[i] = uniform_lut ? std::numeric_limits<uint16_t>::max()
+                                     : static_cast<uint16_t>(i * 911 + i / 16 * 37);
+            }
+            std::array<int32_t, kBatchSize> expected{};
+            for (size_t row = 0; row < kBatchSize; ++row) {
+                for (size_t group = 0; group < dim / 4; ++group) {
+                    const uint8_t byte = input[row * dim / 8 + group / 2];
+                    const size_t code = (byte >> (group % 2 == 0 ? 4 : 0)) & 15;
+                    expected[row] += lut[group * 16 + code];
+                }
+            }
+
+            auto check_backend = [&](auto transfer_fn, auto accumulate_fn) {
+                std::vector<uint8_t> packed_lut(dim * 8);
+                std::array<int32_t, kBatchSize> actual{};
+                transfer_fn(lut.data(), dim, packed_lut.data());
+                accumulate_fn(packed.data(), packed_lut.data(), actual.data(), dim);
+                EXPECT_EQ(actual, expected);
+            };
+            if (cpu::has_avx2()) {
+                SCOPED_TRACE("AVX2");
+                check_backend(simd::transfer_lut_hacc_avx2, simd::accumulate_hacc_avx2);
+            }
+            if (cpu::has_avx512_core()) {
+                SCOPED_TRACE("AVX512");
+                check_backend(simd::transfer_lut_hacc_avx512, simd::accumulate_hacc_avx512);
+            }
+        }
+    }
+}
+
+TEST(FastScanHighAccuracyTest, RejectsAccumulationsExceedingInt32Range) {
+    constexpr size_t kDim = 131088;
+    std::vector<uint8_t> codes(kDim * 4, 0);
+    std::vector<uint16_t> lut(kDim * 4, std::numeric_limits<uint16_t>::max());
+    std::vector<uint8_t> packed_lut(kDim * 8);
+
+    auto check_backend = [&](auto transfer_fn, auto accumulate_fn) {
+        std::array<int32_t, kBatchSize> result;
+        result.fill(42);
+        transfer_fn(lut.data(), kDim, packed_lut.data());
+        EXPECT_THROW(
+            accumulate_fn(codes.data(), packed_lut.data(), result.data(), kDim),
+            std::overflow_error
+        );
+        EXPECT_TRUE(std::all_of(result.begin(), result.end(), [](int32_t value) {
+            return value == 42;
+        }));
+    };
+    if (cpu::has_avx2()) {
+        SCOPED_TRACE("AVX2");
+        check_backend(simd::transfer_lut_hacc_avx2, simd::accumulate_hacc_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        SCOPED_TRACE("AVX512");
+        check_backend(simd::transfer_lut_hacc_avx512, simd::accumulate_hacc_avx512);
+    }
+}
+
 TEST(FastScanHighAccuracyTest, RejectsDimensionsThatCannotFillASimdBlock) {
     std::array<uint16_t, 16 * 3> lut{};
     std::array<uint8_t, 16 * 3 * 2> packed_lut{};
     std::array<uint8_t, 16 * 3> codes{};
-    std::array<uint16_t, 32> low_result{};
+    std::array<int32_t, 32> low_result{};
     std::array<int32_t, 32> result{};
 
     for (size_t dim : {0U, 4U, 8U, 12U, 20U}) {
