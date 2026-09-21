@@ -833,7 +833,7 @@ TEST(QGBuilderMetricTest, UsesInnerProductDistanceToChooseEntryPoint) {
     EXPECT_EQ(graph.entry_point(), expected);
 }
 
-TEST(QGEstimatorTest, AccumulatesAcrossUint16SafeChunks) {
+TEST(QGEstimatorTest, AccumulatesBeyondUint16Range) {
     constexpr std::array<size_t, 3> kDimensions = {1024, 1088, 2048};
 
     for (size_t padded_dim : kDimensions) {

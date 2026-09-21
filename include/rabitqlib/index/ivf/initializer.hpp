@@ -7,8 +7,10 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <queue>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -193,17 +195,73 @@ class CentroidL2Space : public hnswlib::SpaceInterface<float> {
     void* get_dist_func_param() override { return &dim_; }
 };
 
+class CentroidIPSpace : public hnswlib::SpaceInterface<float> {
+   private:
+    size_t dim_;
+
+    static float distance(const void* a, const void* b, const void* dim) {
+        return dot_product_dis(
+            static_cast<const float*>(a),
+            static_cast<const float*>(b),
+            *static_cast<const size_t*>(dim)
+        );
+    }
+
+   public:
+    explicit CentroidIPSpace(size_t dim) : dim_(dim) {}
+
+    size_t get_data_size() override { return dim_ * sizeof(float); }
+    hnswlib::DISTFUNC<float> get_dist_func() override { return distance; }
+    void* get_dist_func_param() override { return &dim_; }
+};
+
 class HNSWInitializer : public Initializer {
    private:
     int M_ = 16;
     int ef_construction_ = 400;
-    hnswlib::HierarchicalNSW<float>* alg_hnsw_ = nullptr;
-    CentroidL2Space space_;
+    std::unique_ptr<hnswlib::HierarchicalNSW<float>> alg_hnsw_;
+    CentroidL2Space l2_space_;
+    CentroidIPSpace ip_space_;
+    hnswlib::SpaceInterface<float>* space_;
+    MetricType metric_type_;
+    std::vector<hnswlib::tableint> label_to_internal_;
+    mutable std::mutex search_mutex_;
+
+    void rebuild_label_lookup() {
+        if (alg_hnsw_->cur_element_count != num_cluster_) {
+            throw std::runtime_error("HNSW centroid count does not match IVF cluster count"
+            );
+        }
+        std::vector<hnswlib::tableint> label_to_internal(num_cluster_);
+        std::vector<bool> seen(num_cluster_, false);
+        for (size_t internal_id = 0; internal_id < num_cluster_; ++internal_id) {
+            const auto label =
+                alg_hnsw_->getExternalLabel(static_cast<hnswlib::tableint>(internal_id));
+            if (label >= num_cluster_ || seen[label]) {
+                throw std::runtime_error("Invalid HNSW centroid label");
+            }
+            label_to_internal[label] = static_cast<hnswlib::tableint>(internal_id);
+            seen[label] = true;
+        }
+        label_to_internal_ = std::move(label_to_internal);
+    }
 
    public:
-    explicit HNSWInitializer(size_t d, size_t k) : Initializer(d, k), space_(d) {
-        alg_hnsw_ = new hnswlib::HierarchicalNSW<float>(
-            &space_, num_cluster_, M_, ef_construction_
+    explicit HNSWInitializer(
+        size_t d, size_t k, MetricType metric_type = MetricType::METRIC_L2
+    )
+        : Initializer(d, k)
+        , l2_space_(d)
+        , ip_space_(d)
+        , space_(
+              metric_type == METRIC_IP
+                  ? static_cast<hnswlib::SpaceInterface<float>*>(&ip_space_)
+                  : static_cast<hnswlib::SpaceInterface<float>*>(&l2_space_)
+          )
+        , metric_type_(metric_type) {
+        validate_metric_type(metric_type_);
+        alg_hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(
+            space_, num_cluster_, M_, ef_construction_
         );
     }
 
@@ -213,21 +271,27 @@ class HNSWInitializer : public Initializer {
         parallel_for(start, rows, num_threads, [&](size_t row, size_t /*thread_id*/) {
             alg_hnsw_->addPoint(cent + (row * dim_), row);
         });
+        rebuild_label_lookup();
     }
 
     [[nodiscard]] const float* centroid(PID id) const override {
-        return reinterpret_cast<const float*>(alg_hnsw_->getDataByInternalId(id));
+        return reinterpret_cast<const float*>(
+            alg_hnsw_->getDataByInternalId(label_to_internal_.at(id))
+        );
     }
 
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
+        std::lock_guard<std::mutex> lock(search_mutex_);
         alg_hnsw_->setEf(std::max(768UL, 2 * nprobe));
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             alg_hnsw_->searchKnn(query, nprobe);
 
         for (size_t i = 0; i < nprobe; ++i) {
-            candidates[i].distance = std::sqrt(result.top().first);
+            candidates[i].distance = metric_type_ == METRIC_IP
+                                         ? result.top().first
+                                         : std::sqrt(result.top().first);
             candidates[i].id = result.top().second;
             result.pop();
         }
@@ -243,9 +307,10 @@ class HNSWInitializer : public Initializer {
     void load(std::ifstream&, const char* filename) override {
         std::string hnsw(filename);
         hnsw += ".hnsw";
-        alg_hnsw_->loadIndex(hnsw, &space_, num_cluster_);
+        alg_hnsw_->loadIndex(hnsw, space_, num_cluster_);
+        rebuild_label_lookup();
     }
 
-    ~HNSWInitializer() override { delete alg_hnsw_; }
+    ~HNSWInitializer() override = default;
 };
 }  // namespace rabitqlib::ivf

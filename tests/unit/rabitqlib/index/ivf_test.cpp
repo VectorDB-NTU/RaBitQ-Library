@@ -218,6 +218,28 @@ TEST(IvfSearchTest, RoutesInnerProductQueriesByInnerProduct) {
     EXPECT_NEAR(distance, -99.0F, 1e-5F);
 }
 
+TEST(IvfSearchTest, RoutesInnerProductQueriesWithHNSWCentroids) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kCount = 20000;
+    std::array<float, kDim> data{};
+    std::vector<float> centroids(kCount * kDim, 0.0F);
+    std::array<float, kDim> query{};
+    for (size_t i = 0; i < kCount; ++i) {
+        centroids[i * kDim] = 0.5F;
+    }
+    data[0] = centroids[0] = 100.0F;
+    query[0] = 1.0F;
+    const PID cluster = 0;
+
+    IVF index(1, kDim, kCount, 32, METRIC_IP);
+    index.construct(data.data(), centroids.data(), &cluster, false, 4);
+    PID result = kPidMax;
+    float distance = std::numeric_limits<float>::infinity();
+    index.search(query.data(), 1, 1, &result, &distance);
+    EXPECT_EQ(result, 0U);
+    EXPECT_NEAR(distance, -99.0F, 1e-5F);
+}
+
 TEST(IvfSearchTest, InnerProductRawRerankingUsesResidualNormForPruning) {
     constexpr size_t kNum = 65;
     constexpr size_t kDim = 64;

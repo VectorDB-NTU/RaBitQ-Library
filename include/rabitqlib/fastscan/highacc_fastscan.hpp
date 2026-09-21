@@ -12,6 +12,7 @@ namespace rabitqlib::fastscan {
  **/
 void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 
+// Accumulate one batch into int32_t results. Throws if a result exceeds int32_t.
 void accumulate_hacc(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,

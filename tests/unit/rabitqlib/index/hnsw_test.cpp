@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -76,6 +77,33 @@ TEST(HnswConstructionTest, ParallelConstructionProducesSearchableIndex) {
     }
 }
 
+TEST(HnswConstructionTest, RejectsInvalidInputsBeforeChangingIndex) {
+    constexpr size_t kDim = 64;
+    std::vector<float> data(kDim, 1.0F);
+    std::vector<float> centroid(kDim, 0.0F);
+    PID invalid_cluster[] = {1};
+    PID valid_cluster[] = {0};
+    HierarchicalNSW index(1, kDim, 4, 4, 10);
+
+    try {
+        index.construct(1, centroid.data(), 1, data.data(), invalid_cluster, 1, false);
+        FAIL() << "Out-of-range cluster ID must be rejected";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "HNSW cluster ID is out of range");
+    }
+    EXPECT_THROW(
+        index.construct(1, centroid.data(), 2, data.data(), valid_cluster, 1, false),
+        std::invalid_argument
+    );
+    EXPECT_THROW(
+        index.construct(1, centroid.data(), 1, nullptr, valid_cluster, 1, false),
+        std::invalid_argument
+    );
+    EXPECT_NO_THROW(
+        index.construct(1, centroid.data(), 1, data.data(), valid_cluster, 1, false)
+    );
+}
+
 class HnswSaveTest : public ::testing::Test {
    protected:
     static constexpr size_t kDim = 64;
@@ -132,6 +160,42 @@ TEST_F(HnswSaveTest, SuccessfulSavePreservesSearchAfterLoading) {
         loaded.search(data_.data(), kCount, 2, kCount, 1),
         index_.search(data_.data(), kCount, 2, kCount, 1)
     );
+}
+
+TEST_F(HnswSaveTest, RejectsPointCountLargerThanCapacity) {
+    index_.save(path_.c_str());
+    {
+        std::fstream file(path_, std::ios::binary | std::ios::in | std::ios::out);
+        const size_t invalid_capacity = 1;
+        file.write(
+            reinterpret_cast<const char*>(&invalid_capacity), sizeof(invalid_capacity)
+        );
+        ASSERT_TRUE(file.good());
+    }
+
+    HierarchicalNSW loaded;
+    try {
+        loaded.load(path_.c_str());
+        FAIL() << "Invalid HNSW point count must be rejected";
+    } catch (const std::runtime_error& error) {
+        EXPECT_NE(std::string(error.what()).find("HNSW"), std::string::npos);
+    }
+}
+
+TEST_F(HnswSaveTest, RejectsTruncatedRotatorWithoutLosingExistingIndex) {
+    index_.save(path_.c_str());
+    HierarchicalNSW loaded;
+    loaded.load(path_.c_str());
+    const auto expected = loaded.search(data_.data(), 1, 2, kCount, 1);
+
+    std::filesystem::resize_file(path_, std::filesystem::file_size(path_) - 1);
+    try {
+        loaded.load(path_.c_str());
+        FAIL() << "Truncated HNSW rotator must be rejected";
+    } catch (const std::runtime_error& error) {
+        EXPECT_NE(std::string(error.what()).find("HNSW"), std::string::npos);
+    }
+    EXPECT_EQ(loaded.search(data_.data(), 1, 2, kCount, 1), expected);
 }
 
 }  // namespace

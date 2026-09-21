@@ -23,48 +23,17 @@ inline void split_batch_estdist_impl(
     float* ip_x0_qr,
     bool use_hacc
 ) {
-    constexpr size_t kSafeChunkDim = 1024;
     ConstBatchDataMap<float> cur_batch(batch_data, padded_dim);
     std::array<int32_t, fastscan::kBatchSize> accu_values{};
     RowMajorArrayMap<int32_t> accu_arr(accu_values.data(), 1, fastscan::kBatchSize);
-    const auto* codes_ptr = cur_batch.bin_code();
-    const auto* lut_ptr = q_obj.lut();
     if (use_hacc) {
-        std::array<int32_t, fastscan::kBatchSize> accu_res;
-        size_t remaining_dim = padded_dim;
-
-        while (remaining_dim > kSafeChunkDim) {
-            fastscan::accumulate_hacc(codes_ptr, lut_ptr, accu_res.data(), kSafeChunkDim);
-            codes_ptr += kSafeChunkDim << 2;
-            lut_ptr += kSafeChunkDim << 3;
-            for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-                accu_arr.data()[i] += accu_res[i];
-            }
-            remaining_dim -= kSafeChunkDim;
-        }
-
-        fastscan::accumulate_hacc(codes_ptr, lut_ptr, accu_res.data(), remaining_dim);
-        for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-            accu_arr.data()[i] += accu_res[i];
-        }
+        fastscan::accumulate_hacc(
+            cur_batch.bin_code(), q_obj.lut(), accu_values.data(), padded_dim
+        );
     } else {
-        std::array<uint16_t, fastscan::kBatchSize> accu_res;
-        size_t remaining_dim = padded_dim;
-
-        while (remaining_dim > kSafeChunkDim) {
-            fastscan::accumulate(codes_ptr, lut_ptr, accu_res.data(), kSafeChunkDim);
-            codes_ptr += kSafeChunkDim << 2;
-            lut_ptr += kSafeChunkDim << 2;
-            for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-                accu_arr.data()[i] += accu_res[i];
-            }
-            remaining_dim -= kSafeChunkDim;
-        }
-
-        fastscan::accumulate(codes_ptr, lut_ptr, accu_res.data(), remaining_dim);
-        for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-            accu_arr.data()[i] += accu_res[i];
-        }
+        fastscan::accumulate(
+            cur_batch.bin_code(), q_obj.lut(), accu_values.data(), padded_dim
+        );
     }
 
     std::array<float, fastscan::kBatchSize> f_add_values;
@@ -100,56 +69,9 @@ inline void qg_batch_estdist_impl(
     float* est_distance
 ) {
     using T = float;
-    using TA = uint16_t;
-
-    // Each 4-dimensional codebook can contribute at most 255, so 1024 dimensions
-    // produce at most 255 * (1024 / 4) = 65280 in the uint16_t FastScan result.
-    constexpr size_t kSafeChunkDim = 1024;
     ConstQGBatchDataMap<T> cur_batch(batch_data, padded_dim);
-
-    if (padded_dim <= kSafeChunkDim) {
-        std::array<TA, fastscan::kBatchSize> accu_res{};
-        fastscan::accumulate(
-            cur_batch.bin_code(), q_obj.lut(), accu_res.data(), padded_dim
-        );
-
-        ConstRowMajorArrayMap<TA> ip_arr(accu_res.data(), 1, fastscan::kBatchSize);
-        std::array<T, fastscan::kBatchSize> f_add_values;
-        std::array<T, fastscan::kBatchSize> f_rescale_values;
-        cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
-        cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
-        ConstRowMajorArrayMap<T> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
-        ConstRowMajorArrayMap<T> f_rescale_arr(
-            f_rescale_values.data(), 1, fastscan::kBatchSize
-        );
-        RowMajorArrayMap<T> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
-
-        est_dist_arr = f_add_arr + q_obj.g_add() +
-                       (f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<T>()) +
-                                         q_obj.sum_vl_lut() + q_obj.k1xsumq()));
-        return;
-    }
-
     std::array<int32_t, fastscan::kBatchSize> accu_values{};
-    std::array<TA, fastscan::kBatchSize> accu_res{};
-    const auto* codes_ptr = cur_batch.bin_code();
-    const auto* lut_ptr = q_obj.lut();
-    size_t remaining_dim = padded_dim;
-
-    while (remaining_dim > kSafeChunkDim) {
-        fastscan::accumulate(codes_ptr, lut_ptr, accu_res.data(), kSafeChunkDim);
-        codes_ptr += kSafeChunkDim << 2;
-        lut_ptr += kSafeChunkDim << 2;
-        for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-            accu_values[i] += accu_res[i];
-        }
-        remaining_dim -= kSafeChunkDim;
-    }
-
-    fastscan::accumulate(codes_ptr, lut_ptr, accu_res.data(), remaining_dim);
-    for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
-        accu_values[i] += accu_res[i];
-    }
+    fastscan::accumulate(cur_batch.bin_code(), q_obj.lut(), accu_values.data(), padded_dim);
 
     ConstRowMajorArrayMap<int32_t> ip_arr(accu_values.data(), 1, fastscan::kBatchSize);
     std::array<T, fastscan::kBatchSize> f_add_values;

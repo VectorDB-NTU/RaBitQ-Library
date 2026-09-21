@@ -12,6 +12,7 @@
 #include <fstream>
 #include <functional>
 #include <ios>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -142,7 +143,7 @@ class HierarchicalNSW {
     size_t maxM0_{0};
     size_t ef_construction_{0};
     size_t ef_{0};
-    MetricType metric_type_;
+    MetricType metric_type_{METRIC_L2};
 
     double mult_{0.0}, revSize_{0.0};
     int maxlevel_{0};
@@ -183,7 +184,7 @@ class HierarchicalNSW {
 
     std::unique_ptr<VisitedListPool> visited_list_pool_{nullptr};
 
-    float (*ip_func_)(const float*, const uint8_t*, size_t);
+    float (*ip_func_)(const float*, const uint8_t*, size_t){nullptr};
 
     std::unique_ptr<Rotator<float>> rotator_;
 
@@ -199,7 +200,8 @@ class HierarchicalNSW {
         }
     };
 
-    float (*raw_dist_func_)(const float* __restrict__, const float* __restrict__, size_t);
+    float (*raw_dist_func_
+    )(const float* __restrict__, const float* __restrict__, size_t){nullptr};
 
     void free_memory() {
         free(data_level0_memory_);
@@ -217,6 +219,7 @@ class HierarchicalNSW {
         centroids_memory_ = nullptr;
 
         rotator_.reset();
+        label_lookup_.clear();
     }
 
     void set_ef(size_t ef) { ef_ = ef; }
@@ -500,111 +503,300 @@ inline void HierarchicalNSW::save(const char* filename) const {
 }
 
 inline void HierarchicalNSW::load(const char* filename) {
+    if (filename == nullptr || filename[0] == '\0') {
+        throw std::invalid_argument("HNSW: index filename must not be empty");
+    }
     std::ifstream input(filename, std::ios::binary);
-
     if (!input.is_open()) {
-        throw std::runtime_error("Cannot open file");
+        throw std::runtime_error("HNSW: cannot open index file");
     }
 
-    free_memory();
+    auto invalid_file = []() -> void {
+        throw std::runtime_error("HNSW: invalid or truncated index file");
+    };
+    auto read_header = [&](auto& value) {
+        input.read(reinterpret_cast<char*>(&value), sizeof(value));
+        if (!input) {
+            invalid_file();
+        }
+    };
+    auto checked_product = [&](size_t left, size_t right) {
+        if (right != 0 && left > std::numeric_limits<size_t>::max() / right) {
+            invalid_file();
+        }
+        return left * right;
+    };
 
-    input.read(reinterpret_cast<char*>(&max_elements_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&cur_element_count_), sizeof(size_t));
+    // Keep the current index intact until the complete file has been validated.
+    HierarchicalNSW loaded;
+    size_t element_count = 0;
+    PID label_offset = 0;
+    read_header(loaded.max_elements_);
+    read_header(element_count);
+    read_header(loaded.dim_);
+    read_header(loaded.padded_dim_);
+    read_header(loaded.num_cluster_);
+    read_header(loaded.ex_bits_);
+    read_header(loaded.metric_type_);
+    read_header(loaded.size_bin_data_);
+    read_header(loaded.size_ex_data_);
+    read_header(loaded.size_links_level0_);
+    read_header(loaded.offsetBinData_);
+    read_header(loaded.offsetExData_);
+    read_header(label_offset);
+    loaded.label_offset_ = label_offset;
+    read_header(loaded.size_data_per_element_);
+    read_header(loaded.size_links_per_element_);
+    read_header(loaded.maxlevel_);
+    read_header(loaded.enterpoint_node_);
+    read_header(loaded.M_);
+    read_header(loaded.maxM_);
+    read_header(loaded.maxM0_);
+    read_header(loaded.mult_);
+    read_header(loaded.ef_construction_);
 
-    input.read(reinterpret_cast<char*>(&dim_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&padded_dim_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&num_cluster_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&ex_bits_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&metric_type_), sizeof(metric_type_));
-    validate_metric_type(metric_type_);
-    raw_dist_func_ =
-        (metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
-
-    ip_func_ = select_excode_ipfunc(ex_bits_);
-
-    input.read(reinterpret_cast<char*>(&size_bin_data_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&size_ex_data_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&size_links_level0_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&offsetBinData_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&offsetExData_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&label_offset_), sizeof(PID));
-    input.read(reinterpret_cast<char*>(&size_data_per_element_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&size_links_per_element_), sizeof(size_t));
-
-    input.read(reinterpret_cast<char*>(&maxlevel_), sizeof(int));
-    input.read(reinterpret_cast<char*>(&enterpoint_node_), sizeof(PID));
-
-    input.read(reinterpret_cast<char*>(&M_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&maxM_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&maxM0_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&mult_), sizeof(double));
-    input.read(reinterpret_cast<char*>(&ef_construction_), sizeof(size_t));
-
-    const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
-    centroids_memory_ = memory::huge_page_allocate<char>(centroids_bytes);
-    if (centroids_memory_ == nullptr) {
-        throw std::runtime_error("Not enough memory: loadIndex failed to allocate centroids"
-        );
+    if (loaded.max_elements_ == 0 ||
+        loaded.max_elements_ > buffer::kSearchBufferMaxPointCount ||
+        element_count > loaded.max_elements_ ||
+        loaded.num_cluster_ > buffer::kSearchBufferMaxPointCount ||
+        (element_count != 0 && loaded.num_cluster_ == 0) || loaded.dim_ < 64 ||
+        loaded.dim_ > 4095 || loaded.padded_dim_ != round_up_to_multiple(loaded.dim_, 64) ||
+        loaded.ex_bits_ > 8 ||
+        (loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
+        loaded.M_ == 0 || loaded.M_ > 10000 || loaded.maxM_ != loaded.M_ ||
+        loaded.maxM0_ != 2 * loaded.M_ || loaded.ef_construction_ < loaded.M_ ||
+        (element_count == 0 &&
+         (loaded.maxlevel_ != -1 || loaded.enterpoint_node_ != kPidMax)) ||
+        (element_count != 0 &&
+         (loaded.maxlevel_ < 0 || loaded.enterpoint_node_ >= element_count))) {
+        invalid_file();
     }
 
-    input.read(
-        centroids_memory_,
-        static_cast<std::streamsize>(num_cluster_ * padded_dim_ * sizeof(float))
+    const size_t expected_level0 = (loaded.maxM0_ + 1) * sizeof(PID);
+    const size_t expected_bin = BinDataMap<float>::data_bytes(loaded.padded_dim_);
+    const size_t expected_ex =
+        ExDataMap<float>::data_bytes(loaded.padded_dim_, loaded.ex_bits_);
+    const size_t expected_label = expected_level0 + sizeof(PID);
+    const size_t expected_bin_offset = expected_label + sizeof(PID);
+    const size_t expected_ex_offset = expected_bin_offset + expected_bin;
+    const size_t expected_stride = expected_ex_offset + expected_ex;
+    if (loaded.size_bin_data_ != expected_bin || loaded.size_ex_data_ != expected_ex ||
+        loaded.size_links_level0_ != expected_level0 ||
+        loaded.label_offset_ != expected_label ||
+        loaded.offsetBinData_ != expected_bin_offset ||
+        loaded.offsetExData_ != expected_ex_offset ||
+        loaded.size_data_per_element_ != expected_stride ||
+        loaded.size_links_per_element_ != (loaded.maxM_ + 1) * sizeof(PID) ||
+        (loaded.M_ > 1 && (!std::isfinite(loaded.mult_) || loaded.mult_ <= 0.0)) ||
+        (loaded.M_ == 1 && !std::isinf(loaded.mult_))) {
+        invalid_file();
+    }
+
+    const size_t centroids_bytes = checked_product(
+        checked_product(loaded.num_cluster_, loaded.padded_dim_), sizeof(float)
     );
-
-    data_level0_memory_ =
-        memory::huge_page_allocate<char>(max_elements_ * size_data_per_element_);
-
-    input.read(
-        data_level0_memory_,
-        static_cast<std::streamsize>(cur_element_count_ * size_data_per_element_)
+    const size_t data_capacity_bytes =
+        checked_product(loaded.max_elements_, loaded.size_data_per_element_);
+    const size_t data_bytes = checked_product(element_count, loaded.size_data_per_element_);
+    const size_t link_pointer_bytes = checked_product(loaded.max_elements_, sizeof(char*));
+    const size_t link_headers_bytes = checked_product(element_count, sizeof(unsigned int));
+    loaded.rotator_.reset(
+        choose_rotator<float>(loaded.dim_, RotatorType::FhtKacRotator, loaded.padded_dim_)
     );
+    const size_t rotator_bytes = loaded.rotator_->dump_bytes();
 
-    std::vector<std::mutex>(max_elements_).swap(link_list_locks_);
-    std::vector<std::mutex>(kMaxLabelOperationLock).swap(label_op_locks_);
-
-    linkLists_ = reinterpret_cast<char**>(malloc(sizeof(void*) * max_elements_));
-    if (linkLists_ == nullptr) {
-        throw std::runtime_error("Not enough memory: loadIndex failed to allocate linklists"
-        );
+    const auto payload_start = input.tellg();
+    input.seekg(0, std::ios::end);
+    const auto payload_end = input.tellg();
+    if (!input || payload_start < 0 || payload_end < payload_start) {
+        invalid_file();
     }
-
-    element_levels_ = std::vector<int>(max_elements_);
-    revSize_ = 1.0 / mult_;
-    ef_ = 10;
-
-    for (size_t i = 0; i < cur_element_count_; i++) {
-        label_lookup_[get_external_label(i)] = i;
-        unsigned int link_list_size;
-        input.read(reinterpret_cast<char*>(&link_list_size), sizeof(unsigned int));
-        if (link_list_size == 0) {
-            element_levels_[i] = 0;
-            linkLists_[i] = nullptr;
-        } else {
-            element_levels_[i] = static_cast<int>(link_list_size / size_links_per_element_);
-            linkLists_[i] = reinterpret_cast<char*>(malloc(link_list_size));
-            if (linkLists_[i] == nullptr) {
-                throw std::runtime_error(
-                    "Not enough memory: loadIndex failed to allocate linklist"
-                );
+    size_t remaining = static_cast<size_t>(payload_end - payload_start);
+    input.seekg(payload_start);
+    if (centroids_bytes > remaining || data_bytes > remaining - centroids_bytes ||
+        link_headers_bytes > remaining - centroids_bytes - data_bytes ||
+        rotator_bytes > remaining - centroids_bytes - data_bytes - link_headers_bytes) {
+        invalid_file();
+    }
+    auto read_payload = [&](char* destination, size_t bytes) {
+        if (bytes > remaining ||
+            bytes > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+            invalid_file();
+        }
+        if (bytes != 0) {
+            input.read(destination, static_cast<std::streamsize>(bytes));
+            if (!input) {
+                invalid_file();
             }
-            input.read(linkLists_[i], link_list_size);
+        }
+        remaining -= bytes;
+    };
+
+    if (centroids_bytes != 0) {
+        loaded.centroids_memory_ = memory::huge_page_allocate<char>(centroids_bytes);
+        if (loaded.centroids_memory_ == nullptr) {
+            throw std::bad_alloc();
+        }
+        read_payload(loaded.centroids_memory_, centroids_bytes);
+    }
+    loaded.data_level0_memory_ = memory::huge_page_allocate<char>(data_capacity_bytes);
+    if (loaded.data_level0_memory_ == nullptr) {
+        throw std::bad_alloc();
+    }
+    read_payload(loaded.data_level0_memory_, data_bytes);
+
+    loaded.element_levels_ = std::vector<int>(loaded.max_elements_);
+    loaded.link_list_locks_ = std::vector<std::mutex>(loaded.max_elements_);
+    loaded.label_op_locks_ = std::vector<std::mutex>(kMaxLabelOperationLock);
+    loaded.linkLists_ = reinterpret_cast<char**>(calloc(1, link_pointer_bytes));
+    if (loaded.linkLists_ == nullptr) {
+        throw std::bad_alloc();
+    }
+    for (size_t i = 0; i < element_count; ++i) {
+        const char* row = loaded.data_level0_memory_ + i * loaded.size_data_per_element_;
+        PID cluster_id = 0;
+        PID label = 0;
+        unsigned short level0_degree = 0;
+        std::memcpy(&level0_degree, row, sizeof(level0_degree));
+        std::memcpy(&cluster_id, row + loaded.size_links_level0_, sizeof(cluster_id));
+        std::memcpy(&label, row + loaded.label_offset_, sizeof(label));
+        if (cluster_id >= loaded.num_cluster_ || level0_degree > loaded.maxM0_) {
+            invalid_file();
+        }
+        for (size_t edge = 0; edge < level0_degree; ++edge) {
+            PID neighbor = 0;
+            std::memcpy(&neighbor, row + sizeof(PID) + edge * sizeof(PID), sizeof(PID));
+            if (neighbor >= element_count) {
+                invalid_file();
+            }
+        }
+        if (!loaded.label_lookup_.emplace(label, static_cast<PID>(i)).second) {
+            invalid_file();
+        }
+
+        unsigned int link_list_size = 0;
+        read_payload(reinterpret_cast<char*>(&link_list_size), sizeof(link_list_size));
+        if (link_list_size != 0) {
+            if (link_list_size % loaded.size_links_per_element_ != 0 ||
+                link_list_size / loaded.size_links_per_element_ >
+                    static_cast<size_t>(loaded.maxlevel_) ||
+                link_list_size > remaining) {
+                invalid_file();
+            }
+            loaded.linkLists_[i] = reinterpret_cast<char*>(malloc(link_list_size));
+            if (loaded.linkLists_[i] == nullptr) {
+                throw std::bad_alloc();
+            }
+            loaded.element_levels_[i] =
+                static_cast<int>(link_list_size / loaded.size_links_per_element_);
+        }
+        loaded.cur_element_count_ = i + 1;
+        if (link_list_size != 0) {
+            read_payload(loaded.linkLists_[i], link_list_size);
+            for (int level = 0; level < loaded.element_levels_[i]; ++level) {
+                const char* link =
+                    loaded.linkLists_[i] + level * loaded.size_links_per_element_;
+                unsigned short degree = 0;
+                std::memcpy(&degree, link, sizeof(degree));
+                if (degree > loaded.maxM_) {
+                    invalid_file();
+                }
+                for (size_t edge = 0; edge < degree; ++edge) {
+                    PID neighbor = 0;
+                    std::memcpy(
+                        &neighbor, link + sizeof(PID) + edge * sizeof(PID), sizeof(PID)
+                    );
+                    if (neighbor >= element_count) {
+                        invalid_file();
+                    }
+                }
+            }
         }
     }
-
-    visited_list_pool_ = std::make_unique<VisitedListPool>(1, max_elements_);
-
-    rotator_.reset(choose_rotator<float>(
-        dim_, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 64)
-    ));
-    if (rotator_->size() != padded_dim_) {
-        throw std::runtime_error("Invalid padded dimension in HNSW index file");
+    for (size_t i = 0; i < element_count; ++i) {
+        for (int level = 1; level <= loaded.element_levels_[i]; ++level) {
+            const char* link = loaded.linkLists_[i] + (static_cast<size_t>(level) - 1) *
+                                                          loaded.size_links_per_element_;
+            unsigned short degree = 0;
+            std::memcpy(&degree, link, sizeof(degree));
+            for (size_t edge = 0; edge < degree; ++edge) {
+                PID neighbor = 0;
+                std::memcpy(
+                    &neighbor, link + sizeof(PID) + edge * sizeof(PID), sizeof(PID)
+                );
+                if (loaded.element_levels_[neighbor] < level) {
+                    invalid_file();
+                }
+            }
+        }
     }
-    rotator_->load(input);
-    input.close();
+    if (element_count != 0 &&
+        loaded.element_levels_[loaded.enterpoint_node_] != loaded.maxlevel_) {
+        invalid_file();
+    }
 
-    this->query_config_ =
-        quant::faster_config(padded_dim_, SplitSingleQuery<float>::kNumBits);
+    if (rotator_bytes > remaining) {
+        invalid_file();
+    }
+    loaded.rotator_->load(input);
+    if (!input) {
+        invalid_file();
+    }
+    remaining -= rotator_bytes;
+    if (remaining != 0) {
+        invalid_file();
+    }
+
+    loaded.visited_list_pool_ = std::make_unique<VisitedListPool>(1, loaded.max_elements_);
+    loaded.raw_dist_func_ =
+        (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
+    loaded.ip_func_ = select_excode_ipfunc(loaded.ex_bits_);
+    loaded.revSize_ = 1.0 / loaded.mult_;
+    loaded.ef_ = 10;
+    loaded.query_config_ =
+        quant::faster_config(loaded.padded_dim_, SplitSingleQuery<float>::kNumBits);
+
+    // All swaps below are non-allocating. The temporary releases the old state.
+    using std::swap;
+    swap(rawDataPtr_, loaded.rawDataPtr_);
+    swap(max_elements_, loaded.max_elements_);
+    const size_t old_count = cur_element_count_.load();
+    cur_element_count_ = loaded.cur_element_count_.load();
+    loaded.cur_element_count_ = old_count;
+    swap(size_data_per_element_, loaded.size_data_per_element_);
+    swap(size_links_per_element_, loaded.size_links_per_element_);
+    swap(M_, loaded.M_);
+    swap(maxM_, loaded.maxM_);
+    swap(maxM0_, loaded.maxM0_);
+    swap(ef_construction_, loaded.ef_construction_);
+    swap(ef_, loaded.ef_);
+    swap(metric_type_, loaded.metric_type_);
+    swap(mult_, loaded.mult_);
+    swap(revSize_, loaded.revSize_);
+    swap(maxlevel_, loaded.maxlevel_);
+    label_op_locks_.swap(loaded.label_op_locks_);
+    link_list_locks_.swap(loaded.link_list_locks_);
+    swap(enterpoint_node_, loaded.enterpoint_node_);
+    swap(size_links_level0_, loaded.size_links_level0_);
+    swap(offsetBinData_, loaded.offsetBinData_);
+    swap(offsetExData_, loaded.offsetExData_);
+    swap(label_offset_, loaded.label_offset_);
+    swap(size_bin_data_, loaded.size_bin_data_);
+    swap(size_ex_data_, loaded.size_ex_data_);
+    swap(ex_bits_, loaded.ex_bits_);
+    swap(data_level0_memory_, loaded.data_level0_memory_);
+    swap(linkLists_, loaded.linkLists_);
+    element_levels_.swap(loaded.element_levels_);
+    swap(num_cluster_, loaded.num_cluster_);
+    swap(dim_, loaded.dim_);
+    swap(padded_dim_, loaded.padded_dim_);
+    swap(centroids_memory_, loaded.centroids_memory_);
+    label_lookup_.swap(loaded.label_lookup_);
+    swap(visited_list_pool_, loaded.visited_list_pool_);
+    swap(ip_func_, loaded.ip_func_);
+    swap(rotator_, loaded.rotator_);
+    swap(query_config_, loaded.query_config_);
+    swap(raw_dist_func_, loaded.raw_dist_func_);
 }
 
 inline void HierarchicalNSW::construct(
@@ -616,6 +808,25 @@ inline void HierarchicalNSW::construct(
     size_t num_threads = 0,
     bool faster = false
 ) {
+    if (cluster_num == 0 || cluster_num > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("HNSW cluster count is out of range");
+    }
+    if (data_num == 0 || data_num > max_elements_ ||
+        data_num > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("HNSW point count is out of range");
+    }
+    if (centroids == nullptr || data == nullptr || cluster_ids == nullptr) {
+        throw std::invalid_argument("HNSW construction inputs must not be null");
+    }
+    if (cluster_num > std::numeric_limits<size_t>::max() / sizeof(float) / padded_dim_) {
+        throw std::invalid_argument("HNSW centroids exceed addressable storage");
+    }
+    for (size_t i = 0; i < data_num; ++i) {
+        if (cluster_ids[i] >= cluster_num) {
+            throw std::invalid_argument("HNSW cluster ID is out of range");
+        }
+    }
+
     num_cluster_ = cluster_num;
     const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
     centroids_memory_ = reinterpret_cast<char*>(malloc(centroids_bytes));

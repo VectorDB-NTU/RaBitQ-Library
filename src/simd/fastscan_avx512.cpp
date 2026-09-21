@@ -1,7 +1,11 @@
 #include <immintrin.h>
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <stdexcept>
 
 #include "rabitqlib/simd/fastscan_dispatch.hpp"
 
@@ -22,10 +26,17 @@ void pack_lut_avx512(size_t dim, const float* query, float* lut) {
     }
 }
 
-void accumulate_avx512(
+namespace {
+
+// After removing packed high-byte terms, each byte-plane sum is at most
+// 255 * (1024 / 4) = 65280, below the 16-bit reduction limit.
+constexpr size_t kChunkDim = 1024;
+constexpr size_t kBatchSize = 32;
+
+void accumulate_chunk_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,
-    uint16_t* __restrict__ result,
+    int32_t* __restrict__ result,
     size_t dim
 ) {
     size_t code_length = dim << 2;
@@ -86,7 +97,45 @@ void accumulate_avx512(
     ret = _mm512_add_epi16(ret, _mm512_shuffle_i64x2(ret1, ret2, 0b10001000));
     ret = _mm512_add_epi16(ret, _mm512_shuffle_i64x2(ret1, ret2, 0b11011101));
 
-    _mm512_storeu_si512(result, ret);
+    _mm512_storeu_si512(result, _mm512_cvtepu16_epi32(_mm512_castsi512_si256(ret)));
+    _mm512_storeu_si512(
+        result + 16, _mm512_cvtepu16_epi32(_mm512_extracti64x4_epi64(ret, 1))
+    );
+}
+
+}  // namespace
+
+void accumulate_avx512(
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ lp_table,
+    int32_t* __restrict__ result,
+    size_t dim
+) {
+    if (dim <= kChunkDim) {
+        accumulate_chunk_avx512(codes, lp_table, result, dim);
+        return;
+    }
+
+    std::array<int64_t, kBatchSize> totals{};
+    std::array<int32_t, kBatchSize> chunk_result;
+    for (size_t offset = 0; offset < dim;) {
+        const size_t chunk_dim = std::min(kChunkDim, dim - offset);
+        accumulate_chunk_avx512(
+            codes + offset * 4, lp_table + offset * 4, chunk_result.data(), chunk_dim
+        );
+        for (size_t lane = 0; lane < kBatchSize; ++lane) {
+            totals[lane] += chunk_result[lane];
+        }
+        offset += chunk_dim;
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        if (totals[lane] > std::numeric_limits<int32_t>::max()) {
+            throw std::overflow_error("FastScan result exceeds int32_t");
+        }
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        result[lane] = static_cast<int32_t>(totals[lane]);
+    }
 }
 
 void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
@@ -116,7 +165,9 @@ void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
     }
 }
 
-void accumulate_hacc_avx512(
+namespace {
+
+void accumulate_hacc_chunk_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
     int32_t* accu_res,
@@ -197,6 +248,41 @@ void accumulate_hacc_avx512(
 
     _mm512_storeu_epi32(accu_res, res[0]);
     _mm512_storeu_epi32(accu_res + 16, res[1]);
+}
+
+}  // namespace
+
+void accumulate_hacc_avx512(
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ hc_lut,
+    int32_t* accu_res,
+    size_t dim
+) {
+    if (dim <= kChunkDim) {
+        accumulate_hacc_chunk_avx512(codes, hc_lut, accu_res, dim);
+        return;
+    }
+
+    std::array<int64_t, kBatchSize> totals{};
+    std::array<int32_t, kBatchSize> chunk_result;
+    for (size_t offset = 0; offset < dim;) {
+        const size_t chunk_dim = std::min(kChunkDim, dim - offset);
+        accumulate_hacc_chunk_avx512(
+            codes + offset * 4, hc_lut + offset * 8, chunk_result.data(), chunk_dim
+        );
+        for (size_t lane = 0; lane < kBatchSize; ++lane) {
+            totals[lane] += chunk_result[lane];
+        }
+        offset += chunk_dim;
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        if (totals[lane] > std::numeric_limits<int32_t>::max()) {
+            throw std::overflow_error("high-accuracy FastScan result exceeds int32_t");
+        }
+    }
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        accu_res[lane] = static_cast<int32_t>(totals[lane]);
+    }
 }
 
 }  // namespace rabitqlib::fastscan::simd

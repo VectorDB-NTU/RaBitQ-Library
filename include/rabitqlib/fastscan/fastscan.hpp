@@ -117,11 +117,12 @@ inline void pack_codes(
     }
 }
 
-// use fast scan to accumulate one block, dim % 16 == 0
+// Accumulate one batch into int32_t results. Throws if a result exceeds int32_t.
+// dim must be a positive multiple of 16.
 void accumulate(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lp_table,
-    uint16_t* __restrict__ result,
+    int32_t* __restrict__ result,
     size_t dim
 );
 

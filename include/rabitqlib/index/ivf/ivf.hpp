@@ -301,7 +301,8 @@ inline void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
         this->initer_ =
             std::make_unique<FlatInitializer>(padded_dim_, num_cluster_, metric_type_);
     } else {
-        this->initer_ = std::make_unique<HNSWInitializer>(padded_dim_, num_cluster_);
+        this->initer_ =
+            std::make_unique<HNSWInitializer>(padded_dim_, num_cluster_, metric_type_);
     }
     batch_storage_ = ByteStorage(batch_data_bytes(cluster_sizes));
     if (rerank_vector_bytes() > 0) {
