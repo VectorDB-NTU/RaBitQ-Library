@@ -63,6 +63,5 @@ export -f check_file
 # shellcheck disable=SC2016
 git ls-files --cached --others --exclude-standard -z -- 'src/*.cpp' 'src/*.hpp' 'include/rabitqlib/*.hpp' \
     ':(exclude)include/rabitqlib/third/**' \
-    ':(exclude)include/rabitqlib/utils/fht_avx.hpp' \
     | sort -zu \
     | xargs -0 -r -n 1 -P "${INCLUDE_JOBS:-2}" bash -c 'check_file "$1"' _

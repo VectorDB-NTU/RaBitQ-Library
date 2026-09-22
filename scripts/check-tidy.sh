@@ -63,8 +63,7 @@ done
 
 mapfile -t first_party_headers < <(
     git -C "$repo_root" ls-files --cached --others --exclude-standard -- '*.h' '*.hpp' \
-        ':(exclude)include/rabitqlib/third/**' \
-        ':(exclude)include/rabitqlib/utils/fht_avx.hpp'
+        ':(exclude)include/rabitqlib/third/**'
 )
 
 header_filter="$repo_root/("

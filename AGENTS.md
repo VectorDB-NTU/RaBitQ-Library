@@ -194,6 +194,6 @@ unless the C++ contract becomes const-correct.
 
 ### Vendored code
 
-`include/rabitqlib/third/` and `include/rabitqlib/utils/fht_avx.hpp` are imported code. Do not
-reformat, refactor, or include them in project-wide lint fixes unless the task explicitly targets
-the vendor snapshot. Keep attribution and license text intact.
+`include/rabitqlib/third/` contains imported code. Do not reformat, refactor, or include it
+in project-wide lint fixes unless the task explicitly targets the vendor snapshot. Keep
+its attribution and license text intact.

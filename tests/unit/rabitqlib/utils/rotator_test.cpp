@@ -2,11 +2,11 @@
 
 #include <gtest/gtest.h>
 
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -64,6 +64,47 @@ TEST_F(RotatorTest, RejectsZeroDimension) {
     );
 }
 
+TEST(FhtRotatorTest, LargeDimensionsPreserveNormAndSavedRotation) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "FHT rotation requires AVX2/FMA";
+    }
+    for (size_t dim : {4095U, 4096U, 16384U, 16385U, 65535U, 65536U}) {
+        SCOPED_TRACE(dim);
+        std::unique_ptr<Rotator<float>> rotator(choose_rotator<float>(dim));
+        std::vector<float> data(dim), rotated(rotator->size()), restored(rotator->size());
+        for (size_t i = 0; i < dim; ++i) {
+            data[i] = std::sin(static_cast<float>(i) * 0.13F);
+        }
+        rotator->rotate(data.data(), rotated.data());
+        double input_norm = 0, output_norm = 0;
+        for (float value : data) {
+            input_norm += static_cast<double>(value) * value;
+        }
+        for (float value : rotated) {
+            ASSERT_TRUE(std::isfinite(value));
+            output_norm += static_cast<double>(value) * value;
+        }
+        EXPECT_NEAR(output_norm, input_norm, input_norm * 2e-6);
+        std::vector<char> state(rotator->dump_bytes());
+        rotator->save(state.data());
+        std::unique_ptr<Rotator<float>> loaded(choose_rotator<float>(dim));
+        loaded->load(state.data());
+        loaded->rotate(data.data(), restored.data());
+        EXPECT_EQ(restored, rotated);
+    }
+}
+
+TEST(FhtRotatorTest, RejectsUnaddressableDimensionsBeforeAllocation) {
+    EXPECT_THROW(
+        (rotator_impl::FhtKacRotator(64, std::numeric_limits<size_t>::max() - 63)),
+        std::invalid_argument
+    );
+    EXPECT_THROW(
+        (choose_rotator<float>(rotator_impl::FhtKacRotator::kMaxDim + 1)),
+        std::invalid_argument
+    );
+}
+
 uint8_t bitreverse8(uint8_t x) {
     x = (((x & 0x55) << 1) | ((x & 0xAA) >> 1));
     x = (((x & 0x33) << 2) | ((x & 0xCC) >> 2));
@@ -113,7 +154,9 @@ TEST(FhtDispatchTest, BackendsMatchScalarButterfliesAndPadding) {
         GTEST_SKIP() << "FHT rotation requires AVX2/FMA or AVX512";
     }
     backends.push_back(simd::fht_rotate);
-    for (size_t dim : {64U, 65U, 127U, 128U, 129U, 192U, 256U, 512U, 1024U, 2048U, 2049U}) {
+    for (size_t dim :
+         {64U,   65U,   127U,  128U,  129U,  192U,   256U,   512U,   1024U,  2048U, 2049U,
+          4095U, 4096U, 4097U, 8192U, 8193U, 16384U, 16385U, 32768U, 65535U, 65536U}) {
         SCOPED_TRACE(dim);
         const size_t padded = (dim + 63) / 64 * 64;
         size_t trunc = 1;
@@ -177,83 +220,51 @@ TEST(FhtDispatchTest, BackendsMatchScalarButterfliesAndPadding) {
     }
 }
 
-#if defined(_MSC_VER)
-#define RABITQ_DECLARE_WINDOWS_FHT(size)                        \
-    extern "C" void rabitq_fht_avx_float_##size(float* values); \
-    extern "C" void rabitq_fht_avx_double_##size(double* values);
-
-RABITQ_DECLARE_WINDOWS_FHT(1)
-RABITQ_DECLARE_WINDOWS_FHT(2)
-RABITQ_DECLARE_WINDOWS_FHT(3)
-RABITQ_DECLARE_WINDOWS_FHT(4)
-RABITQ_DECLARE_WINDOWS_FHT(5)
-RABITQ_DECLARE_WINDOWS_FHT(6)
-RABITQ_DECLARE_WINDOWS_FHT(7)
-RABITQ_DECLARE_WINDOWS_FHT(8)
-RABITQ_DECLARE_WINDOWS_FHT(9)
-RABITQ_DECLARE_WINDOWS_FHT(10)
-RABITQ_DECLARE_WINDOWS_FHT(11)
-RABITQ_DECLARE_WINDOWS_FHT(12)
-
-#undef RABITQ_DECLARE_WINDOWS_FHT
-
-template <typename T>
-void CheckWindowsFhtHelpers(const std::array<void (*)(T*), 12>& helpers) {
-    for (size_t log_n = 1; log_n <= helpers.size(); ++log_n) {
-        SCOPED_TRACE(log_n);
-        const size_t dim = size_t{1} << log_n;
-        std::vector<T> actual(dim), expected(dim);
-        for (size_t i = 0; i < dim; ++i) {
-            actual[i] = expected[i] = static_cast<T>(static_cast<int>(i * 37 % 101) - 50);
+TEST(FhtDispatchTest, PreservesZeroNormAndInnerProduct) {
+    std::vector<decltype(&simd::fht_rotate)> backends;
+    if (cpu::has_avx2()) {
+        backends.push_back(simd::fht_rotate_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        backends.push_back(simd::fht_rotate_avx512);
+    }
+    if (backends.empty()) {
+        GTEST_SKIP() << "FHT rotation requires AVX2/FMA or AVX512";
+    }
+    for (size_t dim : {64U, 65U, 128U, 192U, 256U, 512U, 4097U, 65536U}) {
+        SCOPED_TRACE(dim);
+        const size_t padded = (dim + 63) / 64 * 64;
+        size_t trunc = 1;
+        while (trunc * 2 <= dim) {
+            trunc *= 2;
         }
-        for (size_t width = 1; width < dim; width *= 2) {
-            for (size_t block = 0; block < dim; block += width * 2) {
-                for (size_t i = 0; i < width; ++i) {
-                    const T a = expected[block + i], b = expected[block + width + i];
-                    expected[block + i] = a + b;
-                    expected[block + width + i] = a - b;
-                }
+        const float fac = 1.0F / std::sqrt(static_cast<float>(trunc));
+        std::vector<uint8_t> flip(padded / 2, 0xA5);
+        std::vector<float> a(dim, 0), b(dim), rotated_a(padded), rotated_b(padded);
+        a[dim - 1] = 1;  // Exercise the padded tail with an impulse.
+        for (size_t i = 0; i < dim; ++i) {
+            b[i] = i % 2 == 0 ? 1.0F : -1.0F;
+        }
+        for (auto backend : backends) {
+            backend(a.data(), rotated_a.data(), dim, padded, trunc, fac, flip.data());
+            backend(b.data(), rotated_b.data(), dim, padded, trunc, fac, flip.data());
+            double norm_a = 0, norm_b = 0, dot = 0;
+            for (size_t i = 0; i < padded; ++i) {
+                norm_a += static_cast<double>(rotated_a[i]) * rotated_a[i];
+                norm_b += static_cast<double>(rotated_b[i]) * rotated_b[i];
+                dot += static_cast<double>(rotated_a[i]) * rotated_b[i];
+            }
+            EXPECT_NEAR(norm_a, 1.0, 2e-6);
+            EXPECT_NEAR(norm_b, static_cast<double>(dim), 2e-6 * dim);
+            EXPECT_NEAR(dot, b.back(), 2e-6);
+            std::vector<float> zero(dim, 0);
+            backend(zero.data(), rotated_a.data(), dim, padded, trunc, fac, flip.data());
+            for (float value : rotated_a) {
+                EXPECT_EQ(value, 0.0F);
             }
         }
-        helpers[log_n - 1](actual.data());
-        EXPECT_EQ(actual, expected);
     }
 }
-
-TEST(FhtWindowsAssemblyTest, FloatAndDoubleHelpersMatchScalarButterflies) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "Windows FHT assembly requires AVX";
-    }
-    CheckWindowsFhtHelpers<float>({
-        rabitq_fht_avx_float_1,
-        rabitq_fht_avx_float_2,
-        rabitq_fht_avx_float_3,
-        rabitq_fht_avx_float_4,
-        rabitq_fht_avx_float_5,
-        rabitq_fht_avx_float_6,
-        rabitq_fht_avx_float_7,
-        rabitq_fht_avx_float_8,
-        rabitq_fht_avx_float_9,
-        rabitq_fht_avx_float_10,
-        rabitq_fht_avx_float_11,
-        rabitq_fht_avx_float_12,
-    });
-    CheckWindowsFhtHelpers<double>({
-        rabitq_fht_avx_double_1,
-        rabitq_fht_avx_double_2,
-        rabitq_fht_avx_double_3,
-        rabitq_fht_avx_double_4,
-        rabitq_fht_avx_double_5,
-        rabitq_fht_avx_double_6,
-        rabitq_fht_avx_double_7,
-        rabitq_fht_avx_double_8,
-        rabitq_fht_avx_double_9,
-        rabitq_fht_avx_double_10,
-        rabitq_fht_avx_double_11,
-        rabitq_fht_avx_double_12,
-    });
-}
-#endif
 
 TEST(MatrixRotatorTest, PreservesOverlappingInputAndOutput) {
     rotator_impl::MatrixRotator<float> rotator(3, 3);

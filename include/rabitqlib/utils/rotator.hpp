@@ -141,8 +141,14 @@ class FhtKacRotator : public Rotator<float> {
     static constexpr size_t kByteLen = 8;
 
    public:
+    static constexpr size_t kMaxDim = 65536;
+
     explicit FhtKacRotator(size_t dim, size_t padded_dim)
-        : Rotator<float>(dim, padded_dim), flip_(4 * padded_dim / kByteLen) {
+        : Rotator<float>(dim, padded_dim) {
+        if (dim < 64 || padded_dim < dim || padded_dim % 64 != 0 || padded_dim > kMaxDim) {
+            throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
+        }
+        flip_.resize((padded_dim / kByteLen) * 4);
         std::random_device rd;
         std::seed_seq seed{rd(), rd(), rd(), rd()};
         std::mt19937 gen(seed);
@@ -155,14 +161,9 @@ class FhtKacRotator : public Rotator<float> {
             i = static_cast<uint8_t>(dist(gen));
         }
 
-        // TODO(lib): is it portable?
         size_t bottom_log_dim = floor_log2(dim);
-        trunc_dim_ = 1 << bottom_log_dim;
+        trunc_dim_ = size_t{1} << bottom_log_dim;
         fac_ = 1.0F / std::sqrt(static_cast<float>(trunc_dim_));
-
-        if (bottom_log_dim < 6 || bottom_log_dim > 11) {
-            throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
-        }
     }
     FhtKacRotator() = default;
     ~FhtKacRotator() override = default;

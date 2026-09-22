@@ -10,8 +10,7 @@ if (($# > 0)); then
 else
     git -C "$repo_root" ls-files -z -- \
         '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hpp' '*.cu' '*.cuh' \
-        ':(exclude)include/rabitqlib/third/**' \
-        ':(exclude)include/rabitqlib/utils/fht_avx.hpp'
+        ':(exclude)include/rabitqlib/third/**'
 fi | while IFS= read -r -d '' file; do
     if [[ "$file" == /* ]]; then
         file="$(realpath --relative-to="$repo_root" "$file")"
@@ -23,7 +22,7 @@ fi | while IFS= read -r -d '' file; do
         ../* | */../* | */..)
             continue
             ;;
-        include/rabitqlib/third/* | include/rabitqlib/utils/fht_avx.hpp)
+        include/rabitqlib/third/*)
             continue
             ;;
     esac

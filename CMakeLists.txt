@@ -126,8 +126,6 @@ set_target_properties(rabitq_core PROPERTIES
 rabitq_enable_warnings(rabitq_core)
 
 if(MSVC)
-    enable_language(ASM_MASM)
-    target_sources(rabitq_core PRIVATE src/simd/fht_avx2_masm.asm)
     set_source_files_properties(
         ${RABITQ_AVX2_SOURCES} ${RABITQ_HNSW_AVX2_SOURCES}
         PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
