@@ -128,14 +128,14 @@ jobs:
   windows:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
-    name: Windows x86-64
-    runs-on: windows-2022
+    name: Windows x86-64 (VS 2026)
+    runs-on: windows-2025-vs2026
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - name: Configure
         run: >-
-          cmake -S . -B build-windows -G "Visual Studio 17 2022" -A x64
+          cmake -S . -B build-windows -G "Visual Studio 18 2026" -A x64
           -DRABITQ_BUILD_TESTS=ON
           -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
       - name: Build

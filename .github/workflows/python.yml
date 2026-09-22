@@ -70,8 +70,8 @@ jobs:
   python-windows:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_build == 'true') }}
-    name: Python Windows x86-64
-    runs-on: windows-2022
+    name: Python Windows x86-64 (VS 2026)
+    runs-on: windows-2025-vs2026
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

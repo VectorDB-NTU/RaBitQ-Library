@@ -12,8 +12,10 @@
 namespace rabitqlib::fastscan::simd {
 
 void pack_lut_avx2(size_t dim, const float* query, float* lut) {
+    // Keep the initial +0 addition observable for signed-zero inputs.
+    volatile float zero = 0;
     for (size_t group = 0; group < dim / 4; ++group) {
-        __m256 lo = _mm256_setzero_ps();
+        __m256 lo = _mm256_set1_ps(zero);
         __m256 hi = _mm256_add_ps(lo, _mm256_set1_ps(query[0]));
         const __m256 q1 = _mm256_set1_ps(query[1]);
         const __m256 q2 = _mm256_set1_ps(query[2]);

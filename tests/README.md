@@ -5,17 +5,18 @@ binding tests for RaBitQ Library.
 
 ## Prerequisites
 
-- CMake 3.20 or newer for the `ctest --test-dir` commands below
-- A C++17 compiler with OpenMP support (GCC, Clang, or Visual Studio 2022)
+- CMake 3.20 or newer for the `ctest --test-dir` commands below (4.2 or newer
+  for the Visual Studio 2026 generator)
+- A C++17 compiler with OpenMP support (GCC, Clang, or Visual Studio 2026)
 - An x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 runtime dispatch
 - Git and network access during the first configuration so CMake can download
   GoogleTest 1.14.0
 
-On Windows, install Visual Studio 2022 with the Desktop development with C++
+On Windows, install Visual Studio 2026 with the Desktop development with C++
 workload. Configure with its x64 generator:
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DRABITQ_BUILD_TESTS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DRABITQ_BUILD_TESTS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```

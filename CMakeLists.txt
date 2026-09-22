@@ -33,6 +33,9 @@ if(MSVC)
     # MSVC spells the GNU restrict extension differently. Public headers use
     # __restrict__, so consumers need the same definition as the library.
     target_compile_definitions(rabitq_compile_options INTERFACE __restrict__=__restrict)
+    # Eigen's inline code must have one ISA-independent definition across the
+    # generic, AVX2, and AVX-512 translation units on MSVC.
+    target_compile_definitions(rabitq_compile_options INTERFACE EIGEN_DONT_VECTORIZE)
 endif()
 if(RABITQ_ENABLE_SANITIZERS)
     target_compile_options(rabitq_compile_options INTERFACE

@@ -131,8 +131,10 @@ void accumulate(
 template <typename T>
 inline void pack_lut(size_t dim, const T* __restrict__ query, T* __restrict__ lut) {
     size_t num_codebook = dim >> 2;
+    // Preserve +0 when the first selected coordinate is -0.
+    volatile T zero = 0;
     for (size_t i = 0; i < num_codebook; ++i) {
-        lut[0] = 0;
+        lut[0] = zero;
         for (size_t j = 1; j < 16; ++j) {
             lut[j] = lut[j - LOWBIT(j)] + query[kPos[j]];
         }
