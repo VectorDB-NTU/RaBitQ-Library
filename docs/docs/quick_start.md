@@ -10,7 +10,7 @@ a C++17 API for both indexes and low-level quantization.
 - Linux x86-64 and CPython 3.11–3.14 for currently published Python wheels;
   Windows x86-64 wheels are configured for the next release
 - For source builds: a C++17 compiler with OpenMP support and CMake 3.20 or newer;
-  Windows builds use Visual Studio 2022 with the C++ workload
+  Windows builds use Visual Studio 2026 with the C++ workload
 
 <details>
 <summary>CPU dispatch details</summary>
@@ -33,7 +33,7 @@ python -m pip install rabitqlib
 
 Published Linux x86-64 wheels for CPython 3.11–3.14 do not require a compiler
 or CMake. Windows x86-64 wheels are configured for the next release; until then,
-installing on Windows builds from source with Visual Studio 2022 and CMake.
+installing on Windows builds from source with Visual Studio 2026 and CMake.
 AVX2 + FMA is the CPU baseline; supported AVX-512 kernels are selected at
 runtime.
 
