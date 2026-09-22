@@ -148,6 +148,11 @@ Recommended:
 
 ### Persistence and Python boundaries
 
+Filesystem path strings are UTF-8 on Windows and native path bytes on POSIX. Use
+`io_impl::filesystem_path` from `utils/path.hpp` before opening files or querying
+filesystem metadata, including IVF's HNSW sidecar. It converts UTF-8 to native Unicode
+on Windows and preserves existing path bytes on Linux/macOS.
+
 Never silently reinterpret an old index file. Format changes require a magic/version discriminator,
 validated sizes before allocation, checked reads, and a compatibility fixture or explicit rejection
 path. Review each affected index format; preserve SymphonyQG's versioned quantized format and legacy

@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <list>
 #include <memory>
+#include "rabitqlib/utils/path.hpp"
 
 namespace hnswlib {
 typedef unsigned int tableint;
@@ -683,7 +684,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
     }
 
     void saveIndex(const std::string &location) {
-        std::ofstream output(location, std::ios::binary);
+        std::ofstream output(rabitqlib::io_impl::filesystem_path(location), std::ios::binary);
         std::streampos position;
 
         writeBinaryPOD(output, offsetLevel0_);
@@ -714,7 +715,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
 
     void loadIndex(const std::string &location, SpaceInterface<dist_t> *s, size_t max_elements_i = 0) {
-        std::ifstream input(location, std::ios::binary);
+        std::ifstream input(rabitqlib::io_impl::filesystem_path(location), std::ios::binary);
 
         if (!input.is_open())
             throw std::runtime_error("Cannot open file");

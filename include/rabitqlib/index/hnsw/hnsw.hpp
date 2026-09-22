@@ -31,6 +31,7 @@
 #include "rabitqlib/simd/hnsw_dispatch.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -204,7 +205,7 @@ class HierarchicalNSW {
     )(const float* __restrict__, const float* __restrict__, size_t){nullptr};
 
     void free_memory() {
-        free(data_level0_memory_);
+        memory::aligned_deallocate(data_level0_memory_);
         data_level0_memory_ = nullptr;
         for (PID i = 0; i < cur_element_count_; i++) {
             if (element_levels_[i] > 0) {
@@ -215,7 +216,7 @@ class HierarchicalNSW {
         linkLists_ = nullptr;
         cur_element_count_ = 0;
 
-        free(centroids_memory_);
+        memory::aligned_deallocate(centroids_memory_);
         centroids_memory_ = nullptr;
 
         rotator_.reset();
@@ -444,7 +445,7 @@ inline HierarchicalNSW::HierarchicalNSW(
 inline HierarchicalNSW::~HierarchicalNSW() { free_memory(); }
 
 inline void HierarchicalNSW::save(const char* filename) const {
-    std::ofstream output(filename, std::ios::binary);
+    std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("HNSW: cannot open index file for writing");
     }
@@ -506,7 +507,7 @@ inline void HierarchicalNSW::load(const char* filename) {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("HNSW: index filename must not be empty");
     }
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("HNSW: cannot open index file");
     }
@@ -829,7 +830,8 @@ inline void HierarchicalNSW::construct(
 
     num_cluster_ = cluster_num;
     const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
-    centroids_memory_ = reinterpret_cast<char*>(malloc(centroids_bytes));
+    centroids_memory_ =
+        static_cast<char*>(memory::aligned_allocate_bytes(64, centroids_bytes));
     if (centroids_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids");
     }

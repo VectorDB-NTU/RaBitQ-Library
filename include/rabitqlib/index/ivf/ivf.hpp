@@ -25,6 +25,7 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -281,7 +282,9 @@ inline void IVF::construct(
     num_threads = std::clamp(num_threads, size_t{1}, rabitqlib::total_threads());
     /* Quantize each cluster */
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-    for (size_t i = 0; i < num_cluster_; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_cluster_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         const float* cur_centroid = centroids + (i * dim_);
         float* cur_rotated_c = &rotated_centroids[i * padded_dim_];
         Cluster& cp = cluster_lst_[i];
@@ -409,7 +412,7 @@ inline void IVF::save(const char* filename) const {
         throw std::invalid_argument("IVF save filename must not be empty");
     }
 
-    std::ofstream output(filename, std::ios::binary);
+    std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     output.exceptions(std::ios::failbit | std::ios::badbit);
     if (raw_reranking_) {
         output.write(
@@ -436,7 +439,7 @@ inline void IVF::save(const char* filename) const {
     }
     output.write(
         reinterpret_cast<const char*>(cluster_sizes.data()),
-        static_cast<long>(sizeof(size_t) * num_cluster_)
+        static_cast<std::streamsize>(sizeof(size_t) * num_cluster_)
     );
 
     /* Save rotator */
@@ -444,11 +447,15 @@ inline void IVF::save(const char* filename) const {
 
     /* Save data */
     this->initer_->save(output, filename);
-    output.write(batch_data(), static_cast<long>(batch_data_bytes(cluster_sizes)));
+    output.write(
+        batch_data(), static_cast<std::streamsize>(batch_data_bytes(cluster_sizes))
+    );
     if (ex_data_bytes() != 0) {
-        output.write(ex_data(), static_cast<long>(ex_data_bytes()));
+        output.write(ex_data(), static_cast<std::streamsize>(ex_data_bytes()));
     }
-    output.write(reinterpret_cast<const char*>(ids()), static_cast<long>(ids_bytes()));
+    output.write(
+        reinterpret_cast<const char*>(ids()), static_cast<std::streamsize>(ids_bytes())
+    );
 
     output.close();
 }
@@ -457,7 +464,7 @@ inline void IVF::load(const char* filename) {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("IVF load filename must not be empty");
     }
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open IVF index file");
     }
@@ -522,7 +529,7 @@ inline void IVF::load(const char* filename) {
     std::vector<size_t> cluster_sizes(loaded.num_cluster_, 0);
     input.read(
         reinterpret_cast<char*>(cluster_sizes.data()),
-        static_cast<long>(sizeof(size_t) * loaded.num_cluster_)
+        static_cast<std::streamsize>(sizeof(size_t) * loaded.num_cluster_)
     );
 
     size_t total = 0;
@@ -550,13 +557,15 @@ inline void IVF::load(const char* filename) {
     loaded.allocate_memory(cluster_sizes);
     loaded.initer_->load(input, filename);
     input.read(
-        loaded.batch_data(), static_cast<long>(loaded.batch_data_bytes(cluster_sizes))
+        loaded.batch_data(),
+        static_cast<std::streamsize>(loaded.batch_data_bytes(cluster_sizes))
     );
     if (loaded.ex_data_bytes() != 0) {
-        input.read(loaded.ex_data(), static_cast<long>(loaded.ex_data_bytes()));
+        input.read(loaded.ex_data(), static_cast<std::streamsize>(loaded.ex_data_bytes()));
     }
     input.read(
-        reinterpret_cast<char*>(loaded.ids()), static_cast<long>(loaded.ids_bytes())
+        reinterpret_cast<char*>(loaded.ids()),
+        static_cast<std::streamsize>(loaded.ids_bytes())
     );
     for (size_t i = 0; i < loaded.num_; ++i) {
         if (loaded.ids()[i] >= loaded.num_ ||

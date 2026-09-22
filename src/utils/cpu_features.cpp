@@ -78,7 +78,8 @@ Features detect_features() {
 
     if (max_leaf >= 7) {
         // leaf 7 (subleaf 0): EBX[5]=AVX2, EBX[16]=AVX512F,
-        //                     EBX[17]=AVX512DQ, EBX[30]=AVX512BW,
+        //                     EBX[17]=AVX512DQ, EBX[28]=AVX512CD,
+        //                     EBX[30]=AVX512BW, EBX[31]=AVX512VL,
         //                     ECX[14]=AVX512_VPOPCNTDQ.
         uint32_t l7_eax = 0;
         uint32_t l7_ebx = 0;
@@ -90,6 +91,8 @@ Features detect_features() {
         hardware.avx512f = ((l7_ebx >> 16) & 1U) != 0;
         hardware.avx512dq = ((l7_ebx >> 17) & 1U) != 0;
         hardware.avx512bw = ((l7_ebx >> 30) & 1U) != 0;
+        hardware.avx512vl = ((l7_ebx >> 31) & 1U) != 0;
+        hardware.avx512cd = ((l7_ebx >> 28) & 1U) != 0;
         hardware.avx512vpopcntdq = ((l7_ecx >> 14) & 1U) != 0;
     }
 
@@ -120,7 +123,22 @@ Features filter_usable_features(
     usable.avx512bw = hardware.avx512bw && avx512_state_enabled;
     usable.avx512dq = hardware.avx512dq && avx512_state_enabled;
     usable.avx512vpopcntdq = hardware.avx512vpopcntdq && avx512_state_enabled;
+    usable.avx512vl = hardware.avx512vl && avx512_state_enabled;
+    usable.avx512cd = hardware.avx512cd && avx512_state_enabled;
     return usable;
+}
+
+bool supports_avx512_core(const Features& detected) {
+#if defined(_MSC_VER)
+    // /arch:AVX512 enables the entire F/CD/VL/BW/DQ group. These are
+    // requirements of this optional backend; AVX2 remains the fallback.
+    if (!detected.avx512vl || !detected.avx512cd) {
+        return false;
+    }
+#endif
+    // GCC/Clang also enable AVX2 when compiling with -mavx512f.
+    return detected.avx2 && detected.fma && detected.avx512f && detected.avx512bw &&
+           detected.avx512dq;
 }
 
 }  // namespace detail
@@ -135,10 +153,7 @@ bool has_avx2() {
     return detected.avx2 && detected.fma;
 }
 
-bool has_avx512_core() {
-    const Features& detected = features();
-    return detected.fma && detected.avx512f && detected.avx512bw && detected.avx512dq;
-}
+bool has_avx512_core() { return detail::supports_avx512_core(features()); }
 
 bool has_avx512_popcnt() { return has_avx512_core() && features().avx512vpopcntdq; }
 

@@ -1,9 +1,9 @@
 #include <pybind11/cast.h>
+#include <pybind11/detail/common.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>  // IWYU pragma: keep; registers std::optional casters
-#include <sys/types.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -113,8 +113,8 @@ class IvfIndex {
         }
 
         const size_t nq = static_cast<size_t>(query_array.shape(0));
-        const auto shape =
-            std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
+        const auto shape = std::vector<py::ssize_t>{
+            static_cast<py::ssize_t>(nq), static_cast<py::ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
         auto* ids_data = ids.mutable_data();

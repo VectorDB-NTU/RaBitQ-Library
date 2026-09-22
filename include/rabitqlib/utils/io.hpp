@@ -11,6 +11,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "rabitqlib/utils/path.hpp"
+
 namespace rabitqlib {
 namespace io_impl {
 
@@ -51,14 +53,17 @@ void read_value(std::ifstream& input, T& value, const char* description) {
 
 // get num of bytes
 inline size_t get_filesize(const char* filename) {
-    const auto file_size = std::filesystem::file_size(filename);
+    const auto file_size =
+        std::filesystem::file_size(rabitqlib::io_impl::filesystem_path(filename));
     if (file_size > std::numeric_limits<size_t>::max()) {
         throw std::length_error("File is too large to address");
     }
     return static_cast<size_t>(file_size);
 }
 
-inline bool file_exists(const char* filename) { return std::filesystem::exists(filename); }
+inline bool file_exists(const char* filename) {
+    return std::filesystem::exists(rabitqlib::io_impl::filesystem_path(filename));
+}
 
 // load .*vecs file to a matrix (e.g., RowMajorFloatMat)
 template <typename T, class M>
@@ -73,7 +78,7 @@ void load_vecs(const char* filename, M& row_mat) {
     if (file_size < sizeof(uint32_t)) {
         throw std::runtime_error("Vector file is too small to contain a dimension");
     }
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open vector file: " + std::string(filename));
     }
@@ -122,7 +127,7 @@ void load_bin(const char* filename, M& row_mat) {
     if (file_size < 2 * sizeof(uint32_t)) {
         throw std::runtime_error("Binary matrix file is too small to contain its header");
     }
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error(
             "Cannot open binary matrix file: " + std::string(filename)

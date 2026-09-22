@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "rabitqlib/simd/quantization_dispatch.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 #include "rescale_search.hpp"
 namespace rabitqlib::simd::detail {
 
@@ -57,7 +58,7 @@ static RescaleSearchState evaluate_scale_state_avx512(
             alignas(64) double corrected[8];
             _mm512_store_pd(corrected, c);
             for (unsigned mask = boundary; mask; mask &= mask - 1) {
-                unsigned k = __builtin_ctz(mask);
+                unsigned k = bitops::countr_zero32(mask);
                 corrected[k] = quantized_code_at_scale(magnitudes[i + k], scale, max_code);
             }
             c = _mm512_load_pd(corrected);
@@ -101,10 +102,10 @@ static RescaleSearchState evaluate_scale_state_avx512(
     double f = _mm512_reduce_max_pd(vfirst), n = _mm512_reduce_min_pd(vnext);
     // At least one lane equals each reduced extremum. Select its first set bit;
     // tied boundary ratios describe the same event scale.
-    unsigned fk = __builtin_ctz(static_cast<unsigned>(
+    unsigned fk = bitops::countr_zero32(static_cast<unsigned>(
                  _mm512_cmp_pd_mask(vfirst, _mm512_set1_pd(f), _CMP_EQ_OQ)
              )),
-             nk = __builtin_ctz(static_cast<unsigned>(
+             nk = bitops::countr_zero32(static_cast<unsigned>(
                  _mm512_cmp_pd_mask(vnext, _mm512_set1_pd(n), _CMP_EQ_OQ)
              ));
     // Reciprocal products selected the coordinates; division now recovers the

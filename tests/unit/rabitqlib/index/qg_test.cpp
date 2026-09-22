@@ -1021,7 +1021,10 @@ TEST(QGSearchTest, ParallelQueriesMatchSerialAcrossIndexesAndSettings) {
                         std::array<PID, kNumQueries * kTopK> ids{};
                         std::array<float, kNumQueries * kTopK> distances{};
 #pragma omp parallel for num_threads(threads) schedule(dynamic)
-                        for (size_t i = 0; i < kNumQueries; ++i) {
+                        for (std::ptrdiff_t query_index = 0;
+                             query_index < static_cast<std::ptrdiff_t>(kNumQueries);
+                             ++query_index) {
+                            const size_t i = static_cast<size_t>(query_index);
                             graph.search(
                                 queries.data() + (i * dim),
                                 kTopK,

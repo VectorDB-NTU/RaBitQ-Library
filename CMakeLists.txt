@@ -14,6 +14,7 @@ option(RABITQ_BUILD_SAMPLES "Build C++ sample programs" ON)
 option(RABITQ_BUILD_TESTS "Build C++ tests" OFF)
 option(RABITQ_BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
 option(RABITQ_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+# Enable native tuning for local builds; release wheels explicitly set this OFF.
 option(
     RABITQ_ENABLE_NATIVE_OPTIMIZATION
     "Optimize generic code for the build machine"
@@ -29,6 +30,14 @@ target_compile_options(rabitq_compile_options INTERFACE
     $<$<AND:$<BOOL:${RABITQ_ENABLE_NATIVE_OPTIMIZATION}>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-march=native>
 )
 target_link_libraries(rabitq_compile_options INTERFACE OpenMP::OpenMP_CXX)
+if(MSVC)
+    # MSVC spells the GNU restrict extension differently. Public headers use
+    # __restrict__, so consumers need the same definition as the library.
+    target_compile_definitions(rabitq_compile_options INTERFACE __restrict__=__restrict)
+    # Eigen's inline code must have one ISA-independent definition across the
+    # generic, AVX2, and AVX-512 translation units on MSVC.
+    target_compile_definitions(rabitq_compile_options INTERFACE EIGEN_DONT_VECTORIZE)
+endif()
 if(RABITQ_ENABLE_SANITIZERS)
     target_compile_options(rabitq_compile_options INTERFACE
         $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-fsanitize=address,undefined;-fno-omit-frame-pointer>
@@ -116,24 +125,40 @@ set_target_properties(rabitq_core PROPERTIES
 )
 rabitq_enable_warnings(rabitq_core)
 
-set_source_files_properties(${RABITQ_AVX2_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx2;-mfma"
-)
-set_source_files_properties(${RABITQ_AVX512_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mfma"
-)
-set_source_files_properties(${RABITQ_AVX512_POPCNT_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
-)
-set_source_files_properties(${RABITQ_HNSW_AVX2_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx2;-mfma"
-)
-set_source_files_properties(${RABITQ_HNSW_AVX512_CORE_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx2;-mfma"
-)
-set_source_files_properties(${RABITQ_HNSW_AVX512_POPCNT_SOURCES} PROPERTIES
-    COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
-)
+if(MSVC)
+    enable_language(ASM_MASM)
+    target_sources(rabitq_core PRIVATE src/simd/fht_avx2_masm.asm)
+    set_source_files_properties(
+        ${RABITQ_AVX2_SOURCES} ${RABITQ_HNSW_AVX2_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
+    )
+    # MSVC enables the complete F/CD/VL/BW/DQ group. Keep the optional
+    # backend's runtime guard in cpu_features.cpp aligned with this flag.
+    set_source_files_properties(
+        ${RABITQ_AVX512_SOURCES} ${RABITQ_AVX512_POPCNT_SOURCES}
+        ${RABITQ_HNSW_AVX512_CORE_SOURCES} ${RABITQ_HNSW_AVX512_POPCNT_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "/arch:AVX512"
+    )
+else()
+    set_source_files_properties(${RABITQ_AVX2_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx2;-mfma"
+    )
+    set_source_files_properties(${RABITQ_AVX512_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mfma"
+    )
+    set_source_files_properties(${RABITQ_AVX512_POPCNT_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
+    )
+    set_source_files_properties(${RABITQ_HNSW_AVX2_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx2;-mfma"
+    )
+    set_source_files_properties(${RABITQ_HNSW_AVX512_CORE_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx2;-mfma"
+    )
+    set_source_files_properties(${RABITQ_HNSW_AVX512_POPCNT_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vpopcntdq;-mfma"
+    )
+endif()
 
 add_library(rabitq_headers INTERFACE)
 add_library(rabitqlib::rabitqlib ALIAS rabitq_headers)

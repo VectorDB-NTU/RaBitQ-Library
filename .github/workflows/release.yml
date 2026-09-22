@@ -95,9 +95,44 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  windows-wheels:
+    name: Windows x86-64 wheels
+    needs: [prepare, changes]
+    if: >-
+      !cancelled() && needs.prepare.result == 'success' &&
+      needs.prepare.outputs.build == 'true' &&
+      (needs.changes.result != 'success' || needs.changes.outputs.wheels == 'true')
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Build and test PR wheel
+        if: github.event_name == 'pull_request'
+        uses: pypa/cibuildwheel@v4.2.0
+        env:
+          CIBW_BUILD: cp311-win_amd64
+        with:
+          output-dir: wheelhouse
+      - name: Build and test release wheels
+        if: github.event_name != 'pull_request'
+        uses: pypa/cibuildwheel@v4.2.0
+        with:
+          output-dir: wheelhouse
+      - name: Store wheel artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-x86_64-wheels
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
   release-tag:
     name: Create version tag
-    needs: [prepare, linux-wheels]
+    needs: [prepare, linux-wheels, windows-wheels]
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
@@ -126,7 +161,7 @@ jobs:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
-    needs: [prepare, linux-wheels, release-tag]
+    needs: [prepare, linux-wheels, windows-wheels, release-tag]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -138,8 +173,9 @@ jobs:
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
-          name: linux-x86_64-wheels
+          pattern: '*-wheels'
           path: wheelhouse
+          merge-multiple: true
 
       - name: Publish wheels
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -152,7 +188,7 @@ jobs:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
-    needs: [prepare, linux-wheels, pypi-publish]
+    needs: [prepare, linux-wheels, windows-wheels, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -165,8 +201,9 @@ jobs:
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
-          name: linux-x86_64-wheels
+          pattern: '*-wheels'
           path: wheelhouse
+          merge-multiple: true
 
       - name: Create GitHub release
         env:

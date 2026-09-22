@@ -167,7 +167,10 @@ inline std::vector<Bucket> partition(
         {
             auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
 #pragma omp for schedule(static)
-            for (size_t begin = 0; begin < ids.size(); begin += kTileSize) {
+            for (std::ptrdiff_t offset = 0;
+                 offset < static_cast<std::ptrdiff_t>(ids.size());
+                 offset += static_cast<std::ptrdiff_t>(kTileSize)) {
+                const size_t begin = static_cast<size_t>(offset);
                 assign_tile(begin, work);
             }
         }
@@ -207,7 +210,9 @@ inline std::vector<Bucket> cluster(
         std::vector<std::vector<Bucket>> finished(active.size());
 #pragma omp parallel for num_threads(active.front().depth == 0 ? 1 : threads) \
     schedule(dynamic)
-        for (size_t i = 0; i < active.size(); ++i) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(active.size());
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
             auto& job = active[i];
             if (job.ids.size() <= kLeafSize) {
                 finished[i].push_back(std::move(job.ids));
@@ -306,7 +311,9 @@ inline InitialGraph build_initial_graph(
     }
     RowMajorMatrix<float> sketches(count, kHashBits);
 #pragma omp parallel for num_threads(threads) schedule(static)
-    for (size_t begin = 0; begin < count; begin += kTileSize) {
+    for (std::ptrdiff_t offset = 0; offset < static_cast<std::ptrdiff_t>(count);
+         offset += static_cast<std::ptrdiff_t>(kTileSize)) {
+        const size_t begin = static_cast<size_t>(offset);
         const size_t rows = std::min(kTileSize, count - begin);
         simd::matrix_product(
             data + begin * dim,
@@ -377,7 +384,9 @@ inline InitialGraph build_initial_graph(
     {
         auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
 #pragma omp for schedule(dynamic)
-        for (size_t leaf = 0; leaf < leaves.size(); ++leaf) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(leaves.size());
+             ++index) {
+            const size_t leaf = static_cast<size_t>(index);
             const auto& ids = leaves[leaf];
             if (ids.size() < 2) {
                 continue;
@@ -419,7 +428,9 @@ inline InitialGraph build_initial_graph(
         std::vector<Candidate> candidates;
         Bucket selected;
 #pragma omp for schedule(dynamic)
-        for (size_t i = 0; i < count; ++i) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(count);
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
             const auto* row = table.data() + i * capacity;
             candidates.assign(row, row + sizes[i]);
             std::sort(
@@ -463,7 +474,8 @@ inline InitialGraph build_initial_graph(
     std::partial_sum(result.offsets.begin(), result.offsets.end(), result.offsets.begin());
     result.neighbors.resize(result.offsets.back());
 #pragma omp parallel for num_threads(threads)
-    for (size_t i = 0; i < count; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(count); ++index) {
+        const size_t i = static_cast<size_t>(index);
         for (size_t j = 0; j < result.offsets[i + 1] - result.offsets[i]; ++j) {
             result.neighbors[result.offsets[i] + j] = table[i * capacity + j].id;
         }

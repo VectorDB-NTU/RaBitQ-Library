@@ -5,14 +5,15 @@ binding tests for RaBitQ Library.
 
 ## Prerequisites
 
-- CMake 3.20 or newer for the `ctest --test-dir` commands below
-- A GCC- or Clang-compatible C++17 compiler with OpenMP support
-- An x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 runtime dispatch
+- CMake 3.20 or newer for the `ctest --test-dir` commands below (4.2 or newer
+  for the Visual Studio 2026 generator)
+- A C++17 compiler with OpenMP support (GCC, Clang, or Visual Studio 2026)
+- An x86-64 CPU with AVX2 and FMA; AVX-512 is optional
 - Git and network access during the first configuration so CMake can download
   GoogleTest 1.14.0
 
-The current CMake configuration uses GCC/Clang command-line options and does
-not provide a supported MSVC build path.
+On Windows, install Visual Studio 2026 with the Desktop development with C++
+workload. Use MSVC for all C++ targets, including SIMD kernels.
 
 On Ubuntu or Debian, install the required build tools with:
 
@@ -21,62 +22,73 @@ sudo apt-get update
 sudo apt-get install -y git build-essential cmake libomp-dev
 ```
 
-## Building and Running Tests
+## C++ tests
 
-### Quick Start
+### Quick start
 
-From the project root directory:
+Run from the repository root. Both configurations disable native tuning to
+exercise the portable runtime-dispatch build.
+
+#### Windows (PowerShell)
+
+```powershell
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DRABITQ_BUILD_TESTS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+cmake --build build --config Release --parallel
+ctest --test-dir build -C Release --output-on-failure
+```
+
+#### Linux
 
 ```bash
-cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The combined test executable is also available as `build/tests/rabitq_tests`.
+The combined executable is `build/tests/Release/rabitq_tests.exe` on Windows
+and `build/tests/rabitq_tests` on Linux. To run a subset, add `-R <pattern>` to
+the CTest command.
 
-Release builds use native CPU tuning by default. Pass
-`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` when the resulting test binary must
-run on a different AVX2- or AVX-512-capable machine.
+AVX-512 tests skip when the CPU or OS lacks the required features. Tests using
+`/dev/full` skip on Windows; native POSIX path tests compile only on their
+applicable platforms. Passing on an AVX2 machine does not verify AVX-512 execution.
 
-### Building without Tests
+## Python tests
 
-By default, tests are **not built**, while the C++ samples are. To build only
-the library:
+Use an activated [project environment](../CONTRIBUTING.md#python-environment).
+Rebuild and install the extension before testing C++ changes. These commands
+work in PowerShell and Bash:
 
-```bash
-cmake -S . -B build \
-    -DRABITQ_BUILD_SAMPLES=OFF \
-    -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+```text
+python -m pip install ".[test]" -Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+python -c "import rabitqlib._rabitqlib as ext; print(ext.__file__)"
+python -m pytest tests/python -ra -q
 ```
 
+Confirm the printed extension path belongs to the intended environment. The
+suite includes all three indexes, quantization, persistence, and Unicode paths.
 
-## Test Structure
+## Installed CMake package test
 
-```
-tests/
-├── .gitignore
-├── CMakeLists.txt                 # C++ targets and CTest discovery
-├── README.md
-├── common/                        # Shared C++ test utilities
-│   ├── test_data.hpp
-│   ├── test_data.cpp
-│   └── test_helpers.hpp
-├── integration/
-│   └── bit_pack_unpack_test.cpp
-├── python/
-│   ├── conftest.py
-│   ├── test_hnsw.py
-│   ├── test_import.py
-│   ├── test_ivf.py
-│   └── test_symqg.py
-└── unit/rabitqlib/utils/
-    ├── cpu_features_test.cpp
-    ├── rotator_test.cpp
-    ├── space_test.cpp
-    └── visited_set_test.cpp
+After building the library, verify that another project can consume its installed
+headers and library. Use an absolute path for `<install-prefix>`:
+
+```text
+cmake --install build --config Release --prefix "<install-prefix>"
+cmake -S tests/consumer -B build-consumer "-DCMAKE_PREFIX_PATH=<install-prefix>"
+cmake --build build-consumer --config Release
+ctest --test-dir build-consumer -C Release --output-on-failure
 ```
 
-CMake discovers C++ files matching `*_test.cpp` under `unit/` and
-`integration/`. The Python tests are run separately with `python -m pytest`.
+On Windows, add `-G "Visual Studio 18 2026" -A x64` to the consumer configure command.
+
+## Test structure
+
+- `unit/`: C++ index, quantization, FastScan, and utility tests
+- `integration/`: packing compatibility tests
+- `common/`: shared C++ test utilities
+- `python/`: Python binding tests and persistence fixtures
+- `consumer/`: installed CMake package test
+
+CMake discovers `*_test.cpp` under `unit/` and `integration/`. Python and
+consumer tests run separately using the commands above.

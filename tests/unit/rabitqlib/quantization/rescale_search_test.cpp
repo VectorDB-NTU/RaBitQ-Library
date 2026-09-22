@@ -211,8 +211,8 @@ TEST_P(RabitqRescaleBackendTest, ReusesScratchAcrossDimensionsAndThreads) {
 
     size_t mismatches = 0;
 #pragma omp parallel for num_threads(8) schedule(dynamic, 1) reduction(+ : mismatches)
-    for (size_t call = 0; call < 160; ++call) {
-        const size_t index = call % inputs.size();
+    for (std::ptrdiff_t call = 0; call < 160; ++call) {
+        const size_t index = static_cast<size_t>(call) % inputs.size();
         const auto& magnitudes = inputs[index];
         const auto [start, end] = intervals[index];
         const double actual =

@@ -12,10 +12,12 @@
 namespace rabitqlib::fastscan::simd {
 
 void pack_lut_avx512(size_t dim, const float* query, float* lut) {
+    // Keep the initial +0 addition observable for signed-zero inputs.
+    volatile float zero = 0;
     for (size_t group = 0; group < dim / 4; ++group) {
         // Lane n represents the subset selected by the four bits of n.
         // Masked additions preserve both the coordinate order and the initial +0.
-        __m512 values = _mm512_setzero_ps();
+        __m512 values = _mm512_set1_ps(zero);
         values = _mm512_mask_add_ps(values, 0xFF00, values, _mm512_set1_ps(query[0]));
         values = _mm512_mask_add_ps(values, 0xF0F0, values, _mm512_set1_ps(query[1]));
         values = _mm512_mask_add_ps(values, 0xCCCC, values, _mm512_set1_ps(query[2]));

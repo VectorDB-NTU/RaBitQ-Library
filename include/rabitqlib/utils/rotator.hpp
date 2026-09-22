@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <ios>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -88,7 +89,7 @@ class MatrixRotator : public Rotator<T> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(rand_mat_.data()),
-            static_cast<long>(sizeof(T) * this->dim_ * this->padded_dim_)
+            static_cast<std::streamsize>(sizeof(T) * this->dim_ * this->padded_dim_)
         );
     }
 
@@ -169,14 +170,14 @@ class FhtKacRotator : public Rotator<float> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(flip_.data()),
-            static_cast<long>(sizeof(uint8_t) * flip_.size())
+            static_cast<std::streamsize>(sizeof(uint8_t) * flip_.size())
         );
     }
 
     void save(std::ofstream& output) const override {
         output.write(
             reinterpret_cast<const char*>(flip_.data()),
-            static_cast<long>(sizeof(uint8_t) * flip_.size())
+            static_cast<std::streamsize>(sizeof(uint8_t) * flip_.size())
         );
     }
 

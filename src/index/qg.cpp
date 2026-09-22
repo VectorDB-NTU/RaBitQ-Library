@@ -22,9 +22,11 @@
 #include "rabitqlib/quantization/pack_excode.hpp"
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/simd/estimator_dispatch.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/visited_set.hpp"
@@ -205,7 +207,9 @@ void QuantizedGraph<float>::copy_vectors(const float* data, size_t num_threads) 
             std::vector<float> rotated_data(padded_dim_);
             std::vector<uint8_t> quantized_data(padded_dim_);
 #pragma omp for schedule(dynamic)
-            for (size_t i = 0; i < num_points_; ++i) {
+            for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
+                 ++index) {
+                const size_t i = static_cast<size_t>(index);
                 rotator_->rotate(data + (dim_ * i), rotated_data.data());
                 ExDataMap<float> output(
                     get_quantized_vector(i), padded_dim_, quantization_bits_
@@ -234,7 +238,9 @@ void QuantizedGraph<float>::copy_vectors(const float* data, size_t num_threads) 
         return;
     }
 #pragma omp parallel for schedule(dynamic) num_threads(thread_count)
-    for (size_t i = 0; i < num_points_; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         const float* src = data + (dim_ * i);
         float* dst = get_vector(i);
         std::copy(src, src + dim_, dst);
@@ -256,7 +262,7 @@ void QuantizedGraph<float>::save(const char* filename) const {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("QuantizedGraph save filename must not be empty");
     }
-    std::ofstream output(filename, std::ios::binary);
+    std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("Cannot open quantized graph file for writing");
     }
@@ -311,7 +317,7 @@ void QuantizedGraph<float>::load(const char* filename) {
         throw std::runtime_error("Quantized graph file does not exist");
     }
 
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open quantized graph file");
     }
@@ -548,7 +554,7 @@ void QuantizedGraph<float>::scan_neighbors(
         }
 
         while (candidate_mask != 0) {
-            const auto lane = static_cast<size_t>(__builtin_ctz(candidate_mask));
+            const auto lane = static_cast<size_t>(bitops::countr_zero32(candidate_mask));
             candidate_mask &= candidate_mask - 1;
             const size_t i = begin + lane;
             PID cur_neighbor = neighbors[i];

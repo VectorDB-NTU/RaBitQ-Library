@@ -120,8 +120,9 @@ TEST(FastScanPackingTest, MatchesBitReferenceIncludingTailsAndUnalignedBuffers) 
     }
 }
 
+constexpr size_t kMaxDim = 768;
+
 TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) {
-    constexpr size_t kMaxDim = 768;
     for (size_t dim : {16U, 64U, 128U, 768U}) {
         for (size_t num : {1U, 17U, 31U, 32U}) {
             SCOPED_TRACE(::testing::Message() << "dim=" << dim << " num=" << num);

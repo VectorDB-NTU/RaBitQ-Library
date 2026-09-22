@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <stdexcept>
 
 #include "rabitqlib/simd/warmup_dispatch.hpp"
 
@@ -80,7 +81,11 @@ float warmup_ip_x0_q_512_avx2(
     // Step by 512 bits at a time (64 bytes = 16 elements of 32-bit integers)
     size_t dim_end_512 = (padded_dim / 512) * 512;
 
-    __m256i acc_bits[b_query];
+    constexpr size_t kMaxQueryBits = 8;
+    if (b_query > kMaxQueryBits) {
+        throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
+    }
+    __m256i acc_bits[kMaxQueryBits];
     for (size_t j = 0; j < b_query; ++j) {
         acc_bits[j] = _mm256_setzero_si256();
     }

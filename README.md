@@ -35,16 +35,17 @@
 
 ## News
 
-- **September 2026 — IVF raw-vector reranking:** Set `nbits=32` to store raw
-  float32 vectors for reranking. IVF now selects HACC automatically for 4–9-bit
-  codes, using standard FastScan for 1–3 bits and raw vectors; manual overrides
-  remain available. See the [IVF documentation](docs/docs/index/ivf.md).
+- **September 2026 — Windows x86-64 support:** C++ and Python source builds now
+  support MSVC, runtime AVX2/AVX-512 dispatch, and Unicode index paths. Windows
+  wheels are configured for the next release. See the [Windows build instructions](tests/README.md#prerequisites).
 
-- **September 2026 — Quantized SymphonyQG:** SymphonyQG now supports optional
-  4-bit and 8-bit RaBitQ vector storage. Select QG-quant with
-  `quantization_bits=4` or `quantization_bits=8`; vanilla raw-vector QG remains
-  the default. See the [SymphonyQG documentation](docs/docs/index/qg.md) for
-  details.
+- **September 2026 — IVF raw-vector reranking:** Use `nbits=32` for float32
+  reranking. Quantized IVF automatically selects HACC for 4–9-bit codes.
+  See the [IVF documentation](docs/docs/index/ivf.md).
+
+- **September 2026 — Quantized SymphonyQG:** Set `quantization_bits=4` or `8`
+  for compact vector storage; raw vectors remain the default.
+  See the [SymphonyQG documentation](docs/docs/index/qg.md).
 
 ## Install
 
@@ -52,13 +53,12 @@
 python -m pip install --upgrade rabitqlib
 ```
 
-Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14. AVX2 + FMA is the
-portable CPU baseline; supported AVX-512 kernels are selected at runtime.
+Wheels: CPython 3.11–3.14 on Linux x86-64; Windows x86-64 is planned for the
+next release. Requires AVX2 and FMA, with optional AVX-512 acceleration.
 
 ## Python quick start
 
-The following complete example builds a small IVF index and searches it. It
-uses deterministic synthetic data, so no dataset download is required.
+Build and search a small IVF index using synthetic data:
 
 ```python
 import numpy as np
@@ -92,11 +92,16 @@ Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
 [Python examples](sample/python/) for index construction, querying, and index
 persistence.
 
+Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
+in C++; Python paths are Unicode strings on all platforms.
+
 <details>
 <summary>Build the Python bindings from source</summary>
 
 Source builds require a C++17 compiler, CMake 3.20 or newer, and OpenMP. On
-Ubuntu or Debian:
+Windows, install Visual Studio 2026 with the Desktop development with C++
+workload, then run `python -m pip install .` from the repository root.
+On Ubuntu or Debian:
 
 ```bash
 sudo apt-get update
@@ -218,19 +223,7 @@ and HNSW implementations, with links to the source code.
 
 - CMake 3.20 or newer
 - a C++17 compiler with OpenMP support
-- an x86-64 CPU supported by the selected kernels: most paths accept either
-  AVX2 with FMA or AVX-512F/BW/DQ with FMA
-
-<details>
-<summary>CPU dispatch details</summary>
-
-Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
-AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
-available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
-AVX-512 core path also checks for AVX2 and FMA. AVX-512 translation units are
-compiled with FMA enabled.
-
-</details>
+- an x86-64 CPU with AVX2 and FMA
 
 Clone and build the library and example programs:
 
@@ -242,10 +235,11 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-Release builds enable native CPU tuning by default. To build a binary that can
-be moved between AVX2- and AVX-512-capable machines, configure with
-`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; the ISA-specific kernels will still
-be selected at runtime.
+For MSVC, follow the [Windows build instructions](tests/README.md#prerequisites).
+Local GCC/Clang builds enable `-march=native` by default; set
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for portable binaries, as release
+wheels do. See [CPU dispatch details](DEVELOPMENT.md#dispatch-conventions-and-coverage)
+for backend requirements and fallbacks.
 
 ### Use RaBitQ-Library in another C++ project
 

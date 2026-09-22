@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -15,6 +16,28 @@
 
 namespace rabitqlib::ivf {
 namespace {
+
+TEST(HNSWInitializerTest, PersistsUtf8SidecarPaths) {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           std::filesystem::u8path(u8"rabitq_\u6d4b\u8bd5_\U0001f680");
+    std::filesystem::create_directories(directory);
+    const auto path = (directory / std::filesystem::u8path(u8"\u7d22\u5f15")).u8string();
+    const std::array<float, 4> centroids{0.0F, 0.0F, 3.0F, 4.0F};
+    HNSWInitializer initializer(2, 2);
+    initializer.add_vectors(centroids.data(), 1);
+    std::ofstream ignored_output;
+    initializer.save(ignored_output, path.c_str());
+    EXPECT_TRUE(std::filesystem::is_regular_file(std::filesystem::u8path(path + ".hnsw")));
+    HNSWInitializer loaded(2, 2);
+    std::ifstream ignored_input;
+    loaded.load(ignored_input, path.c_str());
+    std::vector<AnnCandidate<float>> candidates(1);
+    loaded.centroids_distances(centroids.data() + 2, 1, candidates);
+    EXPECT_EQ(candidates[0].id, 1U);
+    EXPECT_FLOAT_EQ(candidates[0].distance, 0.0F);
+    std::filesystem::remove(std::filesystem::u8path(path + ".hnsw"));
+    std::filesystem::remove(directory);
+}
 
 TEST(CentroidL2SpaceTest, MatchesDispatchedDistanceForUnalignedInputsAndTails) {
     for (size_t dim : {1U, 7U, 8U, 15U, 16U, 17U, 63U, 64U, 129U}) {
