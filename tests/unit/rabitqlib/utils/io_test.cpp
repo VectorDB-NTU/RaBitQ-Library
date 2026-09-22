@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <ios>
 #include <stdexcept>
@@ -39,6 +40,54 @@ TEST(VectorIoTest, LoadsCompleteConsistentRecords) {
     EXPECT_FLOAT_EQ(matrix(1, 1), 4.0F);
     std::remove(path.c_str());
 }
+
+TEST(BinaryMatrixIoTest, LoadsUtf8PathsAndChecksTheirSize) {
+    const auto native_path =
+        std::filesystem::temp_directory_path() /
+        std::filesystem::u8path(u8"rabitq_\u6d4b\u8bd5_\U0001f680.bin");
+    {
+        std::ofstream output(native_path, std::ios::binary);
+        write_value(output, uint32_t{1});
+        write_value(output, uint32_t{1});
+        write_value(output, 3.0F);
+    }
+    const auto path = native_path.u8string();
+    EXPECT_TRUE(file_exists(path.c_str()));
+    EXPECT_EQ(get_filesize(path.c_str()), 12U);
+    RowMajorMatrix<float> matrix;
+    load_bin<float>(path.c_str(), matrix);
+    ASSERT_EQ(matrix.size(), 1);
+    EXPECT_FLOAT_EQ(matrix(0, 0), 3.0F);
+    std::filesystem::remove(native_path);
+}
+
+#if !defined(_WIN32)
+TEST(FilesystemPathTest, PreservesNativePosixBytes) {
+    const std::string filename = "rabitq_\xff.bin";
+    EXPECT_EQ(io_impl::filesystem_path(filename).native(), filename);
+}
+#endif
+
+#if defined(__linux__)
+TEST(BinaryMatrixIoTest, LoadsNonUtf8NativePaths) {
+    const auto native_path = std::filesystem::temp_directory_path() / "rabitq_\xff.bin";
+    {
+        std::ofstream output(native_path, std::ios::binary);
+        ASSERT_TRUE(output.is_open());
+        write_value(output, uint32_t{1});
+        write_value(output, uint32_t{1});
+        write_value(output, 3.0F);
+    }
+    const auto path = native_path.native();
+    EXPECT_TRUE(file_exists(path.c_str()));
+    EXPECT_EQ(get_filesize(path.c_str()), 12U);
+    RowMajorMatrix<float> matrix;
+    load_bin<float>(path.c_str(), matrix);
+    ASSERT_EQ(matrix.size(), 1);
+    EXPECT_FLOAT_EQ(matrix(0, 0), 3.0F);
+    std::filesystem::remove(native_path);
+}
+#endif
 
 TEST(VectorIoTest, RejectsInconsistentAndTruncatedRecordsWithoutReplacingOutput) {
     const std::string path = ::testing::TempDir() + "rabitq_invalid.fvecs";

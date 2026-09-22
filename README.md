@@ -94,6 +94,9 @@ Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
 [Python examples](sample/python/) for index construction, querying, and index
 persistence.
 
+Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
+in C++; Python paths are Unicode strings on all platforms.
+
 <details>
 <summary>Build the Python bindings from source</summary>
 
@@ -220,17 +223,16 @@ and HNSW implementations, with links to the source code.
 
 - CMake 3.20 or newer
 - a C++17 compiler with OpenMP support
-- an x86-64 CPU supported by the selected kernels: most paths accept either
-  AVX2 with FMA or AVX-512F/BW/DQ with FMA
+- an x86-64 CPU with AVX2 and FMA
 
 <details>
 <summary>CPU dispatch details</summary>
 
-Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
-AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
-available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
-AVX-512 core path also checks for AVX2 and FMA. AVX-512 translation units are
-compiled with FMA enabled.
+AVX2 and FMA are the minimum CPU requirements. Optional AVX-512 kernels also
+require AVX-512F/BW/DQ. MSVC builds additionally check AVX-512VL/CD because
+`/arch:AVX512` enables the whole group; CPUs missing either feature use AVX2.
+AVX-512 VPOPCNTDQ enables additional popcount kernels. All checks include
+operating-system support for the required vector register state.
 
 </details>
 
@@ -244,10 +246,10 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-Release builds enable native CPU tuning by default. To build a binary that can
-be moved between AVX2- and AVX-512-capable machines, configure with
-`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; the ISA-specific kernels will still
-be selected at runtime.
+Native CPU tuning is on by default for local GCC/Clang builds (`-march=native`).
+Set `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for distributed binaries to retain
+the AVX2/FMA minimum and select optional ISA-specific kernels at runtime.
+Release wheels explicitly disable native tuning.
 
 ### Use RaBitQ-Library in another C++ project
 

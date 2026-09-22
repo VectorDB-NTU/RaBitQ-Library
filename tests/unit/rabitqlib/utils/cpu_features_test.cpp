@@ -14,6 +14,8 @@ rabitqlib::cpu::Features all_hardware_features() {
         true,
         true,
         true,
+        true,
+        true,
     };
 }
 
@@ -62,6 +64,8 @@ TEST(CpuFeatures, EnablesAvx2WithoutAvx512State) {
     EXPECT_FALSE(usable.avx512bw);
     EXPECT_FALSE(usable.avx512dq);
     EXPECT_FALSE(usable.avx512vpopcntdq);
+    EXPECT_FALSE(usable.avx512vl);
+    EXPECT_FALSE(usable.avx512cd);
 }
 
 TEST(CpuFeatures, EnablesAvx512OnlyWithCompleteAvx512State) {
@@ -76,6 +80,8 @@ TEST(CpuFeatures, EnablesAvx512OnlyWithCompleteAvx512State) {
     EXPECT_TRUE(usable.avx512bw);
     EXPECT_TRUE(usable.avx512dq);
     EXPECT_TRUE(usable.avx512vpopcntdq);
+    EXPECT_TRUE(usable.avx512vl);
+    EXPECT_TRUE(usable.avx512cd);
 
     for (const uint64_t state_bit :
          {uint64_t{1} << 5, uint64_t{1} << 6, uint64_t{1} << 7}) {
@@ -88,6 +94,33 @@ TEST(CpuFeatures, EnablesAvx512OnlyWithCompleteAvx512State) {
         EXPECT_FALSE(incomplete.avx512bw);
         EXPECT_FALSE(incomplete.avx512dq);
         EXPECT_FALSE(incomplete.avx512vpopcntdq);
+        EXPECT_FALSE(incomplete.avx512vl);
+        EXPECT_FALSE(incomplete.avx512cd);
+    }
+}
+
+TEST(CpuFeatures, Avx512SelectionRequiresEveryCompilerEnabledFeature) {
+    using rabitqlib::cpu::Features;
+    using rabitqlib::cpu::detail::supports_avx512_core;
+    EXPECT_TRUE(supports_avx512_core(all_hardware_features()));
+    for (auto feature :
+         {&Features::avx2,
+          &Features::fma,
+          &Features::avx512f,
+          &Features::avx512bw,
+          &Features::avx512dq}) {
+        auto missing = all_hardware_features();
+        missing.*feature = false;
+        EXPECT_FALSE(supports_avx512_core(missing));
+    }
+    for (auto feature : {&Features::avx512vl, &Features::avx512cd}) {
+        auto missing = all_hardware_features();
+        missing.*feature = false;
+#if defined(_MSC_VER)
+        EXPECT_FALSE(supports_avx512_core(missing));
+#else
+        EXPECT_TRUE(supports_avx512_core(missing));
+#endif
     }
 }
 

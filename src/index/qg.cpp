@@ -26,6 +26,7 @@
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/visited_set.hpp"
@@ -261,7 +262,7 @@ void QuantizedGraph<float>::save(const char* filename) const {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("QuantizedGraph save filename must not be empty");
     }
-    std::ofstream output(filename, std::ios::binary);
+    std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("Cannot open quantized graph file for writing");
     }
@@ -316,7 +317,7 @@ void QuantizedGraph<float>::load(const char* filename) {
         throw std::runtime_error("Quantized graph file does not exist");
     }
 
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open quantized graph file");
     }

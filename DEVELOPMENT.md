@@ -266,6 +266,13 @@ must happen in generic code first.
 - Preserve stricter predicates: population-count kernels need AVX512_VPOPCNTDQ, and HNSW's
   AVX-512 core variant also needs AVX2 for its warmup implementation. Do not infer support
   from a backend name or from `__AVX*__` macros in a public header.
+  All AVX-512 backends require AVX2, which GCC/Clang also enable with `-mavx512f`.
+  MSVC's `/arch:AVX512` additionally requires AVX512VL and AVX512CD; keep these checks
+  synchronized with the compiler flags. This optional target follows the compiler-group
+  approach documented in [NumPy's MSVC compatibility rules](https://numpy.org/doc/1.26/reference/simd/build-options.html#on-x86-microsoft-visual-c-c).
+  Missing group features select the AVX2 fallback; they do not raise the library's minimum
+  CPU requirements. Native tuning defaults to on for local builds and must be explicitly
+  disabled for distributed builds; release wheels already set it to off.
 - Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
   headers use internal linkage so independently compiled backends retain their own bodies.
   Include the FFHT implementation inside the private kernel namespace for the same reason.

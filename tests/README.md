@@ -42,9 +42,9 @@ ctest --test-dir build --output-on-failure
 
 The combined test executable is also available as `build/tests/rabitq_tests`.
 
-Release builds use native CPU tuning by default. Pass
-`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` when the resulting test binary must
-run on a different AVX2- or AVX-512-capable machine.
+Native CPU tuning is on by default for local GCC/Clang builds. Pass
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for portable test binaries that may
+run on a different CPU from the build machine.
 
 ### Building without Tests
 

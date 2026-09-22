@@ -25,6 +25,7 @@
 #include "rabitqlib/quantization/rabitq.hpp"
 #include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/memory.hpp"
+#include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -411,7 +412,7 @@ inline void IVF::save(const char* filename) const {
         throw std::invalid_argument("IVF save filename must not be empty");
     }
 
-    std::ofstream output(filename, std::ios::binary);
+    std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     output.exceptions(std::ios::failbit | std::ios::badbit);
     if (raw_reranking_) {
         output.write(
@@ -463,7 +464,7 @@ inline void IVF::load(const char* filename) {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("IVF load filename must not be empty");
     }
-    std::ifstream input(filename, std::ios::binary);
+    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open IVF index file");
     }

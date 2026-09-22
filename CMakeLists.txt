@@ -14,6 +14,7 @@ option(RABITQ_BUILD_SAMPLES "Build C++ sample programs" ON)
 option(RABITQ_BUILD_TESTS "Build C++ tests" OFF)
 option(RABITQ_BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
 option(RABITQ_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+# Enable native tuning for local builds; release wheels explicitly set this OFF.
 option(
     RABITQ_ENABLE_NATIVE_OPTIMIZATION
     "Optimize generic code for the build machine"
@@ -131,6 +132,8 @@ if(MSVC)
         ${RABITQ_AVX2_SOURCES} ${RABITQ_HNSW_AVX2_SOURCES}
         PROPERTIES COMPILE_OPTIONS "/arch:AVX2"
     )
+    # MSVC enables the complete F/CD/VL/BW/DQ group. Keep the optional
+    # backend's runtime guard in cpu_features.cpp aligned with this flag.
     set_source_files_properties(
         ${RABITQ_AVX512_SOURCES} ${RABITQ_AVX512_POPCNT_SOURCES}
         ${RABITQ_HNSW_AVX512_CORE_SOURCES} ${RABITQ_HNSW_AVX512_POPCNT_SOURCES}
