@@ -35,16 +35,17 @@
 
 ## News
 
-- **September 2026 — IVF raw-vector reranking:** Set `nbits=32` to store raw
-  float32 vectors for reranking. IVF now selects HACC automatically for 4–9-bit
-  codes, using standard FastScan for 1–3 bits and raw vectors; manual overrides
-  remain available. See the [IVF documentation](docs/docs/index/ivf.md).
+- **September 2026 — Windows x86-64 support:** C++ and Python source builds now
+  support MSVC, runtime AVX2/AVX-512 dispatch, and Unicode index paths. Windows
+  wheels are configured for the next release. See the [Windows build instructions](tests/README.md#prerequisites).
 
-- **September 2026 — Quantized SymphonyQG:** SymphonyQG now supports optional
-  4-bit and 8-bit RaBitQ vector storage. Select QG-quant with
-  `quantization_bits=4` or `quantization_bits=8`; vanilla raw-vector QG remains
-  the default. See the [SymphonyQG documentation](docs/docs/index/qg.md) for
-  details.
+- **September 2026 — IVF raw-vector reranking:** Use `nbits=32` for float32
+  reranking. Quantized IVF automatically selects HACC for 4–9-bit codes.
+  See the [IVF documentation](docs/docs/index/ivf.md).
+
+- **September 2026 — Quantized SymphonyQG:** Set `quantization_bits=4` or `8`
+  for compact vector storage; raw vectors remain the default.
+  See the [SymphonyQG documentation](docs/docs/index/qg.md).
 
 ## Install
 
@@ -52,15 +53,12 @@
 python -m pip install --upgrade rabitqlib
 ```
 
-Published wheels currently support Linux x86-64 with CPython 3.11–3.14. The
-release workflow is configured to add Windows x86-64 wheels in the next release.
-AVX2 and FMA are the CPU baseline; supported AVX-512 kernels are selected at
-runtime.
+Wheels: CPython 3.11–3.14 on Linux x86-64; Windows x86-64 is planned for the
+next release. Requires AVX2 and FMA, with optional AVX-512 acceleration.
 
 ## Python quick start
 
-The following complete example builds a small IVF index and searches it. It
-uses deterministic synthetic data, so no dataset download is required.
+Build and search a small IVF index using synthetic data:
 
 ```python
 import numpy as np
@@ -101,7 +99,9 @@ in C++; Python paths are Unicode strings on all platforms.
 <summary>Build the Python bindings from source</summary>
 
 Source builds require a C++17 compiler, CMake 3.20 or newer, and OpenMP. On
-Ubuntu or Debian:
+Windows, install Visual Studio 2026 with the Desktop development with C++
+workload, then run `python -m pip install .` from the repository root.
+On Ubuntu or Debian:
 
 ```bash
 sudo apt-get update
@@ -225,17 +225,6 @@ and HNSW implementations, with links to the source code.
 - a C++17 compiler with OpenMP support
 - an x86-64 CPU with AVX2 and FMA
 
-<details>
-<summary>CPU dispatch details</summary>
-
-AVX2 and FMA are the minimum CPU requirements. Optional AVX-512 kernels also
-require AVX-512F/BW/DQ. MSVC builds additionally check AVX-512VL/CD because
-`/arch:AVX512` enables the whole group; CPUs missing either feature use AVX2.
-AVX-512 VPOPCNTDQ enables additional popcount kernels. All checks include
-operating-system support for the required vector register state.
-
-</details>
-
 Clone and build the library and example programs:
 
 ```bash
@@ -246,10 +235,11 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-Native CPU tuning is on by default for local GCC/Clang builds (`-march=native`).
-Set `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for distributed binaries to retain
-the AVX2/FMA minimum and select optional ISA-specific kernels at runtime.
-Release wheels explicitly disable native tuning.
+For MSVC, follow the [Windows build instructions](tests/README.md#prerequisites).
+Local GCC/Clang builds enable `-march=native` by default; set
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for portable binaries, as release
+wheels do. See [CPU dispatch details](DEVELOPMENT.md#dispatch-conventions-and-coverage)
+for backend requirements and fallbacks.
 
 ### Use RaBitQ-Library in another C++ project
 
