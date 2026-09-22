@@ -204,7 +204,7 @@ class HierarchicalNSW {
     )(const float* __restrict__, const float* __restrict__, size_t){nullptr};
 
     void free_memory() {
-        free(data_level0_memory_);
+        memory::aligned_deallocate(data_level0_memory_);
         data_level0_memory_ = nullptr;
         for (PID i = 0; i < cur_element_count_; i++) {
             if (element_levels_[i] > 0) {
@@ -215,7 +215,7 @@ class HierarchicalNSW {
         linkLists_ = nullptr;
         cur_element_count_ = 0;
 
-        free(centroids_memory_);
+        memory::aligned_deallocate(centroids_memory_);
         centroids_memory_ = nullptr;
 
         rotator_.reset();
@@ -829,7 +829,8 @@ inline void HierarchicalNSW::construct(
 
     num_cluster_ = cluster_num;
     const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
-    centroids_memory_ = reinterpret_cast<char*>(malloc(centroids_bytes));
+    centroids_memory_ =
+        static_cast<char*>(memory::aligned_allocate_bytes(64, centroids_bytes));
     if (centroids_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids");
     }

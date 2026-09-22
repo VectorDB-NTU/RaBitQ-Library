@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "rabitqlib/utils/bitops.hpp"
+
 namespace rabitqlib {
 
 float warmup_ip_x0_q_512(
@@ -41,11 +43,11 @@ inline float warmup_ip_x0_q(
 
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t x = *static_cast<const uint64_t*>(it_data);
-        ppc += __builtin_popcountll(x);
+        ppc += bitops::popcount64(x);
 
         for (size_t j = 0; j < b_query; ++j) {
             uint64_t y = *static_cast<const uint64_t*>(it_query);
-            ip += (__builtin_popcountll(x & y) << j);
+            ip += (bitops::popcount64(x & y) << j);
             it_query++;
         }
         it_data++;
@@ -74,11 +76,11 @@ inline float warmup_ip_x0_q(
 
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t x = *static_cast<const uint64_t*>(it_data);
-        ppc += __builtin_popcountll(x);
+        ppc += rabitqlib::bitops::popcount64(x);
 
         for (size_t j = 0; j < b_query; ++j) {
             uint64_t y = *static_cast<const uint64_t*>(it_query);
-            ip += (__builtin_popcountll(x & y) << j);
+            ip += (rabitqlib::bitops::popcount64(x & y) << j);
             it_query++;
         }
         it_data++;

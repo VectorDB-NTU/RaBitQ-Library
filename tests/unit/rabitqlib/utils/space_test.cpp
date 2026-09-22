@@ -5,8 +5,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
@@ -71,42 +71,88 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
     for (size_t dim : {64UL, 128UL, 192UL, 448UL, 512UL, 576UL}) {
         SCOPED_TRACE(dim);
         std::vector<int> data_bits(dim);
-        std::vector<int> query_bits(dim);
         size_t data_popcount = 0;
-        size_t intersection_popcount = 0;
         for (size_t i = 0; i < dim; ++i) {
             data_bits[i] = (i % 3) == 0;
-            query_bits[i] = (i % 5) == 0;
             data_popcount += data_bits[i] != 0;
-            intersection_popcount += data_bits[i] != 0 && query_bits[i] != 0;
         }
 
         std::vector<uint8_t> storage((dim / 8) + 1);
         auto* codes = storage.data() + 1;
         ASSERT_NE(reinterpret_cast<uintptr_t>(codes) % alignof(uint64_t), 0U);
         pack_binary_to_bytes<uint64_t>(data_bits.data(), codes, dim);
-        std::vector<uint64_t> query(dim / 64);
-        pack_binary(query_bits.data(), query.data(), dim);
-        const float expected = delta * static_cast<float>(intersection_popcount) +
-                               vl * static_cast<float>(data_popcount);
 
-        if (cpu::has_avx2()) {
-            EXPECT_FLOAT_EQ(
-                simd::warmup_ip_x0_q_512_avx2(codes, query.data(), delta, vl, dim, 1),
-                expected
-            );
+        for (size_t b_query : {1UL, 4UL, 8UL}) {
+            SCOPED_TRACE(b_query);
+            std::vector<uint8_t> query_values(dim);
+            size_t weighted_intersection = 0;
+            for (size_t i = 0; i < dim; ++i) {
+                query_values[i] =
+                    static_cast<uint8_t>((i * 37 + 11) & ((1U << b_query) - 1));
+                if (data_bits[i] != 0) {
+                    weighted_intersection += query_values[i];
+                }
+            }
+
+            std::vector<uint64_t> query((dim / 64) * b_query, 0);
+            size_t query_offset = 0;
+            for (size_t block = 0; block < dim; block += 512) {
+                const size_t block_dim = (dim - block < 512) ? dim - block : 512;
+                const size_t chunks = block_dim / 64;
+                for (size_t bit = 0; bit < b_query; ++bit) {
+                    for (size_t chunk = 0; chunk < chunks; ++chunk) {
+                        uint64_t packed = 0;
+                        for (size_t k = 0; k < 64; ++k) {
+                            const size_t i = block + chunk * 64 + k;
+                            packed |= static_cast<uint64_t>((query_values[i] >> bit) & 1U)
+                                      << (63 - k);
+                        }
+                        query[query_offset + bit * chunks + chunk] = packed;
+                    }
+                }
+                query_offset += chunks * b_query;
+            }
+
+            const float expected = delta * static_cast<float>(weighted_intersection) +
+                                   vl * static_cast<float>(data_popcount);
+            if (cpu::has_avx2()) {
+                EXPECT_FLOAT_EQ(
+                    simd::warmup_ip_x0_q_512_avx2(
+                        codes, query.data(), delta, vl, dim, b_query
+                    ),
+                    expected
+                );
+                EXPECT_FLOAT_EQ(
+                    warmup_ip_x0_q_512(codes, query.data(), delta, vl, dim, b_query),
+                    expected
+                );
+            }
+            if (cpu::has_avx512_popcnt()) {
+                EXPECT_FLOAT_EQ(
+                    simd::warmup_ip_x0_q_512_avx512(
+                        codes, query.data(), delta, vl, dim, b_query
+                    ),
+                    expected
+                );
+            }
         }
-        if (cpu::has_avx512_popcnt()) {
-            EXPECT_FLOAT_EQ(
-                simd::warmup_ip_x0_q_512_avx512(codes, query.data(), delta, vl, dim, 1),
-                expected
-            );
-        }
-        if (cpu::has_avx2()) {
-            EXPECT_FLOAT_EQ(
-                warmup_ip_x0_q_512(codes, query.data(), delta, vl, dim, 1), expected
-            );
-        }
+    }
+}
+
+TEST(WarmupIpX0Q, RejectsQueryWidthsBeyondByte) {
+    const std::array<uint8_t, 8> data{};
+    const std::array<uint64_t, 9> query{};
+    if (cpu::has_avx2()) {
+        EXPECT_THROW(
+            simd::warmup_ip_x0_q_512_avx2(data.data(), query.data(), 1.0F, 0.0F, 64, 9),
+            std::invalid_argument
+        );
+    }
+    if (cpu::has_avx512_popcnt()) {
+        EXPECT_THROW(
+            simd::warmup_ip_x0_q_512_avx512(data.data(), query.data(), 1.0F, 0.0F, 64, 9),
+            std::invalid_argument
+        );
     }
 }
 
@@ -209,8 +255,10 @@ TEST(ScalarQuantize, Uint16MatchesRoundedScalar) {
     ASSERT_EQ(result, expected);
 }
 
+constexpr size_t kScalarQuantizeTestDim = 33;
+
 TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
-    constexpr size_t dim = 33;
+    constexpr size_t dim = kScalarQuantizeTestDim;
     const std::array<float, 9> values{
         0.5F,
         1.5F,
@@ -232,8 +280,8 @@ TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
     }
 
     const auto check = [&](auto quantize8, auto quantize16) {
-        std::array<uint8_t, dim> actual8{};
-        std::array<uint16_t, dim> actual16{};
+        std::array<uint8_t, kScalarQuantizeTestDim> actual8{};
+        std::array<uint16_t, kScalarQuantizeTestDim> actual16{};
         quantize8(actual8.data(), input.data(), dim, 0.0F, 1.0F);
         quantize16(actual16.data(), input.data(), dim, 0.0F, 1.0F);
         EXPECT_EQ(actual8, expected8);
@@ -250,40 +298,45 @@ TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
 }
 
 TEST(ip16_fxu1_avx, ip_works) {
-    srand(42);
     constexpr size_t dim = 64;
     float query[dim];
     uint8_t codes[dim / 8];
 
     for (size_t i = 0; i < dim; ++i) {
-        query[i] = static_cast<float>(rand()) / RAND_MAX * 1000.0f;
+        query[i] = static_cast<float>((i * 37 + 11) % 101) * 0.25F;
     }
 
     for (size_t i = 0; i < dim / 8; ++i) {
-        codes[i] = static_cast<uint8_t>(rand() % 256);
+        codes[i] = static_cast<uint8_t>(i * 53 + 19);
     }
 
-    ASSERT_NEAR(
-        rabitqlib::excode_ipimpl::ip16_fxu1_avx(query, codes, dim), 15055.81f, 0.1f
-    );
+    float expected = 0.0F;
+    for (size_t i = 0; i < dim; ++i) {
+        expected += query[i] * static_cast<float>((codes[i / 8] >> (i % 8)) & 1U);
+    }
+    ASSERT_NEAR(rabitqlib::excode_ipimpl::ip16_fxu1_avx(query, codes, dim), expected, 0.1F);
 }
 
 TEST(ip64_fxu2_avx, ip_works) {
-    srand(42);
     constexpr size_t dim = 64 * 4;
     float query[dim];
     uint8_t codes[dim / 4];
 
     for (size_t i = 0; i < dim; ++i) {
-        query[i] = static_cast<float>(rand()) / RAND_MAX * 1000.0f;
+        query[i] = static_cast<float>((i * 37 + 11) % 101) * 0.25F;
     }
 
     for (size_t i = 0; i < dim / 4; ++i) {
-        codes[i] = static_cast<uint8_t>(rand() % 256);
+        codes[i] = static_cast<uint8_t>(i * 53 + 19);
     }
-    ASSERT_NEAR(
-        rabitqlib::excode_ipimpl::ip64_fxu2_avx(query, codes, dim), 217584.15f, 0.1f
-    );
+
+    float expected = 0.0F;
+    for (size_t i = 0; i < dim; ++i) {
+        const uint8_t packed = codes[(i / 64) * 16 + (i % 16)];
+        const auto code = static_cast<uint8_t>((packed >> (2 * ((i % 64) / 16))) & 3U);
+        expected += query[i] * static_cast<float>(code);
+    }
+    ASSERT_NEAR(rabitqlib::excode_ipimpl::ip64_fxu2_avx(query, codes, dim), expected, 0.1F);
 }
 
 TEST(OddBitExcodeIp, MatchesScalarInnerProduct) {

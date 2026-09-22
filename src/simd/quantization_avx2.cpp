@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "rabitqlib/simd/quantization_dispatch.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 #include "rescale_search.hpp"
 namespace rabitqlib::simd::detail {
 
@@ -62,7 +63,7 @@ static RescaleSearchState evaluate_scale_state_avx2(
             alignas(32) double corrected[4];
             _mm256_store_pd(corrected, c);
             for (unsigned mask = boundary; mask; mask &= mask - 1) {
-                unsigned k = __builtin_ctz(mask);
+                unsigned k = bitops::countr_zero32(mask);
                 corrected[k] = quantized_code_at_scale(magnitudes[i + k], scale, max_code);
             }
             c = _mm256_load_pd(corrected);

@@ -5,8 +5,9 @@
 #include <stdexcept>
 
 #include "rabitqlib/third/Eigen/Dense"
+#include "rabitqlib/utils/bitops.hpp"  // IWYU pragma: keep; used by BIT_ID
 
-#define BIT_ID(x) (__builtin_popcount((x)-1))
+#define BIT_ID(x) (rabitqlib::bitops::popcount32((x)-1))
 #define LOWBIT(x) ((x) & (-(x)))
 
 namespace rabitqlib {

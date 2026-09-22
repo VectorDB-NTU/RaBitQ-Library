@@ -125,6 +125,24 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  windows:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
+    name: Windows x86-64
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: >-
+          cmake -S . -B build-windows -G "Visual Studio 17 2022" -A x64
+          -DRABITQ_BUILD_TESTS=ON
+          -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+      - name: Build
+        run: cmake --build build-windows --config Release --parallel 2
+      - name: Test
+        run: ctest --test-dir build-windows -C Release --output-on-failure
+
   sanitizers:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}

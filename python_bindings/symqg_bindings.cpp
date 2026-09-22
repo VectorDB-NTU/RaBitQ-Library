@@ -1,8 +1,8 @@
 #include <pybind11/cast.h>
+#include <pybind11/detail/common.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
-#include <sys/types.h>
 
 #include <algorithm>
 #include <atomic>
@@ -112,8 +112,8 @@ class SymqgIndex {
         index_->set_ef(ef);
 
         const size_t nq = static_cast<size_t>(query_array.shape(0));
-        const auto shape =
-            std::vector<ssize_t>{static_cast<ssize_t>(nq), static_cast<ssize_t>(k)};
+        const auto shape = std::vector<py::ssize_t>{
+            static_cast<py::ssize_t>(nq), static_cast<py::ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
         auto* ids_data = ids.mutable_data();
@@ -133,7 +133,9 @@ class SymqgIndex {
         std::atomic<bool> failed{false};
         std::exception_ptr error;
 #pragma omp parallel for num_threads(workers) if (workers > 1) schedule(dynamic)
-        for (size_t idx = 0; idx < nq; ++idx) {
+        for (std::ptrdiff_t query_index = 0; query_index < static_cast<std::ptrdiff_t>(nq);
+             ++query_index) {
+            const size_t idx = static_cast<size_t>(query_index);
             if (failed.load(std::memory_order_relaxed)) {
                 continue;
             }

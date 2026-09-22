@@ -40,11 +40,15 @@ cmake.args = [
 ]
 
 [tool.cibuildwheel]
-build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64"
+build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64"
 build-verbosity = 1
 environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" }
 test-requires = "pytest"
 test-command = "pytest {project}/tests/python --tb=short -q"
+
+[tool.cibuildwheel.windows]
+before-build = "python -m pip install delvewheel"
+repair-wheel-command = "delvewheel repair -w {dest_dir} {wheel}"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

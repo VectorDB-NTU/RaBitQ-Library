@@ -254,7 +254,9 @@ static float missing_mask_ip_x0_q(const float*, const uint8_t*, size_t) {
     missing_feature("mask ip x0 q");
 }
 
-static void missing_fastscan_accumulate(const uint8_t*, const uint8_t*, int32_t*, size_t) {
+static void missing_fastscan_accumulate(
+    const uint8_t* __restrict__, const uint8_t* __restrict__, int32_t* __restrict__, size_t
+) {
     missing_feature("fastscan accumulate");
 }
 
@@ -263,7 +265,7 @@ static void missing_fastscan_transfer_lut_hacc(const uint16_t*, size_t, uint8_t*
 }
 
 static void missing_fastscan_accumulate_hacc(
-    const uint8_t*, const uint8_t*, int32_t*, size_t
+    const uint8_t* __restrict__, const uint8_t* __restrict__, int32_t*, size_t
 ) {
     missing_feature("fastscan high-accuracy accumulate");
 }

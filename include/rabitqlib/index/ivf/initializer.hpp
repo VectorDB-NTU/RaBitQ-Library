@@ -7,6 +7,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <ios>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -162,14 +163,14 @@ class FlatInitializer : public Initializer {
     void save(std::ofstream& output, const char*) const override {
         output.write(
             reinterpret_cast<const char*>(centroids_.data()),
-            static_cast<long>(sizeof(float) * dim_ * num_cluster_)
+            static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
         );
     }
 
     void load(std::ifstream& input, const char*) override {
         input.read(
             reinterpret_cast<char*>(centroids_.data()),
-            static_cast<long>(sizeof(float) * dim_ * num_cluster_)
+            static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
         );
     }
 };
@@ -284,7 +285,7 @@ class HNSWInitializer : public Initializer {
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
         std::lock_guard<std::mutex> lock(search_mutex_);
-        alg_hnsw_->setEf(std::max(768UL, 2 * nprobe));
+        alg_hnsw_->setEf(std::max(size_t{768}, 2 * nprobe));
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             alg_hnsw_->searchKnn(query, nprobe);
 

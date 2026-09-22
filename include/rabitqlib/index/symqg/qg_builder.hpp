@@ -127,7 +127,9 @@ class QGBuilder {
             std::vector<PID> ids;
             ids.reserve(degree_bound_);
 #pragma omp for schedule(dynamic)
-            for (size_t i = 0; i < num_nodes_; ++i) {
+            for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+                 ++index) {
+                const size_t i = static_cast<size_t>(index);
                 row.clear();
                 ids.assign(
                     neighbors.begin() + static_cast<ptrdiff_t>(offsets[i]),
@@ -182,7 +184,9 @@ class QGBuilder {
     [[nodiscard]] bool check_dup() const {
         std::atomic<bool> flag(false);
 #pragma omp parallel for num_threads(num_threads_)
-        for (size_t i = 0; i < num_nodes_; ++i) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
             std::unordered_set<PID> edges;
             for (auto nei : new_neighbors_[i]) {
                 if (edges.find(nei.id) != edges.end()) {
@@ -358,7 +362,9 @@ inline void QGBuilder::heuristic_prune(
  */
 inline void QGBuilder::search_new_neighbors(bool refine) {
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
-    for (size_t i = 0; i < num_nodes_; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         PID cur_id = i;
         auto tid = omp_get_thread_num();
         CandidateList candidates;
@@ -413,7 +419,9 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
     // Keep new_neighbors_ read-only while reverse candidates are collected. Mutating a
     // destination row here races with another worker reading that row as its source.
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
-    for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const PID data_id = static_cast<PID>(index);
         for (const auto& nei : new_neighbors_[data_id]) {
             const PID destination = nei.id;
             const CandidateList& destination_neighbors = new_neighbors_[destination];
@@ -439,7 +447,9 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
     }
 
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
-    for (PID data_id = 0; data_id < num_nodes_; ++data_id) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const PID data_id = static_cast<PID>(index);
         CandidateList& tmp_pool = reverse_buffer[data_id];
         if (qg_.is_quantized() && !tmp_pool.empty()) {
             // RaBitQ estimates are directional: score destination -> source afresh.
@@ -463,7 +473,9 @@ inline void QGBuilder::random_init() {
     const PID min_id = 0;
     const PID max_id = num_nodes_ - 1;
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
-    for (size_t i = 0; i < num_nodes_; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         std::unordered_set<PID> neighbor_set;
         neighbor_set.reserve(degree_bound_);
         while (neighbor_set.size() < degree_bound_) {
@@ -496,7 +508,9 @@ inline void QGBuilder::random_init() {
  */
 inline void QGBuilder::graph_refine() {
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
-    for (size_t i = 0; i < num_nodes_; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         CandidateList& cur_neighbors = new_neighbors_[i];
         size_t cur_degree = cur_neighbors.size();
 
@@ -573,7 +587,9 @@ inline void QGBuilder::iter(bool refine) {
 
     // update qg
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
-    for (size_t i = 0; i < num_nodes_; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         qg_.update_qg(i, new_neighbors_[i]);
         degrees_[i] = new_neighbors_[i].size();
     }

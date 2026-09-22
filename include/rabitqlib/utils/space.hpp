@@ -15,6 +15,7 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib {
@@ -201,7 +202,9 @@ inline std::vector<T> compute_centroid(
     std::vector<std::vector<T>> all_results(thread_count, std::vector<T>(dim, 0));
 
 #pragma omp parallel for schedule(dynamic) num_threads(thread_count)
-    for (size_t i = 0; i < num_points; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         auto tid = omp_get_thread_num();
         std::vector<T>& cur_results = all_results[tid];
         const T* cur_data = data + (dim * i);
@@ -245,7 +248,9 @@ inline PID exact_nn(
     std::vector<AnnCandidate<T, PID>> best_entries(thread_count);
 
 #pragma omp parallel for schedule(dynamic) num_threads(thread_count)
-    for (size_t i = 0; i < num_points; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
         auto tid = omp_get_thread_num();
         AnnCandidate<T, PID>& cur_entry = best_entries[tid];
         const T* cur_data = data + (dim * i);
@@ -357,11 +362,11 @@ inline float ip_x0_q(
 
     for (size_t i = 0; i < num_blk; ++i) {
         uint64_t x = *static_cast<const uint64_t*>(it_data);
-        ppc += __builtin_popcountll(x);
+        ppc += bitops::popcount64(x);
 
         for (size_t j = 0; j < b_query; ++j) {
             uint64_t y = *static_cast<const uint64_t*>(it_query);
-            ip += (__builtin_popcountll(x & y) << j);
+            ip += (bitops::popcount64(x & y) << j);
             it_query++;
         }
         it_data++;
@@ -374,7 +379,7 @@ static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d, size_t p
     uint64_t ret = 0;
     size_t iter = padded_dim / 64;
     for (size_t i = 0; i < iter; ++i) {
-        ret += __builtin_popcountll((*d) & (*q));
+        ret += bitops::popcount64((*d) & (*q));
         q++;
         d++;
     }
@@ -396,7 +401,7 @@ inline uint32_t ip_byte_bin(
 inline size_t popcount(const uint64_t* __restrict__ d, size_t length) {
     size_t ret = 0;
     for (size_t i = 0; i < length / 64; ++i) {
-        ret += __builtin_popcountll((*d));
+        ret += bitops::popcount64((*d));
         ++d;
     }
     return ret;

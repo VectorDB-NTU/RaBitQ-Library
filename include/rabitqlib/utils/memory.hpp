@@ -1,9 +1,14 @@
 #pragma once
 
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
 #include <immintrin.h>
 #endif
+#if defined(__linux__)
 #include <sys/mman.h>
+#endif
+#if defined(_MSC_VER)
+#include <malloc.h>
+#endif
 
 #include <cstddef>
 #include <cstdlib>
@@ -12,8 +17,30 @@
 #include <type_traits>
 
 namespace rabitqlib::memory {
-#define PORTABLE_ALIGN32 __attribute__((aligned(32)))
-#define PORTABLE_ALIGN64 __attribute__((aligned(64)))
+inline void* aligned_allocate_bytes(size_t alignment, size_t size) {
+#if defined(_MSC_VER)
+    return _aligned_malloc(size, alignment);
+#else
+    return std::aligned_alloc(alignment, size);
+#endif
+}
+
+inline void aligned_deallocate(void* ptr) noexcept {
+#if defined(_MSC_VER)
+    _aligned_free(ptr);
+#else
+    std::free(ptr);
+#endif
+}
+
+inline void advise_huge_pages(void* ptr, size_t size) {
+#if defined(__linux__)
+    madvise(ptr, size, MADV_HUGEPAGE);
+#else
+    (void)ptr;
+    (void)size;
+#endif
+}
 
 template <typename T, size_t Alignment = 64, bool HugePage = false>
 class AlignedAllocator {
@@ -72,17 +99,17 @@ class AlignedAllocator {
         }
 
         const auto nbytes = aligned_size(n * sizeof(T));
-        auto* ptr = std::aligned_alloc(Alignment, nbytes);
+        auto* ptr = aligned_allocate_bytes(Alignment, nbytes);
         if (ptr == nullptr) {
             throw std::bad_alloc();
         }
         if (HugePage) {
-            madvise(ptr, nbytes, MADV_HUGEPAGE);
+            advise_huge_pages(ptr, nbytes);
         }
         return reinterpret_cast<T*>(ptr);
     }
 
-    void deallocate(T* ptr, [[maybe_unused]] std::size_t n) { std::free(ptr); }
+    void deallocate(T* ptr, [[maybe_unused]] std::size_t n) { aligned_deallocate(ptr); }
 };
 
 template <typename T>
@@ -123,12 +150,12 @@ inline T* align_allocate(size_t nbytes) {
         throw std::bad_array_new_length();
     }
     const size_t size = nbytes + padding;
-    void* ptr = std::aligned_alloc(Alignment, size);
+    void* ptr = aligned_allocate_bytes(Alignment, size);
     if (ptr == nullptr) {
         throw std::bad_alloc();
     }
     if (HugePage) {
-        madvise(ptr, size, MADV_HUGEPAGE);
+        advise_huge_pages(ptr, size);
     }
     return static_cast<T*>(ptr);
 }
@@ -142,15 +169,15 @@ inline T* huge_page_allocate(size_t nbytes) {
 }
 
 static inline void prefetch_l1(const void* addr) {
-#if defined(__SSE2__)
-    _mm_prefetch(addr, _MM_HINT_T0);
+#if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
+    _mm_prefetch(static_cast<const char*>(addr), _MM_HINT_T0);
 #else
     __builtin_prefetch(addr, 0, 3);
 #endif
 }
 
 static inline void prefetch_l2(const void* addr) {
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
     _mm_prefetch((const char*)addr, _MM_HINT_T1);
 #else
     __builtin_prefetch(addr, 0, 2);

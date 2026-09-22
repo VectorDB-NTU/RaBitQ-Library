@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -175,6 +176,84 @@ TEST(FhtDispatchTest, BackendsMatchScalarButterfliesAndPadding) {
         }
     }
 }
+
+#if defined(_MSC_VER)
+#define RABITQ_DECLARE_WINDOWS_FHT(size)                        \
+    extern "C" void rabitq_fht_avx_float_##size(float* values); \
+    extern "C" void rabitq_fht_avx_double_##size(double* values);
+
+RABITQ_DECLARE_WINDOWS_FHT(1)
+RABITQ_DECLARE_WINDOWS_FHT(2)
+RABITQ_DECLARE_WINDOWS_FHT(3)
+RABITQ_DECLARE_WINDOWS_FHT(4)
+RABITQ_DECLARE_WINDOWS_FHT(5)
+RABITQ_DECLARE_WINDOWS_FHT(6)
+RABITQ_DECLARE_WINDOWS_FHT(7)
+RABITQ_DECLARE_WINDOWS_FHT(8)
+RABITQ_DECLARE_WINDOWS_FHT(9)
+RABITQ_DECLARE_WINDOWS_FHT(10)
+RABITQ_DECLARE_WINDOWS_FHT(11)
+RABITQ_DECLARE_WINDOWS_FHT(12)
+
+#undef RABITQ_DECLARE_WINDOWS_FHT
+
+template <typename T>
+void CheckWindowsFhtHelpers(const std::array<void (*)(T*), 12>& helpers) {
+    for (size_t log_n = 1; log_n <= helpers.size(); ++log_n) {
+        SCOPED_TRACE(log_n);
+        const size_t dim = size_t{1} << log_n;
+        std::vector<T> actual(dim), expected(dim);
+        for (size_t i = 0; i < dim; ++i) {
+            actual[i] = expected[i] = static_cast<T>(static_cast<int>(i * 37 % 101) - 50);
+        }
+        for (size_t width = 1; width < dim; width *= 2) {
+            for (size_t block = 0; block < dim; block += width * 2) {
+                for (size_t i = 0; i < width; ++i) {
+                    const T a = expected[block + i], b = expected[block + width + i];
+                    expected[block + i] = a + b;
+                    expected[block + width + i] = a - b;
+                }
+            }
+        }
+        helpers[log_n - 1](actual.data());
+        EXPECT_EQ(actual, expected);
+    }
+}
+
+TEST(FhtWindowsAssemblyTest, FloatAndDoubleHelpersMatchScalarButterflies) {
+    if (!cpu::has_avx2()) {
+        GTEST_SKIP() << "Windows FHT assembly requires AVX";
+    }
+    CheckWindowsFhtHelpers<float>({
+        rabitq_fht_avx_float_1,
+        rabitq_fht_avx_float_2,
+        rabitq_fht_avx_float_3,
+        rabitq_fht_avx_float_4,
+        rabitq_fht_avx_float_5,
+        rabitq_fht_avx_float_6,
+        rabitq_fht_avx_float_7,
+        rabitq_fht_avx_float_8,
+        rabitq_fht_avx_float_9,
+        rabitq_fht_avx_float_10,
+        rabitq_fht_avx_float_11,
+        rabitq_fht_avx_float_12,
+    });
+    CheckWindowsFhtHelpers<double>({
+        rabitq_fht_avx_double_1,
+        rabitq_fht_avx_double_2,
+        rabitq_fht_avx_double_3,
+        rabitq_fht_avx_double_4,
+        rabitq_fht_avx_double_5,
+        rabitq_fht_avx_double_6,
+        rabitq_fht_avx_double_7,
+        rabitq_fht_avx_double_8,
+        rabitq_fht_avx_double_9,
+        rabitq_fht_avx_double_10,
+        rabitq_fht_avx_double_11,
+        rabitq_fht_avx_double_12,
+    });
+}
+#endif
 
 TEST(MatrixRotatorTest, PreservesOverlappingInputAndOutput) {
     rotator_impl::MatrixRotator<float> rotator(3, 3);

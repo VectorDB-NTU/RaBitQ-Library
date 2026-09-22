@@ -1,13 +1,20 @@
-#include <pybind11/stl.h>
+#include <pybind11/cast.h>
+#include <pybind11/detail/common.h>
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
 
 #include <algorithm>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bindings_common.hpp"
+#include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 
 namespace py = pybind11;
@@ -71,7 +78,7 @@ class HnswIndex {
         if (num_clusters == 0) {
             throw std::invalid_argument("at least one centroid is required");
         }
-        for (ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
+        for (py::ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
             if (cluster_ids_array.data()[i] >= num_clusters) {
                 throw std::invalid_argument("cluster_ids contains an out-of-range value");
             }
@@ -115,8 +122,8 @@ class HnswIndex {
             throw std::invalid_argument("k must be between 1 and max_elements");
         }
 
-        const auto shape = std::vector<ssize_t>{
-            static_cast<ssize_t>(query_array.shape(0)), static_cast<ssize_t>(k)};
+        const auto shape = std::vector<py::ssize_t>{
+            static_cast<py::ssize_t>(query_array.shape(0)), static_cast<py::ssize_t>(k)};
         auto ids = py::array_t<rabitqlib::PID>(shape);
         auto dists = py::array_t<float>(shape);
         std::fill(ids.mutable_data(), ids.mutable_data() + ids.size(), rabitqlib::kPidMax);
@@ -136,10 +143,10 @@ class HnswIndex {
             num_threads
         );
 
-        for (ssize_t i = 0; i < static_cast<ssize_t>(results.size()); ++i) {
-            for (ssize_t j = 0; j < static_cast<ssize_t>(std::min<size_t>(
-                                        k, results[static_cast<size_t>(i)].size()
-                                    ));
+        for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(results.size()); ++i) {
+            for (py::ssize_t j = 0; j < static_cast<py::ssize_t>(std::min<size_t>(
+                                            k, results[static_cast<size_t>(i)].size()
+                                        ));
                  ++j) {
                 ids_buf(i, j) =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].second;

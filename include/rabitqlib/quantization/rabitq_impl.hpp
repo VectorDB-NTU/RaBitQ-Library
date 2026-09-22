@@ -251,7 +251,8 @@ inline void one_bit_compact_codes(
     constexpr size_t kTypeBits = sizeof(TC) * 8;
 
 #pragma omp parallel for if (Parallel)
-    for (size_t i = 0; i < num; ++i) {
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num); ++index) {
+        const size_t i = static_cast<size_t>(index);
         T add;
         T rescale;
         T error;

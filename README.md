@@ -52,8 +52,10 @@
 python -m pip install --upgrade rabitqlib
 ```
 
-Prebuilt wheels support Linux x86-64 and CPython 3.11–3.14. AVX2 + FMA is the
-portable CPU baseline; supported AVX-512 kernels are selected at runtime.
+Published wheels currently support Linux x86-64 with CPython 3.11–3.14. The
+release workflow is configured to add Windows x86-64 wheels in the next release.
+AVX2 and FMA are the CPU baseline; supported AVX-512 kernels are selected at
+runtime.
 
 ## Python quick start
 
