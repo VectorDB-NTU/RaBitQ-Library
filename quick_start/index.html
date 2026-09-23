@@ -1168,8 +1168,7 @@ a C++17 API for both indexes and low-level quantization.</p>
 <ul>
 <li>An x86-64 CPU supported by the selected kernels: most paths accept either
   AVX2 with FMA or AVX-512F/BW/DQ with FMA</li>
-<li>Linux x86-64 and CPython 3.11–3.14 for currently published Python wheels;
-  Windows x86-64 wheels are configured for the next release</li>
+<li>Linux or Windows x86-64 and CPython 3.11–3.14 for published Python wheels</li>
 <li>For source builds: a C++17 compiler with OpenMP support and CMake 3.20 or newer;
   Windows builds use Visual Studio 2026 with the C++ workload</li>
 </ul>
@@ -1188,9 +1187,8 @@ path when available. AVX-512 translation units are compiled with FMA enabled.
 <h3 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>rabitqlib
 </code></pre></div>
-<p>Published Linux x86-64 wheels for CPython 3.11–3.14 do not require a compiler
-or CMake. Windows x86-64 wheels are configured for the next release; until then,
-installing on Windows builds from source with Visual Studio 2026 and CMake.
+<p>Published Linux and Windows x86-64 wheels for CPython 3.11–3.14 do not require
+a compiler or CMake.
 AVX2 + FMA is the CPU baseline; supported AVX-512 kernels are selected at
 runtime.</p>
 <h3 id="build-and-search-an-ivf-index">Build and search an IVF index<a class="headerlink" href="#build-and-search-an-ivf-index" title="Permanent link">&para;</a></h3>
