@@ -37,7 +37,8 @@
 
 - **September 2026 — Windows x86-64 support:** C++ and Python source builds now
   support MSVC, runtime AVX2/AVX-512 dispatch, and Unicode index paths. Windows
-  wheels are configured for the next release. See the [Windows build instructions](tests/README.md#prerequisites).
+  wheels are available for CPython 3.11–3.14. For source builds, see the
+  [Windows build instructions](tests/README.md#prerequisites).
 
 - **September 2026 — IVF raw-vector reranking:** Use `nbits=32` for float32
   reranking. Quantized IVF automatically selects HACC for 4–9-bit codes.
@@ -53,8 +54,8 @@
 python -m pip install --upgrade rabitqlib
 ```
 
-Wheels: CPython 3.11–3.14 on Linux x86-64; Windows x86-64 is planned for the
-next release. Requires AVX2 and FMA, with optional AVX-512 acceleration.
+Wheels: CPython 3.11–3.14 on Linux and Windows x86-64. Requires AVX2 and FMA,
+with optional AVX-512 acceleration.
 
 ## Python quick start
 
