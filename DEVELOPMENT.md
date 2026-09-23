@@ -28,9 +28,9 @@ Verify formatting without changing files:
 ./scripts/check-format.sh
 ```
 
-The scripts intentionally exclude vendored Eigen code and the imported FFHT
-implementation. To use a nonstandard executable name, set `CLANG_FORMAT`; it
-must still identify itself as clang-format 15.
+The scripts intentionally exclude vendored code in `include/rabitqlib/third/`.
+To use a nonstandard executable name, set `CLANG_FORMAT`; it must still identify
+itself as clang-format 15.
 
 clangd embeds its own formatter, so use clangd 15 in editors such as VS Code
 if format-on-save must exactly match CI. If another clangd version is required,
@@ -77,9 +77,9 @@ Use a fresh build directory when changing compilers. `CMAKE_CXX_COMPILER`
 selects the compiler explicitly; `CXX=c++` on the check command must match it.
 
 The wrapper supplies clang-tidy with that compiler's standard-library include
-paths and reports diagnostics only for first-party files. Vendored Eigen,
-hnswlib, and the imported FFHT implementation are excluded. New checks should
-be added incrementally after their existing first-party findings are fixed.
+paths and reports diagnostics only for first-party files. Vendored Eigen and
+hnswlib are excluded. New checks should be added incrementally after their
+existing first-party findings are fixed.
 
 Focused clang-tidy checks on affected code are sufficient during iteration.
 For first-party C++ changes, run the full check above before merging and report
@@ -275,7 +275,10 @@ must happen in generic code first.
   disabled for distributed builds; release wheels already set it to off.
 - Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
   headers use internal linkage so independently compiled backends retain their own bodies.
-  Include the FFHT implementation inside the private kernel namespace for the same reason.
+  The AVX FHT intrinsics in `src/simd/fht_kernels.hpp` use the private kernel namespace
+  for the same reason. Rotation uses this implementation on GCC, Clang, and MSVC;
+  no assembler is required. Keep the FFHT attribution and MIT license in the
+  intrinsics header intact.
 - Pass ordinary pointers, sizes, and library-owned query state across ISA boundaries. Never
   pass Eigen matrix/packet objects between backends. The private matrix implementation
   header includes Eigen under a namespace selected by each backend translation unit.
@@ -296,7 +299,7 @@ covers its arithmetic kernels, not every scalar loop in construction and search.
 | Integer scalar quantization, extra-code packing, transpose, sign masks | Existing runtime selection; byte layouts and rounding rules are unchanged |
 | Standard and high-accuracy FastScan | Runtime selection; generic LUT construction stays separate from selection |
 | IVF and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
-| FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; imported FFHT AVX butterflies are unchanged |
+| FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; shared AVX intrinsics preserve the FFHT butterfly order |
 | Float matrix rotation and PiPNN construction | Matrix products, row norms, and lower-triangle pairwise distances use isolated matrix backends |
 | HNSW search and IVF centroid routing | Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher |
 | Quantization orchestration, reconstruction, non-float utilities | Template/control code remains generic; no blanket native tuning or reduction-order rewrite |

@@ -20,7 +20,7 @@ fi
 mapfile -d '' files < <("$repo_root/scripts/clang-format-files.sh" "$@")
 
 if printf '%s\n' "${files[@]}" \
-    | grep -Eq '/include/rabitqlib/third/|/include/rabitqlib/utils/fht_avx\.hpp$'; then
+    | grep -q '/include/rabitqlib/third/'; then
     echo "error: the format file list contains excluded third-party code" >&2
     exit 1
 fi

@@ -561,7 +561,8 @@ inline void HierarchicalNSW::load(const char* filename) {
         element_count > loaded.max_elements_ ||
         loaded.num_cluster_ > buffer::kSearchBufferMaxPointCount ||
         (element_count != 0 && loaded.num_cluster_ == 0) || loaded.dim_ < 64 ||
-        loaded.dim_ > 4095 || loaded.padded_dim_ != round_up_to_multiple(loaded.dim_, 64) ||
+        loaded.dim_ > rotator_impl::FhtKacRotator::kMaxDim ||
+        loaded.padded_dim_ != round_up_to_multiple(loaded.dim_, 64) ||
         loaded.ex_bits_ > 8 ||
         (loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
         loaded.M_ == 0 || loaded.M_ > 10000 || loaded.maxM_ != loaded.M_ ||
