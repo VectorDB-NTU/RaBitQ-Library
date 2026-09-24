@@ -1,5 +1,5 @@
 import argparse
-from time import time
+from time import perf_counter
 
 import numpy as np
 from rabitqlib import HnswIndex
@@ -35,13 +35,14 @@ def main(args=None) -> None:
 
     for i_probe, ef in enumerate(EFS):
         for r in range(args.test_rounds):
-            t0 = time()
+            t0 = perf_counter()
             ids, _ = idx.search(
                 queries, k=args.topk, ef=ef, num_threads=args.num_threads
             )
-            elapsed = time() - t0  # seconds
+            elapsed = perf_counter() - t0  # seconds
 
-            qps = nq / elapsed
+            # Report an unmeasurable duration instead of inventing a QPS value.
+            qps = nq / elapsed if elapsed > 0 else float("nan")
             recall = compute_recall(ids, gt, args.topk)
 
             all_qps[r, i_probe] = qps

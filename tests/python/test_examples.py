@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -67,6 +68,49 @@ def write_vecs(path, values):
     words[:, 0] = values.shape[1]
     words[:, 1:] = values.view(np.int32)
     words.tofile(path)
+
+
+@pytest.mark.parametrize("kind", ["ivf", "hnsw", "symqg"])
+@pytest.mark.parametrize("elapsed", [0.0, 0.5])
+def test_query_timing_handles_unchanged_clock(kind, elapsed, monkeypatch, capsys):
+    name = "symqg_querying" if kind == "symqg" else f"{kind}_rabitq_querying"
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    spec = importlib.util.spec_from_file_location(name, EXAMPLES / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # Wall-clock timestamps can be identical for a short search on Windows.
+    monkeypatch.setattr(module, "time", lambda: 100.0, raising=False)
+    ticks = iter([100.0, 100.0 + elapsed])
+    monkeypatch.setattr(module, "perf_counter", lambda: next(ticks), raising=False)
+    monkeypatch.setattr(module, "NPROBES" if kind == "ivf" else "EFS", [1])
+    ids = np.array([[0], [1]], dtype=np.uint32)
+    index = SimpleNamespace(
+        dim=2, num_clusters=2, search=lambda *a, **kw: (ids, np.zeros((2, 1)))
+    )
+    index_name = {"ivf": "IvfIndex", "hnsw": "HnswIndex", "symqg": "SymqgIndex"}[kind]
+    monkeypatch.setattr(module, index_name, SimpleNamespace(load=lambda path: index))
+    monkeypatch.setattr(module, "read_fvecs", lambda path: np.zeros((2, 2)))
+    monkeypatch.setattr(module, "read_ivecs", lambda path: ids)
+    module.main(
+        SimpleNamespace(
+            index_file="index",
+            query_file="queries",
+            gt_file="truth",
+            topk=1,
+            test_rounds=1,
+            num_threads=1,
+            metric="l2",
+            use_hacc=None,
+        )
+    )
+    row = capsys.readouterr().out.splitlines()[-1].split()
+    qps, recall = map(float, row[1:])
+    if elapsed == 0:
+        assert np.isnan(qps)
+    else:
+        assert qps == pytest.approx(4.0)
+    assert recall == 1.0
 
 
 @pytest.fixture
