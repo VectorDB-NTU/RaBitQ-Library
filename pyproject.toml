@@ -33,9 +33,10 @@ test = ["pytest>=7", "numpy"]
 # Disable directory auto-discovery so we can map it via CMake's install target
 wheel.packages = []
 
-# Pass the toggle to your root CMake file automatically on pip install
+# Python packages need the extension and core library, not C++ sample executables.
 cmake.args = [
     "-DRABITQ_BUILD_PYTHON_BINDINGS=ON",
+    "-DRABITQ_BUILD_SAMPLES=OFF",
     "-DCMAKE_BUILD_TYPE=Release"
 ]
 
