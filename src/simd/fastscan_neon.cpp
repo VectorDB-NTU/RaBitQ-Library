@@ -67,12 +67,18 @@ void accumulate_impl(
 }
 }  // namespace
 void accumulate_neon(
-    const uint8_t* codes, const uint8_t* lut, int32_t* result, size_t dim
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ lut,
+    int32_t* __restrict__ result,
+    size_t dim
 ) {
     accumulate_impl<false>(codes, lut, result, dim);
 }
 void accumulate_hacc_neon(
-    const uint8_t* codes, const uint8_t* lut, int32_t* result, size_t dim
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ lut,
+    int32_t* result,
+    size_t dim
 ) {
     accumulate_impl<true>(codes, lut, result, dim);
 }

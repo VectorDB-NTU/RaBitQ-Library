@@ -51,9 +51,11 @@ Function resolve_kernel(Function avx2, Function fallback) {
     return fallback;
 }
 
-// Keep ARM selection cached in the same resolver as the x86 tiers.
+// Use a distinct name: a fallback function pointer can implicitly convert to bool.
+// Overloading the x86 resolver would let MSVC select this overload when __restrict
+// makes the SIMD and scalar function-pointer types differ.
 template <typename Function>
-Function resolve_kernel(Function preferred, Function fallback, bool supported) {
+Function resolve_optional_kernel(Function preferred, Function fallback, bool supported) {
     return supported ? preferred : fallback;
 }
 
@@ -169,13 +171,13 @@ void split_batch_estdist(
 
 #if defined(__aarch64__)
 const auto kEuclideanSqrFn =
-    resolve_kernel(euclidean_sqr_neon, euclidean_sqr_generic, cpu::has_neon());
+    resolve_optional_kernel(euclidean_sqr_neon, euclidean_sqr_generic, cpu::has_neon());
 const auto kDotProductFn =
-    resolve_kernel(dot_product_neon, dot_product_generic, cpu::has_neon());
+    resolve_optional_kernel(dot_product_neon, dot_product_generic, cpu::has_neon());
 const auto kDotProductDisFn =
-    resolve_kernel(dot_product_dis_neon, dot_product_dis_generic, cpu::has_neon());
+    resolve_optional_kernel(dot_product_dis_neon, dot_product_dis_generic, cpu::has_neon());
 const auto kL2normSqrFn =
-    resolve_kernel(l2norm_sqr_neon, l2norm_sqr_generic, cpu::has_neon());
+    resolve_optional_kernel(l2norm_sqr_neon, l2norm_sqr_generic, cpu::has_neon());
 #else
 const auto kEuclideanSqrFn =
     RABITQ_RESOLVE(euclidean_sqr_avx512, euclidean_sqr_avx2, euclidean_sqr_generic);
@@ -223,7 +225,7 @@ double best_rescale_factor(
 
 #if defined(__aarch64__) || defined(_M_ARM64)
 const auto kFhtRotateFn =
-    resolve_kernel(fht_rotate_neon, fht_rotate_generic, cpu::has_neon());
+    resolve_optional_kernel(fht_rotate_neon, fht_rotate_generic, cpu::has_neon());
 #else
 const auto kFhtRotateFn =
     RABITQ_RESOLVE(fht_rotate_avx512, fht_rotate_avx2, fht_rotate_generic);
@@ -254,7 +256,7 @@ ExcodeIpTable resolve_excode_ip_table() {
         excode_ipimpl::ip16_fxu8_generic,
     };
 #if defined(__aarch64__) || defined(_M_ARM64)
-    return resolve_kernel(
+    return resolve_optional_kernel(
         ExcodeIpTable{
             ip_fxu0,
             excode_ipimpl::ip16_fxu1_neon,
@@ -298,24 +300,26 @@ ExcodeIpTable resolve_excode_ip_table() {
 }
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-const auto kFlipSignFn = resolve_kernel(flip_sign_neon, flip_sign_generic, cpu::has_neon());
+const auto kFlipSignFn =
+    resolve_optional_kernel(flip_sign_neon, flip_sign_generic, cpu::has_neon());
 #else
 const auto kFlipSignFn =
     RABITQ_RESOLVE(flip_sign_avx512, flip_sign_avx2, flip_sign_generic);
 #endif
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-const auto kKacsWalkFn = resolve_kernel(kacs_walk_neon, kacs_walk_generic, cpu::has_neon());
+const auto kKacsWalkFn =
+    resolve_optional_kernel(kacs_walk_neon, kacs_walk_generic, cpu::has_neon());
 #else
 const auto kKacsWalkFn =
     RABITQ_RESOLVE(kacs_walk_avx512, kacs_walk_avx2, kacs_walk_generic);
 #endif
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-const auto kScalarQuantizeUint8Fn = resolve_kernel(
+const auto kScalarQuantizeUint8Fn = resolve_optional_kernel(
     scalar_quantize_uint8_neon, scalar_quantize_uint8_generic, cpu::has_neon()
 );
-const auto kScalarQuantizeUint16Fn = resolve_kernel(
+const auto kScalarQuantizeUint16Fn = resolve_optional_kernel(
     scalar_quantize_uint16_neon, scalar_quantize_uint16_generic, cpu::has_neon()
 );
 #else
@@ -406,10 +410,10 @@ const ex_ipfunc kIp64Fxu6AvxFn = kExcodeIpTable[6];
 const ex_ipfunc kIp64Fxu7AvxFn = kExcodeIpTable[7];
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-const auto kNewTransposeBinFn = simd::resolve_kernel(
+const auto kNewTransposeBinFn = simd::resolve_optional_kernel(
     simd::new_transpose_bin_neon, simd::new_transpose_bin_generic, cpu::has_neon()
 );
-const auto kNewTransposeBin512Fn = simd::resolve_kernel(
+const auto kNewTransposeBin512Fn = simd::resolve_optional_kernel(
     simd::new_transpose_bin_512_neon, simd::new_transpose_bin_512_generic, cpu::has_neon()
 );
 #else
@@ -428,7 +432,7 @@ const auto kNewTransposeBin512Fn = RABITQ_RESOLVE(
 
 using MaskIpX0QFn = float (*)(const float*, const uint8_t*, size_t);
 #if defined(__aarch64__) || defined(_M_ARM64)
-const MaskIpX0QFn kMaskIpX0QFn = simd::resolve_kernel(
+const MaskIpX0QFn kMaskIpX0QFn = simd::resolve_optional_kernel(
     static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_neon),
     static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_generic),
     cpu::has_neon()
@@ -514,7 +518,7 @@ float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) 
 namespace rabitqlib::fastscan {
 
 #if defined(__aarch64__) || defined(_M_ARM64)
-const auto kPackLutFn = rabitqlib::simd::resolve_kernel(
+const auto kPackLutFn = rabitqlib::simd::resolve_optional_kernel(
     simd::pack_lut_neon, simd::pack_lut_generic, cpu::has_neon()
 );
 #else
@@ -528,7 +532,7 @@ void pack_lut<float>(size_t dim, const float* __restrict__ query, float* __restr
 }
 
 #if defined(__aarch64__)
-const auto kAccumulateFn = rabitqlib::simd::resolve_kernel(
+const auto kAccumulateFn = rabitqlib::simd::resolve_optional_kernel(
     simd::accumulate_neon, simd::accumulate_unsupported, cpu::has_neon()
 );
 #else
@@ -544,7 +548,7 @@ const auto kTransferLutHaccFn = RABITQ_RESOLVE(
 );
 
 #if defined(__aarch64__)
-const auto kAccumulateHaccFn = rabitqlib::simd::resolve_kernel(
+const auto kAccumulateHaccFn = rabitqlib::simd::resolve_optional_kernel(
     simd::accumulate_hacc_neon, simd::accumulate_hacc_generic, cpu::has_neon()
 );
 #else
@@ -595,7 +599,7 @@ namespace rabitqlib {
 using WarmupIpX0Q512Fn =
     float (*)(const uint8_t*, const uint64_t*, float, float, size_t, size_t);
 #if defined(__aarch64__) || defined(_M_ARM64)
-const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = simd::resolve_kernel(
+const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = simd::resolve_optional_kernel(
     static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_neon),
     static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_generic),
     cpu::has_neon()
@@ -651,7 +655,7 @@ const SearchKnnFn kSearchKnnFn = cpu::has_avx512_popcnt()
                                        );
 #else
 const SearchKnnFn kSearchKnnFn =
-    simd::resolve_kernel(search_knn_neon, search_knn_generic, cpu::has_neon());
+    simd::resolve_optional_kernel(search_knn_neon, search_knn_generic, cpu::has_neon());
 #endif
 }  // namespace
 std::priority_queue<std::pair<float, PID>> search_knn(

@@ -64,18 +64,26 @@ void accumulate_generic_impl(
 }
 }  // namespace
 void accumulate_generic(
-    const uint8_t* codes, const uint8_t* lut, int32_t* result, size_t dim
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ lut,
+    int32_t* __restrict__ result,
+    size_t dim
 ) {
     accumulate_generic_impl<false>(codes, lut, result, dim);
 }
-void accumulate_unsupported(const uint8_t*, const uint8_t*, int32_t*, size_t) {
+void accumulate_unsupported(
+    const uint8_t* __restrict__, const uint8_t* __restrict__, int32_t* __restrict__, size_t
+) {
     throw std::runtime_error(
         "Standard FastScan accumulation requires AVX2/FMA, AVX-512, or ARM NEON; "
         "no supported SIMD backend is available"
     );
 }
 void accumulate_hacc_generic(
-    const uint8_t* codes, const uint8_t* lut, int32_t* result, size_t dim
+    const uint8_t* __restrict__ codes,
+    const uint8_t* __restrict__ lut,
+    int32_t* result,
+    size_t dim
 ) {
     accumulate_generic_impl<true>(codes, lut, result, dim);
 }
