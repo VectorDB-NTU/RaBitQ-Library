@@ -35,6 +35,10 @@
 
 ## News
 
+- **September 2026 — Apple Silicon support:** macOS ARM64 joins Linux and
+  Windows x86-64, with NEON kernels and CPython 3.11–3.14 wheel builds for
+  macOS 14+. See the [platform requirements](docs/docs/quick_start.md#requirements).
+
 - **September 2026 — Windows x86-64 support:** C++ and Python source builds now
   support MSVC, runtime AVX2/AVX-512 dispatch, and Unicode index paths. Windows
   wheels are available for CPython 3.11–3.14. For source builds, see the
@@ -145,7 +149,7 @@ depend on the dataset, index configuration, and search parameters.
 | --- | --- |
 | **Compact by design** | Choose [1-bit](https://doi.org/10.1145/3654970) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
 | **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
-| **Native CPU backends** | Runtime AVX2/AVX-512 selection on x86-64; NEON distance, packed-code, FastScan, rotation, and HNSW search kernels on ARM64, with scalar packing and query transposition. |
+| **Native CPU backends** | Runtime AVX2/AVX-512 selection on x86-64; NEON distance, packed-code, FastScan, rotation, query preparation, and HNSW search kernels on ARM64, with portable scalar fallbacks. |
 | **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
 
 The library supports Euclidean distance and inner product. Cosine search is

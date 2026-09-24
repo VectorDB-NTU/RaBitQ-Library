@@ -26,7 +26,7 @@ sudo apt-get install -y git build-essential cmake libomp-dev
 
 ### Quick start
 
-Run from the repository root. Both configurations disable native tuning to
+Run from the repository root. All configurations disable native tuning to
 exercise the portable runtime-dispatch build.
 
 #### Windows (PowerShell)

@@ -6,7 +6,7 @@ RaBitQLib provides two types of random rotation. All implementations sample and 
 By default, the library uses the `FFHT + Kac’s Walk` method. 
 
 The default rotator accepts input dimensions from 64 through 65,536 inclusive,
-including 16,384. It pads to a multiple of 64 and uses AVX intrinsics
+including 16,384. It pads to a multiple of 64 and uses AVX or NEON kernels
 for power-of-two blocks through `2^16`. Allocate the
 output using `rotator->size()`, which can exceed the input dimension.
 
@@ -54,12 +54,12 @@ rotator -> rotate(x.data(), x_prime.data())
 
 ## FFHT + Kac’s Walk
 ### Description
-Each transform uses the shared AVX intrinsics in `src/simd/fht_kernels.hpp`,
-compiled within the AVX2 or AVX-512 backend selected at runtime. GCC, Clang,
-and MSVC use the same implementation without inline assembly or MASM.
-The FFHT butterfly order, normalization, four sign-flip passes, and saved
-rotation state are preserved. These intrinsics still require x86 AVX;
-support for other CPU architectures requires an additional backend.
+On x86-64, transforms use the shared AVX intrinsics in `src/simd/fht_kernels.hpp`
+within the AVX2 or AVX-512 backend selected at runtime. GCC, Clang, and MSVC
+use the same implementation without inline assembly or MASM. ARM64 uses
+NEON kernels in `src/simd/rotator_neon.cpp`; a portable scalar implementation
+is also available. The backends preserve the FFHT butterfly order,
+normalization, four sign-flip passes, and saved rotation state.
 
 This method is a combination of the well-known Fast Johnson-Lindenstrauss Transformation algorithms based on [Fast Hadamard Transform](https://www.cs.princeton.edu/~chazelle/pubs/FJLT-sicomp09.pdf) and ideas in [Kac’s Walk](https://projecteuclid.org/journals/annals-of-applied-probability/volume-27/issue-1/Kacs-walk-on-n-sphere-mixes-in-nlog-n-steps/10.1214/16-AAP1214.full). 
 It first samples 4 sequences of random signs (i.e., Rademacher random variables). Then for each vector, it repeats the following procedures 4 times.

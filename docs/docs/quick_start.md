@@ -5,20 +5,31 @@ a C++17 API for both indexes and low-level quantization.
 
 ## Requirements
 
-- An x86-64 CPU supported by the selected kernels: most paths accept either
-  AVX2 with FMA or AVX-512F/BW/DQ with FMA
-- Linux or Windows x86-64 and CPython 3.11–3.14 for published Python wheels
-- For source builds: a C++17 compiler with OpenMP support and CMake 3.20 or newer;
-  Windows builds use Visual Studio 2026 with the C++ workload
+| Platform | CPU baseline | Python wheel targets |
+| --- | --- | --- |
+| Linux x86-64 | AVX2 and FMA | CPython 3.11–3.14 |
+| Windows x86-64 | AVX2 and FMA | CPython 3.11–3.14 |
+| macOS 14+ ARM64 (Apple Silicon) | NEON | CPython 3.11–3.14 |
+
+Source builds require a C++17 compiler, OpenMP, and CMake 3.20 or newer.
+Windows uses MSVC (Visual Studio 2026 with the Desktop development with C++
+workload and CMake 4.2+ for its generator). Apple Silicon uses AppleClang and
+an external OpenMP runtime such as Homebrew `libomp`.
+
+Linux AArch64 still requires separate platform validation. Intel Mac and
+universal2 wheels are not provided.
 
 <details>
 <summary>CPU dispatch details</summary>
 
-Most SIMD entry points select AVX-512 kernels when AVX-512F, AVX-512BW, and
-AVX-512DQ are detected; otherwise they use AVX2 when AVX2 and FMA are
-available. AVX-512 VPOPCNTDQ enables additional popcount kernels. The HNSW
-AVX-512 core path also checks for AVX2 and FMA, and otherwise uses its AVX2
-path when available. AVX-512 translation units are compiled with FMA enabled.
+On x86-64, optional AVX-512 kernels require AVX2, FMA, and AVX-512F/BW/DQ;
+MSVC builds also require AVX-512VL/CD. Popcount-specific kernels additionally
+require AVX-512 VPOPCNTDQ. Detection checks CPU features and OS support for
+the required register state. Missing AVX-512 features select the AVX2 backend.
+
+On ARM64, the build excludes x86 kernels and uses NEON and portable scalar
+implementations. Standard FastScan requires AVX2/FMA, a supported AVX-512
+backend, or NEON; scalar fallbacks do not remove that requirement.
 
 </details>
 
@@ -30,10 +41,9 @@ path when available. AVX-512 translation units are compiled with FMA enabled.
 python -m pip install rabitqlib
 ```
 
-Published Linux and Windows x86-64 wheels for CPython 3.11–3.14 do not require
-a compiler or CMake.
-AVX2 + FMA is the CPU baseline; supported AVX-512 kernels are selected at
-runtime.
+Wheels target the platforms above and require no compiler or CMake.
+macOS ARM64 wheels bundle OpenMP, so wheel users do not need Homebrew.
+Release wheels disable native CPU tuning and select supported kernels at runtime.
 
 ### Build and search an IVF index
 
@@ -107,11 +117,22 @@ cd RaBitQ-Library
 python -m pip install .
 ```
 
+On Apple Silicon, use a native ARM64 Python environment. From the repository root:
+
+```bash
+brew install cmake ninja libomp
+python -m pip install . -Ccmake.define.OpenMP_ROOT="$(brew --prefix libomp)"
+```
+
+On Windows, install the build tools listed above, then run `python -m pip install .`
+from the repository root. For a portable source build on any supported platform,
+also pass `-Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`.
+
 </details>
 
 ## C++
 
-Clone the repository and build the library and examples:
+On Linux, clone the repository and build the library and examples:
 
 ```bash
 git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
@@ -121,10 +142,11 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-Release builds enable native CPU tuning by default. To build a binary that can
-be moved between AVX2- and AVX-512-capable machines, configure with
-`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; the ISA-specific kernels will still
-be selected at runtime.
+CMake enables native CPU tuning by default where supported by the compiler.
+For portable binaries within a supported OS and architecture, configure with
+`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; runtime kernel selection remains active.
+See the [platform-specific build commands](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/README.md#quick-start)
+for Windows and Apple Silicon.
 
 Example executables are written to `bin/`. Their source demonstrates complete
 indexing and querying workflows:
@@ -134,10 +156,10 @@ indexing and querying workflows:
 - [SymphonyQG](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/symqg_indexing.cpp)
 - [Low-level quantization](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/quantizer.cpp)
 
-### Run the C++ tests
+### Run the C++ tests on Linux
 
 ```bash
-cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```

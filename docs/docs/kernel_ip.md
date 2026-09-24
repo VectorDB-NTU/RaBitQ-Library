@@ -1,8 +1,9 @@
 # Kernel - Inner Product
 
 > Inner-product kernels are selected at runtime. The library provides AVX2/FMA
-> and AVX-512 implementations; AVX-512 VPOPCNTDQ is used by popcount-specific
-> paths when available.
+> and AVX-512 implementations on x86-64, plus NEON and portable scalar
+> implementations on ARM64. AVX-512 VPOPCNTDQ is used by popcount-specific
+> x86 paths when available.
 
 This part introduces how to compute the inner product between quantization codes and rotated query vectors i.e., $\left< \mathbf{x}_0,\mathbf{q}_r'\right>$ and $\left< \mathbf{x}_u,\mathbf{q}_r'\right>$. The implementation includes two types:
 
@@ -50,6 +51,6 @@ $$
 ## The Kernel for Multi-bit Codes
 
 For multi-bit codes, the packed unsigned values are unpacked and accumulated
-by the selected AVX2/FMA or AVX-512 kernel. The dispatch table supports zero
+by the selected AVX2/FMA, AVX-512, NEON, or scalar kernel. The dispatch table supports zero
 through eight extended bits; full RaBitQ codes therefore contain one through
 nine bits per dimension.

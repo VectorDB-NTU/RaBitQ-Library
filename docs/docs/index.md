@@ -6,7 +6,7 @@
 accurate vector quantization and approximate nearest-neighbor search.
 
 Build with the low-level quantizer or use complete IVF, HNSW, and SymphonyQG
-indexes backed by optimized AVX2 and AVX-512 kernels.
+indexes on Linux and Windows x86-64, or macOS ARM64 (Apple Silicon).
 
 [Get started](quick_start.md){ .md-button .md-button--primary }
 [View on GitHub](https://github.com/VectorDB-NTU/RaBitQ-Library){ .md-button }
@@ -23,7 +23,7 @@ indexes backed by optimized AVX2 and AVX-512 kernels.
   </div>
   <div class="feature-card">
     <h2>Fast on modern CPUs</h2>
-    <p>Runtime dispatch selects optimized AVX2 or AVX-512 kernels. IVF and
+    <p>Use AVX2/AVX-512 kernels on x86-64 and NEON on Apple Silicon. IVF and
     SymphonyQG use FastScan for batched distance estimation.</p>
   </div>
   <div class="feature-card">
@@ -95,7 +95,7 @@ degree, and search parameters.
   code per padded dimension plus per-vector factors.
 - **Fast distance estimation.** IVF and SymphonyQG use
   [FastScan](https://arxiv.org/abs/1704.07355) for batched estimates; HNSW
-  uses single-code AVX kernels.
+  uses single-code SIMD kernels.
 - **Theoretical error bounds.** An asymptotically optimal error bound supports
   reliable ordering and reranking.
 - **Multiple integration points.** Use the quantizer directly or select a
