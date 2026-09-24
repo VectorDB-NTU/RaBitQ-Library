@@ -3,12 +3,11 @@ from time import time
 
 from rabitqlib import HnswIndex
 
-from utils import cluster_data, read_fvecs
+from utils import load_clusters, read_fvecs
 
 # ──────────────────────────────────────────────
 # Default configuration
 # ──────────────────────────────────────────────
-NUM_CLUSTERS = 256  # number of clusters
 M = 16  # degree bound for HNSW
 EF_CONSTRUCTION = 200  # ef for indexing
 TOTAL_BITS = 8  # total number of bits for quantization
@@ -23,10 +22,8 @@ def main(args=None) -> None:
     data = read_fvecs(args.data_file)
     print(f"Data shape: {data.shape}")
 
-    # 2. Cluster with FAISS
-    centroids, cluster_ids = cluster_data(
-        data, args.num_clusters, args.metric, args.num_threads
-    )
+    # 2. Load clusters computed in a separate Faiss process.
+    centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
     print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
 
     # 3. Build HNSW index
@@ -65,12 +62,9 @@ if __name__ == "__main__":
     parser.add_argument("data_file", type=str, help="Path to the data file")
     parser.add_argument("index_file", type=str, help="Path to save the index")
     parser.add_argument(
-        "--num-clusters",
-        dest="num_clusters",
-        type=int,
-        metavar="INT",
-        default=256,
-        help="Number of clusters for quantization",
+        "--clusters",
+        required=True,
+        help="Clustering file produced by faiss_clustering.py for this data and metric",
     )
     parser.add_argument(
         "--degree",

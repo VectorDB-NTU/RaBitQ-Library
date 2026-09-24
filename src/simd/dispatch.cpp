@@ -51,10 +51,25 @@ Function resolve_kernel(Function avx2, Function fallback) {
     return fallback;
 }
 
+// Keep ARM selection cached in the same resolver as the x86 tiers.
+template <typename Function>
+Function resolve_kernel(Function preferred, Function fallback, bool supported) {
+    return supported ? preferred : fallback;
+}
+
 }  // namespace
 
+// Non-x86 builds must not reference symbols from excluded AVX objects.
+#if defined(__x86_64__) || defined(_M_X64)
+#define RABITQ_RESOLVE(...) rabitqlib::simd::resolve_kernel(__VA_ARGS__)
+#define RABITQ_RESOLVE2(...) rabitqlib::simd::resolve_kernel(__VA_ARGS__)
+#else
+#define RABITQ_RESOLVE(avx512, avx2, fallback, ...) fallback
+#define RABITQ_RESOLVE2(avx2, fallback) fallback
+#endif
+
 const auto kMatrixProductFn =
-    resolve_kernel(matrix_product_avx512, matrix_product_avx2, matrix_product_generic);
+    RABITQ_RESOLVE(matrix_product_avx512, matrix_product_avx2, matrix_product_generic);
 
 void matrix_product(
     const float* left,
@@ -67,7 +82,7 @@ void matrix_product(
     kMatrixProductFn(left, right, result, rows, inner, cols);
 }
 
-const auto kMatrixProductTransposedFn = resolve_kernel(
+const auto kMatrixProductTransposedFn = RABITQ_RESOLVE(
     matrix_product_transposed_avx512,
     matrix_product_transposed_avx2,
     matrix_product_transposed_generic
@@ -85,13 +100,13 @@ void matrix_product_transposed(
 }
 
 const auto kRowNormsFn =
-    resolve_kernel(row_norms_avx512, row_norms_avx2, row_norms_generic);
+    RABITQ_RESOLVE(row_norms_avx512, row_norms_avx2, row_norms_generic);
 
 void row_norms(const float* data, float* result, size_t rows, size_t dim) {
     kRowNormsFn(data, result, rows, dim);
 }
 
-const auto kPairwiseDistancesLowerFn = resolve_kernel(
+const auto kPairwiseDistancesLowerFn = RABITQ_RESOLVE(
     pairwise_distances_lower_avx512,
     pairwise_distances_lower_avx2,
     pairwise_distances_lower_generic
@@ -108,7 +123,7 @@ void pairwise_distances_lower(
     kPairwiseDistancesLowerFn(data, result, norms_data, size, dim, inner_product);
 }
 
-const auto kQgBatchEstdistFn = resolve_kernel(
+const auto kQgBatchEstdistFn = RABITQ_RESOLVE(
     qg_batch_estdist_avx512, qg_batch_estdist_avx2, qg_batch_estdist_generic
 );
 
@@ -122,7 +137,7 @@ void qg_batch_estdist(
 }
 
 const auto kQgBatchEstdistMaskFn =
-    resolve_kernel(qg_batch_estdist_mask_avx2, qg_batch_estdist_mask_generic);
+    RABITQ_RESOLVE2(qg_batch_estdist_mask_avx2, qg_batch_estdist_mask_generic);
 
 uint32_t qg_batch_estdist_mask(
     const char* batch_data,
@@ -134,7 +149,7 @@ uint32_t qg_batch_estdist_mask(
     return kQgBatchEstdistMaskFn(batch_data, q_obj, padded_dim, est_distance, threshold);
 }
 
-const auto kSplitBatchEstdistFn = resolve_kernel(
+const auto kSplitBatchEstdistFn = RABITQ_RESOLVE(
     split_batch_estdist_avx512, split_batch_estdist_avx2, split_batch_estdist_generic
 );
 
@@ -152,14 +167,26 @@ void split_batch_estdist(
     );
 }
 
+#if defined(__aarch64__)
 const auto kEuclideanSqrFn =
-    resolve_kernel(euclidean_sqr_avx512, euclidean_sqr_avx2, euclidean_sqr_generic);
+    resolve_kernel(euclidean_sqr_neon, euclidean_sqr_generic, cpu::has_neon());
 const auto kDotProductFn =
-    resolve_kernel(dot_product_avx512, dot_product_avx2, dot_product_generic);
+    resolve_kernel(dot_product_neon, dot_product_generic, cpu::has_neon());
 const auto kDotProductDisFn =
-    resolve_kernel(dot_product_dis_avx512, dot_product_dis_avx2, dot_product_dis_generic);
+    resolve_kernel(dot_product_dis_neon, dot_product_dis_generic, cpu::has_neon());
 const auto kL2normSqrFn =
-    resolve_kernel(l2norm_sqr_avx512, l2norm_sqr_avx2, l2norm_sqr_generic);
+    resolve_kernel(l2norm_sqr_neon, l2norm_sqr_generic, cpu::has_neon());
+#else
+const auto kEuclideanSqrFn =
+    RABITQ_RESOLVE(euclidean_sqr_avx512, euclidean_sqr_avx2, euclidean_sqr_generic);
+const auto kDotProductFn =
+    RABITQ_RESOLVE(dot_product_avx512, dot_product_avx2, dot_product_generic);
+const auto kDotProductDisFn =
+    RABITQ_RESOLVE(dot_product_dis_avx512, dot_product_dis_avx2, dot_product_dis_generic);
+const auto kL2normSqrFn =
+    RABITQ_RESOLVE(l2norm_sqr_avx512, l2norm_sqr_avx2, l2norm_sqr_generic);
+
+#endif
 
 float euclidean_sqr(const float* a, const float* b, size_t dim) {
     return kEuclideanSqrFn(a, b, dim);
@@ -175,12 +202,6 @@ float dot_product_dis(const float* a, const float* b, size_t dim) {
 
 float l2norm_sqr(const float* a, size_t dim) { return kL2normSqrFn(a, dim); }
 
-[[noreturn]] static void missing_feature(const char* feature_name) {
-    throw std::runtime_error(
-        std::string(feature_name) + " requires AVX2/FMA or AVX512 support"
-    );
-}
-
 // With zero extra bits there is no extra code to contribute to the inner
 // product, so the ex_bits == 0 slot must be a constant-zero stub rather than
 // a duplicate of the 1-bit implementation.
@@ -190,7 +211,7 @@ static float ip_fxu0(
     return 0.0F;
 }
 
-const auto kBestRescaleFactorFn = resolve_kernel(
+const auto kBestRescaleFactorFn = RABITQ_RESOLVE(
     best_rescale_factor_avx512, best_rescale_factor_avx2, best_rescale_factor_generic
 );
 
@@ -200,13 +221,13 @@ double best_rescale_factor(
     return kBestRescaleFactorFn(magnitudes, dim, max_code, start, end);
 }
 
-static void
-missing_fht_rotate(const float*, float*, size_t, size_t, size_t, float, const uint8_t*) {
-    missing_feature("sign flip");
-}
-
+#if defined(__aarch64__) || defined(_M_ARM64)
 const auto kFhtRotateFn =
-    resolve_kernel(fht_rotate_avx512, fht_rotate_avx2, missing_fht_rotate);
+    resolve_kernel(fht_rotate_neon, fht_rotate_generic, cpu::has_neon());
+#else
+const auto kFhtRotateFn =
+    RABITQ_RESOLVE(fht_rotate_avx512, fht_rotate_avx2, fht_rotate_generic);
+#endif
 
 void fht_rotate(
     const float* data,
@@ -220,65 +241,36 @@ void fht_rotate(
     kFhtRotateFn(data, rotated_vec, dim, padded_dim, trunc_dim, fac, flip);
 }
 
-static float missing_excode_ip(const float*, const uint8_t*, size_t) {
-    missing_feature("excode ip functions");
-}
-
-static void missing_flip_sign(const uint8_t*, float*, size_t) {
-    missing_feature("sign flip");
-}
-
-static void missing_kacs_walk(float*, size_t) { missing_feature("FhtKacRotator"); }
-
-static void missing_scalar_quantize_uint8(uint8_t*, const float*, size_t, float, float) {
-    missing_feature("uint8 quantize");
-}
-
-static void missing_scalar_quantize_uint16(uint16_t*, const float*, size_t, float, float) {
-    missing_feature("uint16 quantize");
-}
-
-static void missing_pack_excode(const uint8_t*, uint8_t*, size_t) {
-    missing_feature("excode packing");
-}
-
-static void missing_new_transpose_bin(const uint16_t*, uint64_t*, size_t, size_t) {
-    missing_feature("new transpose bin");
-}
-
-static void missing_new_transpose_bin_512(const uint8_t*, uint64_t*, size_t, size_t) {
-    missing_feature("new_transpose_bin_512");
-}
-
-static float missing_mask_ip_x0_q(const float*, const uint8_t*, size_t) {
-    missing_feature("mask ip x0 q");
-}
-
-static void missing_fastscan_accumulate(
-    const uint8_t* __restrict__, const uint8_t* __restrict__, int32_t* __restrict__, size_t
-) {
-    missing_feature("fastscan accumulate");
-}
-
-static void missing_fastscan_transfer_lut_hacc(const uint16_t*, size_t, uint8_t*) {
-    missing_feature("fastscan high-accuracy LUT transfer");
-}
-
-static void missing_fastscan_accumulate_hacc(
-    const uint8_t* __restrict__, const uint8_t* __restrict__, int32_t*, size_t
-) {
-    missing_feature("fastscan high-accuracy accumulate");
-}
-
-static float missing_warmup_ip_x0_q_512(
-    const uint8_t*, const uint64_t*, float, float, size_t, size_t
-) {
-    missing_feature("warmup_ip_x0_q_512");
-}
-
 ExcodeIpTable resolve_excode_ip_table() {
+    const auto generic = ExcodeIpTable{
+        ip_fxu0,
+        excode_ipimpl::ip16_fxu1_generic,
+        excode_ipimpl::ip64_fxu2_generic,
+        excode_ipimpl::ip64_fxu3_generic,
+        excode_ipimpl::ip16_fxu4_generic,
+        excode_ipimpl::ip64_fxu5_generic,
+        excode_ipimpl::ip64_fxu6_generic,
+        excode_ipimpl::ip64_fxu7_generic,
+        excode_ipimpl::ip16_fxu8_generic,
+    };
+#if defined(__aarch64__) || defined(_M_ARM64)
     return resolve_kernel(
         ExcodeIpTable{
+            ip_fxu0,
+            excode_ipimpl::ip16_fxu1_neon,
+            excode_ipimpl::ip64_fxu2_neon,
+            excode_ipimpl::ip64_fxu3_neon,
+            excode_ipimpl::ip16_fxu4_neon,
+            excode_ipimpl::ip64_fxu5_neon,
+            excode_ipimpl::ip64_fxu6_neon,
+            excode_ipimpl::ip64_fxu7_neon,
+            excode_ipimpl::ip16_fxu8_neon},
+        generic,
+        cpu::has_neon()
+    );
+#else
+    return RABITQ_RESOLVE(
+        (ExcodeIpTable{
             ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx512,
             excode_ipimpl::ip64_fxu2_avx512,
@@ -288,8 +280,8 @@ ExcodeIpTable resolve_excode_ip_table() {
             excode_ipimpl::ip64_fxu6_avx512,
             excode_ipimpl::ip64_fxu7_avx512,
             excode_ipimpl::ip16_fxu8_avx512,
-        },
-        ExcodeIpTable{
+        }),
+        (ExcodeIpTable{
             ip_fxu0,
             excode_ipimpl::ip16_fxu1_avx2,
             excode_ipimpl::ip64_fxu2_avx2,
@@ -299,54 +291,62 @@ ExcodeIpTable resolve_excode_ip_table() {
             excode_ipimpl::ip64_fxu6_avx2,
             excode_ipimpl::ip64_fxu7_avx2,
             excode_ipimpl::ip16_fxu8_avx2,
-        },
-        ExcodeIpTable{
-            ip_fxu0,
-            missing_excode_ip,
-            missing_excode_ip,
-            missing_excode_ip,
-            missing_excode_ip,
-            missing_excode_ip,
-            missing_excode_ip,
-            missing_excode_ip,
-            missing_excode_ip,
-        }
+        }),
+        generic
     );
+#endif
 }
 
+#if defined(__aarch64__) || defined(_M_ARM64)
+const auto kFlipSignFn = resolve_kernel(flip_sign_neon, flip_sign_generic, cpu::has_neon());
+#else
 const auto kFlipSignFn =
-    resolve_kernel(flip_sign_avx512, flip_sign_avx2, missing_flip_sign);
+    RABITQ_RESOLVE(flip_sign_avx512, flip_sign_avx2, flip_sign_generic);
+#endif
 
+#if defined(__aarch64__) || defined(_M_ARM64)
+const auto kKacsWalkFn = resolve_kernel(kacs_walk_neon, kacs_walk_generic, cpu::has_neon());
+#else
 const auto kKacsWalkFn =
-    resolve_kernel(kacs_walk_avx512, kacs_walk_avx2, missing_kacs_walk);
+    RABITQ_RESOLVE(kacs_walk_avx512, kacs_walk_avx2, kacs_walk_generic);
+#endif
 
+#if defined(__aarch64__) || defined(_M_ARM64)
 const auto kScalarQuantizeUint8Fn = resolve_kernel(
-    scalar_quantize_uint8_avx512, scalar_quantize_uint8_avx2, missing_scalar_quantize_uint8
+    scalar_quantize_uint8_neon, scalar_quantize_uint8_generic, cpu::has_neon()
+);
+const auto kScalarQuantizeUint16Fn = resolve_kernel(
+    scalar_quantize_uint16_neon, scalar_quantize_uint16_generic, cpu::has_neon()
+);
+#else
+const auto kScalarQuantizeUint8Fn = RABITQ_RESOLVE(
+    scalar_quantize_uint8_avx512, scalar_quantize_uint8_avx2, scalar_quantize_uint8_generic
 );
 
-const auto kScalarQuantizeUint16Fn = resolve_kernel(
+const auto kScalarQuantizeUint16Fn = RABITQ_RESOLVE(
     scalar_quantize_uint16_avx512,
     scalar_quantize_uint16_avx2,
-    missing_scalar_quantize_uint16
+    scalar_quantize_uint16_generic
 );
+#endif
 
-const auto kPacking2BitExcodeFn = resolve_kernel(
-    packing_2bit_excode_avx512, packing_2bit_excode_avx2, missing_pack_excode
+const auto kPacking2BitExcodeFn = RABITQ_RESOLVE(
+    packing_2bit_excode_avx512, packing_2bit_excode_avx2, packing_2bit_excode_generic
 );
-const auto kPacking3BitExcodeFn = resolve_kernel(
-    packing_3bit_excode_avx512, packing_3bit_excode_avx2, missing_pack_excode
+const auto kPacking3BitExcodeFn = RABITQ_RESOLVE(
+    packing_3bit_excode_avx512, packing_3bit_excode_avx2, packing_3bit_excode_generic
 );
-const auto kPacking4BitExcodeFn = resolve_kernel(
-    packing_4bit_excode_avx512, packing_4bit_excode_avx2, missing_pack_excode
+const auto kPacking4BitExcodeFn = RABITQ_RESOLVE(
+    packing_4bit_excode_avx512, packing_4bit_excode_avx2, packing_4bit_excode_generic
 );
-const auto kPacking5BitExcodeFn = resolve_kernel(
-    packing_5bit_excode_avx512, packing_5bit_excode_avx2, missing_pack_excode
+const auto kPacking5BitExcodeFn = RABITQ_RESOLVE(
+    packing_5bit_excode_avx512, packing_5bit_excode_avx2, packing_5bit_excode_generic
 );
-const auto kPacking6BitExcodeFn = resolve_kernel(
-    packing_6bit_excode_avx512, packing_6bit_excode_avx2, missing_pack_excode
+const auto kPacking6BitExcodeFn = RABITQ_RESOLVE(
+    packing_6bit_excode_avx512, packing_6bit_excode_avx2, packing_6bit_excode_generic
 );
-const auto kPacking7BitExcodeFn = resolve_kernel(
-    packing_7bit_excode_avx512, packing_7bit_excode_avx2, missing_pack_excode
+const auto kPacking7BitExcodeFn = RABITQ_RESOLVE(
+    packing_7bit_excode_avx512, packing_7bit_excode_avx2, packing_7bit_excode_generic
 );
 
 void flip_sign(const uint8_t* flip, float* data, size_t dim) {
@@ -405,24 +405,41 @@ const ex_ipfunc kIp64Fxu5AvxFn = kExcodeIpTable[5];
 const ex_ipfunc kIp64Fxu6AvxFn = kExcodeIpTable[6];
 const ex_ipfunc kIp64Fxu7AvxFn = kExcodeIpTable[7];
 
-const auto kNewTransposeBinFn = rabitqlib::simd::resolve_kernel(
+#if defined(__aarch64__) || defined(_M_ARM64)
+const auto kNewTransposeBinFn = simd::resolve_kernel(
+    simd::new_transpose_bin_neon, simd::new_transpose_bin_generic, cpu::has_neon()
+);
+const auto kNewTransposeBin512Fn = simd::resolve_kernel(
+    simd::new_transpose_bin_512_neon, simd::new_transpose_bin_512_generic, cpu::has_neon()
+);
+#else
+const auto kNewTransposeBinFn = RABITQ_RESOLVE(
     simd::new_transpose_bin_avx512,
     simd::new_transpose_bin_avx2,
-    simd::missing_new_transpose_bin
+    simd::new_transpose_bin_generic
 );
 
-const auto kNewTransposeBin512Fn = rabitqlib::simd::resolve_kernel(
+const auto kNewTransposeBin512Fn = RABITQ_RESOLVE(
     simd::new_transpose_bin_512_avx512,
     simd::new_transpose_bin_512_avx2,
-    simd::missing_new_transpose_bin_512
+    simd::new_transpose_bin_512_generic
 );
+#endif
 
 using MaskIpX0QFn = float (*)(const float*, const uint8_t*, size_t);
-const MaskIpX0QFn kMaskIpX0QFn = rabitqlib::simd::resolve_kernel<MaskIpX0QFn>(
+#if defined(__aarch64__) || defined(_M_ARM64)
+const MaskIpX0QFn kMaskIpX0QFn = simd::resolve_kernel(
+    static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_neon),
+    static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_generic),
+    cpu::has_neon()
+);
+#else
+const MaskIpX0QFn kMaskIpX0QFn = RABITQ_RESOLVE(
     static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx512),
     static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx2),
-    simd::missing_mask_ip_x0_q
+    static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_generic)
 );
+#endif
 
 ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
     if (ex_bits <= 8) {
@@ -496,32 +513,45 @@ float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) 
 
 namespace rabitqlib::fastscan {
 
+#if defined(__aarch64__) || defined(_M_ARM64)
 const auto kPackLutFn = rabitqlib::simd::resolve_kernel(
-    simd::pack_lut_avx512, simd::pack_lut_avx2, simd::pack_lut_generic
+    simd::pack_lut_neon, simd::pack_lut_generic, cpu::has_neon()
 );
+#else
+const auto kPackLutFn =
+    RABITQ_RESOLVE(simd::pack_lut_avx512, simd::pack_lut_avx2, simd::pack_lut_generic);
+#endif
 
 template <>
 void pack_lut<float>(size_t dim, const float* __restrict__ query, float* __restrict__ lut) {
     kPackLutFn(dim, query, lut);
 }
 
+#if defined(__aarch64__)
 const auto kAccumulateFn = rabitqlib::simd::resolve_kernel(
-    simd::accumulate_avx512,
-    simd::accumulate_avx2,
-    rabitqlib::simd::missing_fastscan_accumulate
+    simd::accumulate_neon, simd::accumulate_unsupported, cpu::has_neon()
 );
+#else
+const auto kAccumulateFn = RABITQ_RESOLVE(
+    simd::accumulate_avx512, simd::accumulate_avx2, simd::accumulate_unsupported
+);
+#endif
 
-const auto kTransferLutHaccFn = rabitqlib::simd::resolve_kernel(
+const auto kTransferLutHaccFn = RABITQ_RESOLVE(
     simd::transfer_lut_hacc_avx512,
     simd::transfer_lut_hacc_avx2,
-    rabitqlib::simd::missing_fastscan_transfer_lut_hacc
+    simd::transfer_lut_hacc_generic
 );
 
+#if defined(__aarch64__)
 const auto kAccumulateHaccFn = rabitqlib::simd::resolve_kernel(
-    simd::accumulate_hacc_avx512,
-    simd::accumulate_hacc_avx2,
-    rabitqlib::simd::missing_fastscan_accumulate_hacc
+    simd::accumulate_hacc_neon, simd::accumulate_hacc_generic, cpu::has_neon()
 );
+#else
+const auto kAccumulateHaccFn = RABITQ_RESOLVE(
+    simd::accumulate_hacc_avx512, simd::accumulate_hacc_avx2, simd::accumulate_hacc_generic
+);
+#endif
 
 void accumulate(
     const uint8_t* __restrict__ codes,
@@ -564,13 +594,20 @@ namespace rabitqlib {
 
 using WarmupIpX0Q512Fn =
     float (*)(const uint8_t*, const uint64_t*, float, float, size_t, size_t);
-const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn =
-    rabitqlib::simd::resolve_kernel<WarmupIpX0Q512Fn>(
-        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512),
-        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2),
-        rabitqlib::simd::missing_warmup_ip_x0_q_512,
-        cpu::has_avx512_popcnt()
-    );
+#if defined(__aarch64__) || defined(_M_ARM64)
+const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = simd::resolve_kernel(
+    static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_neon),
+    static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_generic),
+    cpu::has_neon()
+);
+#else
+const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = RABITQ_RESOLVE(
+    static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512),
+    static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2),
+    static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_generic),
+    cpu::has_avx512_popcnt()
+);
+#endif
 
 float warmup_ip_x0_q_512(
     const uint8_t* data,
@@ -602,20 +639,20 @@ namespace rabitqlib::hnsw::detail {
 namespace {
 using SearchKnnFn =
     std::priority_queue<std::pair<float, PID>> (*)(HierarchicalNSW&, const float*, size_t);
-std::priority_queue<std::pair<float, PID>> missing_search_knn(
-    HierarchicalNSW&, const float*, size_t
-) {
-    throw std::runtime_error("HNSW search requires AVX2/FMA or AVX512 support");
-}
 // The core variant uses AVX2 warmup; the popcount variant has its own stricter tier.
+#if defined(__x86_64__) || defined(_M_X64)
 const SearchKnnFn kSearchKnnFn = cpu::has_avx512_popcnt()
                                      ? search_knn_avx512_popcnt
-                                     : rabitqlib::simd::resolve_kernel(
+                                     : RABITQ_RESOLVE(
                                            search_knn_avx512_core,
                                            search_knn_avx2,
-                                           missing_search_knn,
+                                           search_knn_generic,
                                            cpu::has_avx512_core() && cpu::has_avx2()
                                        );
+#else
+const SearchKnnFn kSearchKnnFn =
+    simd::resolve_kernel(search_knn_neon, search_knn_generic, cpu::has_neon());
+#endif
 }  // namespace
 std::priority_queue<std::pair<float, PID>> search_knn(
     HierarchicalNSW& index, const float* query, size_t topk

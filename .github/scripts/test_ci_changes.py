@@ -45,7 +45,11 @@ class ChangeSelectionTest(unittest.TestCase):
                 "python_build",
                 "wheels",
             },
-            "sample/python/ivf_rabitq_indexing.py": {"python_quality"},
+            "sample/python/ivf_rabitq_indexing.py": {
+                "python_quality",
+                "python_build",
+                "wheels",
+            },
             ".github/scripts/prepare_release.py": {"python_quality"},
             "scripts/check-python.sh": {"shell", "python_quality"},
             "scripts/check-tidy.sh": {"shell", "cpp"},
@@ -68,7 +72,7 @@ class ChangeSelectionTest(unittest.TestCase):
         self.assertIn("cpp", classify(["docs/new.md", "src/deleted.cpp"]))
         self.assertEqual(
             classify(["sample/python/tool.py", "tests/unit/example.cpp"]),
-            {"cpp", "python_quality"},
+            {"cpp", "python_quality", "python_build", "wheels"},
         )
 
     def test_unknown_inputs_and_filter_edits_run_everything(self):

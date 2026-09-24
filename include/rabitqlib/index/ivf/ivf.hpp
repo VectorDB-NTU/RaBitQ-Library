@@ -279,7 +279,7 @@ inline void IVF::construct(
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
-    num_threads = std::clamp(num_threads, size_t{1}, rabitqlib::total_threads());
+    num_threads = resolve_num_threads(num_threads);
     /* Quantize each cluster */
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_cluster_);

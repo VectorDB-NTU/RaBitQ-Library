@@ -129,8 +129,12 @@ class RabitqRescaleBackendTest : public ::testing::TestWithParam<bool> {
     }
 
     RescaleSearch search() const {
+#if defined(__x86_64__) || defined(_M_X64)
         return GetParam() ? simd::best_rescale_factor_avx512
                           : simd::best_rescale_factor_avx2;
+#else
+        return simd::best_rescale_factor_generic;
+#endif
     }
 };
 

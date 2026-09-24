@@ -14,10 +14,8 @@
 
 TEST(ExcodeIp, BackendsMatchScalarAcrossWidthsAndBlockBoundaries) {
     using namespace rabitqlib;
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "Packed-code tests require AVX2/FMA";
-    }
 
+#if defined(__x86_64__) || defined(_M_X64)
     const std::array<ex_ipfunc, 8> avx2_functions{
         simd::excode_ipimpl::ip16_fxu1_avx2,
         simd::excode_ipimpl::ip64_fxu2_avx2,
@@ -38,14 +36,27 @@ TEST(ExcodeIp, BackendsMatchScalarAcrossWidthsAndBlockBoundaries) {
         simd::excode_ipimpl::ip64_fxu7_avx512,
         simd::excode_ipimpl::ip16_fxu8_avx512,
     };
+#endif
+#if defined(__aarch64__) || defined(_M_ARM64)
+    const std::array<ex_ipfunc, 8> neon_functions{
+        simd::excode_ipimpl::ip16_fxu1_neon,
+        simd::excode_ipimpl::ip64_fxu2_neon,
+        simd::excode_ipimpl::ip64_fxu3_neon,
+        simd::excode_ipimpl::ip16_fxu4_neon,
+        simd::excode_ipimpl::ip64_fxu5_neon,
+        simd::excode_ipimpl::ip64_fxu6_neon,
+        simd::excode_ipimpl::ip64_fxu7_neon,
+        simd::excode_ipimpl::ip16_fxu8_neon,
+    };
+#endif
     using PackFunction = void (*)(const uint8_t*, uint8_t*, size_t);
     const std::array<PackFunction, 6> pack_functions{
-        simd::packing_2bit_excode_avx2,
-        simd::packing_3bit_excode_avx2,
-        simd::packing_4bit_excode_avx2,
-        simd::packing_5bit_excode_avx2,
-        simd::packing_6bit_excode_avx2,
-        simd::packing_7bit_excode_avx2,
+        simd::packing_2bit_excode,
+        simd::packing_3bit_excode,
+        simd::packing_4bit_excode,
+        simd::packing_5bit_excode,
+        simd::packing_6bit_excode,
+        simd::packing_7bit_excode,
     };
 
     for (size_t bits = 1; bits <= 8; ++bits) {
@@ -96,14 +107,26 @@ TEST(ExcodeIp, BackendsMatchScalarAcrossWidthsAndBlockBoundaries) {
                 // product itself near zero. Different reduction trees may round
                 // differently.
                 const double tolerance = 2e-6 * std::max(1.0, sum_abs);
-                EXPECT_NEAR(
-                    avx2_functions[bits - 1](query, compact, dim), expected, tolerance
-                );
+#if defined(__x86_64__) || defined(_M_X64)
+                if (cpu::has_avx2()) {
+                    EXPECT_NEAR(
+                        avx2_functions[bits - 1](query, compact, dim), expected, tolerance
+                    );
+                }
                 if (cpu::has_avx512_core()) {
                     EXPECT_NEAR(
                         avx512_functions[bits - 1](query, compact, dim), expected, tolerance
                     );
                 }
+#endif
+#if defined(__aarch64__) || defined(_M_ARM64)
+                if (cpu::has_neon()) {
+                    EXPECT_NEAR(
+                        neon_functions[bits - 1](query, compact, dim), expected, tolerance
+                    );
+                    EXPECT_EQ(select_excode_ipfunc(bits), neon_functions[bits - 1]);
+                }
+#endif
                 EXPECT_NEAR(
                     select_excode_ipfunc(bits)(query, compact, dim), expected, tolerance
                 );

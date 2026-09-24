@@ -13,7 +13,6 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -23,6 +22,7 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace py = pybind11;
 
@@ -120,12 +120,10 @@ class SymqgIndex {
         auto* dists_data = dists.mutable_data();
 
         const auto* queries_data = query_array.data();
-        const size_t requested_threads =
-            num_threads == 0 ? std::thread::hardware_concurrency() : num_threads;
         const auto workers = static_cast<int>(std::max<size_t>(
             1,
             std::min(
-                {requested_threads,
+                {resolve_num_threads(num_threads),
                  nq,
                  static_cast<size_t>(std::numeric_limits<int>::max())}
             )

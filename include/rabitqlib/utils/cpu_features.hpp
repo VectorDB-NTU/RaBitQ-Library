@@ -13,10 +13,12 @@ struct Features {
     bool avx512vpopcntdq = false;
     bool avx512vl = false;
     bool avx512cd = false;
+    bool neon = false;
 };
 
 const Features& features();
 bool has_avx2();
+bool has_neon();
 bool has_avx512_core();
 bool has_avx512_popcnt();
 

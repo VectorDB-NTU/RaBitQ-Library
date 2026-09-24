@@ -62,7 +62,7 @@ class QGBuilder {
     QGBuilder(QuantizedGraph<float>& index, uint32_t ef_build, size_t num_threads)
         : qg_{index}
         , ef_build_{ef_build}
-        , num_threads_{std::max<size_t>(1, std::min(num_threads, total_threads()))}
+        , num_threads_{resolve_num_threads(num_threads)}
         , num_nodes_{qg_.num_vertices()}
         , dim_{qg_.dimension()}
         , degree_bound_(qg_.degree_bound()) {}

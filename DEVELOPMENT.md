@@ -30,7 +30,10 @@ Verify formatting without changing files:
 
 The scripts intentionally exclude vendored code in `include/rabitqlib/third/`.
 To use a nonstandard executable name, set `CLANG_FORMAT`; it must still identify
-itself as clang-format 15.
+itself as clang-format 15. On macOS, use Bash 4+ on PATH for the shell wrappers.
+Apple SDKs newer than clang-tidy 15 may require a matching newer analyzer; set
+`RUN_CLANG_TIDY` to its runner and report that version separately from the Linux
+clang-tidy 15 baseline.
 
 clangd embeds its own formatter, so use clangd 15 in editors such as VS Code
 if format-on-save must exactly match CI. If another clangd version is required,
@@ -222,7 +225,7 @@ This matches CI's script set. Also pass any changed shell scripts outside
 - Preserve existing public headers, aliases, and index formats unless a change
   is explicitly documented as breaking.
 - Add backend-independent tests when introducing or changing SIMD kernels.
-- Keep scalar, AVX2, and AVX-512 implementations behaviorally equivalent.
+- Keep scalar, NEON, AVX2, and AVX-512 implementations behaviorally equivalent.
 - Benchmark allocations or algorithm changes in search and quantization hot
   paths, and substantiate performance claims with benchmarks. Run correctness
   tests first and include commands, dataset, CPU, compiler, ISA, thread count,
@@ -258,11 +261,18 @@ must happen in generic code first.
 #### Dispatch conventions and coverage
 
 - Keep backend-neutral declarations in `include/rabitqlib/simd/*_dispatch.hpp` and
-  implementations in `src/simd/*_{generic,avx2,avx512}.cpp`. HNSW keeps its existing
+  implementations in `src/simd/*_{generic,neon,avx2,avx512}.cpp`. HNSW keeps its existing
   `src/index/` implementations and compatibility namespaces.
 - Select a cached function pointer through `resolve_kernel` in `src/simd/dispatch.cpp`.
-  The order is AVX-512, AVX2/FMA, then the existing generic implementation or a descriptive
-  unsupported-operation exception. Public wrappers do not repeat feature checks.
+  The x86 order is AVX-512, AVX2/FMA, then the portable generic implementation. ARM64
+  selects NEON for raw float distances, FastScan, packed-code dot products (1–8 extra
+  bits), masked sums, binary warmup, HNSW search, and FHT/Kac rotation including
+  sign flipping, query-bit transposition, uint8/uint16 scalar quantization, and
+  FastScan LUT construction. Extra-code packing retains a portable scalar implementation.
+  Public wrappers do not repeat feature checks.
+  Standard FastScan accumulation requires AVX2/FMA, AVX-512, or NEON and throws
+  `std::runtime_error` when no supported SIMD backend is available. Its scalar kernel
+  is retained as a correctness reference only, never as a runtime fallback.
 - Preserve stricter predicates: population-count kernels need AVX512_VPOPCNTDQ, and HNSW's
   AVX-512 core variant also needs AVX2 for its warmup implementation. Do not infer support
   from a backend name or from `__AVX*__` macros in a public header.
@@ -294,10 +304,10 @@ covers its arithmetic kernels, not every scalar loop in construction and search.
 
 | Area | Dispatch coverage / deliberate boundary |
 | --- | --- |
-| Raw float distances, norms, packed-code products | Runtime AVX2/AVX-512 selection; generic raw-float fallback |
+| Raw float distances, norms, packed-code products | Runtime AVX2/AVX-512/NEON selection; portable generic fallback |
 | Quantizer rescale search | SIMD bounded search; the certified scalar event sweep remains the fallback |
 | Integer scalar quantization, extra-code packing, transpose, sign masks | Existing runtime selection; byte layouts and rounding rules are unchanged |
-| Standard and high-accuracy FastScan | Runtime selection; generic LUT construction stays separate from selection |
+| Standard and high-accuracy FastScan | Runtime selection, including NEON float LUT construction; HACC LUT byte conversion remains generic on ARM |
 | IVF and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
 | FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; shared AVX intrinsics preserve the FFHT butterfly order |
 | Float matrix rotation and PiPNN construction | Matrix products, row norms, and lower-triangle pairwise distances use isolated matrix backends |
@@ -306,9 +316,11 @@ covers its arithmetic kernels, not every scalar loop in construction and search.
 | Graph scheduling, candidate queues, I/O, allocation, random initialization | Generic control code; IVF one-bit candidate insertion stays in a small compiled function to avoid inlining-induced register spills; thread scheduling and seeds remain caller-owned |
 | Example KMeans training | Uses external FAISS, whose build and dispatch are independent of this package |
 
-Portable wheels continue to disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. Adding an optimized
-backend does not add support for generic-CPU quantized search or AArch64; those require
-complete implementations and separate compatibility validation.
+Portable wheels disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. ARM64 builds exclude all
+x86 source groups and use standard AArch64 NEON intrinsics, without Apple-only APIs.
+macOS ARM64 has native C++ and installed-wheel CI. Linux ARM64 still requires separate
+platform verification. The reference suites also exercise portable scalar kernels on x86, including
+byte-for-byte packing parity with the selected x86 backend.
 
 ### Change quantization or packing
 

@@ -265,10 +265,14 @@ def test_raw_reranking(dim, metric, high_accuracy, fast_quantization, tmp_path):
         fast_quantization=fast_quantization,
         num_threads=2,
     )
+    # Use a wider oracle: float32 BLAS reduction error near cancellation can
+    # exceed the tolerance even when the returned float32 distance is accurate.
+    reference_data = data.astype(np.float64)
+    reference_queries = queries.astype(np.float64)
     expected = (
-        np.sum((queries[:, None] - data) ** 2, axis=2)
+        np.sum((reference_queries[:, None] - reference_data) ** 2, axis=2)
         if metric == "l2"
-        else 1 - queries @ data.T
+        else 1 - reference_queries @ reference_data.T
     )
     original = data.copy()
     data[:] = 1000  # the index must own the raw data

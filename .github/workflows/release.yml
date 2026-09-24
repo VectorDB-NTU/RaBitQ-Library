@@ -130,9 +130,38 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
 
+  macos-wheels:
+    name: macOS arm64 wheels (CPython 3.11–3.14)
+    needs: [prepare, changes]
+    if: >-
+      !cancelled() && needs.prepare.result == 'success' &&
+      needs.prepare.outputs.build == 'true' &&
+      (needs.changes.result != 'success' || needs.changes.outputs.wheels == 'true')
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Verify native Apple Silicon runner
+        run: test "$(uname -m)" = arm64
+      # All four ABIs are built, repaired, installed and tested on PRs as well.
+      - name: Build and test wheels with bundled OpenMP
+        uses: pypa/cibuildwheel@v4.2.0
+        with:
+          output-dir: wheelhouse
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-arm64-wheels
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
   release-tag:
     name: Create version tag
-    needs: [prepare, linux-wheels, windows-wheels]
+    needs: [prepare, linux-wheels, windows-wheels, macos-wheels]
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
@@ -161,7 +190,7 @@ jobs:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
-    needs: [prepare, linux-wheels, windows-wheels, release-tag]
+    needs: [prepare, linux-wheels, windows-wheels, macos-wheels, release-tag]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -188,7 +217,7 @@ jobs:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
-    needs: [prepare, linux-wheels, windows-wheels, pypi-publish]
+    needs: [prepare, linux-wheels, windows-wheels, macos-wheels, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write

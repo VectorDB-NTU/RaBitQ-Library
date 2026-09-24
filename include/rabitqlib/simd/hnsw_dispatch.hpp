@@ -13,6 +13,13 @@ std::priority_queue<std::pair<float, PID>> search_knn(
     HierarchicalNSW&, const float*, size_t
 );
 
+std::priority_queue<std::pair<float, PID>> search_knn_neon(
+    HierarchicalNSW&, const float*, size_t
+);
+
+std::priority_queue<std::pair<float, PID>> search_knn_generic(
+    HierarchicalNSW&, const float*, size_t
+);
 std::priority_queue<std::pair<float, PID>> search_knn_avx2(
     HierarchicalNSW&, const float*, size_t
 );

@@ -40,11 +40,18 @@ cmake.args = [
 ]
 
 [tool.cibuildwheel]
-build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64"
+build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp311-macosx_arm64 cp312-macosx_arm64 cp313-macosx_arm64 cp314-macosx_arm64"
 build-verbosity = 1
 environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" }
-test-requires = "pytest"
+test-requires = ["pytest", "faiss-cpu"]
 test-command = "pytest {project}/tests/python --tb=short -q"
+
+[tool.cibuildwheel.macos]
+archs = ["arm64"]
+before-all = "brew install libomp"
+environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF -DOpenMP_ROOT=$(brew --prefix libomp)", MACOSX_DEPLOYMENT_TARGET = "14.0" }
+repair-wheel-command = "delocate-wheel --require-archs arm64 -w {dest_dir} -v {wheel}"
+test-environment = { RABITQ_TEST_WHEEL = "1", OMP_NUM_THREADS = "2" }
 
 [tool.cibuildwheel.windows]
 before-build = "python -m pip install delvewheel"

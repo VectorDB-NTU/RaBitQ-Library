@@ -1,6 +1,3 @@
-from time import time
-
-import faiss
 import numpy as np
 
 # ──────────────────────────────────────────────
@@ -38,45 +35,38 @@ def compute_recall(ids: np.ndarray, gt: np.ndarray, topk: int) -> float:
 
 
 # ──────────────────────────────────────────────
-# Clustering
+# Saved clustering results (no Faiss dependency)
 # ──────────────────────────────────────────────
 
 
-def cluster_data(
-    X: np.ndarray,
-    K: int,
-    metric_str: str = "l2",
-    num_threads: int = 0,
+def load_clusters(
+    filename: str, data_shape: tuple[int, int], metric: str
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Cluster X into K clusters using FAISS IVF.
-
-    Returns
-    -------
-    centroids   : np.ndarray, shape (K, dim), float32
-    cluster_ids : np.ndarray, shape (n,),     uint32
-    """
-    if num_threads > 0:
-        faiss.omp_set_num_threads(num_threads)
-
-    dim = X.shape[1]
-
-    if metric_str == "ip":
-        metric = faiss.METRIC_INNER_PRODUCT
-        print("Clustering metric: InnerProduct")
-    else:
-        metric = faiss.METRIC_L2
-        print("Clustering metric: L2")
-
-    index = faiss.index_factory(dim, f"IVF{K},Flat", metric)
-    index.verbose = True
-
-    t0 = time()
-    index.train(X)
-    print(f"IVF training time: {time() - t0:.2f}s")
-
-    centroids = index.quantizer.reconstruct_n(0, index.nlist)  # (K, dim) float32
-    _, cluster_ids_2d = index.quantizer.search(X, 1)  # (n, 1)   int64
-    cluster_ids = cluster_ids_2d.flatten().astype(np.uint32)  # (n,)     uint32
-
+    """Load results from faiss_clustering.py for the same data in the same order."""
+    with np.load(filename, allow_pickle=False) as saved:
+        if not {"centroids", "cluster_ids", "metric"}.issubset(saved.files):
+            raise ValueError(
+                "clustering file must contain centroids, cluster_ids and metric"
+            )
+        centroids = saved["centroids"]
+        cluster_ids = saved["cluster_ids"]
+        saved_metric = saved["metric"]
+    if saved_metric.shape != () or saved_metric.item() != metric:
+        raise ValueError("clustering metric does not match index metric")
+    num_points, dim = data_shape
+    if (
+        centroids.dtype != np.float32
+        or centroids.ndim != 2
+        or centroids.shape[1] != dim
+        or not 1 <= len(centroids) <= num_points
+    ):
+        raise ValueError(
+            "centroids must be float32 with shape (num_clusters, data_dim)"
+        )
+    if not np.isfinite(centroids).all():
+        raise ValueError("centroids must contain only finite values")
+    if cluster_ids.dtype != np.uint32 or cluster_ids.shape != (num_points,):
+        raise ValueError("cluster_ids must be uint32 with one ID per data point")
+    if (cluster_ids >= len(centroids)).any():
+        raise ValueError("cluster_ids contain an out-of-range cluster ID")
     return centroids, cluster_ids

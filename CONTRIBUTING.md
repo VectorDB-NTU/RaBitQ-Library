@@ -38,9 +38,11 @@ Run any examples you add or change, including examples inside Markdown.
 
 ## Setup for code changes
 
-Source builds need an x86-64 CPU supported by RaBitQ's AVX2 or AVX-512 dispatch,
-CMake 3.20 or newer for the commands below, and a GCC- or Clang-compatible C++17 compiler with OpenMP.
-The current build does not support MSVC or AArch64 (including Apple Silicon).
+Source builds support x86-64 with AVX2/FMA (AVX-512 optional) and macOS ARM64
+with NEON. They need CMake 3.20 or newer, a C++17 compiler, and OpenMP.
+Windows x86-64 uses Visual Studio 2026; Linux AArch64 needs separate platform
+validation. See the [platform-specific build instructions](tests/README.md#quick-start)
+for Windows and [Apple Silicon](tests/README.md#macos-arm64).
 Documentation-only contributions do not need this hardware or compiler setup.
 
 On Ubuntu or Debian:
@@ -75,13 +77,23 @@ python -m pip install ".[test]"
 python -m pytest tests/python/test_ivf.py::test_search_output_shape -q
 ```
 
+On Apple Silicon, pass the OpenMP prefix and disable native tuning when building
+the extension in the same environment:
+
+```bash
+python -m pip install ".[test]" \
+    -Ccmake.define.OpenMP_ROOT="$(brew --prefix libomp)" \
+    -Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+python -m pytest tests/python/test_ivf.py::test_search_output_shape -q
+```
+
 This builds the C++ extension, so the source-build prerequisites above apply.
 Re-run the install command after changing package sources, bindings, or C++ code;
 this is not an editable install. Tests should use the newly installed package.
 
 ### C++ changes
 
-Configure, build, and run the tests:
+On Linux, configure, build, and run the tests:
 
 ```bash
 cmake -S . -B build -DRABITQ_BUILD_TESTS=ON \
@@ -93,8 +105,8 @@ ctest --test-dir build --output-on-failure
 
 The first configuration needs Git and network access to download GoogleTest.
 Increase `--parallel 2` if your machine has enough memory for more compiler jobs.
-Native CPU tuning is disabled here so the build can run on other supported
-x86-64 machines. See [the test guide](tests/README.md) for test layout and options.
+Native CPU tuning is disabled here to keep generic code portable. On Windows
+or Apple Silicon, use the matching commands in [the test guide](tests/README.md#quick-start).
 
 ## Before opening a pull request
 
@@ -137,9 +149,9 @@ for details.
 
 | Problem | What to check |
 | --- | --- |
-| CMake cannot find OpenMP or a compiler | Install the source-build prerequisites above. Include the compiler version and CMake error when asking for help. |
-| Unsupported CPU or architecture | Code tests require a supported x86-64 CPU; disabling native tuning does not add AArch64 or generic-CPU quantized search support. Report your CPU model in the issue or PR. |
-| Tests do not reflect your Python or C++ edits | Re-run `python -m pip install ".[test]"` in the active environment, then check the import paths below. Re-run the regression test that exercises your change. |
+| CMake cannot find OpenMP or a compiler | Check the [platform-specific prerequisites](tests/README.md#prerequisites). On Apple Silicon, install `libomp` and pass its prefix as `OpenMP_ROOT`. Include the compiler version and CMake error when asking for help. |
+| Unsupported CPU or architecture | Use x86-64 with AVX2/FMA or macOS ARM64 with NEON. Linux AArch64 still needs platform validation; disabling native tuning alone does not establish support. Report your CPU model in the issue or PR. |
+| Tests do not reflect your Python or C++ edits | Re-run the platform-specific install command above in the active environment, then check the import paths below. Re-run the regression test that exercises your change. |
 | Formatting or analysis reports the wrong tool version | Use the pinned versions and executable overrides in the [development reference](DEVELOPMENT.md). |
 
 Check which installed package and extension Python imports:

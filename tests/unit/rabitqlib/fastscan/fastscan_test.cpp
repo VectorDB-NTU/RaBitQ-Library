@@ -77,14 +77,24 @@ TEST(FastScanLutTest, MatchesOrderedSubsetSumsExactly) {
 
 TEST(FastScanLutTest, EverySupportedBackendMatchesOrderedSubsetSumsExactly) {
     check_lut_subset_sums<float>(simd::pack_lut_generic);
+#if defined(__aarch64__) || defined(_M_ARM64)
+    if (cpu::has_neon()) {
+        SCOPED_TRACE("NEON");
+        check_lut_subset_sums<float>(simd::pack_lut_neon);
+    }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         SCOPED_TRACE("AVX2");
         check_lut_subset_sums<float>(simd::pack_lut_avx2);
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         SCOPED_TRACE("AVX512");
         check_lut_subset_sums<float>(simd::pack_lut_avx512);
     }
+#endif
 }
 
 TEST(FastScanPackingTest, MatchesBitReferenceIncludingTailsAndUnalignedBuffers) {
@@ -158,6 +168,13 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                 EXPECT_EQ(actual, expected);
                 EXPECT_EQ(actual_hacc, expected_hacc);
             };
+            check_backend(accumulate, transfer_lut_hacc, accumulate_hacc);
+            check_backend(
+                simd::accumulate_generic,
+                simd::transfer_lut_hacc_generic,
+                simd::accumulate_hacc_generic
+            );
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2()) {
                 SCOPED_TRACE("AVX2");
                 check_backend(
@@ -166,6 +183,8 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                     simd::accumulate_hacc_avx2
                 );
             }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx512_core()) {
                 SCOPED_TRACE("AVX512");
                 check_backend(
@@ -174,6 +193,7 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                     simd::accumulate_hacc_avx512
                 );
             }
+#endif
         }
     }
 }
@@ -208,14 +228,19 @@ TEST(FastScanPackingTest, AccumulatesLargeDimensionsWithoutLaneOverflow) {
             EXPECT_EQ(actual, expected);
         };
         check_backend(accumulate);
+        check_backend(simd::accumulate_generic);
+#if defined(__x86_64__) || defined(_M_X64)
         if (cpu::has_avx2()) {
             SCOPED_TRACE("AVX2");
             check_backend(simd::accumulate_avx2);
         }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
         if (cpu::has_avx512_core()) {
             SCOPED_TRACE("AVX512");
             check_backend(simd::accumulate_avx512);
         }
+#endif
     }
 }
 
@@ -253,14 +278,20 @@ TEST(FastScanHighAccuracyTest, AccumulatesLargeDimensionsWithoutLaneOverflow) {
                 accumulate_fn(packed.data(), packed_lut.data(), actual.data(), dim);
                 EXPECT_EQ(actual, expected);
             };
+            check_backend(transfer_lut_hacc, accumulate_hacc);
+            check_backend(simd::transfer_lut_hacc_generic, simd::accumulate_hacc_generic);
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2()) {
                 SCOPED_TRACE("AVX2");
                 check_backend(simd::transfer_lut_hacc_avx2, simd::accumulate_hacc_avx2);
             }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx512_core()) {
                 SCOPED_TRACE("AVX512");
                 check_backend(simd::transfer_lut_hacc_avx512, simd::accumulate_hacc_avx512);
             }
+#endif
         }
     }
 }
@@ -283,14 +314,20 @@ TEST(FastScanHighAccuracyTest, RejectsAccumulationsExceedingInt32Range) {
             return value == 42;
         }));
     };
+    check_backend(transfer_lut_hacc, accumulate_hacc);
+    check_backend(simd::transfer_lut_hacc_generic, simd::accumulate_hacc_generic);
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         SCOPED_TRACE("AVX2");
         check_backend(simd::transfer_lut_hacc_avx2, simd::accumulate_hacc_avx2);
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         SCOPED_TRACE("AVX512");
         check_backend(simd::transfer_lut_hacc_avx512, simd::accumulate_hacc_avx512);
     }
+#endif
 }
 
 TEST(FastScanHighAccuracyTest, RejectsDimensionsThatCannotFillASimdBlock) {
@@ -318,6 +355,7 @@ TEST(FastScanHighAccuracyTest, RejectsDimensionsThatCannotFillASimdBlock) {
     }
 }
 
+#if defined(__x86_64__) || defined(_M_X64)
 TEST(FastScanHighAccuracyTest, Avx512TransferAcceptsUnalignedOutput) {
     if (!cpu::has_avx512_core()) {
         GTEST_SKIP() << "AVX512 is not supported on this CPU";
@@ -352,19 +390,22 @@ TEST(FastScanHighAccuracyTest, Avx512TransferAcceptsUnalignedOutput) {
     EXPECT_TRUE(std::equal(expected.begin(), expected.end(), storage.begin() + 1));
 }
 
+#endif
+
 TEST(BatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
-    if (!cpu::has_avx2() && !cpu::has_avx512_core()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA or AVX512";
-    }
     using Estimator = decltype(&rabitqlib::simd::split_batch_estdist);
     std::vector<Estimator> backends{
         rabitqlib::simd::split_batch_estdist, rabitqlib::simd::split_batch_estdist_generic};
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         backends.push_back(rabitqlib::simd::split_batch_estdist_avx2);
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         backends.push_back(rabitqlib::simd::split_batch_estdist_avx512);
     }
+#endif
 
     constexpr size_t kDim = 512;
     std::array<float, kDim> data;
@@ -404,18 +445,19 @@ TEST(BatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
 }
 
 TEST(BatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTailBatches) {
-    if (!cpu::has_avx2() && !cpu::has_avx512_core()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA or AVX512";
-    }
     using Estimator = decltype(&rabitqlib::simd::split_batch_estdist);
     std::vector<Estimator> backends{
         rabitqlib::simd::split_batch_estdist, rabitqlib::simd::split_batch_estdist_generic};
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         backends.push_back(rabitqlib::simd::split_batch_estdist_avx2);
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         backends.push_back(rabitqlib::simd::split_batch_estdist_avx512);
     }
+#endif
     for (size_t dim : {16U, 64U, 128U, 1024U, 1040U, 4096U}) {
         for (bool hacc : {false, true}) {
             for (auto metric : {METRIC_L2, METRIC_IP}) {
@@ -499,10 +541,6 @@ TEST(BatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTailBatches
 }
 
 TEST(FastScanHighAccuracyTest, AccumulatesAcrossChunks) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "AVX2 is not supported on this CPU";
-    }
-
     constexpr size_t kDim = 4096;
     std::vector<float> query(kDim, 1.0F);
     SplitBatchQuery<float> q_obj(query.data(), kDim, 3, METRIC_L2, true);
