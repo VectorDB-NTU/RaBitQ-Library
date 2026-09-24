@@ -39,6 +39,13 @@ target_link_libraries(rabitq_tests
 include(GoogleTest)
 gtest_discover_tests(rabitq_tests DISCOVERY_MODE PRE_TEST)
 
+# Substitute CPU predicates only in this executable to exercise real cached dispatch
+# on a CPU without SIMD. The static library's detector object is not linked here.
+add_executable(fastscan_no_simd_test dispatch/fastscan_no_simd_test.cpp)
+target_link_libraries(fastscan_no_simd_test PRIVATE GTest::gtest_main rabitq_headers)
+rabitq_enable_warnings(fastscan_no_simd_test)
+gtest_discover_tests(fastscan_no_simd_test DISCOVERY_MODE PRE_TEST)
+
 # Message to verify files are found
 message(STATUS "Discovered test files:")
 foreach(TEST_SRC ${UNIT_TESTS} ${INTEG_TESTS})

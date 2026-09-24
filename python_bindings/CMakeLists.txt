@@ -33,6 +33,19 @@ target_link_libraries(_rabitqlib PRIVATE
     Python::NumPy
 )
 
+# Keep the OpenMP runtime discoverable in source installs and during wheel
+# repair. Delocate copies it into the wheel and rewrites the loader path.
+if(APPLE)
+    set_property(TARGET _rabitqlib PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
+    # CMake omits link directories inside the source/build tree from the
+    # automatic install RPATH, including project-local Python environments.
+    foreach(runtime IN LISTS OpenMP_CXX_LIBRARIES)
+        get_filename_component(runtime_dir "${runtime}" DIRECTORY)
+        set_property(TARGET _rabitqlib APPEND PROPERTY INSTALL_RPATH "${runtime_dir}")
+    endforeach()
+    install(FILES licenses/LLVM-OpenMP.txt DESTINATION rabitqlib/licenses)
+endif()
+
 # 5. Map files to a 'rabitqlib' directory
 # inside the target wheel, completely bypassing your local layout.
 install(TARGETS _rabitqlib DESTINATION rabitqlib)

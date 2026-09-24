@@ -195,3 +195,36 @@ jobs:
           cmake --build build-consumer
       - name: Test downstream consumer
         run: ctest --test-dir build-consumer --output-on-failure
+
+  macos-arm64:
+    name: Native Apple Silicon C++
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build tools and existing OpenMP dependency
+        run: brew install cmake ninja libomp
+      - name: Configure portable ARM64 source groups
+        run: |
+          test "$(uname -m)" = arm64
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=OFF \
+            -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+            -DOpenMP_ROOT="$(brew --prefix libomp)"
+          ! grep -E -- '-mavx|_avx[25].*\.cpp' build/compile_commands.json
+      - name: Build and run C++ reference and index tests
+        run: |
+          cmake --build build --parallel 3
+          ctest --test-dir build --output-on-failure
+      - name: Test installed CMake package
+        run: |
+          cmake --install build --prefix "$RUNNER_TEMP/rabitq-install"
+          cmake -S tests/consumer -B build-consumer \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/rabitq-install" \
+            -DOpenMP_ROOT="$(brew --prefix libomp)"
+          cmake --build build-consumer --parallel 3
+          ctest --test-dir build-consumer --output-on-failure

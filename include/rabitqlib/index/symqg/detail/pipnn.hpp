@@ -300,7 +300,7 @@ inline InitialGraph build_initial_graph(
         );
     }
     using namespace pipnn_impl;
-    const size_t threads = std::max<size_t>(1, std::min(num_threads, total_threads()));
+    const size_t threads = resolve_num_threads(num_threads);
     ScratchPool scratch(count, dim, threads);
     auto leaves = cluster(data, count, dim, metric, threads, scratch);
     RowMajorMatrix<float> projections(dim, kHashBits);

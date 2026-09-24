@@ -25,6 +25,7 @@ TEST(MatrixDispatchTest, AllBackendsMatchScalarForRectangularUnalignedInputs) {
          matrix_product_transposed_generic,
          row_norms_generic,
          pairwise_distances_lower_generic}};
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         backends.push_back(
             {matrix_product_avx2,
@@ -33,6 +34,8 @@ TEST(MatrixDispatchTest, AllBackendsMatchScalarForRectangularUnalignedInputs) {
              pairwise_distances_lower_avx2}
         );
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         backends.push_back(
             {matrix_product_avx512,
@@ -41,6 +44,7 @@ TEST(MatrixDispatchTest, AllBackendsMatchScalarForRectangularUnalignedInputs) {
              pairwise_distances_lower_avx512}
         );
     }
+#endif
     for (size_t dim : {1U, 7U, 16U, 17U, 65U, 128U}) {
         for (size_t rows : {1U, 33U}) {
             constexpr size_t kCols = 19;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -84,6 +85,12 @@ constexpr T round_up_to_multiple_of(size_t x, size_t multiple_of) {
 inline size_t total_threads() {
     const auto threads = std::thread::hardware_concurrency();
     return threads == 0 ? 1 : threads;
+}
+
+// Zero selects all hardware threads; explicit requests cannot exceed that count.
+inline size_t resolve_num_threads(size_t requested) {
+    const size_t available = total_threads();
+    return requested == 0 ? available : std::min(requested, available);
 }
 
 template <typename T, typename TP>

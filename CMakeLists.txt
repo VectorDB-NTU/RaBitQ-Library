@@ -21,6 +21,7 @@ option(
     ON
 )
 
+include(cmake/rabitqOpenMP.cmake)
 find_package(OpenMP REQUIRED)
 
 add_library(rabitq_compile_options INTERFACE)
@@ -104,14 +105,39 @@ set(RABITQ_HNSW_AVX512_POPCNT_SOURCES
     src/index/hnsw_search_avx512_popcnt.cpp
 )
 
+# Select source groups from the target architecture, never the build host's ISA.
+set(RABITQ_TARGET_PROCESSOR "${CMAKE_SYSTEM_PROCESSOR}")
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    set(RABITQ_TARGET_PROCESSOR "${CMAKE_OSX_ARCHITECTURES}")
+endif()
+string(TOLOWER "${RABITQ_TARGET_PROCESSOR}" RABITQ_TARGET_PROCESSOR)
+if(RABITQ_TARGET_PROCESSOR MATCHES "^(x86_64|amd64)$")
+    set(RABITQ_ARCH_SOURCES
+        ${RABITQ_AVX2_SOURCES}
+        ${RABITQ_AVX512_SOURCES}
+        ${RABITQ_AVX512_POPCNT_SOURCES}
+        ${RABITQ_HNSW_AVX2_SOURCES}
+        ${RABITQ_HNSW_AVX512_CORE_SOURCES}
+        ${RABITQ_HNSW_AVX512_POPCNT_SOURCES}
+    )
+elseif(RABITQ_TARGET_PROCESSOR MATCHES "^(arm64|aarch64)$")
+    set(RABITQ_ARCH_SOURCES
+        src/simd/space_neon.cpp
+        src/simd/fastscan_neon.cpp
+        src/simd/space_packed_neon.cpp
+        src/simd/rotator_neon.cpp
+        src/simd/query_neon.cpp
+        src/index/hnsw_search_neon.cpp
+    )
+else()
+    message(FATAL_ERROR "Supported targets are x86-64 and ARM64 (single architecture)")
+endif()
+
 add_library(rabitq_core STATIC
     ${RABITQ_COMMON_SOURCES}
-    ${RABITQ_AVX2_SOURCES}
-    ${RABITQ_AVX512_SOURCES}
-    ${RABITQ_AVX512_POPCNT_SOURCES}
-    ${RABITQ_HNSW_AVX2_SOURCES}
-    ${RABITQ_HNSW_AVX512_CORE_SOURCES}
-    ${RABITQ_HNSW_AVX512_POPCNT_SOURCES}
+    ${RABITQ_ARCH_SOURCES}
+    src/simd/portable_generic.cpp
+    src/index/hnsw_search_generic.cpp
 )
 
 target_include_directories(rabitq_core PUBLIC
@@ -194,6 +220,7 @@ install(EXPORT rabitqlibTargets
     DESTINATION "${rabitqlib_cmake_dir}"
 )
 install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/rabitqOpenMP.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/rabitqlibConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/rabitqlibConfigVersion.cmake"
     DESTINATION "${rabitqlib_cmake_dir}"

@@ -54,8 +54,10 @@
 python -m pip install --upgrade rabitqlib
 ```
 
-Wheels: CPython 3.11–3.14 on Linux and Windows x86-64. Requires AVX2 and FMA,
-with optional AVX-512 acceleration.
+Wheels: CPython 3.11–3.14 on Linux and Windows x86-64, and macOS 14+ ARM64
+(Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512 acceleration;
+ARM64 uses NEON and portable scalar kernels. macOS wheels bundle OpenMP;
+Intel Mac and universal2 wheels are not provided.
 
 ## Python quick start
 
@@ -89,9 +91,16 @@ print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 print(ids[0])
 ```
 
+For all three indexes, `build` and `search` interpret `num_threads=0` as the
+detected hardware thread count. Larger requests are capped at that count;
+smaller positive requests are respected. Operations may use fewer workers when
+there are fewer work items. If hardware detection is unavailable, one thread is
+used. Omitting `num_threads` in Python still defaults to one thread.
+
 Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
-[Python examples](sample/python/) for index construction, querying, and index
-persistence.
+[Python examples](sample/python/README.md) for index construction, querying, and
+index persistence. IVF and HNSW examples run Faiss clustering in a separate process,
+then pass saved clusters to RaBitQ indexing so their OpenMP runtimes stay separate.
 
 Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
 in C++; Python paths are Unicode strings on all platforms.
@@ -124,7 +133,7 @@ python -m pip install .
 | **SymphonyQG** | Fast graph search with a configurable memory/accuracy tradeoff | Uses raw vectors by default, or optional packed 4-bit/8-bit RaBitQ vectors, alongside per-neighborhood quantization data. |
 
 IVF and SymphonyQG use [FastScan](https://arxiv.org/abs/1704.07355) for batched
-estimates, while HNSW uses single-code AVX2 or AVX-512 kernels.
+estimates, while HNSW uses single-code kernels selected for the target architecture.
 
 In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
 90%, 95%, and 99% recall, respectively, without reranking. Actual results
@@ -136,7 +145,7 @@ depend on the dataset, index configuration, and search parameters.
 | --- | --- |
 | **Compact by design** | Choose [1-bit](https://doi.org/10.1145/3654970) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
 | **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
-| **Fast on x86-64** | Dedicated AVX2 and AVX-512 kernels are selected through runtime CPU dispatch. |
+| **Native CPU backends** | Runtime AVX2/AVX-512 selection on x86-64; NEON distance, packed-code, FastScan, rotation, and HNSW search kernels on ARM64, with scalar packing and query transposition. |
 | **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
 
 The library supports Euclidean distance and inner product. Cosine search is
@@ -224,7 +233,7 @@ and HNSW implementations, with links to the source code.
 
 - CMake 3.20 or newer
 - a C++17 compiler with OpenMP support
-- an x86-64 CPU with AVX2 and FMA
+- an x86-64 CPU with AVX2 and FMA, or an Apple Silicon Mac
 
 Clone and build the library and example programs:
 
@@ -237,6 +246,9 @@ cmake --build build --parallel
 ```
 
 For MSVC, follow the [Windows build instructions](tests/README.md#prerequisites).
+For Apple Silicon source builds, see the [macOS ARM64 instructions](tests/README.md#macos-arm64).
+The ARM kernel sources use portable AArch64 intrinsics, but macOS tests do not
+establish Linux ARM64 support.
 Local GCC/Clang builds enable `-march=native` by default; set
 `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for portable binaries, as release
 wheels do. See [CPU dispatch details](DEVELOPMENT.md#dispatch-conventions-and-coverage)

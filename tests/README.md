@@ -8,7 +8,7 @@ binding tests for RaBitQ Library.
 - CMake 3.20 or newer for the `ctest --test-dir` commands below (4.2 or newer
   for the Visual Studio 2026 generator)
 - A C++17 compiler with OpenMP support (GCC, Clang, or Visual Studio 2026)
-- An x86-64 CPU with AVX2 and FMA; AVX-512 is optional
+- An x86-64 CPU with AVX2 and FMA (AVX-512 optional), or an Apple Silicon Mac
 - Git and network access during the first configuration so CMake can download
   GoogleTest 1.14.0
 
@@ -45,8 +45,35 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+#### macOS ARM64
+
+Use a native ARM64 project Python environment. Install CMake, Ninja and the existing
+OpenMP dependency (AppleClang does not ship an OpenMP runtime):
+
+```bash
+brew install cmake ninja libomp
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=OFF \
+  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+  -DOpenMP_ROOT="$(brew --prefix libomp)"
+cmake --build build --parallel
+OMP_NUM_THREADS=2 ctest --test-dir build --output-on-failure
+```
+
+An environment providing `llvm-openmp` can use its prefix as `OpenMP_ROOT` instead.
+CMake excludes AVX source files on ARM64. Reference tests run through generic and
+NEON kernels; explicit AVX backend tests are guarded or skipped. Linux AArch64
+needs its own build and execution validation.
+
+For Python source builds, pass `-Ccmake.define.OpenMP_ROOT=<libomp-prefix>` as well
+as the native-optimization setting below. Release CI uses native `macos-14` runners,
+builds CPython 3.11–3.14 ARM64 wheels, bundles OpenMP with delocate, then installs and
+runs the full Python suite for each wheel. The minimum wheel OS target is macOS 14.
+Set `RABITQ_TEST_WHEEL=1` when testing a repaired wheel locally to also check its
+ARM64 extension and bundled OpenMP loader path. Intel and universal2 wheels are excluded.
+
 The combined executable is `build/tests/Release/rabitq_tests.exe` on Windows
-and `build/tests/rabitq_tests` on Linux. To run a subset, add `-R <pattern>` to
+and `build/tests/rabitq_tests` on Linux/macOS. To run a subset, add `-R <pattern>` to
 the CTest command.
 
 AVX-512 tests skip when the CPU or OS lacks the required features. Tests using
@@ -67,6 +94,13 @@ python -m pytest tests/python -ra -q
 
 Confirm the printed extension path belongs to the intended environment. The
 suite includes all three indexes, quantization, persistence, and Unicode paths.
+
+The example integration tests additionally need `faiss-cpu`. Wheel CI installs it
+as a test dependency and runs Faiss clustering and RaBitQ indexing/querying in
+separate subprocesses, with guards against importing both libraries together.
+These tests cover L2/IP and the saved clustering file used by the
+[Python examples](../sample/python/README.md). They skip the Faiss-dependent cases
+when Faiss is absent from a local test environment.
 
 ## Installed CMake package test
 

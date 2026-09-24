@@ -56,12 +56,16 @@ TEST(MaskIpX0Q, SupportsUnalignedCodes) {
     ASSERT_NE(reinterpret_cast<uintptr_t>(codes) % alignof(uint64_t), 0U);
     pack_binary_to_bytes<uint64_t>(binary_code.data(), codes, dim);
 
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx2(query.data(), codes, dim), expected);
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx512(query.data(), codes, dim), expected);
     }
+#endif
     EXPECT_FLOAT_EQ(mask_ip_x0_q(query.data(), codes, dim), expected);
 }
 
@@ -115,6 +119,7 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
 
             const float expected = delta * static_cast<float>(weighted_intersection) +
                                    vl * static_cast<float>(data_popcount);
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2()) {
                 EXPECT_FLOAT_EQ(
                     simd::warmup_ip_x0_q_512_avx2(
@@ -127,6 +132,8 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
                     expected
                 );
             }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx512_popcnt()) {
                 EXPECT_FLOAT_EQ(
                     simd::warmup_ip_x0_q_512_avx512(
@@ -135,6 +142,7 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
                     expected
                 );
             }
+#endif
         }
     }
 }
@@ -142,18 +150,22 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
 TEST(WarmupIpX0Q, RejectsQueryWidthsBeyondByte) {
     const std::array<uint8_t, 8> data{};
     const std::array<uint64_t, 9> query{};
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         EXPECT_THROW(
             simd::warmup_ip_x0_q_512_avx2(data.data(), query.data(), 1.0F, 0.0F, 64, 9),
             std::invalid_argument
         );
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_popcnt()) {
         EXPECT_THROW(
             simd::warmup_ip_x0_q_512_avx512(data.data(), query.data(), 1.0F, 0.0F, 64, 9),
             std::invalid_argument
         );
     }
+#endif
 }
 
 TEST(Select_IP_Func, returns_stable_function_pointer) {
@@ -191,11 +203,13 @@ TEST(Select_IP_Func, returns_stable_function_pointer) {
 
     ip_func = select_excode_ipfunc(8);
     ASSERT_NE(ip_func, nullptr);
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         ASSERT_EQ(ip_func, simd::excode_ipimpl::ip16_fxu8_avx512);
-    } else {
+    } else if (cpu::has_avx2()) {
         ASSERT_EQ(ip_func, simd::excode_ipimpl::ip16_fxu8_avx2);
     }
+#endif
 }
 
 TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
@@ -289,12 +303,16 @@ TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
     };
 
     check(simd::scalar_quantize_uint8, simd::scalar_quantize_uint16);
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         check(simd::scalar_quantize_uint8_avx2, simd::scalar_quantize_uint16_avx2);
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         check(simd::scalar_quantize_uint8_avx512, simd::scalar_quantize_uint16_avx512);
     }
+#endif
 }
 
 TEST(ip16_fxu1_avx, ip_works) {
@@ -371,6 +389,7 @@ TEST(OddBitExcodeIp, MatchesScalarInnerProduct) {
         }
         const float expected_float = static_cast<float>(expected);
 
+#if defined(__x86_64__) || defined(_M_X64)
         if (cpu::has_avx2()) {
             const std::array<ex_ipfunc, 8> avx2_functions{
                 nullptr,
@@ -388,6 +407,8 @@ TEST(OddBitExcodeIp, MatchesScalarInnerProduct) {
                 0.1F
             );
         }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
         if (cpu::has_avx512_core()) {
             const std::array<ex_ipfunc, 8> avx512_functions{
                 nullptr,
@@ -405,6 +426,7 @@ TEST(OddBitExcodeIp, MatchesScalarInnerProduct) {
                 0.1F
             );
         }
+#endif
     }
 }
 
@@ -423,6 +445,7 @@ TEST(ip_fxu8_avx, ip_works) {
     const float expected_float = static_cast<float>(expected);
     ex_ipfunc ip_func = select_excode_ipfunc(8);
     ASSERT_NEAR(ip_func(query.data(), codes.data(), dim), expected_float, 0.1F);
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         ASSERT_NEAR(
             simd::excode_ipimpl::ip16_fxu8_avx2(query.data(), codes.data(), dim),
@@ -430,6 +453,8 @@ TEST(ip_fxu8_avx, ip_works) {
             0.1F
         );
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         ASSERT_NEAR(
             simd::excode_ipimpl::ip16_fxu8_avx512(query.data(), codes.data(), dim),
@@ -437,4 +462,5 @@ TEST(ip_fxu8_avx, ip_works) {
             0.1F
         );
     }
+#endif
 }

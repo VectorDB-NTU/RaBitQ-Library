@@ -7,7 +7,8 @@ where present. Keep this file current when the paths, commands, or contracts bel
 
 RaBitQ-Library is a C++17 library with Python bindings (`rabitqlib`) for compact vector
 quantization and approximate nearest-neighbor search. It provides one-bit and multi-bit RaBitQ
-encoding and IVF, HNSW, and SymphonyQG indexes. It targets x86-64 with runtime AVX2/AVX-512 dispatch.
+encoding and IVF, HNSW, and SymphonyQG indexes. It targets x86-64 with runtime AVX2/AVX-512
+dispatch and macOS ARM64 with NEON and portable scalar kernels. Linux AArch64 requires separate platform validation.
 RaBitQ rotates vectors and quantizes residuals relative to centroids; compact codes and correction
 factors estimate L2 distance or inner product.
 
@@ -19,7 +20,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/index/{query,estimator}.hpp` | Query state and distance estimation |
 | `include/rabitqlib/simd/`, `src/simd/` | Kernel declarations, implementations, and dispatch |
 | `src/index/` | Compiled SymphonyQG implementation, HNSW search kernels, and IVF candidate insertion |
-| `src/utils/cpu_features.cpp` | Generic x86 feature detection |
+| `src/utils/cpu_features.cpp` | Generic CPU feature detection |
 | `include/rabitqlib/utils/` | Rotation, allocation, buffers, I/O, and helpers |
 | `python_bindings/` | pybind11 extension and index wrappers |
 | `sample/cpp/`, `sample/python/` | Usage examples |
@@ -110,6 +111,8 @@ Recommended:
 - Public/generic code calls centralized dispatch entry points. Keep ISA-specific translation units
   and their flags in `CMakeLists.txt` synchronized with feature predicates in
   `src/simd/dispatch.cpp` and detection in `src/utils/cpu_features.cpp`, including HNSW source groups.
+  ARM64 builds must exclude all x86 ISA source groups; ARM kernels use portable AArch64
+  NEON intrinsics.
 - Use the shared resolver in `src/simd/dispatch.cpp` for cached selection, including HNSW.
   Keep calculations in backend source files; see the dispatch coverage table in
   [DEVELOPMENT.md](DEVELOPMENT.md#dispatch-conventions-and-coverage).
@@ -117,6 +120,7 @@ Recommended:
   code; never execute a high-ISA kernel to find out whether the CPU supports it.
 - Semantic kernel changes must cover every implementation and a backend-independent reference
   test, including dimensions around vector-width/packing boundaries and supported bit widths.
+  Keep portable reference tests enabled on ARM; guard only explicit x86 backend calls.
 - Native tuning can affect generic code independently of dispatch. Keep native optimization off
   for portable binaries and wheels; runtime dispatch alone does not make a native build portable.
   A portable build tested on the current CPU does not establish AVX2 backend coverage. Report

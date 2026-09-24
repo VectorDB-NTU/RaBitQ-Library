@@ -223,9 +223,6 @@ static_assert(
 );
 
 TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     for (size_t dim : {64U, 1024U, 1088U}) {
         for (auto metric : {METRIC_L2, METRIC_IP}) {
             SCOPED_TRACE(::testing::Message() << dim << "/" << metric);
@@ -253,10 +250,14 @@ TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
             std::array<float, fastscan::kBatchSize> estimates{};
             std::vector<decltype(&simd::qg_batch_estdist)> backends{
                 simd::qg_batch_estdist_generic, simd::qg_batch_estdist};
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2())
                 backends.push_back(simd::qg_batch_estdist_avx2);
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx512_core())
                 backends.push_back(simd::qg_batch_estdist_avx512);
+#endif
             for (auto backend : backends) {
                 backend(batch.data(), q_obj, dim, estimates.data());
                 for (size_t i = 0; i < fastscan::kBatchSize; ++i) {
@@ -291,9 +292,11 @@ TEST(QGEstimatorTest, CandidateMaskBackendsMatchScalarOrdering) {
 
     constexpr float kThreshold = 2.0F;
     const uint32_t expected = simd::qg_candidate_mask_generic(distances.data(), kThreshold);
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         EXPECT_EQ(simd::qg_candidate_mask_avx2(distances.data(), kThreshold), expected);
     }
+#endif
 }
 
 TEST(QGConstructionTest, BuildsAndPrunesAfterInputReleaseUsingExistingCodes) {
@@ -341,9 +344,6 @@ TEST(QGConstructionTest, BuildsAndPrunesAfterInputReleaseUsingExistingCodes) {
 }
 
 TEST(QGConstructionTest, EncodedSeedSearchMatchesRetainedScores) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kCount = 97, kDim = 65, kDegree = 32;
     std::vector<float> data(kCount * kDim);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -387,9 +387,6 @@ TEST(QGConstructionTest, EncodedSeedSearchMatchesRetainedScores) {
 }
 
 TEST(QGConstructionTest, DefaultsToPipnnInitialization) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kCount = 97, kDim = 65, kDegree = 32;
     std::vector<float> data(kCount * kDim);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -425,9 +422,6 @@ TEST(QGConstructionTest, DefaultsToPipnnInitialization) {
 }
 
 TEST(QGConstructionTest, SupportsExplicitRandomInitialization) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     std::vector<float> data(65 * 65, 0.5F);
     QuantizedGraph<float> graph(65, 65, 32);
     QGBuilder builder(graph, 64, data.data(), 1, QGInitialization::Random);
@@ -456,9 +450,6 @@ TEST(QGConstructionTest, RejectsNullDataForEveryInitializationMode) {
 }
 
 TEST(QGConstructionTest, UsesExplicitThreadCountsWithoutChangingCallerState) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kCount = 33, kDim = 64;
     std::vector<float> data(kCount * kDim, 0.25F);
     const int caller_threads = omp_get_max_threads();
@@ -476,9 +467,6 @@ TEST(QGConstructionTest, UsesExplicitThreadCountsWithoutChangingCallerState) {
 }
 
 TEST(QGConstructionTest, InitializesUnusedPartialBatchFactors) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kCount = 33, kDim = 64;
     std::vector<float> data(kCount * kDim);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -504,9 +492,6 @@ TEST(QGConstructionTest, InitializesUnusedPartialBatchFactors) {
 }
 
 TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kCount = 97, kDim = 65, kDegree = 64;
     constexpr std::array<size_t, 6> kDegrees{0, 1, 31, 32, 33, 64};
     for (auto metric : {METRIC_L2, METRIC_IP}) {
@@ -780,9 +765,6 @@ TEST(QuantizedGraphLifecycleTest, RejectsSearchAndSaveBeforeBuild) {
 }
 
 TEST(QuantizedGraphLifecycleTest, BuilderDoesNotPublishPartialGraph) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kNumPoints = 33;
     constexpr size_t kDim = 64;
     constexpr size_t kDegree = 32;
@@ -920,9 +902,6 @@ TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
 }
 
 TEST(QGSearchTest, RejectsInvalidKAndEfInsteadOfReturningPartialResults) {
-    if (!cpu::has_avx2()) {
-        GTEST_SKIP() << "FastScan requires AVX2/FMA";
-    }
     constexpr size_t kNumPoints = 33, kDim = 64, kDegree = 32;
     std::vector<float> data(kNumPoints * kDim);
     for (size_t i = 0; i < data.size(); ++i) {

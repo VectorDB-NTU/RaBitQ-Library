@@ -20,6 +20,7 @@
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/third/hnswlib/hnswlib.h"
 #include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
 template <class Function>
@@ -27,10 +28,7 @@ inline void parallel_for(size_t start, size_t end, size_t numThreads, Function f
     if (start >= end) {
         return;
     }
-    if (numThreads == 0) {
-        numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
-    }
-    numThreads = std::min(numThreads, end - start);
+    numThreads = std::min(resolve_num_threads(numThreads), end - start);
 
     if (numThreads == 1) {
         for (size_t id = start; id < end; id++) {

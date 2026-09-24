@@ -44,9 +44,9 @@ def classify(paths):
             or path == "tests/CMakeLists.txt"
         ):
             selected.add("cpp")
-        elif path.startswith("tests/python/"):
+        elif path.startswith(("tests/python/", "sample/python/")):
             selected.update(("python_quality", "python_build", "wheels"))
-        elif path.startswith(("python/", "sample/python/", ".github/scripts/")):
+        elif path.startswith(("python/", ".github/scripts/")):
             selected.add("python_quality")
         elif path == ".github/workflows/test.yaml":
             selected.update(("cpp", "shell"))

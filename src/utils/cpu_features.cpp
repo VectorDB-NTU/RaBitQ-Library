@@ -55,6 +55,10 @@ uint64_t xgetbv(uint32_t) { return 0; }
 
 Features detect_features() {
     Features hardware{};
+#if defined(__aarch64__)
+    // AdvSIMD is part of the ARM64 ABI on macOS and Linux AArch64.
+    hardware.neon = true;
+#endif
     if constexpr (!kIsX86) {
         return hardware;
     }
@@ -147,6 +151,8 @@ const Features& features() {
     static const Features detected = detect_features();
     return detected;
 }
+
+bool has_neon() { return features().neon; }
 
 bool has_avx2() {
     const Features& detected = features();

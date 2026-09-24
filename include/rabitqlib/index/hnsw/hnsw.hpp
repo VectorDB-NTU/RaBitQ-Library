@@ -124,6 +124,12 @@ class HierarchicalNSW {
     };
 
    private:
+    friend maxheap<std::pair<float, PID>> detail::search_knn_neon(
+        HierarchicalNSW&, const float*, size_t
+    );
+    friend maxheap<std::pair<float, PID>> detail::search_knn_generic(
+        HierarchicalNSW&, const float*, size_t
+    );
     friend maxheap<std::pair<float, PID>> detail::search_knn_avx2(
         HierarchicalNSW&, const float*, size_t
     );

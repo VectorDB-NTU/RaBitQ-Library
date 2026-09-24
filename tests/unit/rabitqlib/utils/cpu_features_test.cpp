@@ -125,3 +125,14 @@ TEST(CpuFeatures, Avx512SelectionRequiresEveryCompilerEnabledFeature) {
 }
 
 }  // namespace
+
+TEST(CpuFeatures, NativeArm64UsesNeonWithoutX86Features) {
+#if defined(__aarch64__)
+    EXPECT_TRUE(rabitqlib::cpu::has_neon());
+    EXPECT_FALSE(rabitqlib::cpu::has_avx2());
+    EXPECT_FALSE(rabitqlib::cpu::has_avx512_core());
+    EXPECT_FALSE(rabitqlib::cpu::has_avx512_popcnt());
+#else
+    EXPECT_FALSE(rabitqlib::cpu::has_neon());
+#endif
+}

@@ -194,7 +194,7 @@ inline std::vector<T> compute_centroid(
     const auto thread_count = static_cast<int>(std::max<size_t>(
         1,
         std::min(
-            {num_threads,
+            {resolve_num_threads(num_threads),
              std::max<size_t>(num_points, 1),
              static_cast<size_t>(std::numeric_limits<int>::max())}
         )
@@ -240,7 +240,7 @@ inline PID exact_nn(
     const auto thread_count = static_cast<int>(std::max<size_t>(
         1,
         std::min(
-            {num_threads,
+            {resolve_num_threads(num_threads),
              std::max<size_t>(num_points, 1),
              static_cast<size_t>(std::numeric_limits<int>::max())}
         )

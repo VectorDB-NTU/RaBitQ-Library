@@ -1,5 +1,5 @@
 import argparse
-from time import time
+from time import perf_counter
 
 import numpy as np
 from rabitqlib import IvfIndex
@@ -28,7 +28,7 @@ def main(args=None) -> None:
 
     # 2. Load index
     idx = IvfIndex.load(args.index_file)
-    print(f"Index loaded — dim={idx.dim}, clusters={idx.num_clusters}")
+    print(f"Index loaded: dim={idx.dim}, clusters={idx.num_clusters}")
 
     all_qps = np.zeros((args.test_rounds, len(NPROBES)))
     all_recall = np.zeros((args.test_rounds, len(NPROBES)))
@@ -42,7 +42,7 @@ def main(args=None) -> None:
                     f"will use nprobe = num_clusters ({idx.num_clusters})."
                 )
 
-            t0 = time()
+            t0 = perf_counter()
             ids, _ = idx.search(
                 queries,
                 k=args.topk,
@@ -50,9 +50,10 @@ def main(args=None) -> None:
                 high_accuracy=args.use_hacc,
                 num_threads=args.num_threads,
             )
-            elapsed = time() - t0
+            elapsed = perf_counter() - t0
 
-            all_qps[r, probe_index] = nq / elapsed
+            # Report an unmeasurable duration instead of inventing a QPS value.
+            all_qps[r, probe_index] = nq / elapsed if elapsed > 0 else float("nan")
             all_recall[r, probe_index] = compute_recall(ids, gt, args.topk)
 
     avg_qps = all_qps.mean(axis=0)

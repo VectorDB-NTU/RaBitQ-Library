@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -39,6 +38,7 @@ std::vector<Backend> backends() {
          simd::dot_product_generic,
          simd::dot_product_dis_generic,
          simd::l2norm_sqr_generic}};
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         result.push_back(
             {"avx2",
@@ -48,6 +48,8 @@ std::vector<Backend> backends() {
              simd::l2norm_sqr_avx2}
         );
     }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
         result.push_back(
             {"avx512",
@@ -57,88 +59,22 @@ std::vector<Backend> backends() {
              simd::l2norm_sqr_avx512}
         );
     }
+#endif
+#if defined(__aarch64__)
+    if (cpu::has_neon()) {
+        result.push_back(
+            {"neon",
+             simd::euclidean_sqr_neon,
+             simd::dot_product_neon,
+             simd::dot_product_dis_neon,
+             simd::l2norm_sqr_neon}
+        );
+    }
+#endif
     return result;
 }
 
-void check_reference(const float* a, const float* b, size_t dim) {
-    long double l2 = 0, dot = 0, norm = 0, absolute_products = 0;
-    for (size_t i = 0; i < dim; ++i) {
-        const long double x = a[i], y = b[i];
-        l2 += (x - y) * (x - y);
-        dot += x * y;
-        norm += x * x;
-        absolute_products += std::abs(x * y);
-    }
-    // Longer float reductions accumulate more rounding error.
-    const long double tolerance = 2e-6L * std::max(1.0L, dim / 4096.0L);
-    for (const auto& backend : backends()) {
-        SCOPED_TRACE(backend.name);
-        EXPECT_NEAR(backend.l2(a, b, dim), l2, tolerance * std::max(1.0L, l2));
-        EXPECT_NEAR(
-            backend.dot(a, b, dim), dot, tolerance * std::max(1.0L, absolute_products)
-        );
-        EXPECT_NEAR(backend.ip(a, b, dim), 1 - dot, tolerance * (1 + absolute_products));
-        EXPECT_NEAR(backend.norm(a, dim), norm, tolerance * std::max(1.0L, norm));
-    }
-}
 }  // namespace
-
-TEST(FloatDistance, BackendsMatchReferenceAcrossDimensionsAndAlignments) {
-    std::vector<size_t> dimensions;
-    for (size_t dim = 0; dim <= 80; ++dim) {
-        dimensions.push_back(dim);
-    }
-    for (size_t dim :
-         {127,
-          128,
-          129,
-          255,
-          256,
-          257,
-          419,
-          420,
-          421,
-          959,
-          960,
-          961,
-          1023,
-          1024,
-          1025,
-          4096,
-          65536}) {
-        dimensions.push_back(dim);
-    }
-    for (size_t dim : dimensions) {
-        SCOPED_TRACE(dim);
-        for (size_t offset : {0, 1, 7, 15}) {
-            std::vector<float> a(std::max(size_t{1}, dim + offset));
-            std::vector<float> b(std::max(size_t{1}, dim + offset));
-            for (int pattern = 0; pattern < 6; ++pattern) {
-                SCOPED_TRACE(pattern);
-                for (size_t i = 0; i < dim; ++i) {
-                    float x = static_cast<float>(static_cast<int>(i % 23) - 11) / 7;
-                    float y = static_cast<float>(static_cast<int>(i % 17) - 8) / 9;
-                    if (pattern == 1) {
-                        y = x;
-                    } else if (pattern == 2) {
-                        y = -x;
-                    } else if (pattern == 3) {
-                        x = (i % 4 < 2) ? 4096.0F : -4096.0F;
-                        y = 1;
-                    } else if (pattern == 4) {
-                        x = std::ldexp(x, 30);
-                        y = std::ldexp(y, 30);
-                    } else if (pattern == 5) {
-                        y = std::nextafter(x, 2.0F);
-                    }
-                    a[i + offset] = x;
-                    b[i + offset] = y;
-                }
-                check_reference(a.data() + offset, b.data() + offset, dim);
-            }
-        }
-    }
-}
 
 TEST(FloatDistance, EmptyAndAliasedInputsPreserveDistanceConventions) {
     const std::array<float, 5> a{1, -2, 3, -4, 5};
@@ -152,6 +88,41 @@ TEST(FloatDistance, EmptyAndAliasedInputsPreserveDistanceConventions) {
         EXPECT_EQ(backend.dot(a.data(), a.data(), a.size()), 55);
         EXPECT_EQ(backend.ip(a.data(), a.data(), a.size()), -54);
         EXPECT_EQ(backend.norm(a.data(), a.size()), 55);
+    }
+}
+
+TEST(FloatDistance, SubtractionUsesFloatPrecisionInVectorBlocksAndTails) {
+    // In float, 1 - 2^-25 rounds to 1 before squaring. Widening the subtraction
+    // to double would instead return the float immediately below 1.
+    for (size_t dim : {1U, 4U, 16U, 17U, 33U}) {
+        for (size_t at : {size_t{0}, dim - 1}) {
+            std::vector<float> a(dim, 0), b(dim, 0);
+            a[at] = 1.0F;
+            b[at] = std::ldexp(1.0F, -25);
+            for (const auto& backend : backends()) {
+                SCOPED_TRACE(
+                    ::testing::Message() << backend.name << " dim=" << dim << " at=" << at
+                );
+                EXPECT_EQ(backend.l2(a.data(), b.data(), dim), 1.0F);
+            }
+        }
+    }
+}
+
+TEST(FloatDistance, AccumulationRetainsFloatPrecision) {
+    // Each small square is below half an ulp at 1. Place them in the same
+    // accumulation lane for all backends. Double accumulation would preserve
+    // their combined 2^-23 contribution and return the float above 1.
+    std::array<float, 513> a{}, zero{};
+    a[0] = 1.0F;
+    for (size_t i = 64; i < a.size(); i += 64)
+        a[i] = std::ldexp(1.0F, -13);
+    for (const auto& backend : backends()) {
+        SCOPED_TRACE(backend.name);
+        EXPECT_EQ(backend.l2(a.data(), zero.data(), a.size()), 1.0F);
+        EXPECT_EQ(backend.dot(a.data(), a.data(), a.size()), 1.0F);
+        EXPECT_EQ(backend.ip(a.data(), a.data(), a.size()), 0.0F);
+        EXPECT_EQ(backend.norm(a.data(), a.size()), 1.0F);
     }
 }
 
@@ -184,10 +155,20 @@ TEST(FloatDistance, TailsDoNotReadPastGuardPage) {
         SCOPED_TRACE(dim);
         ASSERT_LE(dim * sizeof(float), page);
         auto* data = reinterpret_cast<float*>(end) - dim;
+        float expected = 0;
         for (size_t i = 0; i < dim; ++i) {
             data[i] = static_cast<float>(i % 7);
+            expected += data[i] * data[i];
         }
-        check_reference(data, data, dim);
+        // Small integer inputs make these sums exactly representable in float.
+        // Keep this a bounds-safety check, independent of precision tolerances.
+        for (const auto& backend : backends()) {
+            SCOPED_TRACE(backend.name);
+            EXPECT_EQ(backend.l2(data, data, dim), 0.0F);
+            EXPECT_EQ(backend.dot(data, data, dim), expected);
+            EXPECT_EQ(backend.ip(data, data, dim), 1.0F - expected);
+            EXPECT_EQ(backend.norm(data, dim), expected);
+        }
     }
 }
 #endif

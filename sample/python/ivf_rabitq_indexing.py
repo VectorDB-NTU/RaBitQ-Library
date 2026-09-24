@@ -3,12 +3,11 @@ from time import time
 
 from rabitqlib import IvfIndex
 
-from utils import cluster_data, read_fvecs
+from utils import load_clusters, read_fvecs
 
 # ──────────────────────────────────────────────
 # Default configuration
 # ──────────────────────────────────────────────
-NUM_CLUSTERS = 256  # number of clusters (K for IVF)
 TOTAL_BITS = 8  # total number of bits for quantization
 METRIC = "l2"  # "l2" or "ip"
 FASTER_QUANT = True  # use faster quantization
@@ -24,10 +23,8 @@ def main(args=None) -> None:
     print(f"\tN: {n}")
     print(f"\tDIM: {dim}")
 
-    # 2. Cluster with FAISS
-    centroids, cluster_ids = cluster_data(
-        data, args.num_clusters, args.metric, args.num_threads
-    )
+    # 2. Load clusters computed in a separate Faiss process.
+    centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
     print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
 
     # 3. Build IVF index
@@ -39,7 +36,7 @@ def main(args=None) -> None:
     idx = IvfIndex(
         dim=dim,
         max_elements=n,
-        num_clusters=args.num_clusters,
+        num_clusters=len(centroids),
         nbits=args.total_bits,
         metric=args.metric,
     )
@@ -57,7 +54,7 @@ def main(args=None) -> None:
     print("IVF constructed")
     idx.save(args.index_file)
     print(f"Indexing time: {elapsed_min:.4f} min")
-    print(f"Index saved → {args.index_file}")
+    print(f"Index saved: {args.index_file}")
 
 
 if __name__ == "__main__":
@@ -66,12 +63,9 @@ if __name__ == "__main__":
     parser.add_argument("data_file", type=str, help="Path to the data file")
     parser.add_argument("index_file", type=str, help="Path to save the index")
     parser.add_argument(
-        "--num-clusters",
-        dest="num_clusters",
-        type=int,
-        metavar="INT",
-        default=NUM_CLUSTERS,
-        help="Number of clusters (K for IVF)",
+        "--clusters",
+        required=True,
+        help="Clustering file produced by faiss_clustering.py for this data and metric",
     )
     parser.add_argument(
         "--total-bits",
