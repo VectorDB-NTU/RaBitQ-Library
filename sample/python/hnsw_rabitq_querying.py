@@ -25,7 +25,7 @@ def main(args=None) -> None:
 
     # 2. Load index
     idx = HnswIndex.load(args.index_file)
-    print(f"Index loaded — dim={idx.dim}")
+    print(f"Index loaded: dim={idx.dim}")
     print(f"TopK: {args.topk}")
 
     print("\nsearch start >.....\n")

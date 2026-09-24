@@ -26,7 +26,7 @@ def main(args=None) -> None:
 
     # 2. Load index
     idx = SymqgIndex.load(args.index_file)
-    print(f"Index loaded — dim={idx.dim}, metric={args.metric}")
+    print(f"Index loaded: dim={idx.dim}, metric={args.metric}")
     print(f"TopK: {args.topk}")
 
     print("\nsearch start >.....\n")

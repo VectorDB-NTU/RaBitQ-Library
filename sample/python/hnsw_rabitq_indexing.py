@@ -53,7 +53,7 @@ def main(args=None) -> None:
     print(f"Indexing time: {time() - t0:.2f}s")
 
     idx.save(args.index_file)
-    print(f"Index saved → {args.index_file}")
+    print(f"Index saved: {args.index_file}")
 
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ def main(args=None) -> None:
 
     # 2. Load index
     idx = IvfIndex.load(args.index_file)
-    print(f"Index loaded — dim={idx.dim}, clusters={idx.num_clusters}")
+    print(f"Index loaded: dim={idx.dim}, clusters={idx.num_clusters}")
 
     all_qps = np.zeros((args.test_rounds, len(NPROBES)))
     all_recall = np.zeros((args.test_rounds, len(NPROBES)))

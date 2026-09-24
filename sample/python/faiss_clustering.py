@@ -46,7 +46,7 @@ def main(args) -> None:
         np.savez(
             output, centroids=centroids, cluster_ids=cluster_ids, metric=args.metric
         )
-    print(f"Clusters saved → {args.clusters_file}")
+    print(f"Clusters saved: {args.clusters_file}")
 
 
 if __name__ == "__main__":

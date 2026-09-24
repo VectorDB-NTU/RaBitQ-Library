@@ -33,6 +33,8 @@ runpy.run_path(script, run_name='__main__')
 
 def run_example(name, *args, blocked="faiss"):
     env = os.environ.copy()
+    # Reproduce Windows redirected output even on hosts using UTF-8 by default.
+    env["PYTHONIOENCODING"] = "cp1252:strict"
     for key in (
         "DYLD_LIBRARY_PATH",
         "DYLD_INSERT_LIBRARIES",
@@ -53,6 +55,7 @@ def run_example(name, *args, blocked="faiss"):
         env=env,
         capture_output=True,
         text=True,
+        encoding="cp1252",
         timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr

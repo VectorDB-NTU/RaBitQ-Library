@@ -54,7 +54,7 @@ def main(args=None) -> None:
     print("IVF constructed")
     idx.save(args.index_file)
     print(f"Indexing time: {elapsed_min:.4f} min")
-    print(f"Index saved → {args.index_file}")
+    print(f"Index saved: {args.index_file}")
 
 
 if __name__ == "__main__":
