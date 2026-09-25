@@ -11,15 +11,18 @@ only the affected job groups:
 | Changes | Checks |
 | --- | --- |
 | Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
-| C++ headers or library sources | C++ formatting, analysis, tests, sanitizers, consumer build, and Python wheels/tests |
-| C++ tests or examples | C++ checks |
-| Python bindings | Python checks and wheel tests; C++ checks for compiled binding files |
+| C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
+| C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
+| Compiled Python bindings | C++ formatting and clang-tidy, plus Python checks and wheel tests |
 | Python tests | Python checks and wheel tests |
 | Python scripts or examples | Python lint |
-| CMake or package configuration | C++ and Python build/test checks |
-| Shell scripts | ShellCheck and the checks driven by those scripts |
+| CMake configuration | C++ tests and clang-tidy, plus Python builds/wheels |
+| `pyproject.toml` | Python lint, builds, and wheels; no C++ checks |
+| Shell scripts | ShellCheck and any check driven by the changed script |
 
-Shared headers still trigger broad regression suites; CI does not infer
+The optional include-cleaner report is available through
+`./scripts/check-includes.sh` and no longer runs on every C++ change. Shared
+headers still trigger broad regression suites; CI does not infer
 individual test dependencies from C++ function changes. Unknown paths run all
 checks. Pushes compare the complete pushed range; pull requests compare against
 their base. Renames and deletions are included. Relevant jobs also run if
