@@ -127,6 +127,44 @@ class ChangeSelectionTest(unittest.TestCase):
             ):
                 self.assertEqual(detect("push", {"before": "base"}, "main"), expected)
 
+    def test_ci_routing_changes_run_full_pr_ci_but_not_repeat_on_tagged_main(self):
+        paths = [
+            ".github/scripts/ci_changes.py",
+            ".github/scripts/test_ci_changes.py",
+            ".github/workflows/changes.yml",
+            ".github/workflows/test.yaml",
+            "MAINTAINING.md",
+        ]
+        changed = "\0".join(paths) + "\0"
+        with patch("ci_changes.git", side_effect=["merge-base", changed]):
+            self.assertEqual(
+                detect(
+                    "pull_request",
+                    {"pull_request": {"base": {"sha": "base"}}},
+                    "42/merge",
+                ),
+                set(GROUPS),
+            )
+        for changed_paths, tags, expected in (
+            (paths, "v0.3.3", {"python_quality"}),
+            (paths, "", set(GROUPS)),
+            (paths + ["src/simd/dispatch.cpp"], "v0.3.3", set(GROUPS)),
+        ):
+            with self.subTest(changed_paths=changed_paths, tags=tags):
+                with (
+                    patch(
+                        "ci_changes.git",
+                        side_effect=["\0".join(changed_paths) + "\0", tags],
+                    ),
+                    patch(
+                        "ci_changes.Path.read_text",
+                        return_value='[project]\nversion = "0.3.3"',
+                    ),
+                ):
+                    self.assertEqual(
+                        detect("push", {"before": "base"}, "main"), expected
+                    )
+
     def test_release_events_and_new_branches_run_everything(self):
         for event, payload, ref in (
             ("workflow_dispatch", {}, "main"),

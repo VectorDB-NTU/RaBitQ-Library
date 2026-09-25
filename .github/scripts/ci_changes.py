@@ -18,6 +18,17 @@ GROUPS = (
 
 CPP_SUFFIXES = (".c", ".cc", ".cpp", ".h", ".hpp")
 
+# Keep broad pull-request checks for routing edits, then avoid repeating
+# their builds after a CI-only merge into an already released main branch.
+CI_ROUTING_PATHS = frozenset(
+    (
+        ".github/scripts/ci_changes.py",
+        ".github/scripts/test_ci_changes.py",
+        ".github/workflows/changes.yml",
+        ".github/workflows/test.yaml",
+    )
+)
+
 
 def classify(paths):
     selected = set()
@@ -108,8 +119,14 @@ def detect(event_name, event, ref_name):
         base = event["before"]
         if not base or set(base) == {"0"}:
             return set(GROUPS)
-    paths = git("diff", "--name-only", "--no-renames", "-z", base, "HEAD").split("\0")
-    selected = classify(path for path in paths if path)
+    paths = [
+        path
+        for path in git(
+            "diff", "--name-only", "--no-renames", "-z", base, "HEAD"
+        ).split("\0")
+        if path
+    ]
+    selected = classify(paths)
     if event_name == "push" and ref_name == "main":
         version = tomllib.loads(Path("pyproject.toml").read_text())["project"][
             "version"
@@ -117,6 +134,10 @@ def detect(event_name, event, ref_name):
         if not git("tag", "--list", f"v{version}"):
             # A docs-only fix after failed release CI must not bypass that CI.
             return set(GROUPS)
+        if any(path in CI_ROUTING_PATHS for path in paths) and all(
+            path in CI_ROUTING_PATHS or path.endswith(".md") for path in paths
+        ):
+            return {"python_quality"}
     return selected
 
 
