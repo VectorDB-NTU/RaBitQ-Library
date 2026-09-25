@@ -28,9 +28,12 @@ checks. Pushes compare the complete pushed range; pull requests compare against
 their base. Renames and deletions are included. Relevant jobs also run if
 change detection fails, so a detection error cannot silently waive a check.
 
-Release tags and manual wheel builds always run the full wheel build. An
-untagged version on `main` also forces full C++ and Python CI, even for a
-subsequent docs-only commit, before automatic publishing can proceed.
+Release tags and manual wheel builds always run the full wheel build. CI
+routing edits run the full relevant matrix on pull requests. After an already
+released version reaches `main`, a push changing only the routing files and
+Markdown reruns Python lint and selector tests without repeating platform
+builds. An untagged version on `main` still forces full C++ and Python CI,
+even for a subsequent docs-only commit, before automatic publishing can proceed.
 
 ## Publishing a release
 
