@@ -5,6 +5,10 @@ on:
     outputs:
       cpp:
         value: ${{ jobs.detect.outputs.cpp }}
+      cpp_format:
+        value: ${{ jobs.detect.outputs.cpp_format }}
+      cpp_tidy:
+        value: ${{ jobs.detect.outputs.cpp_tidy }}
       python_quality:
         value: ${{ jobs.detect.outputs.python_quality }}
       python_build:
@@ -23,6 +27,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       cpp: ${{ steps.paths.outputs.cpp }}
+      cpp_format: ${{ steps.paths.outputs.cpp_format }}
+      cpp_tidy: ${{ steps.paths.outputs.cpp_tidy }}
       python_quality: ${{ steps.paths.outputs.python_quality }}
       python_build: ${{ steps.paths.outputs.python_build }}
       shell: ${{ steps.paths.outputs.shell }}

@@ -26,22 +26,26 @@ class ChangeSelectionTest(unittest.TestCase):
     def test_shared_code_runs_cpp_and_python(self):
         for path in ("include/rabitqlib/index/ivf/ivf.hpp", "src/simd/dispatch.cpp"):
             with self.subTest(path=path):
-                self.assertEqual(classify([path]), {"cpp", "python_build", "wheels"})
+                self.assertEqual(
+                    classify([path]),
+                    {"cpp", "cpp_format", "cpp_tidy", "python_build", "wheels"},
+                )
 
     def test_language_specific_changes(self):
         cases = {
-            "tests/unit/rabitqlib/index/ivf_test.cpp": {"cpp"},
-            "sample/cpp/ivf_rabitq_querying.cpp": {"cpp"},
+            "tests/unit/rabitqlib/index/ivf_test.cpp": {"cpp", "cpp_format"},
+            "tests/dispatch/fastscan_no_simd_test.cpp": {"cpp", "cpp_format"},
+            "sample/cpp/ivf_rabitq_querying.cpp": {"cpp", "cpp_format"},
             "python_bindings/ivf_bindings.cpp": {
-                "cpp",
-                "python_quality",
+                "cpp_format",
+                "cpp_tidy",
                 "python_build",
                 "wheels",
             },
             "python_bindings/__init__.py": {"python_quality", "python_build", "wheels"},
+            "python_bindings/licenses/LLVM-OpenMP.txt": {"python_build", "wheels"},
             "tests/python/test_ivf.py": {"python_quality", "python_build", "wheels"},
             "tests/python/fixtures/ivf_legacy_4bit.index": {
-                "python_quality",
                 "python_build",
                 "wheels",
             },
@@ -52,27 +56,33 @@ class ChangeSelectionTest(unittest.TestCase):
             },
             ".github/scripts/prepare_release.py": {"python_quality"},
             "scripts/check-python.sh": {"shell", "python_quality"},
-            "scripts/check-tidy.sh": {"shell", "cpp"},
+            "scripts/check-tidy.sh": {"shell", "cpp_tidy"},
+            "scripts/check-format.sh": {"shell", "cpp_format"},
+            "scripts/check-includes.sh": {"shell"},
+            ".clang-format": {"cpp_format"},
+            ".clang-tidy": {"cpp_tidy"},
+            ".github/workflows/test.yaml": {"cpp", "cpp_format", "cpp_tidy"},
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(classify([path]), expected)
 
-    def test_build_configuration_checks_both_languages(self):
-        for path in (
-            "pyproject.toml",
-            "CMakeLists.txt",
-            "cmake/RaBitQLibConfig.cmake.in",
-        ):
-            self.assertEqual(
-                classify([path]), {"cpp", "python_quality", "python_build", "wheels"}
-            )
+    def test_build_configuration_selects_affected_checks(self):
+        self.assertEqual(
+            classify(["pyproject.toml"]),
+            {"python_quality", "python_build", "wheels"},
+        )
+        for path in ("CMakeLists.txt", "cmake/RaBitQLibConfig.cmake.in"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    classify([path]), {"cpp", "cpp_tidy", "python_build", "wheels"}
+                )
 
     def test_mixed_changes_and_renamed_source(self):
         self.assertIn("cpp", classify(["docs/new.md", "src/deleted.cpp"]))
         self.assertEqual(
             classify(["sample/python/tool.py", "tests/unit/example.cpp"]),
-            {"cpp", "python_quality", "python_build", "wheels"},
+            {"cpp", "cpp_format", "python_quality", "python_build", "wheels"},
         )
 
     def test_unknown_inputs_and_filter_edits_run_everything(self):

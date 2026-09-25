@@ -6,7 +6,17 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-GROUPS = ("cpp", "python_quality", "python_build", "shell", "wheels")
+GROUPS = (
+    "cpp",
+    "cpp_format",
+    "cpp_tidy",
+    "python_quality",
+    "python_build",
+    "shell",
+    "wheels",
+)
+
+CPP_SUFFIXES = (".c", ".cc", ".cpp", ".h", ".hpp")
 
 
 def classify(paths):
@@ -23,19 +33,24 @@ def classify(paths):
             ".editorconfig",
         ):
             return set(GROUPS)
-        if path in ("CMakeLists.txt", "pyproject.toml") or path.startswith("cmake/"):
-            selected.update(("cpp", "python_quality", "python_build", "wheels"))
-        elif path.startswith(("include/", "src/")):
-            selected.update(("cpp", "python_build", "wheels"))
-        elif path.startswith("python_bindings/"):
+        if path == "pyproject.toml":
             selected.update(("python_quality", "python_build", "wheels"))
-            if not path.endswith(".py"):
-                selected.add("cpp")
+        elif path == "CMakeLists.txt" or path.startswith("cmake/"):
+            selected.update(("cpp", "cpp_tidy", "python_build", "wheels"))
+        elif path.startswith(("include/", "src/")):
+            selected.update(("cpp", "cpp_format", "cpp_tidy", "python_build", "wheels"))
+        elif path.startswith("python_bindings/"):
+            selected.update(("python_build", "wheels"))
+            if path.endswith(".py"):
+                selected.add("python_quality")
+            elif path.endswith(CPP_SUFFIXES):
+                selected.update(("cpp_format", "cpp_tidy"))
         elif (
             path.startswith(
                 (
                     "tests/unit/",
                     "tests/integration/",
+                    "tests/dispatch/",
                     "tests/common/",
                     "tests/consumer/",
                     "sample/cpp/",
@@ -44,24 +59,34 @@ def classify(paths):
             or path == "tests/CMakeLists.txt"
         ):
             selected.add("cpp")
-        elif path.startswith(("tests/python/", "sample/python/")):
+            if path.endswith(CPP_SUFFIXES):
+                selected.add("cpp_format")
+        elif path.startswith("tests/python/"):
+            selected.update(("python_build", "wheels"))
+            if path.endswith(".py"):
+                selected.add("python_quality")
+        elif path.startswith("sample/python/"):
             selected.update(("python_quality", "python_build", "wheels"))
         elif path.startswith(("python/", ".github/scripts/")):
             selected.add("python_quality")
         elif path == ".github/workflows/test.yaml":
-            selected.update(("cpp", "shell"))
+            selected.update(("cpp", "cpp_format", "cpp_tidy"))
         elif path == ".github/workflows/python.yml":
             selected.update(("python_quality", "python_build"))
         elif path == ".github/workflows/release.yml":
             selected.update(("python_quality", "wheels"))
-        elif path in (".clang-format", ".clang-tidy"):
-            selected.add("cpp")
+        elif path == ".clang-format":
+            selected.add("cpp_format")
+        elif path == ".clang-tidy":
+            selected.add("cpp_tidy")
         elif path.startswith("scripts/") and path.endswith(".sh"):
             selected.add("shell")
             if path == "scripts/check-python.sh":
                 selected.add("python_quality")
-            else:
-                selected.add("cpp")
+            elif path == "scripts/check-tidy.sh":
+                selected.add("cpp_tidy")
+            elif path != "scripts/check-includes.sh":
+                selected.add("cpp_format")
         else:
             # Unknown inputs may affect builds; never silently skip their checks.
             return set(GROUPS)

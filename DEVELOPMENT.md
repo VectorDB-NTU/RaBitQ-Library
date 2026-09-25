@@ -90,9 +90,9 @@ whether validation was focused or complete.
 
 ### Include dependency reports
 
-The **Include cleaner (advisory)** job uses clang-tidy's `misc-include-cleaner`
-check to report missing and unused includes. CI uses `ubuntu-latest` and
-unversioned distribution packages:
+The optional include dependency check uses clang-tidy's
+`misc-include-cleaner` to report missing and unused includes. Run it locally when
+reviewing include changes. On Ubuntu, install unversioned distribution packages:
 
 ```bash
 sudo apt-get update
@@ -135,8 +135,7 @@ Vendored files are excluded. The script also ignores suggestions to include
 Eigen and hnswlib implementation headers behind their existing public headers;
 these vendor snapshots lack the export annotations needed by include-cleaner.
 `INCLUDE_JOBS` controls parallelism (default: 2).
-The script fails for findings or analyzer errors; CI keeps this step advisory
-and uploads the `include-report` artifact without modifying files.
+The script fails for findings or analyzer errors and does not modify files.
 
 Review suggestions before applying them, especially for templates and public
 forwarding headers. For a source file, automatic fixes can be applied with:
