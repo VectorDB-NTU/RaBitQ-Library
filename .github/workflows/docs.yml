@@ -16,6 +16,9 @@ concurrency:
   group: documentation-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build documentation

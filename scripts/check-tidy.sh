@@ -75,6 +75,37 @@ for header in "${first_party_headers[@]}"; do
 done
 header_filter+=")$"
 
+source_filter="^$repo_root/(src|python_bindings|sample|tests)/"
+if [[ -n "${TIDY_SHARD_INDEX:-}" || -n "${TIDY_SHARD_COUNT:-}" ]]; then
+    source_filter="$(python - "$build_dir/compile_commands.json" "$repo_root" \
+        "${TIDY_SHARD_INDEX:-}" "${TIDY_SHARD_COUNT:-}" <<'PYCODE'
+import json
+import re
+import sys
+from pathlib import Path
+
+database, root, index, count = sys.argv[1:]
+root = Path(root).resolve()
+index, count = int(index), int(count)
+if count < 1 or not 0 <= index < count:
+    raise SystemExit("error: invalid clang-tidy shard index or count")
+
+entries = json.loads(Path(database).read_text())
+sources = set()
+for entry in entries:
+    path = (Path(entry["directory"]) / entry["file"]).resolve()
+    if path.is_relative_to(root) and path.relative_to(root).parts[0] in {
+        "src", "python_bindings", "sample", "tests"
+    }:
+        sources.add(path)
+shard = sorted(sources)[index::count]
+if not shard:
+    raise SystemExit("error: clang-tidy shard has no translation units")
+print("^(" + "|".join(re.escape(str(path)) for path in shard) + ")$")
+PYCODE
+    )"
+fi
+
 tidy_output="$(mktemp)"
 if [[ -z "$tidy_output" || ! -f "$tidy_output" ]]; then
     echo "error: could not create a temporary clang-tidy output file" >&2
@@ -87,10 +118,14 @@ if ! "$tidy_runner" \
     -p "$build_dir" \
     -header-filter="^$header_filter" \
     "${extra_args[@]}" \
-    "^$repo_root/(src|python_bindings|sample|tests)/" \
+    "$source_filter" \
     >"$tidy_output" 2>&1; then
     cat "$tidy_output" >&2
     exit 1
 fi
 
-echo "clang-tidy passed for all configured first-party translation units"
+if [[ -n "${TIDY_SHARD_INDEX:-}" ]]; then
+    echo "clang-tidy passed for shard $TIDY_SHARD_INDEX of $TIDY_SHARD_COUNT"
+else
+    echo "clang-tidy passed for all configured first-party translation units"
+fi
