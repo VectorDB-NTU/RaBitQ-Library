@@ -35,6 +35,10 @@
 
 ## News
 
+- **September 2026 — Linux ARM64 support:** Native AArch64 C++ tests and
+  CPython 3.11–3.14 wheel builds cover NEON kernels and all three indexes.
+  See the [platform requirements](docs/docs/quick_start.md#requirements).
+
 - **September 2026 — Apple Silicon support:** macOS ARM64 joins Linux and
   Windows x86-64, with NEON kernels and CPython 3.11–3.14 wheel builds for
   macOS 14+. See the [platform requirements](docs/docs/quick_start.md#requirements).
@@ -58,10 +62,12 @@
 python -m pip install --upgrade rabitqlib
 ```
 
-Wheels: CPython 3.11–3.14 on Linux and Windows x86-64, and macOS 14+ ARM64
-(Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512 acceleration;
-ARM64 uses NEON and portable scalar kernels. macOS wheels bundle OpenMP;
-Intel Mac and universal2 wheels are not provided.
+Wheels: CPython 3.11–3.14 on Linux x86-64 and ARM64, Windows x86-64, and
+macOS 14+ ARM64 (Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512
+acceleration; ARM64 uses NEON and portable scalar kernels. Linux ARM64 and
+macOS wheels bundle OpenMP. Linux ARM64 wheels use a `manylinux_2_28` build
+image; check each wheel's tags for its glibc compatibility. Intel Mac and
+universal2 wheels are not provided.
 
 ## Python quick start
 
@@ -237,7 +243,7 @@ and HNSW implementations, with links to the source code.
 
 - CMake 3.20 or newer
 - a C++17 compiler with OpenMP support
-- an x86-64 CPU with AVX2 and FMA, or an Apple Silicon Mac
+- an x86-64 CPU with AVX2 and FMA, or an ARM64 CPU on Linux or macOS
 
 Clone and build the library and example programs:
 
@@ -250,9 +256,8 @@ cmake --build build --parallel
 ```
 
 For MSVC, follow the [Windows build instructions](tests/README.md#prerequisites).
-For Apple Silicon source builds, see the [macOS ARM64 instructions](tests/README.md#macos-arm64).
-The ARM kernel sources use portable AArch64 intrinsics, but macOS tests do not
-establish Linux ARM64 support.
+For ARM64 source builds, see the [Linux ARM64](tests/README.md#linux-arm64)
+and [macOS ARM64](tests/README.md#macos-arm64) instructions.
 Local GCC/Clang builds enable `-march=native` by default; set
 `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for portable binaries, as release
 wheels do. See [CPU dispatch details](DEVELOPMENT.md#dispatch-conventions-and-coverage)

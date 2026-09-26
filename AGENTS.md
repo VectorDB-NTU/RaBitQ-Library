@@ -8,7 +8,8 @@ where present. Keep this file current when the paths, commands, or contracts bel
 RaBitQ-Library is a C++17 library with Python bindings (`rabitqlib`) for compact vector
 quantization and approximate nearest-neighbor search. It provides one-bit and multi-bit RaBitQ
 encoding and IVF, HNSW, and SymphonyQG indexes. It targets x86-64 with runtime AVX2/AVX-512
-dispatch and macOS ARM64 with NEON and portable scalar kernels. Linux AArch64 requires separate platform validation.
+dispatch and Linux/macOS ARM64 with NEON and portable scalar kernels. Native Linux AArch64
+C++ and installed-wheel CI validate that platform.
 RaBitQ rotates vectors and quantizes residuals relative to centroids; compact codes and correction
 factors estimate L2 distance or inner product.
 

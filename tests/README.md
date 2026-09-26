@@ -8,7 +8,7 @@ binding tests for RaBitQ Library.
 - CMake 3.20 or newer for the `ctest --test-dir` commands below (4.2 or newer
   for the Visual Studio 2026 generator)
 - A C++17 compiler with OpenMP support (GCC, Clang, or Visual Studio 2026)
-- An x86-64 CPU with AVX2 and FMA (AVX-512 optional), or an Apple Silicon Mac
+- An x86-64 CPU with AVX2 and FMA (AVX-512 optional), or an ARM64 CPU on Linux or macOS
 - Git and network access during the first configuration so CMake can download
   GoogleTest 1.14.0
 
@@ -45,6 +45,25 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
+#### Linux ARM64
+
+Use a native AArch64 host with CMake, Ninja, a C++17 compiler, and OpenMP.
+From the repository root:
+
+```bash
+test "$(uname -m)" = aarch64
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=OFF \
+  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+cmake --build build --parallel 2
+OMP_NUM_THREADS=2 ctest --test-dir build --output-on-failure
+```
+
+Native Linux ARM64 CI runs the C++ suite and installed CMake consumer. Its wheel
+job builds and tests repaired CPython 3.11–3.14 wheels. Set
+`RABITQ_TEST_WHEEL=1` after installing a repaired wheel locally to check the
+AArch64 extension and bundled OpenMP runtime. AVX backend tests skip on ARM.
+
 #### macOS ARM64
 
 Use a native ARM64 project Python environment. Install CMake, Ninja and the existing
@@ -62,8 +81,7 @@ OMP_NUM_THREADS=2 ctest --test-dir build --output-on-failure
 
 An environment providing `llvm-openmp` can use its prefix as `OpenMP_ROOT` instead.
 CMake excludes AVX source files on ARM64. Reference tests run through generic and
-NEON kernels; explicit AVX backend tests are guarded or skipped. Linux AArch64
-needs its own build and execution validation.
+NEON kernels; explicit AVX backend tests are guarded or skipped.
 
 For Python source builds, pass `-Ccmake.define.OpenMP_ROOT=<libomp-prefix>` as well
 as the native-optimization setting below. Release CI uses native `macos-14` runners,

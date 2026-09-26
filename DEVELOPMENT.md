@@ -317,9 +317,9 @@ covers its arithmetic kernels, not every scalar loop in construction and search.
 
 Portable wheels disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. ARM64 builds exclude all
 x86 source groups and use standard AArch64 NEON intrinsics, without Apple-only APIs.
-macOS ARM64 has native C++ and installed-wheel CI. Linux ARM64 still requires separate
-platform verification. The reference suites also exercise portable scalar kernels on x86, including
-byte-for-byte packing parity with the selected x86 backend.
+macOS and Linux ARM64 have native C++ and installed-wheel CI. The reference suites
+also exercise portable scalar kernels on x86, including byte-for-byte packing parity
+with the selected x86 backend.
 
 ### Change quantization or packing
 

@@ -6,7 +6,8 @@
 accurate vector quantization and approximate nearest-neighbor search.
 
 Build with the low-level quantizer or use complete IVF, HNSW, and SymphonyQG
-indexes on Linux and Windows x86-64, or macOS ARM64 (Apple Silicon).
+indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
+(Apple Silicon).
 
 [Get started](quick_start.md){ .md-button .md-button--primary }
 [View on GitHub](https://github.com/VectorDB-NTU/RaBitQ-Library){ .md-button }
@@ -23,7 +24,7 @@ indexes on Linux and Windows x86-64, or macOS ARM64 (Apple Silicon).
   </div>
   <div class="feature-card">
     <h2>Fast on modern CPUs</h2>
-    <p>Use AVX2/AVX-512 kernels on x86-64 and NEON on Apple Silicon. IVF and
+    <p>Use AVX2/AVX-512 kernels on x86-64 and NEON on ARM64. IVF and
     SymphonyQG use FastScan for batched distance estimation.</p>
   </div>
   <div class="feature-card">
