@@ -100,6 +100,52 @@ jobs:
           BUILD_RESULT: ${{ needs.linux-wheel-build.result }}
         run: test "$BUILD_RESULT" = success
 
+  linux-arm64-wheel-build:
+    name: Linux ARM64 ${{ matrix.abi }} wheel
+    needs: [prepare, changes]
+    if: >-
+      !cancelled() && needs.prepare.result == 'success' &&
+      needs.prepare.outputs.build == 'true' &&
+      (needs.changes.result != 'success' || needs.changes.outputs.wheels == 'true')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: ${{ fromJSON(github.event_name == 'pull_request' && '["cp311","cp314"]' || '["cp311","cp312","cp313","cp314"]') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Verify native ARM64 runner
+        run: test "$(uname -m)" = aarch64
+      - name: Build and test repaired wheel
+        uses: pypa/cibuildwheel@v4.2.0
+        env:
+          CIBW_BUILD: ${{ matrix.abi }}-manylinux_aarch64
+        with:
+          output-dir: wheelhouse
+      - name: Store wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-arm64-${{ matrix.abi }}-wheels
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  linux-arm64-wheels:
+    name: Linux ARM64 wheels (CPython 3.11–3.14)
+    needs: linux-arm64-wheel-build
+    if: ${{ always() && !cancelled() && needs.linux-arm64-wheel-build.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all selected wheels
+        env:
+          BUILD_RESULT: ${{ needs.linux-arm64-wheel-build.result }}
+        run: test "$BUILD_RESULT" = success
+
   windows-wheel-build:
     name: Windows x86-64 ${{ matrix.abi }} wheel
     needs: [prepare, changes]
@@ -193,7 +239,7 @@ jobs:
 
   release-tag:
     name: Create version tag
-    needs: [prepare, linux-wheels, windows-wheels, macos-wheels]
+    needs: [prepare, linux-wheels, linux-arm64-wheels, windows-wheels, macos-wheels]
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
@@ -222,7 +268,7 @@ jobs:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
-    needs: [prepare, linux-wheels, windows-wheels, macos-wheels, release-tag]
+    needs: [prepare, linux-wheels, linux-arm64-wheels, windows-wheels, macos-wheels, release-tag]
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -249,7 +295,7 @@ jobs:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_run') &&
       needs.prepare.outputs.publish == 'true'
-    needs: [prepare, linux-wheels, windows-wheels, macos-wheels, pypi-publish]
+    needs: [prepare, linux-wheels, linux-arm64-wheels, windows-wheels, macos-wheels, pypi-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write

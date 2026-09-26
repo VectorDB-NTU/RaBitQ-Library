@@ -182,6 +182,37 @@ jobs:
       - name: Test downstream consumer
         run: ctest --test-dir build-consumer --output-on-failure
 
+  linux-arm64:
+    name: Native Linux ARM64 C++
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build tools
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Configure portable ARM64 build
+        run: |
+          test "$(uname -m)" = aarch64
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=OFF \
+            -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+          ! grep -E -- '-mavx|_avx[25].*\.cpp' build/compile_commands.json
+      - name: Build and run C++ tests
+        run: |
+          cmake --build build --parallel 2
+          ctest --test-dir build --output-on-failure
+      - name: Test installed CMake package
+        run: |
+          cmake --install build --prefix "$RUNNER_TEMP/rabitq-install"
+          cmake -S tests/consumer -B build-consumer -G Ninja \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/rabitq-install"
+          cmake --build build-consumer --parallel 2
+          ctest --test-dir build-consumer --output-on-failure
+
   macos-arm64:
     name: Native Apple Silicon C++
     needs: changes

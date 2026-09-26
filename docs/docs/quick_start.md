@@ -8,6 +8,7 @@ a C++17 API for both indexes and low-level quantization.
 | Platform | CPU baseline | Python wheel targets |
 | --- | --- | --- |
 | Linux x86-64 | AVX2 and FMA | CPython 3.11–3.14 |
+| Linux ARM64 (AArch64) | NEON | CPython 3.11–3.14 |
 | Windows x86-64 | AVX2 and FMA | CPython 3.11–3.14 |
 | macOS 14+ ARM64 (Apple Silicon) | NEON | CPython 3.11–3.14 |
 
@@ -16,8 +17,9 @@ Windows uses MSVC (Visual Studio 2026 with the Desktop development with C++
 workload and CMake 4.2+ for its generator). Apple Silicon uses AppleClang and
 an external OpenMP runtime such as Homebrew `libomp`.
 
-Linux AArch64 still requires separate platform validation. Intel Mac and
-universal2 wheels are not provided.
+Linux ARM64 source builds and repaired wheels run on native AArch64 CI.
+The Linux ARM64 wheel targets glibc 2.28 or newer. Intel Mac and universal2
+wheels are not provided.
 
 <details>
 <summary>CPU dispatch details</summary>
@@ -42,7 +44,8 @@ python -m pip install rabitqlib
 ```
 
 Wheels target the platforms above and require no compiler or CMake.
-macOS ARM64 wheels bundle OpenMP, so wheel users do not need Homebrew.
+Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
+need a separate OpenMP installation.
 Release wheels disable native CPU tuning and select supported kernels at runtime.
 
 ### Build and search an IVF index
@@ -146,7 +149,7 @@ CMake enables native CPU tuning by default where supported by the compiler.
 For portable binaries within a supported OS and architecture, configure with
 `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; runtime kernel selection remains active.
 See the [platform-specific build commands](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/README.md#quick-start)
-for Windows and Apple Silicon.
+for Linux ARM64, Windows, and Apple Silicon.
 
 Example executables are written to `bin/`. Their source demonstrates complete
 indexing and querying workflows:
