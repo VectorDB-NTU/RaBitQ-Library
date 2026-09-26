@@ -1201,8 +1201,8 @@ Windows uses MSVC (Visual Studio 2026 with the Desktop development with C++
 workload and CMake 4.2+ for its generator). Apple Silicon uses AppleClang and
 an external OpenMP runtime such as Homebrew <code>libomp</code>.</p>
 <p>Linux ARM64 source builds and repaired wheels run on native AArch64 CI.
-The Linux ARM64 wheels use a <code>manylinux_2_28</code> build image; auditwheel assigns
-the final glibc compatibility tags. Intel Mac and universal2 wheels are not provided.</p>
+Linux ARM64 wheels carry <code>manylinux_2_27_aarch64</code> and
+<code>manylinux_2_28_aarch64</code> tags.</p>
 <details>
 <summary>CPU dispatch details</summary>
 
