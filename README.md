@@ -35,26 +35,15 @@
 
 ## News
 
-- **September 2026 — Linux ARM64 support:** Native AArch64 C++ tests and
-  CPython 3.11–3.14 wheel builds cover NEON kernels and all three indexes.
-  See the [platform requirements](docs/docs/quick_start.md#requirements).
+- **September 2026 — Platform support:** CPython 3.11–3.14 wheels cover Linux
+  x86-64 and ARM64, Windows x86-64, and macOS 14+ ARM64. C++ source builds are
+  validated on these platforms. See the
+  [platform requirements](docs/docs/quick_start.md#requirements).
 
-- **September 2026 — Apple Silicon support:** macOS ARM64 joins Linux and
-  Windows x86-64, with NEON kernels and CPython 3.11–3.14 wheel builds for
-  macOS 14+. See the [platform requirements](docs/docs/quick_start.md#requirements).
-
-- **September 2026 — Windows x86-64 support:** C++ and Python source builds now
-  support MSVC, runtime AVX2/AVX-512 dispatch, and Unicode index paths. Windows
-  wheels are available for CPython 3.11–3.14. For source builds, see the
-  [Windows build instructions](tests/README.md#prerequisites).
-
-- **September 2026 — IVF raw-vector reranking:** Use `nbits=32` for float32
-  reranking. Quantized IVF automatically selects HACC for 4–9-bit codes.
-  See the [IVF documentation](docs/docs/index/ivf.md).
-
-- **September 2026 — Quantized SymphonyQG:** Set `quantization_bits=4` or `8`
-  for compact vector storage; raw vectors remain the default.
-  See the [SymphonyQG documentation](docs/docs/index/qg.md).
+- **September 2026 — txtai integration:** [txtai](https://github.com/neuml/txtai)
+  now includes `rabitqlib` as an ANN backend with IVF and HNSW modes. See its
+  [RaBitQ configuration](https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq)
+  and the [integration discussion](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/110).
 
 ## Install
 
@@ -65,9 +54,8 @@ python -m pip install --upgrade rabitqlib
 Wheels: CPython 3.11–3.14 on Linux x86-64 and ARM64, Windows x86-64, and
 macOS 14+ ARM64 (Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512
 acceleration; ARM64 uses NEON and portable scalar kernels. Linux ARM64 and
-macOS wheels bundle OpenMP. Linux ARM64 wheels use a `manylinux_2_28` build
-image; check each wheel's tags for its glibc compatibility. Intel Mac and
-universal2 wheels are not provided.
+macOS wheels bundle OpenMP. Linux ARM64 wheels carry
+`manylinux_2_27_aarch64` and `manylinux_2_28_aarch64` tags.
 
 ## Python quick start
 

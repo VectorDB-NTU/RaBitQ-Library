@@ -111,6 +111,10 @@ University.
 
 ## Used across the vector-search ecosystem
 
+[txtai](https://github.com/neuml/txtai) uses `rabitqlib` directly as an ANN
+backend with IVF and HNSW modes. See its
+[RaBitQ configuration](https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq).
+
 RaBitQ has been adopted by projects including
 [Milvus](https://github.com/milvus-io/milvus),
 [Faiss](https://github.com/facebookresearch/faiss),
