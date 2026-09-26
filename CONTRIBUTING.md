@@ -38,11 +38,12 @@ Run any examples you add or change, including examples inside Markdown.
 
 ## Setup for code changes
 
-Source builds support x86-64 with AVX2/FMA (AVX-512 optional) and macOS ARM64
-with NEON. They need CMake 3.20 or newer, a C++17 compiler, and OpenMP.
-Windows x86-64 uses Visual Studio 2026; Linux AArch64 needs separate platform
-validation. See the [platform-specific build instructions](tests/README.md#quick-start)
-for Windows and [Apple Silicon](tests/README.md#macos-arm64).
+Source builds support Linux and Windows x86-64 with AVX2/FMA (AVX-512
+optional), and Linux and macOS ARM64 with NEON. They need CMake 3.20 or newer,
+a C++17 compiler, and OpenMP. Windows x86-64 uses Visual Studio 2026. See the
+[platform-specific build instructions](tests/README.md#quick-start) for
+[Linux ARM64](tests/README.md#linux-arm64) and
+[Apple Silicon](tests/README.md#macos-arm64).
 Documentation-only contributions do not need this hardware or compiler setup.
 
 On Ubuntu or Debian:
@@ -150,7 +151,7 @@ for details.
 | Problem | What to check |
 | --- | --- |
 | CMake cannot find OpenMP or a compiler | Check the [platform-specific prerequisites](tests/README.md#prerequisites). On Apple Silicon, install `libomp` and pass its prefix as `OpenMP_ROOT`. Include the compiler version and CMake error when asking for help. |
-| Unsupported CPU or architecture | Use x86-64 with AVX2/FMA or macOS ARM64 with NEON. Linux AArch64 still needs platform validation; disabling native tuning alone does not establish support. Report your CPU model in the issue or PR. |
+| Unsupported CPU or architecture | Use Linux or Windows x86-64 with AVX2/FMA, or Linux or macOS ARM64 with NEON. Disabling native tuning does not add an unsupported architecture. Report your CPU model in the issue or PR. |
 | Tests do not reflect your Python or C++ edits | Re-run the platform-specific install command above in the active environment, then check the import paths below. Re-run the regression test that exercises your change. |
 | Formatting or analysis reports the wrong tool version | Use the pinned versions and executable overrides in the [development reference](DEVELOPMENT.md). |
 

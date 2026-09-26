@@ -88,7 +88,7 @@ as the native-optimization setting below. Release CI uses native `macos-14` runn
 builds CPython 3.11–3.14 ARM64 wheels, bundles OpenMP with delocate, then installs and
 runs the full Python suite for each wheel. The minimum wheel OS target is macOS 14.
 Set `RABITQ_TEST_WHEEL=1` when testing a repaired wheel locally to also check its
-ARM64 extension and bundled OpenMP loader path. Intel and universal2 wheels are excluded.
+ARM64 extension and bundled OpenMP loader path.
 
 The combined executable is `build/tests/Release/rabitq_tests.exe` on Windows
 and `build/tests/rabitq_tests` on Linux/macOS. To run a subset, add `-R <pattern>` to
