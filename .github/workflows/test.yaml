@@ -7,6 +7,8 @@ on:
 concurrency:
   group: ${{ github.head_ref || github.sha }}-${{ github.workflow }}
   cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
   changes:
     uses: ./.github/workflows/changes.yml
@@ -26,12 +28,19 @@ jobs:
       - name: Check formatting
         run: ./scripts/check-format.sh
 
-  clang-tidy:
+  clang-tidy-shard:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp_tidy == 'true') }}
-    name: C++ static analysis
+    name: C++ static analysis shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    env:
+      TIDY_SHARD_INDEX: ${{ matrix.shard }}
+      TIDY_SHARD_COUNT: "2"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -54,6 +63,17 @@ jobs:
           -Dpybind11_DIR="$pybind11_DIR"
       - name: Run clang-tidy
         run: ./scripts/check-tidy.sh build-tidy
+
+  clang-tidy:
+    name: C++ static analysis
+    needs: clang-tidy-shard
+    if: ${{ always() && !cancelled() && needs.clang-tidy-shard.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both shards
+        env:
+          BUILD_RESULT: ${{ needs.clang-tidy-shard.result }}
+        run: test "$BUILD_RESULT" = success
 
   shellcheck:
     needs: changes
@@ -141,15 +161,19 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
-      - name: Build and install RaBitQ-Library
+      - name: Build RaBitQ-Library with portable tests
         run: |
           cmake -S . -B build-install -G Ninja \
             -DRABITQ_BUILD_SAMPLES=OFF \
+            -DRABITQ_BUILD_TESTS=ON \
             -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="$PWD/rabitqlib-install"
           cmake --build build-install
-          cmake --install build-install
+      - name: Test portable Release build
+        run: ctest --test-dir build-install --output-on-failure
+      - name: Install RaBitQ-Library
+        run: cmake --install build-install
       - name: Build downstream consumer
         run: |
           cmake -S tests/consumer -B build-consumer -G Ninja \

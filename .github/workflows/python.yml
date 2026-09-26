@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.head_ref || github.sha }}-${{ github.workflow }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   changes:
     uses: ./.github/workflows/changes.yml
