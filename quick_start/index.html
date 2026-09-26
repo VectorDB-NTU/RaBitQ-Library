@@ -1180,6 +1180,11 @@ a C++17 API for both indexes and low-level quantization.</p>
 <td>CPython 3.11–3.14</td>
 </tr>
 <tr>
+<td>Linux ARM64 (AArch64)</td>
+<td>NEON</td>
+<td>CPython 3.11–3.14</td>
+</tr>
+<tr>
 <td>Windows x86-64</td>
 <td>AVX2 and FMA</td>
 <td>CPython 3.11–3.14</td>
@@ -1195,8 +1200,9 @@ a C++17 API for both indexes and low-level quantization.</p>
 Windows uses MSVC (Visual Studio 2026 with the Desktop development with C++
 workload and CMake 4.2+ for its generator). Apple Silicon uses AppleClang and
 an external OpenMP runtime such as Homebrew <code>libomp</code>.</p>
-<p>Linux AArch64 still requires separate platform validation. Intel Mac and
-universal2 wheels are not provided.</p>
+<p>Linux ARM64 source builds and repaired wheels run on native AArch64 CI.
+The Linux ARM64 wheels use a <code>manylinux_2_28</code> build image; auditwheel assigns
+the final glibc compatibility tags. Intel Mac and universal2 wheels are not provided.</p>
 <details>
 <summary>CPU dispatch details</summary>
 
@@ -1216,7 +1222,8 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>rabitqlib
 </code></pre></div>
 <p>Wheels target the platforms above and require no compiler or CMake.
-macOS ARM64 wheels bundle OpenMP, so wheel users do not need Homebrew.
+Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
+need a separate OpenMP installation.
 Release wheels disable native CPU tuning and select supported kernels at runtime.</p>
 <h3 id="build-and-search-an-ivf-index">Build and search an IVF index<a class="headerlink" href="#build-and-search-an-ivf-index" title="Permanent link">&para;</a></h3>
 <p>The following complete example uses deterministic synthetic data and does not
@@ -1302,7 +1309,7 @@ also pass `-Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`.
 For portable binaries within a supported OS and architecture, configure with
 <code>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code>; runtime kernel selection remains active.
 See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/README.md#quick-start">platform-specific build commands</a>
-for Windows and Apple Silicon.</p>
+for Linux ARM64, Windows, and Apple Silicon.</p>
 <p>Example executables are written to <code>bin/</code>. Their source demonstrates complete
 indexing and querying workflows:</p>
 <ul>
