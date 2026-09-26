@@ -18,8 +18,8 @@ workload and CMake 4.2+ for its generator). Apple Silicon uses AppleClang and
 an external OpenMP runtime such as Homebrew `libomp`.
 
 Linux ARM64 source builds and repaired wheels run on native AArch64 CI.
-The Linux ARM64 wheel targets glibc 2.28 or newer. Intel Mac and universal2
-wheels are not provided.
+The Linux ARM64 wheels use a `manylinux_2_28` build image; auditwheel assigns
+the final glibc compatibility tags. Intel Mac and universal2 wheels are not provided.
 
 <details>
 <summary>CPU dispatch details</summary>

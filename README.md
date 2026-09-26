@@ -65,8 +65,9 @@ python -m pip install --upgrade rabitqlib
 Wheels: CPython 3.11–3.14 on Linux x86-64 and ARM64, Windows x86-64, and
 macOS 14+ ARM64 (Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512
 acceleration; ARM64 uses NEON and portable scalar kernels. Linux ARM64 and
-macOS wheels bundle OpenMP. Linux ARM64 wheels require glibc 2.28 or newer;
-Intel Mac and universal2 wheels are not provided.
+macOS wheels bundle OpenMP. Linux ARM64 wheels use a `manylinux_2_28` build
+image; check each wheel's tags for its glibc compatibility. Intel Mac and
+universal2 wheels are not provided.
 
 ## Python quick start
 
