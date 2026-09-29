@@ -688,7 +688,10 @@ TEST(QGConstructionTest, CopiedCacheOwnsItsQueryStorage) {
 }
 
 TEST(QGConstructionTest, CachedResetMatchesFreshConstruction) {
-    constexpr size_t kCount = 65;
+    // Keep more candidates than the degree bound so construction still prunes,
+    // without making every reset repeat a large graph build.
+    constexpr size_t kCount = 41;
+    constexpr size_t kEfBuild = 40;
     for (auto init : {QGInitialization::Random, QGInitialization::PiPNN}) {
         for (size_t dim : {65U, 1025U}) {
             for (auto metric : {METRIC_L2, METRIC_IP}) {
@@ -703,7 +706,7 @@ TEST(QGConstructionTest, CachedResetMatchesFreshConstruction) {
                     QuantizedGraph<float> cached(
                         kCount, dim, 32, metric, RotatorType::FhtKacRotator, bits, 42
                     );
-                    QGBuilder builder(cached, 64, data.data(), 1, init, 42, true);
+                    QGBuilder builder(cached, kEfBuild, data.data(), 1, init, 42, true);
                     for (size_t iteration = 0; iteration < 3; ++iteration) {
                         SCOPED_TRACE(iteration);
                         if (iteration > 0) {
@@ -715,7 +718,7 @@ TEST(QGConstructionTest, CachedResetMatchesFreshConstruction) {
                         QuantizedGraph<float> fresh(
                             kCount, dim, 32, metric, RotatorType::FhtKacRotator, bits, 42
                         );
-                        QGBuilder fresh_builder(fresh, 64, data.data(), 1, init, 42);
+                        QGBuilder fresh_builder(fresh, kEfBuild, data.data(), 1, init, 42);
                         builder.build();
                         fresh_builder.build();
                         EXPECT_EQ(cached.entry_point(), fresh.entry_point());
