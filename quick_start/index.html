@@ -1246,8 +1246,10 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 
 <h2 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h2>
 <h3 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>rabitqlib
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.5.0"</span>
 </code></pre></div>
+<p>The clustering examples require 0.5.0 or newer. For unreleased changes,
+<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes">install from a checkout</a>.</p>
 <p>Wheels target the platforms above and require no compiler or CMake.
 Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
 need a separate OpenMP installation.

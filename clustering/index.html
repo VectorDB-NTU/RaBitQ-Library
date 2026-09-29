@@ -1223,6 +1223,8 @@
 centroid means from the original float32 data, accumulate in float64, and require
 no external clustering package. Choose the class explicitly; neither switches
 algorithms based on the cluster count.</p>
+<p>Both classes require RaBitQ Library 0.5.0 or newer; see
+<a href="../quick_start/#install">installation options</a>.</p>
 <h2 id="choose-a-method">Choose a method<a class="headerlink" href="#choose-a-method" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1432,7 +1434,7 @@ compares both methods with FAISS and requires <code>faiss-cpu</code>. Defaults a
 million 256-dimensional vectors, 4,000 centroids, and up to 25 iterations.
 Load data with <code>--input data.npy</code>, or <code>--input data.bin --d D</code> for raw row-major
 float32 data. Choose a thread count within the available hardware limit.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>sample/python/compare_with_faiss.py<span class="w"> </span>--threads<span class="w"> </span><span class="m">48</span><span class="w"> </span>--num-seeds<span class="w"> </span><span class="m">2</span><span class="w"> </span>--repeats<span class="w"> </span><span class="m">2</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>sample/python/compare_with_faiss.py<span class="w"> </span>--threads<span class="w"> </span><span class="m">48</span>
 </code></pre></div>
 <p>All three methods receive the same full dataset, iteration limit, cluster count,
 thread budget, and seed values; FAISS subsampling is disabled. This command runs
