@@ -11,6 +11,11 @@ import numpy as np
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / "sample/python/compare_with_faiss.py"
+# Detect availability without loading FAISS's native runtime in the pytest process.
+requires_faiss = pytest.mark.skipif(
+    importlib.util.find_spec("faiss") is None,
+    reason="faiss-cpu is required for the optional clustering comparison",
+)
 
 
 def run_comparison(monkeypatch, capsys, *, force_recompute):
@@ -83,6 +88,7 @@ def run_comparison(monkeypatch, capsys, *, force_recompute):
     return calls, quality
 
 
+@requires_faiss
 def test_repeated_comparison_reuses_identical_exhaustive_results(monkeypatch, capsys):
     cached_calls, cached_quality = run_comparison(
         monkeypatch, capsys, force_recompute=False
@@ -105,6 +111,7 @@ def test_default_comparison_trains_once_per_method(monkeypatch):
     assert args.repeats == 1
 
 
+@requires_faiss
 @pytest.mark.parametrize("spherical", [False, True])
 def test_native_runtimes_are_isolated(tmp_path, spherical):
     # This guard is inherited by spawned workers. It catches mixed imports even

@@ -116,8 +116,8 @@ suite includes all three indexes, quantization, persistence, and Unicode paths.
 The [Python example tests](python/test_examples.py) cover RaBitQKMeans and
 QGKMeans clustering, L2/IP indexing, saved cluster files, and queries without
 importing FAISS. The [FAISS comparison tests](python/test_compare_with_faiss.py)
-cover both clustering methods and require `faiss-cpu`; wheel CI includes it as
-a test dependency.
+cover both clustering methods and skip FAISS-dependent cases when `faiss-cpu`
+is absent; wheel CI includes it as a test dependency.
 
 The [C++ clustering example tests](python/test_cpp_clustering_examples.py) check
 saved vectors, exact labels, and compatibility with the C++ index builders.
