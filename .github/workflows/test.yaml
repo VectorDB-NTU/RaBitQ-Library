@@ -98,14 +98,26 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
       - name: Install dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build -G Ninja -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+      # The installed-consumer job runs the full portable Release suite.
+      - name: Test native build smoke coverage
+        run: >-
+          ctest --test-dir build --output-on-failure --no-tests=error
+          -R 'MatrixDispatchTest|FloatDistance|FastScan|QGKMeansTest.TrainsAndReturnsAssignmentsForFinalCentroids|RaBitQKMeansTest.FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts'
+      - name: Install example test dependencies
+        run: python -m pip install numpy pytest
+      - name: Test C++ examples
+        env:
+          RABITQ_REQUIRE_CPP_EXAMPLES: "1"
+        run: python -m pytest tests/python/test_cpp_clustering_examples.py --tb=short -q
 
   windows:
     needs: changes
@@ -172,6 +184,30 @@ jobs:
           cmake --build build-install
       - name: Test portable Release build
         run: ctest --test-dir build-install --output-on-failure
+      - name: Download pinned Intel SDE
+        run: |
+          curl --fail --location --retry 3 --max-time 120 \
+            https://downloadmirror.intel.com/924984/sde-external-10.13.1-2026-07-28-lin.tar.xz \
+            -o "$RUNNER_TEMP/sde.tar.xz"
+          echo "94e97d623fec54385686e1e7ba65ebc9941748c05ee451423948334892bf2b50  $RUNNER_TEMP/sde.tar.xz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/sde"
+          tar -xJf "$RUNNER_TEMP/sde.tar.xz" -C "$RUNNER_TEMP/sde" --strip-components=1
+      - name: Test AVX2-only and AVX-512 dispatch under emulation
+        env:
+          OMP_NUM_THREADS: "2"
+        run: |
+          simd_filter='CpuFeatures.*:FloatDistance.*:MatrixDispatchTest.*:FastScan*.*:BatchEstimatorTest.*'
+          simd_filter+=':FhtDispatchTest.*:FlipSignTest.*:KacsWalkTest.*:ExcodeIp.*:MaskIpX0Q.*'
+          simd_filter+=':PortableKernels.*:QueryPreparation.*:ScalarQuantize.*:WarmupIpX0Q.*:PackBinary.*'
+          simd_filter+=':ExplicitSimd/RabitqRescaleBackendTest.*:QGEstimatorTest.*'
+          simd_filter+=':QGKMeansTest.TrainsAndReturnsAssignmentsForFinalCentroids'
+          simd_filter+=':RaBitQKMeansTest.FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts'
+          simd_filter+=':IvfPersistenceTest.ReloadsRawAndQuantizedStorage'
+          simd_filter+=':HnswSaveTest.SuccessfulSavePreservesSearchAfterLoading'
+          for cpu_model in hsw icl; do
+            RABITQ_TEST_CPU="$cpu_model" "$RUNNER_TEMP/sde/sde64" "-$cpu_model" -- \
+              build-install/tests/rabitq_tests --gtest_filter="$simd_filter"
+          done
       - name: Install RaBitQ-Library
         run: cmake --install build-install
       - name: Build downstream consumer

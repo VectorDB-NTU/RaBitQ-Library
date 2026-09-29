@@ -3,6 +3,9 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
 
 namespace {
 
@@ -28,6 +31,28 @@ TEST(CpuFeatures, ReturnsStableResult) {
         rabitqlib::cpu::has_avx512_popcnt(),
         rabitqlib::cpu::has_avx512_core() && first.avx512vpopcntdq
     );
+}
+
+// The emulated CI runs must fail instead of silently skipping optional backends.
+TEST(CpuFeatures, MatchesRequiredEmulatedCpu) {
+    const bool avx2 = rabitqlib::cpu::has_avx2();
+    const bool avx512 = rabitqlib::cpu::has_avx512_core();
+    const bool popcnt = rabitqlib::cpu::has_avx512_popcnt();
+    const bool neon = rabitqlib::cpu::has_neon();
+    std::cout << "SIMD capabilities: AVX2/FMA=" << avx2 << " AVX512=" << avx512
+              << " AVX512_VPOPCNTDQ=" << popcnt << " NEON=" << neon << '\n';
+    const char* required = std::getenv("RABITQ_TEST_CPU");
+    if (required == nullptr) {
+        return;
+    }
+    SCOPED_TRACE(required);
+    ASSERT_TRUE(std::strcmp(required, "hsw") == 0 || std::strcmp(required, "icl") == 0)
+        << "RABITQ_TEST_CPU must be hsw or icl";
+    EXPECT_TRUE(avx2);
+    EXPECT_FALSE(neon);
+    const bool require_avx512 = std::strcmp(required, "icl") == 0;
+    EXPECT_EQ(avx512, require_avx512);
+    EXPECT_EQ(popcnt, require_avx512);
 }
 
 TEST(CpuFeatures, RequiresOsManagedAvxState) {

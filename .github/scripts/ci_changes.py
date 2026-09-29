@@ -72,8 +72,12 @@ def classify(paths):
             selected.add("cpp")
             if path.endswith(CPP_SUFFIXES):
                 selected.add("cpp_format")
+        elif path == "tests/python/test_cpp_clustering_examples.py":
+            selected.update(("cpp", "python_quality"))
         elif path.startswith("tests/python/"):
             selected.update(("python_build", "wheels"))
+            if path == "tests/python/conftest.py":
+                selected.add("cpp")
             if path.endswith(".py"):
                 selected.add("python_quality")
         elif path.startswith("sample/python/"):

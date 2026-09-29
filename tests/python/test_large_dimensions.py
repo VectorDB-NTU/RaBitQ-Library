@@ -5,7 +5,8 @@ import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 
-@pytest.mark.parametrize("dim", [4096, 16384, 16385, 65536])
+# Keep a padded dimension and the maximum across every index and metric.
+@pytest.mark.parametrize("dim", [16385, 65536])
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 @pytest.mark.parametrize("kind", ["ivf", "hnsw", "qg"])
 def test_large_dimension_round_trip(tmp_path, dim, metric, kind):

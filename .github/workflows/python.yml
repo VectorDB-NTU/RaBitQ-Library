@@ -67,8 +67,16 @@ jobs:
       - name: Build and install wheel
         run: pip install ".[test]" -v
 
-      - name: Run pytest
-        run: pytest --tb=short -q
+      # Repaired-wheel jobs run the full Python suite.
+      - name: Smoke-test source installation
+        run: >-
+          python -m pytest --tb=short -q
+          tests/python/test_import.py
+          tests/python/test_ivf.py::test_save_load_roundtrip
+          tests/python/test_hnsw.py::test_save_load_roundtrip
+          tests/python/test_symqg.py::test_save_load_roundtrip
+          tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
+          tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
 
   python-windows:
     needs: changes
@@ -84,5 +92,33 @@ jobs:
           cache: pip
       - name: Build and install package
         run: python -m pip install ".[test]" -v
-      - name: Test Python bindings
-        run: python -m pytest tests/python --tb=short -q
+      - name: Smoke-test source installation
+        run: >-
+          python -m pytest --tb=short -q
+          tests/python/test_import.py
+          tests/python/test_ivf.py::test_save_load_roundtrip
+          tests/python/test_hnsw.py::test_save_load_roundtrip
+          tests/python/test_symqg.py::test_save_load_roundtrip
+          tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
+          tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
+
+  faiss-comparison:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_build == 'true') }}
+    name: FAISS comparison script
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OMP_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake
+      - name: Install comparison dependencies
+        run: python -m pip install ".[test]" faiss-cpu
+      - name: Test comparison script
+        run: python -m pytest tests/python/test_compare_with_faiss.py --tb=short -q

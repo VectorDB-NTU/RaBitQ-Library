@@ -98,6 +98,25 @@ AVX-512 tests skip when the CPU or OS lacks the required features. Tests using
 `/dev/full` skip on Windows; native POSIX path tests compile only on their
 applicable platforms. Passing on an AVX2 machine does not verify AVX-512 execution.
 
+## CI coverage
+
+The installed-consumer job runs the full portable Linux Release suite. The Ubuntu
+native build runs SIMD and clustering smoke tests; Windows, ARM64, and ASan/UBSan
+jobs retain their full C++ suites.
+
+The portable Linux job also reuses its test binary under pinned
+[Intel SDE](https://www.intel.com/content/www/us/en/download/684897/intel-software-development-emulator.html)
+CPU models: Haswell (`-hsw`, AVX2 only) and Ice Lake (`-icl`, AVX-512 including
+VPOPCNTDQ). Kernel reference tests and small clustering/index tests exercise real
+runtime dispatch under emulation. `RABITQ_TEST_CPU` checks the emulated features
+and prints them; an incorrect CPU model fails instead of silently losing coverage.
+These are correctness checks, not hardware performance measurements.
+
+Source-install Python jobs check imports, index persistence, and both clustering
+APIs. Repaired-wheel jobs run the full core Python suite. Large-dimension Python
+cases check representative binding/persistence paths; C++ retains the exhaustive
+clustering dimension/storage matrix.
+
 ## Python tests
 
 Use an activated [project environment](../CONTRIBUTING.md#python-environment).
@@ -117,16 +136,20 @@ The [Python example tests](python/test_examples.py) cover RaBitQKMeans and
 QGKMeans clustering, L2/IP indexing, saved cluster files, and queries without
 importing FAISS. The [FAISS comparison tests](python/test_compare_with_faiss.py)
 cover both clustering methods and skip FAISS-dependent cases when `faiss-cpu`
-is absent; wheel CI includes it as a test dependency.
+is absent. CI runs them in a dedicated Linux job; wheel tests do not install FAISS.
 
 The [C++ clustering example tests](python/test_cpp_clustering_examples.py) check
 saved vectors, exact labels, and compatibility with the C++ index builders.
-Build the corresponding examples first; cases skip when their executables are absent.
+The Ubuntu C++ job runs them against its sample binaries, with
+`RABITQ_REQUIRE_CPP_EXAMPLES=1` so missing executables fail. Wheel jobs exclude
+these tests. Locally, build the examples first; missing executables otherwise skip.
 
 ## Installed CMake package test
 
 After building the library, verify that another project can consume its installed
-headers and library. Use an absolute path for `<install-prefix>`:
+headers and library. The consumer trains QGKMeans and RaBitQKMeans and checks
+final assignments, distances, and objective against a scalar L2 reference.
+Use an absolute path for `<install-prefix>`:
 
 ```text
 cmake --install build --config Release --prefix "<install-prefix>"

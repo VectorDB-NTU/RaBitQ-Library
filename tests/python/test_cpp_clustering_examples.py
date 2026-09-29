@@ -13,7 +13,10 @@ BIN = Path(__file__).resolve().parents[2] / "bin"
 def run_cpp(name, *args):
     executable = BIN / (name + (".exe" if os.name == "nt" else ""))
     if not executable.is_file():
-        pytest.skip(f"Build the C++ example target {name} first")
+        message = f"Build the C++ example target {name} first"
+        if os.environ.get("RABITQ_REQUIRE_CPP_EXAMPLES") == "1":
+            pytest.fail(message)
+        pytest.skip(message)
     return subprocess.run(
         [str(executable), *map(str, args)],
         env=dict(os.environ, OMP_THREAD_LIMIT="2", OMP_NUM_THREADS="2"),
@@ -119,3 +122,14 @@ def test_cpp_clustering_usage_and_errors(tmp_path, method):
     result = run_cpp(method, *args)
     assert result.returncode == 1
     assert "File does not exist:" in result.stderr
+
+
+@pytest.mark.parametrize("required", [False, True])
+def test_missing_cpp_example_fails_when_required(tmp_path, monkeypatch, required):
+    monkeypatch.setitem(run_cpp.__globals__, "BIN", tmp_path)
+    monkeypatch.setenv("RABITQ_REQUIRE_CPP_EXAMPLES", "1" if required else "0")
+    expected = pytest.fail.Exception if required else pytest.skip.Exception
+    with pytest.raises(
+        expected, match=r"Build the C\+\+ example target qgkmeans first"
+    ):
+        run_cpp("qgkmeans")

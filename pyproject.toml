@@ -44,8 +44,8 @@ cmake.args = [
 build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64 cp311-manylinux_aarch64 cp312-manylinux_aarch64 cp313-manylinux_aarch64 cp314-manylinux_aarch64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp311-macosx_arm64 cp312-macosx_arm64 cp313-macosx_arm64 cp314-macosx_arm64"
 build-verbosity = 1
 environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" }
-test-requires = ["pytest", "faiss-cpu"]
-test-command = "pytest {project}/tests/python --tb=short -q"
+test-requires = ["pytest"]
+test-command = "pytest {project}/tests/python --ignore={project}/tests/python/test_compare_with_faiss.py --ignore={project}/tests/python/test_cpp_clustering_examples.py --tb=short -q"
 
 [tool.cibuildwheel.linux]
 manylinux-aarch64-image = "manylinux_2_28"
