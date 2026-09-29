@@ -147,6 +147,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      # Keep assertions/debug symbols while avoiding unoptimized sanitizer loops.
       - name: Configure
         run: >-
           cmake -S . -B build-sanitizers -G Ninja
@@ -155,6 +156,7 @@ jobs:
           -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
           -DRABITQ_ENABLE_SANITIZERS=ON
           -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS_DEBUG="-O1 -g -fno-optimize-sibling-calls"
       - name: Build
         run: cmake --build build-sanitizers
       - name: Test

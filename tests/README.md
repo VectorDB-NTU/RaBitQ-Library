@@ -102,7 +102,9 @@ applicable platforms. Passing on an AVX2 machine does not verify AVX-512 executi
 
 The installed-consumer job runs the full portable Linux Release suite. The Ubuntu
 native build runs SIMD and clustering smoke tests; Windows, ARM64, and ASan/UBSan
-jobs retain their full C++ suites.
+jobs retain their full C++ suites. The sanitizer job uses Debug with
+`-O1 -g -fno-optimize-sibling-calls`, retaining assertions, frame pointers, leak
+checking, and both ASan/UBSan while avoiding unoptimized clustering loops.
 
 The portable Linux job also reuses its test binary under pinned
 [Intel SDE](https://www.intel.com/content/www/us/en/download/684897/intel-software-development-emulator.html)
