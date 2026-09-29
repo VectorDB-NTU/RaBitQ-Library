@@ -432,15 +432,27 @@ TEST(QGKMeansTest, ExactAssignmentMatchesScalarAtMaximumDimension) {
 TEST(QGKMeansTest, ExactAssignmentPreservesCallerOpenMPSettings) {
     struct SavedOpenMPSettings {
         int threads = omp_get_max_threads();
+#if _OPENMP >= 200805
         int levels = omp_get_max_active_levels();
+#else
+        int nested = omp_get_nested();
+#endif
         ~SavedOpenMPSettings() {
             omp_set_num_threads(threads);
+#if _OPENMP >= 200805
             omp_set_max_active_levels(levels);
+#else
+            omp_set_nested(nested);
+#endif
         }
     };
     const SavedOpenMPSettings saved;
     omp_set_num_threads(3);
+#if _OPENMP >= 200805
     omp_set_max_active_levels(2);
+#else
+    omp_set_nested(1);
+#endif
     constexpr size_t kDimension = 65;
     const std::vector<float> centroids(3 * kDimension, 1.0F);
     // Three rows reduce the requested team to one; 65 rows use two blocks.
@@ -463,7 +475,11 @@ TEST(QGKMeansTest, ExactAssignmentPreservesCallerOpenMPSettings) {
                 distances.data()
             );
             EXPECT_EQ(omp_get_max_threads(), 3);
+#if _OPENMP >= 200805
             EXPECT_EQ(omp_get_max_active_levels(), 2);
+#else
+            EXPECT_NE(omp_get_nested(), 0);
+#endif
         }
     }
 }
@@ -724,7 +740,7 @@ TEST(QGKMeansTest, EmptyClusterRecoveryDoesNotPerturbConstantData) {
 
 TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
     constexpr size_t kDimension = 64, kClusters = 33, kPoints = kClusters + 8;
-    const auto normalize = [](float* row) {
+    const auto normalize = [=](float* row) {
         double squared_norm = 0;
         for (size_t dim = 0; dim < kDimension; ++dim) {
             squared_norm += static_cast<double>(row[dim]) * row[dim];
@@ -971,7 +987,7 @@ TEST(QGKMeansTest, AccumulatesShiftedClusterMeansAccurately) {
 
 TEST(QGKMeansTest, FinalAssignmentsRetainACloserPreviousCluster) {
     constexpr size_t kDimension = 65, kClusters = 256, kPoints = 2048;
-    const auto normalize = [](float* row) {
+    const auto normalize = [=](float* row) {
         double norm = 0;
         for (size_t dim = 0; dim < kDimension; ++dim) {
             norm += static_cast<double>(row[dim]) * row[dim];
