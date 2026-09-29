@@ -995,6 +995,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../clustering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Clustering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1117,7 +1144,7 @@ raw vectors or quantized codes.</p>
 Quantized vectors share a rotated global centroid. Refinement temporarily
 reconstructs source vectors and estimates distances to stored target codes;
 reverse edges are rescored because these estimates are directional. Raw refinement
-uses owned raw vectors. No full reconstructed-vector cache is retained.</p>
+uses owned raw vectors. No full reconstructed-vector cache is retained by default.</p>
 <h2 id="index-construction">Index Construction<a class="headerlink" href="#index-construction" title="Permanent link">&para;</a></h2>
 <p><a href="https://dl.acm.org/doi/abs/10.1145/3770855.3817891">PiPNN</a> is the default initializer
 for fast indexing, followed by one SymphonyQG refinement iteration. Random
@@ -1138,26 +1165,34 @@ Supported metrics are <code>"l2"</code> and <code>"ip"</code>. <code>max_degree<
 and smaller than the point count. <code>ef_construction</code> controls the build search
 window; <code>ef</code> controls the query search window. Python defaults to one thread.</p>
 <h3 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h3>
-<p>The C++ API uses the float-only <code>rabitqlib::symqg::QuantizedGraph</code> and <code>QGBuilder</code>.
-<code>QuantizedGraph&lt;float&gt;</code> retains the C++ template API, with its implementation
-compiled in <code>src/index/qg.cpp</code>. C++17 variable declarations can also omit <code>&lt;float&gt;</code>
-through class template argument deduction:</p>
+<p>The C++ API provides <code>rabitqlib::symqg::QuantizedGraph&lt;float&gt;</code> and <code>QGBuilder</code>.
+Only float vectors are supported; C++17 declarations may omit <code>&lt;float&gt;</code> through
+class template argument deduction:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">max_deg</span><span class="p">,</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="n">MetricType</span><span class="w"> </span><span class="n">metric_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">METRIC_L2</span><span class="p">,</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="n">RotatorType</span><span class="w"> </span><span class="n">rotator_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RotatorType</span><span class="o">::</span><span class="n">FhtKacRotator</span><span class="p">,</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">quantization_bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">quantization_bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">seed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="p">{}()</span>
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">);</span>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">QGBuilder</span><span class="p">(</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">index</span><span class="p">,</span><span class="w"> </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">ef_build</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">(),</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="n">QGInitialization</span><span class="w"> </span><span class="n">init</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QGInitialization</span><span class="o">::</span><span class="n">PiPNN</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="p">);</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="n">QGInitialization</span><span class="w"> </span><span class="n">init</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QGInitialization</span><span class="o">::</span><span class="n">PiPNN</span><span class="p">,</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">seed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="p">{}(),</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">cache_vectors</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="p">);</span>
 </code></pre></div>
-<p><code>data</code> contains <code>num * dim</code> floats; <code>max_deg</code> has the same constraints as Python's
-<code>max_degree</code>. C++ defaults to all available threads. Pass
-<code>QGInitialization::Random</code> as the final builder argument to use random initialization.
-The builder handles initialization internally.</p>
+<p><code>data</code> contains <code>num * dim</code> floats; <code>max_deg</code> has Python's <code>max_degree</code>
+constraints. C++ defaults to all available threads. <code>build()</code> runs one refinement
+for PiPNN or three passes for <code>QGInitialization::Random</code>; <code>build(n)</code> requests
+<code>n &gt;= 2</code> passes. The older overload with a numeric fifth argument uses that value
+as the random-initialization seed.</p>
+<p><code>builder.reset(data)</code> reinitializes vectors of the same shape and reuses workspace.
+Input may be released after reset returns; rebuild before querying or saving.
+<code>cache_vectors=true</code> retains transformed vectors and query factors
+(<code>4 * num * padded_dim</code> bytes plus factors). <a href="../../clustering/#qgkmeans">QGKMeans</a> enables
+this for its centroid graph; the cache is not persisted. The graph seed controls
+rotation, and the builder seed controls random initialization and fallback edges.
+PiPNN uses fixed internal seeds.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">using</span><span class="w"> </span><span class="k">namespace</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="o">::</span><span class="nn">symqg</span><span class="p">;</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1">// data contains rows * cols floats.</span>

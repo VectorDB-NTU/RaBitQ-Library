@@ -973,6 +973,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../clustering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Clustering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1072,65 +1099,59 @@ batch of distances. Its actual memory, latency, and recall depend on the bit
 width, number of clusters, and <code>nprobe</code>.</p>
 <p>The algorithm includes two phases: indexing and querying.</p>
 <h2 id="index-construction">Index Construction<a class="headerlink" href="#index-construction" title="Permanent link">&para;</a></h2>
-<p>The first step is to run a clustering algorithm to partition raw data vectors (<code>*.fvecs</code> format) into different buckets.
-The algorithm performs KMeans clustering on raw vectors based on <a href="https://github.com/facebookresearch/faiss">Faiss</a> (see <code>python/ivf.py</code>).
-To run the algorithm, you need to execute the command in <code>shell</code>:</p>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>python/ivf.py<span class="w">  </span>/path/to/raw/data<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">                      </span>number_of_clusters<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">                      </span>/path/to/output/centroids<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">                      </span>/path/to/output/cluster_ids<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">                      </span>distance_metric
+<p>Use <a href="../../clustering/#qgkmeans">QGKMeans</a> to partition the input vectors (<code>.fvecs</code>).
+Build the C++ examples, then run <code>bin/qgkmeans</code> to save centroids and cluster IDs.
+For small cluster counts, use <code>bin/rabitqkmeans</code> for
+<a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a> flat assignment. Both use exact final
+assignment. The optional metric defaults to <code>l2</code>; append <code>ip</code> for normalized input.</p>
+<p>For example, split SIFT into 4,096 clusters using squared L2 distance:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>./bin/qgkmeans<span class="w"> </span>/data/sift/sift_base.fvecs<span class="w"> </span><span class="m">4096</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span>/data/sift/sift_centroids_4096_l2.fvecs<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span>/data/sift/sift_clusterids_4096_l2.ivecs
 </code></pre></div>
-For example, the following command splits the sift vector data into 4096 clusters using Euclidean (l2) distance:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>python/ivf.py<span class="w"> </span>/data/sift/sift_base.fvecs<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">                     </span><span class="m">4096</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">                     </span>/data/sift/sift_centroids_4096_l2.fvecs<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">                     </span>/data/sift/sift_clusterids_4096_l2.ivecs<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">                     </span>l2
-</code></pre></div></p>
 <p>After files are prepared, you need to load them into memory:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">using</span><span class="w"> </span><span class="n">data_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">RowMajorArray</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">;</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">using</span><span class="w"> </span><span class="n">gt_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">RowMajorArray</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="p">;</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">data_type</span><span class="w"> </span><span class="n">data</span><span class="p">;</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">data_type</span><span class="w"> </span><span class="n">centroids</span><span class="p">;</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">gt_type</span><span class="w"> </span><span class="n">cids</span><span class="p">;</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">load_vecs</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">data_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">data_file</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="p">);</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">load_vecs</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">data_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">centroids_file</span><span class="p">,</span><span class="w"> </span><span class="n">centroids</span><span class="p">);</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">load_vecs</span><span class="o">&lt;</span><span class="n">PID</span><span class="p">,</span><span class="w"> </span><span class="n">gt_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">cids_file</span><span class="p">,</span><span class="w"> </span><span class="n">cids</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">using</span><span class="w"> </span><span class="n">data_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">RowMajorArray</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">using</span><span class="w"> </span><span class="n">gt_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">RowMajorArray</span><span class="o">&lt;</span><span class="kt">uint32_t</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">data_type</span><span class="w"> </span><span class="n">data</span><span class="p">;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">data_type</span><span class="w"> </span><span class="n">centroids</span><span class="p">;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">gt_type</span><span class="w"> </span><span class="n">cids</span><span class="p">;</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">load_vecs</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">data_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">data_file</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="p">);</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">load_vecs</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">data_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">centroids_file</span><span class="p">,</span><span class="w"> </span><span class="n">centroids</span><span class="p">);</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">load_vecs</span><span class="o">&lt;</span><span class="n">PID</span><span class="p">,</span><span class="w"> </span><span class="n">gt_type</span><span class="o">&gt;</span><span class="p">(</span><span class="n">cids_file</span><span class="p">,</span><span class="w"> </span><span class="n">cids</span><span class="p">);</span>
 </code></pre></div></p>
 <p>Then initialize an IVF object with the number of data points, vector
 dimension, number of clusters, and total bits per dimension. The C++ index
 accepts total quantized bit widths from 1 through 9, or <code>total_bits=32</code>
 (Python <code>nbits=32</code>) to store raw float32 vectors for reranking. Raw storage
 and automatic FastScan precision selection are available starting with version 0.3.3.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">using</span><span class="w"> </span><span class="n">index_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">ivf</span><span class="o">::</span><span class="n">IVF</span><span class="p">;</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">rows</span><span class="p">();</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">cols</span><span class="p">();</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="kt">size_t</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">centroids</span><span class="p">.</span><span class="n">rows</span><span class="p">();</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">index_type</span><span class="w"> </span><span class="nf">ivf</span><span class="p">(</span><span class="n">num_points</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">total_bits</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">using</span><span class="w"> </span><span class="n">index_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">ivf</span><span class="o">::</span><span class="n">IVF</span><span class="p">;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">rows</span><span class="p">();</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">cols</span><span class="p">();</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="kt">size_t</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">centroids</span><span class="p">.</span><span class="n">rows</span><span class="p">();</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">index_type</span><span class="w"> </span><span class="nf">ivf</span><span class="p">(</span><span class="n">num_points</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">total_bits</span><span class="p">);</span>
 </code></pre></div>
 <p>Finally, call the construct API:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::construct</span><span class="p">(</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span><span class="w"> </span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">centroids</span><span class="p">,</span><span class="w"> </span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="p">,</span><span class="w"> </span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">faster</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::construct</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span><span class="w"> </span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">centroids</span><span class="p">,</span><span class="w"> </span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="p">,</span><span class="w"> </span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">faster</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">);</span>
 </code></pre></div></p>
 <ul>
 <li><strong>data</strong>: Pointer to the raw data vectors.</li>
-<li><strong>centroids</strong>: Centroids computed by K-means clustering on the raw data vectors (we recommend to tune cluster_num around 4 * the square root of the dataset following Faiss).</li>
+<li><strong>centroids</strong>: Clustering centroids; tune <code>cluster_num</code> for the dataset and search budget.</li>
 <li><strong>cluster_ids</strong>: Array of length <code>data_num</code>; every entry must be in the range <code>[0, cluster_num)</code>.</li>
 <li><strong>faster</strong>: If true, enable fast implementations for RaBitQ (By default, it is set as <code>false</code> to pursue better accuracy.).</li>
 <li><strong>num_threads</strong>: Maximum number of OpenMP threads used to quantize clusters.</li>
 </ul>
 <p>For example:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">construct</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">cids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">construct</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">centroids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">cids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span>
 </code></pre></div></p>
 <p>During construction, we process clusters in parallel, rotate their centroids and
 vectors, and compute one-bit codes and factors. Quantized mode also computes
@@ -1138,7 +1159,7 @@ vectors, and compute one-bit codes and factors. Quantized mode also computes
 float32 vectors instead. In raw mode, the index owns a copy of the input, so
 the original data can be released after construction.</p>
 <p>After construction, you can directly save the index file to disk:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="n">outoput_index_file</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="n">outoput_index_file</span><span class="p">);</span>
 </code></pre></div>
 Raw-mode files use a magic/version header and include both the original vectors
 and the rotation state. Loading restores the mode automatically, so querying
@@ -1146,10 +1167,10 @@ does not require an external dataset. Existing quantized files retain their
 format and remain compatible; versions before 0.3.3 cannot load raw-mode files.</p>
 <h3 id="data-layout">Data Layout<a class="headerlink" href="#data-layout" title="Permanent link">&para;</a></h3>
 <p>The main data layout for our IVF is organized as follows:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">[</span><span class="n">batch</span><span class="w"> </span><span class="n">data</span><span class="p">]</span><span class="w">    </span><span class="c1">// 1-bit code and factors</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="p">[</span><span class="n">ex_data</span><span class="p">]</span><span class="w">       </span><span class="c1">// code for remaining bits, or original float32 vectors</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="p">[</span><span class="n">ids</span><span class="p">]</span><span class="w">           </span><span class="c1">// PID of vectors (organized by clusters)</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">[</span><span class="n">cluster_lst</span><span class="p">]</span><span class="w">   </span><span class="c1">// List of clusters' metadata in IVF</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">[</span><span class="n">batch</span><span class="w"> </span><span class="n">data</span><span class="p">]</span><span class="w">    </span><span class="c1">// 1-bit code and factors</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="p">[</span><span class="n">ex_data</span><span class="p">]</span><span class="w">       </span><span class="c1">// code for remaining bits, or original float32 vectors</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">[</span><span class="n">ids</span><span class="p">]</span><span class="w">           </span><span class="c1">// PID of vectors (organized by clusters)</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">[</span><span class="n">cluster_lst</span><span class="p">]</span><span class="w">   </span><span class="c1">// List of clusters' metadata in IVF</span>
 </code></pre></div>
 In raw mode, <code>ex_data</code> holds <code>4 * num_points * dim</code> bytes in cluster order,
 without padding or extra-bit factors. The one-bit filtering codes and factors
@@ -1157,18 +1178,18 @@ are additional storage. <code>nbits()</code> (Python <code>nbits</code>) reports
 the one-bit filtering code is not included in that value.</p>
 <h2 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h2>
 <p>Currently, querying requires the index to be loaded in memory. If you want to use a previously saved index on the disk,  firstly load it into memory:</p>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">using</span><span class="w"> </span><span class="n">index_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">ivf</span><span class="o">::</span><span class="n">IVF</span><span class="p">;</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">index_type</span><span class="w"> </span><span class="n">ivf</span><span class="p">;</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">ivf</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">index_file</span><span class="p">);</span>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">using</span><span class="w"> </span><span class="n">index_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">ivf</span><span class="o">::</span><span class="n">IVF</span><span class="p">;</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">index_type</span><span class="w"> </span><span class="n">ivf</span><span class="p">;</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">ivf</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">index_file</span><span class="p">);</span>
 </code></pre></div>
 Once the index is loaded, you can call the search function for queries:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::search</span><span class="p">(</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">__restrict__</span><span class="w"> </span><span class="n">query</span><span class="p">,</span><span class="w"> </span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">__restrict__</span><span class="w"> </span><span class="n">results</span><span class="p">,</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">dists</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::search</span><span class="p">(</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">__restrict__</span><span class="w"> </span><span class="n">query</span><span class="p">,</span><span class="w"> </span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">__restrict__</span><span class="w"> </span><span class="n">results</span><span class="p">,</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">dists</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
 </code></pre></div></p>
 <ul>
 <li><strong>query</strong>: Query vector.</li>
@@ -1183,9 +1204,9 @@ error carried into extra-bit distance estimation; raw reranking computes its
 final distances directly from floats. Existing C++ overloads with <code>use_hacc</code>
 and Python's <code>high_accuracy=True/False</code> still allow explicit overrides. Python
 uses automatic selection when <code>high_accuracy</code> is omitted or <code>None</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="n">distances</span><span class="p">);</span><span class="w">         </span><span class="c1">// Automatic</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">ivf</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="n">distances</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span><span class="w">   </span><span class="c1">// Force HACC</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">ivf</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="n">distances</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">);</span><span class="w">  </span><span class="c1">// Force standard FastScan</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="n">distances</span><span class="p">);</span><span class="w">         </span><span class="c1">// Automatic</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">ivf</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="n">distances</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span><span class="w">   </span><span class="c1">// Force HACC</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">ivf</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="n">nprobe</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="n">distances</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">);</span><span class="w">  </span><span class="c1">// Force standard FastScan</span>
 </code></pre></div>
 <p>The IDs-only overloads accept the same override without the <code>distances</code>
 argument. In Python, call <code>index.search(queries, k, nprobe)</code> for automatic

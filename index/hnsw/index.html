@@ -1001,6 +1001,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../clustering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Clustering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1144,7 +1171,7 @@ supported.</p>
 <ul>
 <li><strong>data</strong>: Pointer to the raw data vectors.</li>
 <li><strong>data_num</strong>: The number of data vectors.</li>
-<li><strong>centroids</strong>: Centroids computed by K-means clustering on the raw data vectors (we recommend <code>cluster_num = 16</code>).  </li>
+<li><strong>centroids</strong>: Centroids computed by <a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>; the examples use <code>cluster_num = 16</code>.</li>
 <li><strong>cluster_ids</strong>: Array of length <code>data_num</code>; every entry must be in the range <code>[0, cluster_num)</code>.</li>
 <li><strong>num_threads</strong>: Number of threads to use (default: 0, which auto-selects).</li>
 <li><strong>faster</strong>: If <code>true</code>, enables the faster quantizer.</li>
