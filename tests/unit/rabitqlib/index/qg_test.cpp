@@ -1,6 +1,7 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 
 #include <gtest/gtest.h>
+#include <omp.h>
 
 #include <algorithm>
 #include <array>
@@ -13,7 +14,9 @@
 #include <fstream>
 #include <ios>
 #include <limits>
+#include <memory>
 #include <optional>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -29,12 +32,117 @@
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/quantization/data_layout.hpp"
 #include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/simd/estimator_dispatch.hpp"
+#include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
+    static float build_distance(QGBuilder& builder, PID source_id, PID target_id) {
+        std::vector<float> reconstructed;
+        std::optional<QuantizedQuery> prepared;
+        const float* source = builder.qg_.prepare_build_query(
+            source_id, reconstructed, prepared, builder.build_cache()
+        );
+        return builder.qg_.point_distance(
+            source, prepared ? &*prepared : nullptr, target_id
+        );
+    }
+    static CandidateList probe_pruned_edges(
+        QGBuilder& builder,
+        const CandidateList& current,
+        const CandidateList& pruned,
+        float threshold
+    ) {
+        CandidateList result;
+        builder.add_pruned_edges(current, pruned, result, threshold);
+        return result;
+    }
+    static std::array<size_t, 3> check_refinement_endpoint(
+        QGBuilder& builder, float cosine, bool duplicate_id
+    ) {
+        // Identical current vectors make every pair use the same cosine. Choose
+        // radial scores from the graph's own distance, including quantized modes.
+        const float radial = build_distance(builder, 32, 1) / (2.0F * (1.0F - cosine));
+        EXPECT_GT(radial, 0.0F);
+        CandidateList current;
+        for (PID id = 1; id < 32; ++id) {
+            current.emplace_back(id, radial);
+        }
+        CandidateList pruned{AnnCandidate<float>(duplicate_id ? 1 : 32, radial)};
+        float left = 0.5F;
+        float right = 1.0F;
+        size_t successful = 0;
+        size_t unsuccessful = 0;
+        bool last_successful = false;
+        for (size_t iteration = 0; iteration < kMaxBsIter; ++iteration) {
+            const float mid = (left + right) / 2.0F;
+            const auto probe = probe_pruned_edges(builder, current, pruned, mid);
+            last_successful = probe.size() == 32;
+            if (last_successful) {
+                ++successful;
+                right = mid;
+            } else {
+                ++unsuccessful;
+                left = mid;
+            }
+        }
+        // The original algorithm always reevaluates the final right endpoint.
+        auto expected = probe_pruned_edges(builder, current, pruned, right);
+        if (expected.size() < 32) {
+            // Only one slot is missing; independently reproduce its seeded choice.
+            std::mt19937 random(builder.seed_ ^ 0x80000000U);
+            std::uniform_int_distribution<PID> distribution(
+                0, static_cast<PID>(builder.num_nodes_) - 1
+            );
+            PID selected = 0;
+            do {
+                selected = distribution(random);
+            } while (selected < 32);
+            expected.emplace_back(selected, build_distance(builder, 0, selected));
+        }
+        for (auto& row : builder.new_neighbors_) {
+            row.assign(32, AnnCandidate<float>(1, 0.0F));
+        }
+        builder.new_neighbors_[0] = current;
+        builder.pruned_neighbors_[0] = pruned;
+        builder.graph_refine();
+        const auto& actual = builder.new_neighbors_[0];
+        EXPECT_EQ(actual.size(), expected.size());
+        for (size_t i = 0; i < std::min(actual.size(), expected.size()); ++i) {
+            EXPECT_EQ(actual[i].id, expected[i].id);
+            uint32_t actual_bits = 0;
+            uint32_t expected_bits = 0;
+            std::memcpy(&actual_bits, &actual[i].distance, sizeof(actual_bits));
+            std::memcpy(&expected_bits, &expected[i].distance, sizeof(expected_bits));
+            EXPECT_EQ(actual_bits, expected_bits);
+        }
+        return {successful, unsuccessful, static_cast<size_t>(last_successful)};
+    }
+
+    static void disconnect(QuantizedGraph<float>& graph) {
+        for (PID i = 0; i < 66; ++i) {
+            std::vector<AnnCandidate<float>> row;
+            for (PID j = (i / 33) * 33; j < (i / 33 + 1) * 33; ++j) {
+                if (i != j) {
+                    row.emplace_back(j, 0.0F);
+                }
+            }
+            graph.update_qg(i, row);
+        }
+    }
+
+    static auto rows(const QuantizedGraph<float>& graph) {
+        std::vector<char> result;
+        for (PID id = 0; id < graph.num_points_; ++id) {
+            const char* row = graph.get_quantized_vector(id);
+            result.insert(result.end(), row, row + graph.row_offset_);
+        }
+        return result;
+    }
     static void check_contiguous_rows(QuantizedGraph<float>& graph) {
         const size_t vector_bytes =
             graph.is_quantized()
@@ -176,6 +284,451 @@ struct QGConstructionTestAccess {
 };
 
 namespace {
+
+TEST(QGConstructionTest, RefinementMatchesOriginalFinalEndpointAndSeededFallback) {
+    constexpr size_t kDim = 65;
+    constexpr size_t kCount = 65;
+    std::vector<float> data(kCount * kDim, 0.0F);
+    for (PID id = 1; id < 32; ++id) {
+        data[id * kDim] = 1.0F;
+    }
+    data[32 * kDim + 1] = 1.0F;
+    for (PID id = 33; id < kCount; ++id) {
+        data[id * kDim + id % kDim] = 0.25F;
+    }
+    for (size_t bits : {0U, 4U, 8U}) {
+        for (MetricType metric : {METRIC_L2, METRIC_IP}) {
+            for (bool cache_vectors : {false, true}) {
+                for (size_t threads : {1U, 4U}) {
+                    SCOPED_TRACE(
+                        ::testing::Message() << bits << "/" << static_cast<int>(metric)
+                                             << "/" << cache_vectors << "/" << threads
+                    );
+                    QuantizedGraph<float> graph(
+                        kCount, kDim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                    );
+                    QGBuilder builder(
+                        graph,
+                        32,
+                        data.data(),
+                        threads,
+                        QGInitialization::Random,
+                        42,
+                        cache_vectors
+                    );
+                    // All probes succeed, ending at the final successful threshold.
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::check_refinement_endpoint(
+                            builder, 0.25F, false
+                        ),
+                        (std::array<size_t, 3>{5, 0, 1})
+                    );
+                    // A later failed probe must not replace the saved right endpoint.
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::check_refinement_endpoint(
+                            builder, 0.8F, false
+                        ),
+                        (std::array<size_t, 3>{2, 3, 0})
+                    );
+                    // No probe succeeds; the previously untested endpoint 1.0 does.
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::check_refinement_endpoint(
+                            builder, 0.9921875F, false
+                        ),
+                        (std::array<size_t, 3>{0, 5, 0})
+                    );
+                    // Duplicate IDs retain the existing early exit and seeded fill.
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::check_refinement_endpoint(
+                            builder, 0.8F, true
+                        ),
+                        (std::array<size_t, 3>{0, 5, 0})
+                    );
+                }
+            }
+        }
+    }
+}
+
+TEST(BatchQueryTest, PreparedSumPreservesLookupTableAndMetric) {
+    BatchQuery<float> reference, prepared;
+    for (const size_t dimension : {64U, 1024U}) {
+        std::vector<float> query(dimension), scratch(dimension * 4);
+        for (size_t i = 0; i < dimension; ++i) {
+            query[i] = std::sin(static_cast<float>(i) * 0.37F);
+        }
+        for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
+            reference.reset(query.data(), dimension, scratch.data(), metric);
+            const float prepared_sum = reference.k1xsumq();
+            prepared.set_g_add(17.0F);
+            prepared.reset(query.data(), dimension, scratch.data(), metric, &prepared_sum);
+            EXPECT_EQ(prepared.g_add(), 0.0F);
+            EXPECT_EQ(prepared.k1xsumq(), reference.k1xsumq());
+            EXPECT_EQ(prepared.delta(), reference.delta());
+            EXPECT_EQ(prepared.sum_vl_lut(), reference.sum_vl_lut());
+            EXPECT_TRUE(
+                std::equal(reference.lut(), reference.lut() + dimension * 4, prepared.lut())
+            );
+            reference.set_g_add(1.5F);
+            prepared.set_g_add(1.5F);
+            EXPECT_EQ(prepared.g_add(), reference.g_add());
+        }
+    }
+}
+
+TEST(QuantizedGraphSearchTest, ScratchSearchMatchesRegularSearch) {
+    constexpr size_t kNumPoints = 257;
+    for (const size_t kDim : {64U, 65U, 1025U, 4097U}) {
+        SCOPED_TRACE(kDim);
+        constexpr size_t kDegree = 32;
+        constexpr size_t kEfSearch = 1;
+        const size_t kNumQueries = kDim == 64 ? 256 : 16;
+        std::mt19937 rng(123);
+        std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
+        std::vector<float> data(kNumPoints * kDim);
+        std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
+
+        for (const size_t bits : {0U, 4U, 8U}) {
+            SCOPED_TRACE(bits);
+            for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
+                SCOPED_TRACE(static_cast<int>(metric));
+                QuantizedGraph<float> graph(
+                    kNumPoints, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits, 42
+                );
+                QGBuilder builder(graph, kDegree, data.data(), 1, 42);
+                graph.set_ef(kEfSearch);
+
+                std::vector<float> rotated_query(graph.padded_dim());
+                std::vector<float> estimated_distances(kDegree);
+                std::vector<float> lookup_table(graph.padded_dim() * 4);
+                BatchQuery<float> batch_query;
+                buffer::SearchBuffer<float> search_pool(kEfSearch);
+                buffer::SearchBuffer<float> result_pool(1);
+                VisitedSet visited(kNumPoints, kNumPoints / 10);
+
+                PID label = kPidMax;
+                float distance = 0.0F;
+                EXPECT_THROW(
+                    graph.search_with_scratch(
+                        data.data(),
+                        1,
+                        &label,
+                        &distance,
+                        rotated_query.data(),
+                        estimated_distances.data(),
+                        lookup_table.data(),
+                        batch_query,
+                        search_pool,
+                        result_pool,
+                        visited
+                    ),
+                    std::logic_error
+                );
+                builder.build(2);
+
+                for (size_t query_index = 0; query_index < kNumQueries; ++query_index) {
+                    SCOPED_TRACE(query_index);
+                    std::vector<float> query(kDim);
+                    std::generate(query.begin(), query.end(), [&] {
+                        return distribution(rng);
+                    });
+                    PID regular_label = kPidMax;
+                    float regular_distance = 0.0F;
+                    graph.search(query.data(), 1, &regular_label, &regular_distance);
+
+                    PID scratch_label = kPidMax;
+                    float scratch_distance = 0.0F;
+                    graph.search_with_scratch(
+                        query.data(),
+                        1,
+                        &scratch_label,
+                        &scratch_distance,
+                        rotated_query.data(),
+                        estimated_distances.data(),
+                        lookup_table.data(),
+                        batch_query,
+                        search_pool,
+                        result_pool,
+                        visited
+                    );
+
+                    EXPECT_EQ(scratch_label, regular_label);
+                    EXPECT_FLOAT_EQ(scratch_distance, regular_distance);
+                    const float expected_distance =
+                        metric == METRIC_IP
+                            ? dot_product_dis(
+                                  query.data(), data.data() + scratch_label * kDim, kDim
+                              )
+                            : euclidean_sqr(
+                                  query.data(), data.data() + scratch_label * kDim, kDim
+                              );
+                    if (bits == 0) {
+                        EXPECT_NEAR(scratch_distance, expected_distance, 1e-5F);
+                    }
+                }
+
+                if (metric == METRIC_L2 && bits == 0) {
+                    const PID hint = static_cast<PID>(kNumPoints - 1);
+                    PID hinted_label = kPidMax;
+                    float hinted_distance = 1.0F;
+                    graph.search_with_scratch(
+                        data.data() + hint * kDim,
+                        1,
+                        &hinted_label,
+                        &hinted_distance,
+                        rotated_query.data(),
+                        estimated_distances.data(),
+                        lookup_table.data(),
+                        batch_query,
+                        search_pool,
+                        result_pool,
+                        visited,
+                        hint
+                    );
+                    EXPECT_EQ(hinted_label, hint);
+                    EXPECT_FLOAT_EQ(hinted_distance, 0.0F);
+                }
+            }
+        }
+    }
+}
+
+TEST(QuantizedGraphSearchTest, SingleResultMatchesTopKWithTiesAndHints) {
+    constexpr size_t kCount = 65;
+    for (size_t dim : {64U, 65U}) {
+        for (size_t bits : {0U, 4U, 8U}) {
+            for (auto metric : {METRIC_L2, METRIC_IP}) {
+                for (bool tied : {false, true}) {
+                    SCOPED_TRACE(
+                        ::testing::Message()
+                        << dim << "/" << bits << "/" << metric << "/" << tied
+                    );
+                    std::vector<float> data(kCount * dim, 0.25F);
+                    if (!tied) {
+                        for (size_t i = 0; i < data.size(); ++i) {
+                            data[i] = std::sin(static_cast<float>(i) * 0.13F);
+                        }
+                    }
+                    QuantizedGraph<float> graph(
+                        kCount, dim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                    );
+                    QGBuilder builder(graph, 64, data.data(), 1, 42);
+                    builder.build();
+                    graph.set_ef(kCount);
+                    std::vector<float> rotated(graph.padded_dim());
+                    std::vector<float> estimates(graph.degree_bound());
+                    std::vector<float> lut(graph.padded_dim() * 4);
+                    BatchQuery<float> query;
+                    buffer::SearchBuffer<float> search_pool(kCount);
+                    buffer::SearchBuffer<float> one_result(1), two_results(2);
+                    VisitedSet visited(kCount);
+                    for (PID hint : {kPidMax, graph.entry_point(), PID{64}}) {
+                        for (size_t i = 0; i < 4; ++i) {
+                            PID single = kPidMax;
+                            float distance = 0;
+                            std::array<PID, 2> expected{};
+                            std::array<float, 2> expected_distances{};
+                            graph.search_with_scratch(
+                                data.data() + i * dim,
+                                2,
+                                expected.data(),
+                                expected_distances.data(),
+                                rotated.data(),
+                                estimates.data(),
+                                lut.data(),
+                                query,
+                                search_pool,
+                                two_results,
+                                visited,
+                                hint
+                            );
+                            graph.search_with_scratch(
+                                data.data() + i * dim,
+                                1,
+                                &single,
+                                &distance,
+                                rotated.data(),
+                                estimates.data(),
+                                lut.data(),
+                                query,
+                                search_pool,
+                                one_result,
+                                visited,
+                                hint
+                            );
+                            EXPECT_EQ(single, expected[0]);
+                            EXPECT_EQ(distance, expected_distances[0]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST(QuantizedGraphSearchTest, ScratchSearchRejectsDefaultVisitedSet) {
+    constexpr size_t kNumPoints = 66;
+    constexpr size_t kDim = 64;
+    constexpr size_t kDegree = 32;
+    constexpr size_t kEfSearch = 32;
+    std::mt19937 rng(123);
+    std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
+    std::vector<float> data(kNumPoints * kDim);
+    std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
+
+    QuantizedGraph<float> graph(kNumPoints, kDim, kDegree);
+    QGBuilder builder(graph, kDegree, data.data(), 1, 42);
+    builder.build(2);
+    graph.set_ef(kEfSearch);
+
+    std::vector<float> rotated_query(graph.padded_dim());
+    std::vector<float> estimated_distances(kDegree);
+    std::vector<float> lookup_table(graph.padded_dim() * 4);
+    BatchQuery<float> batch_query;
+    buffer::SearchBuffer<float> search_pool(kEfSearch);
+    buffer::SearchBuffer<float> result_pool(1);
+    VisitedSet visited;
+    EXPECT_FALSE(visited.initialized());
+    try {
+        PID label = kPidMax;
+        float distance = 0.0F;
+        graph.search_with_scratch(
+            data.data(),
+            1,
+            &label,
+            &distance,
+            rotated_query.data(),
+            estimated_distances.data(),
+            lookup_table.data(),
+            batch_query,
+            search_pool,
+            result_pool,
+            visited
+        );
+        FAIL() << "Expected an uninitialized visited set to be rejected";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "SymphonyQG visited set must be initialized");
+    }
+    visited.initialize(kNumPoints, kNumPoints / 10);
+
+    for (size_t query_index = 0; query_index < 2; ++query_index) {
+        const float* query = data.data() + query_index * kDim;
+        PID regular_label = kPidMax;
+        PID scratch_label = kPidMax;
+        float regular_distance = 0.0F;
+        float scratch_distance = 0.0F;
+        graph.search(query, 1, &regular_label, &regular_distance);
+        graph.search_with_scratch(
+            query,
+            1,
+            &scratch_label,
+            &scratch_distance,
+            rotated_query.data(),
+            estimated_distances.data(),
+            lookup_table.data(),
+            batch_query,
+            search_pool,
+            result_pool,
+            visited
+        );
+        EXPECT_TRUE(visited.initialized());
+        EXPECT_EQ(scratch_label, regular_label);
+        EXPECT_FLOAT_EQ(scratch_distance, regular_distance);
+    }
+}
+
+TEST(QuantizedGraphSearchTest, LookupTableResetMatchesFreshAcrossSizesAndModes) {
+    Lut<float> reused;
+    for (const size_t dim : {64U, 4160U, 128U, 64U}) {
+        SCOPED_TRACE(dim);
+        std::vector<float> query(dim), scratch(dim * 4);
+        std::vector<uint16_t> hacc_scratch(dim * 4);
+        for (const bool hacc : {false, true, false}) {
+            SCOPED_TRACE(hacc);
+            for (const bool zero : {false, true}) {
+                for (size_t i = 0; i < dim; ++i) {
+                    query[i] = zero ? 0.0F : static_cast<float>(i % 23) - 11.0F;
+                }
+                const Lut<float> fresh(query.data(), dim, hacc);
+                reused.reset(query.data(), dim, scratch.data(), hacc_scratch.data(), hacc);
+                EXPECT_FLOAT_EQ(reused.delta(), fresh.delta());
+                EXPECT_FLOAT_EQ(reused.sum_vl(), fresh.sum_vl());
+                const size_t bytes = dim * 4 * (hacc ? 2 : 1);
+                EXPECT_TRUE(std::equal(fresh.lut(), fresh.lut() + bytes, reused.lut()));
+                EXPECT_TRUE(std::isfinite(reused.delta()));
+                EXPECT_TRUE(std::isfinite(reused.sum_vl()));
+            }
+        }
+    }
+}
+
+TEST(QGConstructionTest, CopiedCacheOwnsItsQueryStorage) {
+    constexpr size_t kCount = 65, kDim = 65;
+    for (size_t bits : {4U, 8U}) {
+        std::vector<float> data(kCount * kDim);
+        for (size_t i = 0; i < data.size(); ++i) {
+            data[i] = std::sin(static_cast<float>(i));
+        }
+        QuantizedGraph<float> graph(
+            kCount, kDim, 32, METRIC_L2, RotatorType::FhtKacRotator, bits, 42
+        );
+        auto original = std::make_unique<QGBuilder>(graph, 64, data.data(), 1, 42, true);
+        QGBuilder copy(*original);
+        original.reset();
+        std::fill(data.begin(), data.end(), std::numeric_limits<float>::quiet_NaN());
+        std::vector<float>().swap(data);
+        copy.build();
+        for (const auto& row : QGConstructionTestAccess::neighbors(copy)) {
+            ASSERT_EQ(row.size(), 32U);
+            for (const auto& neighbor : row) {
+                EXPECT_TRUE(std::isfinite(neighbor.distance));
+            }
+        }
+    }
+}
+
+TEST(QGConstructionTest, CachedResetMatchesFreshConstruction) {
+    constexpr size_t kCount = 65;
+    for (auto init : {QGInitialization::Random, QGInitialization::PiPNN}) {
+        for (size_t dim : {65U, 1025U}) {
+            for (auto metric : {METRIC_L2, METRIC_IP}) {
+                for (size_t bits : {0U, 4U, 8U}) {
+                    SCOPED_TRACE(
+                        ::testing::Message() << dim << "/" << metric << "/" << bits
+                    );
+                    std::mt19937 rng(123);
+                    std::normal_distribution<float> normal;
+                    std::vector<float> data(kCount * dim);
+                    std::generate(data.begin(), data.end(), [&] { return normal(rng); });
+                    QuantizedGraph<float> cached(
+                        kCount, dim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                    );
+                    QGBuilder builder(cached, 64, data.data(), 1, init, 42, true);
+                    for (size_t iteration = 0; iteration < 3; ++iteration) {
+                        SCOPED_TRACE(iteration);
+                        if (iteration > 0) {
+                            for (float& value : data) {
+                                value += 0.2F * normal(rng);
+                            }
+                            builder.reset(data.data());
+                        }
+                        QuantizedGraph<float> fresh(
+                            kCount, dim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                        );
+                        QGBuilder fresh_builder(fresh, 64, data.data(), 1, init, 42);
+                        builder.build();
+                        fresh_builder.build();
+                        EXPECT_EQ(cached.entry_point(), fresh.entry_point());
+                        EXPECT_EQ(
+                            QGConstructionTestAccess::rows(cached),
+                            QGConstructionTestAccess::rows(fresh)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
 
 TEST(QuantizedGraphCompatibilityTest, SupportsExplicitAndDeducedFloatTypes) {
     using Graph = rabitqlib::symqg::QuantizedGraph<float>;
@@ -1021,4 +1574,43 @@ TEST(QGSearchTest, ParallelQueriesMatchSerialAcrossIndexesAndSettings) {
 }
 
 }  // namespace
+}  // namespace rabitqlib::symqg
+
+namespace rabitqlib::symqg {
+TEST(QuantizedGraphSearchTest, ScratchSearchRejectsIncompleteResults) {
+    QuantizedGraph<float> graph(66, 64, 32, METRIC_L2, RotatorType::FhtKacRotator, 0, 42);
+    std::vector<float> data(66 * 64, 0.0F);
+    QGBuilder builder(graph, 66, data.data(), 1, 42);
+    builder.build(2);
+    QGConstructionTestAccess::disconnect(graph);
+    graph.set_ef(66);
+    std::vector<PID> ids(66, kPidMax);
+    std::vector<float> distances(66, -1.0F), rotated(64), estimates(32), lut(256);
+    BatchQuery<float> query;
+    buffer::SearchBuffer<float> search(66), result(66);
+    VisitedSet visited(66, 66);
+    EXPECT_THROW(
+        graph.search(data.data(), 66, ids.data(), distances.data()), std::runtime_error
+    );
+    EXPECT_THROW(
+        graph.search_with_scratch(
+            data.data(),
+            66,
+            ids.data(),
+            distances.data(),
+            rotated.data(),
+            estimates.data(),
+            lut.data(),
+            query,
+            search,
+            result,
+            visited
+        ),
+        std::runtime_error
+    );
+    EXPECT_TRUE(std::all_of(ids.begin(), ids.end(), [](PID id) { return id == kPidMax; }));
+    EXPECT_TRUE(std::all_of(distances.begin(), distances.end(), [](float d) {
+        return d == -1.0F;
+    }));
+}
 }  // namespace rabitqlib::symqg

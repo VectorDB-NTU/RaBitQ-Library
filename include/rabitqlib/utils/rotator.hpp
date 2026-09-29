@@ -143,14 +143,14 @@ class FhtKacRotator : public Rotator<float> {
    public:
     static constexpr size_t kMaxDim = 65536;
 
-    explicit FhtKacRotator(size_t dim, size_t padded_dim)
+    explicit FhtKacRotator(
+        size_t dim, size_t padded_dim, uint32_t seed = std::random_device{}()
+    )
         : Rotator<float>(dim, padded_dim) {
         if (dim < 64 || padded_dim < dim || padded_dim % 64 != 0 || padded_dim > kMaxDim) {
             throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
         }
         flip_.resize((padded_dim / kByteLen) * 4);
-        std::random_device rd;
-        std::seed_seq seed{rd(), rd(), rd(), rd()};
         std::mt19937 gen(seed);
 
         // Uniform distribution in the range [0, 255]
@@ -214,7 +214,10 @@ class FhtKacRotator : public Rotator<float> {
 // for given dim & type, set rotator, return padded dimension
 template <typename T>
 Rotator<T>* choose_rotator(
-    size_t dim, RotatorType type = RotatorType::FhtKacRotator, size_t padded_dim = 0
+    size_t dim,
+    RotatorType type = RotatorType::FhtKacRotator,
+    size_t padded_dim = 0,
+    uint32_t seed = std::random_device{}()
 ) {
     if (dim == 0) {
         throw std::invalid_argument("Rotator dimension must be positive");
@@ -237,7 +240,7 @@ Rotator<T>* choose_rotator(
         if (!std::is_same_v<T, float>) {
             throw std::invalid_argument("FhtKacRotator only supports float");
         }
-        return ::new rotator_impl::FhtKacRotator(dim, padded_dim);
+        return ::new rotator_impl::FhtKacRotator(dim, padded_dim, seed);
     }
 
     if (type == RotatorType::MatrixRotator) {

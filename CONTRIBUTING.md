@@ -175,7 +175,6 @@ another. Each task can be a separate PR.
 | --- | --- | --- |
 | Explain Python search results | [Quick start](docs/docs/quick_start.md), [IVF binding](python_bindings/ivf_bindings.cpp), and [IVF tests](tests/python/test_ivf.py) | A short explanation covers result shapes, how IDs map to input rows, and what L2 distances represent, checked against the implementation. The example runs and the strict docs build passes. |
 | Add a self-contained IVF save/load example | [Python examples](sample/python/), [README quick start](README.md#python-quick-start), and [IVF tests](tests/python/test_ivf.py) | A deterministic script builds from synthetic data, saves to a temporary directory, reloads, and checks that search IDs and distances match. It needs no dataset download, cleans up its temporary files, passes Python checks, and is linked from the README. |
-| Explain the quick start's cluster assignment | [Quick start](docs/docs/quick_start.md) and [IVF guide](docs/docs/index/ivf.md) | The tutorial explains that its round-robin assignment is for a small runnable example, explains why real IVF workloads use clustering, and links to the existing clustering workflow. The strict docs build passes. |
 
 ## Feedback and further reading
 

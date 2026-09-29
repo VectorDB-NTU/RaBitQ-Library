@@ -310,10 +310,11 @@ covers its arithmetic kernels, not every scalar loop in construction and search.
 | IVF and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
 | FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; shared AVX intrinsics preserve the FFHT butterfly order |
 | Float matrix rotation and PiPNN construction | Matrix products, row norms, and lower-triangle pairwise distances use isolated matrix backends |
+| RaBitQKMeans and QGKMeans centroid updates | Indexed float32 rows accumulate into float64 sums through the matrix backends, preserving per-cluster point order without additional workspace |
 | HNSW search and IVF centroid routing | Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher |
 | Quantization orchestration, reconstruction, non-float utilities | Template/control code remains generic; no blanket native tuning or reduction-order rewrite |
 | Graph scheduling, candidate queues, I/O, allocation, random initialization | Generic control code; IVF one-bit candidate insertion stays in a small compiled function to avoid inlining-induced register spills; thread scheduling and seeds remain caller-owned |
-| Example KMeans training | Uses external FAISS, whose build and dispatch are independent of this package |
+| Example KMeans training | Explicit RaBitQKMeans flat or QGKMeans graph assignment; FAISS is an optional comparison dependency only |
 
 Portable wheels disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. ARM64 builds exclude all
 x86 source groups and use standard AArch64 NEON intrinsics, without Apple-only APIs.

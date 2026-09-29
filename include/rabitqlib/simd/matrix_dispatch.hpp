@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace rabitqlib::simd {
 // Dense row-major float32 kernels; inputs and outputs must not overlap.
@@ -120,4 +121,47 @@ void pairwise_distances_lower_avx512(
     size_t dim,
     bool inner_product
 );
+
+// Accumulate input rows in point_ids order into double cluster sums and counts.
+// Inputs and outputs must not overlap. Concurrent calls require disjoint clusters.
+void accumulate_cluster_sums(
+    const float* x,
+    const size_t* point_ids,
+    size_t count,
+    size_t dim,
+    const uint32_t* labels,
+    double* sums,
+    size_t* counts
+);
+
+void accumulate_cluster_sums_generic(
+    const float* x,
+    const size_t* point_ids,
+    size_t count,
+    size_t dim,
+    const uint32_t* labels,
+    double* sums,
+    size_t* counts
+);
+
+void accumulate_cluster_sums_avx2(
+    const float* x,
+    const size_t* point_ids,
+    size_t count,
+    size_t dim,
+    const uint32_t* labels,
+    double* sums,
+    size_t* counts
+);
+
+void accumulate_cluster_sums_avx512(
+    const float* x,
+    const size_t* point_ids,
+    size_t count,
+    size_t dim,
+    const uint32_t* labels,
+    double* sums,
+    size_t* counts
+);
+
 }  // namespace rabitqlib::simd

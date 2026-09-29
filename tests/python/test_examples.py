@@ -1,4 +1,4 @@
-"""Example stages keep Faiss and RaBitQ in different Python processes."""
+"""Clustering, indexing and querying examples run without importing Faiss."""
 
 import importlib.util
 import os
@@ -12,7 +12,6 @@ import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "sample" / "python"
-HAS_FAISS = importlib.util.find_spec("faiss") is not None
 
 # Fail on an accidental import, even when a runtime combination happens to coexist.
 BOOTSTRAP = """
@@ -36,6 +35,7 @@ def run_example(name, *args, blocked="faiss"):
     env = os.environ.copy()
     # Reproduce Windows redirected output even on hosts using UTF-8 by default.
     env["PYTHONIOENCODING"] = "cp1252:strict"
+    env["OMP_NUM_THREADS"] = "2"
     for key in (
         "DYLD_LIBRARY_PATH",
         "DYLD_INSERT_LIBRARIES",
@@ -167,33 +167,36 @@ def check_saved_index_and_query(tmp_path, kind, metric, data):
     assert "Recall" in output
 
 
-@pytest.mark.skipif(
-    not HAS_FAISS, reason="Faiss is required only for clustering examples"
-)
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 @pytest.mark.parametrize("kind", ["ivf", "hnsw"])
-def test_separate_clustering_and_indexing(tmp_path, example_data, metric, kind):
+@pytest.mark.parametrize("method,count", [("rabitq", 2), ("qg", 33)])
+def test_separate_clustering_and_indexing(
+    tmp_path, example_data, metric, kind, method, count
+):
     data_path, data = example_data
     clusters = tmp_path / "clusters.npz"
     run_example(
-        "faiss_clustering.py",
+        "kmeans_clustering.py",
         data_path,
         clusters,
         "--num-clusters",
-        2,
+        count,
         "--metric",
         metric,
         "--num-threads",
         2,
-        blocked="rabitqlib",
+        *(["--method", method] if method == "rabitq" else []),
     )
     with np.load(clusters, allow_pickle=False) as saved:
-        assert saved["centroids"].shape == (2, data.shape[1])
+        assert saved["centroids"].shape == (count, data.shape[1])
         assert saved["centroids"].dtype == np.float32
         assert saved["cluster_ids"].shape == (len(data),)
         assert saved["cluster_ids"].dtype == np.uint32
-        assert (saved["cluster_ids"] < 2).all()
+        assert (saved["cluster_ids"] < count).all()
         assert saved["metric"].item() == metric
+        check_exact_cluster_labels(
+            data, saved["centroids"], saved["cluster_ids"], metric
+        )
     run_example(
         f"{kind}_rabitq_indexing.py",
         data_path,
@@ -208,6 +211,72 @@ def test_separate_clustering_and_indexing(tmp_path, example_data, metric, kind):
         2,
     )
     check_saved_index_and_query(tmp_path, kind, metric, data)
+
+
+def check_exact_cluster_labels(data, centroids, labels, metric):
+    original = data.astype(np.float64)
+    centers = centroids.astype(np.float64)
+    if metric == "ip":
+        np.testing.assert_allclose(np.linalg.norm(centers, axis=1), 1.0, atol=1e-6)
+        distances = 1.0 - original @ centers.T
+    else:
+        delta = original[:, None, :] - centers[None, :, :]
+        distances = np.einsum("nkd,nkd->nk", delta, delta)
+    np.testing.assert_array_equal(labels, np.argmin(distances, axis=1))
+
+
+@pytest.mark.parametrize("argument", [None, "l2", "ip", "innerproduct"])
+def test_legacy_clustering_formats_without_faiss(tmp_path, example_data, argument):
+    data_path, data = example_data
+    centroids_path = tmp_path / "centroids.fvecs"
+    labels_path = tmp_path / "labels.ivecs"
+    run_example(
+        EXAMPLES.parents[1] / "python" / "ivf.py",
+        data_path,
+        16,
+        centroids_path,
+        labels_path,
+        *([] if argument is None else [argument]),
+        "--method",
+        "rabitq",
+    )
+    centroid_words = np.fromfile(centroids_path, dtype=np.int32).reshape(16, -1)
+    np.testing.assert_array_equal(centroid_words[:, 0], data.shape[1])
+    centroids = centroid_words[:, 1:].copy().view(np.float32)
+    label_words = np.fromfile(labels_path, dtype=np.int32).reshape(len(data), 2)
+    np.testing.assert_array_equal(label_words[:, 0], 1)
+    labels = label_words[:, 1]
+    assert np.isfinite(centroids).all()
+    assert ((0 <= labels) & (labels < 16)).all()
+    metric = "ip" if argument in ("ip", "innerproduct") else "l2"
+    check_exact_cluster_labels(data, centroids, labels, metric)
+
+
+@pytest.mark.parametrize(
+    "clusters,dimension,message",
+    [(0, 64, "num_clusters"), (129, 64, "num_clusters"), (2, 63, "dimension")],
+)
+def test_clustering_rejects_invalid_sizes(clusters, dimension, message, monkeypatch):
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    spec = importlib.util.spec_from_file_location(
+        "kmeans_clustering", EXAMPLES / "kmeans_clustering.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    data = np.zeros((128, dimension), dtype=np.float32)
+    with pytest.raises(ValueError, match=message):
+        module.cluster_data(data, clusters, "l2", 1, method="rabitq")
+
+
+def test_clustering_default_requires_graph_compatible_cluster_count(monkeypatch):
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    spec = importlib.util.spec_from_file_location(
+        "kmeans_clustering", EXAMPLES / "kmeans_clustering.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with pytest.raises(ValueError, match="more centroids than the graph degree"):
+        module.cluster_data(np.zeros((65, 64), dtype=np.float32), 2, "l2", 1)
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])

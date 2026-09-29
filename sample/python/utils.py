@@ -35,14 +35,14 @@ def compute_recall(ids: np.ndarray, gt: np.ndarray, topk: int) -> float:
 
 
 # ──────────────────────────────────────────────
-# Saved clustering results (no Faiss dependency)
+# Saved clustering results
 # ──────────────────────────────────────────────
 
 
 def load_clusters(
     filename: str, data_shape: tuple[int, int], metric: str
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Load results from faiss_clustering.py for the same data in the same order."""
+    """Load results from kmeans_clustering.py for the same data in the same order."""
     with np.load(filename, allow_pickle=False) as saved:
         if not {"centroids", "cluster_ids", "metric"}.issubset(saved.files):
             raise ValueError(

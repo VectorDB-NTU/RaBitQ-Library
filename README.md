@@ -6,7 +6,7 @@
 
 <p>
   A research-backed C++17 library with Python bindings for 1-bit and multi-bit<br>
-  vector quantization, IVF, HNSW, and SymphonyQG.
+  vector quantization, IVF, HNSW, SymphonyQG, and clustering.
 </p>
 
 <p>
@@ -63,17 +63,16 @@ Build and search a small IVF index using synthetic data:
 
 ```python
 import numpy as np
-from rabitqlib import IvfIndex
+from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
 
 rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-# Assign vectors to five clusters and calculate their centroids.
-cluster_ids = (np.arange(len(data)) % 5).astype(np.uint32)
-centroids = np.stack(
-    [data[cluster_ids == cluster].mean(axis=0) for cluster in range(5)]
-).astype(np.float32)
+clustering = RaBitQKMeans(
+    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
+)
+clustering.train(data)
 
 index = IvfIndex(
     dim=64,
@@ -82,7 +81,7 @@ index = IvfIndex(
     nbits=4,
     metric="l2",
 )
-index.build(data, centroids, cluster_ids)
+index.build(data, clustering.centroids, clustering.assignments)
 
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
@@ -93,15 +92,19 @@ For all three indexes, `build` and `search` interpret `num_threads=0` as the
 detected hardware thread count. Larger requests are capped at that count;
 smaller positive requests are respected. Operations may use fewer workers when
 there are fewer work items. If hardware detection is unavailable, one thread is
-used. Omitting `num_threads` in Python still defaults to one thread.
+used. Python index methods default to one thread when `num_threads` is omitted.
 
-Python bindings are also available for `HnswIndex` and `SymqgIndex`. See the
-[Python examples](sample/python/README.md) for index construction, querying, and
-index persistence. IVF and HNSW examples run Faiss clustering in a separate process,
-then pass saved clusters to RaBitQ indexing so their OpenMP runtimes stay separate.
+IVF and HNSW examples save clusters for reuse across index configurations.
+Choose RaBitQKMeans for flat assignment or QGKMeans for graph assignment;
+FAISS is needed only for the optional clustering comparison.
 
 Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
 in C++; Python paths are Unicode strings on all platforms.
+
+See the [Python examples](sample/python/README.md) for IVF, HNSW, and SymphonyQG.
+For clustering, use [RaBitQKMeans](docs/docs/clustering.md#rabitqkmeans) for small cluster
+counts or [QGKMeans](docs/docs/clustering.md#qgkmeans) for graph assignment. The
+[FAISS comparison](sample/python/compare_with_faiss.py) benchmarks both methods.
 
 <details>
 <summary>Build the Python bindings from source</summary>
@@ -145,6 +148,7 @@ depend on the dataset, index configuration, and search parameters.
 | **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
 | **Native CPU backends** | Runtime AVX2/AVX-512 selection on x86-64; NEON distance, packed-code, FastScan, rotation, query preparation, and HNSW search kernels on ARM64, with portable scalar fallbacks. |
 | **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
+| **Native clustering** | Choose [RaBitQKMeans](docs/docs/clustering.md#rabitqkmeans) with flat RaBitQ assignment or [QGKMeans](docs/docs/clustering.md#qgkmeans) with SymphonyQG assignment; neither needs an external k-means package. |
 
 The library supports Euclidean distance and inner product. Cosine search is
 available by normalizing vectors before using inner product.

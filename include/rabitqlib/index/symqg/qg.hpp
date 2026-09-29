@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <random>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -30,6 +31,7 @@ class QuantizedQuery {
         size_t padded_dim,
         MetricType metric_type
     );
+    QuantizedQuery(const float* rotated_query, const QuantizedQuery& prepared);
     [[nodiscard]] const float* rotated_query() const;
     [[nodiscard]] float k1xsumq() const;
     [[nodiscard]] float g_add() const;
@@ -73,6 +75,13 @@ class QuantizedGraph<float> {
     size_t row_offset_ = 0;         // length of entire row
     size_t ef_ = 0;
     bool ready_ = false;
+    uint32_t seed_ = 42;
+
+    // Owned by QGBuilder and never persisted.
+    struct BuildCache {
+        std::vector<float> rotated_vectors;
+        std::vector<QuantizedQuery> queries;
+    };
 
     [[nodiscard]] static size_t checked_add(size_t lhs, size_t rhs);
 
@@ -90,23 +99,36 @@ class QuantizedGraph<float> {
 
     void set_quantization_centroid(const float* centroid);
 
-    [[nodiscard]] char* get_row_data(PID data_id);
+    [[nodiscard]] char* get_row_data(PID data_id) {
+        return reinterpret_cast<char*>(get_vector(data_id));
+    }
 
-    [[nodiscard]] const char* get_row_data(PID data_id) const;
+    [[nodiscard]] const char* get_row_data(PID data_id) const {
+        return reinterpret_cast<const char*>(get_vector(data_id));
+    }
 
-    [[nodiscard]] float* get_vector(PID data_id);
+    [[nodiscard]] float* get_vector(PID data_id) {
+        return data_.data() + ((row_offset_ / sizeof(float)) * data_id);
+    }
 
-    [[nodiscard]] const float* get_vector(PID data_id) const;
+    [[nodiscard]] const float* get_vector(PID data_id) const {
+        return data_.data() + ((row_offset_ / sizeof(float)) * data_id);
+    }
 
-    [[nodiscard]] char* get_quantized_vector(PID data_id);
+    [[nodiscard]] char* get_quantized_vector(PID data_id) { return get_row_data(data_id); }
 
-    [[nodiscard]] const char* get_quantized_vector(PID data_id) const;
+    [[nodiscard]] const char* get_quantized_vector(PID data_id) const {
+        return get_row_data(data_id);
+    }
 
-    void prepare_query(const float*, std::vector<float>&, std::optional<QuantizedQuery>&)
-        const;
+    void validate_search(const float*, uint32_t, const uint32_t*, const float*) const;
 
-    const float*
-    prepare_build_query(PID, std::vector<float>&, std::optional<QuantizedQuery>&) const;
+    const float* prepare_build_query(
+        PID,
+        std::vector<float>&,
+        std::optional<QuantizedQuery>&,
+        const BuildCache* = nullptr
+    ) const;
 
     float point_distance(const float*, const QuantizedQuery*, PID) const;
 
@@ -114,25 +136,47 @@ class QuantizedGraph<float> {
 
     void reconstruct_quantized_vector(PID, float*) const;
 
-    [[nodiscard]] char* get_batch_data(PID data_id);
+    [[nodiscard]] char* get_batch_data(PID data_id) {
+        return get_row_data(data_id) + batch_data_offset_;
+    }
 
-    [[nodiscard]] const char* get_batch_data(PID data_id) const;
+    [[nodiscard]] const char* get_batch_data(PID data_id) const {
+        return get_row_data(data_id) + batch_data_offset_;
+    }
 
-    [[nodiscard]] rabitqlib::detail::PackedArrayView<PID> get_neighbors(PID data_id);
+    [[nodiscard]] rabitqlib::detail::PackedArrayView<PID> get_neighbors(PID data_id) {
+        return rabitqlib::detail::PackedArrayView<PID>(
+            get_row_data(data_id) + neighbor_offset_
+        );
+    }
 
     [[nodiscard]] rabitqlib::detail::ConstPackedArrayView<PID> get_neighbors(PID data_id
+    ) const {
+        return rabitqlib::detail::ConstPackedArrayView<PID>(
+            get_row_data(data_id) + neighbor_offset_
+        );
+    }
+
+    void find_candidates(
+        PID,
+        size_t,
+        std::vector<AnnCandidate<float>>&,
+        VisitedSet&,
+        const std::vector<uint32_t>&,
+        const BuildCache* = nullptr
     ) const;
 
-    void
-    find_candidates(PID, size_t, std::vector<AnnCandidate<float>>&, VisitedSet&, const std::vector<uint32_t>&)
-        const;
-
-    void update_qg(PID, const std::vector<AnnCandidate<float>>&);
+    void update_qg(
+        PID,
+        const std::vector<AnnCandidate<float>>&,
+        const BuildCache* = nullptr,
+        std::vector<float>* = nullptr
+    );
 
     void
     update_results(buffer::SearchBuffer<float>&, VisitedSet&, const float*, const QuantizedQuery*);
 
-    void scan_neighbors(
+    inline void scan_neighbors(
         const BatchQuery<float>&,
         PID,
         float*,
@@ -148,7 +192,8 @@ class QuantizedGraph<float> {
         size_t max_deg,
         MetricType metric_type = METRIC_L2,
         RotatorType rotator_type = RotatorType::FhtKacRotator,
-        size_t quantization_bits = 0
+        size_t quantization_bits = 0,
+        uint32_t seed = std::random_device{}()
     );
 
     explicit QuantizedGraph();
@@ -189,6 +234,38 @@ class QuantizedGraph<float> {
         uint32_t* __restrict__ results,
         float* __restrict__ dists
     );
+    /**
+     * Search using caller-owned scratch buffers.
+     *
+     * This avoids per-query allocations and can use a previous result as a
+     * warm-start hint. The search and result buffers must be sized for ef and
+     * knn respectively. rotated_query_scratch, est_dist_scratch, and
+     * lut_float_scratch require padded_dim(), degree_bound(), and
+     * padded_dim() * 4 elements respectively. The visited set must be
+     * initialized before the first search; an uninitialized set raises
+     * std::invalid_argument. Concurrent searches require separate scratch
+     * buffers, including visited sets.
+     *
+     * An optional k1xsumq must come from BatchQuery::k1xsumq() for the same
+     * query and this graph's rotation. A null pointer recomputes the sum.
+     */
+    void search_with_scratch(
+        const float* __restrict__ query,
+        uint32_t knn,
+        uint32_t* __restrict__ results,
+        float* __restrict__ dists,
+        float* __restrict__ rotated_query_scratch,
+        float* __restrict__ est_dist_scratch,
+        float* __restrict__ lut_float_scratch,
+        BatchQuery<float>& batch_query,
+        buffer::SearchBuffer<float>& search_pool,
+        buffer::SearchBuffer<float>& result_pool,
+        VisitedSet& visited,
+        PID hint = kPidMax,
+        const float* k1xsumq = nullptr
+    );
+
+    [[nodiscard]] size_t padded_dim() const { return this->padded_dim_; }
 };
 
 // Preserve C++17 deduction for callers that omit the float template argument.
@@ -199,7 +276,8 @@ QuantizedGraph(
     size_t,
     MetricType = METRIC_L2,
     RotatorType = RotatorType::FhtKacRotator,
-    size_t = 0
+    size_t = 0,
+    uint32_t = std::random_device{}()
 )
     ->QuantizedGraph<float>;
 

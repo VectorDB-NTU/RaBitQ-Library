@@ -10,24 +10,19 @@ width, number of clusters, and `nprobe`.
 The algorithm includes two phases: indexing and querying.
 
 ## Index Construction
-The first step is to run a clustering algorithm to partition raw data vectors (`*.fvecs` format) into different buckets.
-The algorithm performs KMeans clustering on raw vectors based on [Faiss](https://github.com/facebookresearch/faiss) (see `python/ivf.py`).
-To run the algorithm, you need to execute the command in `shell`:
+
+Use [QGKMeans](../clustering.md#qgkmeans) to partition the input vectors (`.fvecs`).
+Build the C++ examples, then run `bin/qgkmeans` to save centroids and cluster IDs.
+For small cluster counts, use `bin/rabitqkmeans` for
+[RaBitQKMeans](../clustering.md#rabitqkmeans) flat assignment. Both use exact final
+assignment. The optional metric defaults to `l2`; append `ip` for normalized input.
+
+For example, split SIFT into 4,096 clusters using squared L2 distance:
 
 ```shell
-python python/ivf.py  /path/to/raw/data \
-                      number_of_clusters \
-                      /path/to/output/centroids \
-                      /path/to/output/cluster_ids \
-                      distance_metric
-```
-For example, the following command splits the sift vector data into 4096 clusters using Euclidean (l2) distance:
-```shell
-python python/ivf.py /data/sift/sift_base.fvecs \
-                     4096 \
-                     /data/sift/sift_centroids_4096_l2.fvecs \
-                     /data/sift/sift_clusterids_4096_l2.ivecs \
-                     l2
+./bin/qgkmeans /data/sift/sift_base.fvecs 4096 \
+    /data/sift/sift_centroids_4096_l2.fvecs \
+    /data/sift/sift_clusterids_4096_l2.ivecs
 ```
 
 After files are prepared, you need to load them into memory:
@@ -72,7 +67,7 @@ void IVF::construct(
 ```
 
 - **data**: Pointer to the raw data vectors.
-- **centroids**: Centroids computed by K-means clustering on the raw data vectors (we recommend to tune cluster_num around 4 * the square root of the dataset following Faiss).
+- **centroids**: Clustering centroids; tune `cluster_num` for the dataset and search budget.
 - **cluster_ids**: Array of length `data_num`; every entry must be in the range `[0, cluster_num)`.
 - **faster**: If true, enable fast implementations for RaBitQ (By default, it is set as `false` to pursue better accuracy.).
 - **num_threads**: Maximum number of OpenMP threads used to quantize clusters.

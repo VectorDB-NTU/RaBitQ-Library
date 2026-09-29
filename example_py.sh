@@ -1,5 +1,5 @@
 # compiling
-pip install .
+python -m pip install .
 
 # Download the dataset
 mkdir -p ./data/gist
@@ -14,14 +14,14 @@ python  ./sample/python/symqg_indexing.py --max-degree 32 --ef-construction 400 
 python  ./sample/python/symqg_querying.py ./data/gist/symqg_32.index ./data/gist/gist_query.fvecs ./data/gist/gist_groundtruth.ivecs
 
 # indexing and querying for RabitQ+ with ivf
-python ./sample/python/faiss_clustering.py --num-clusters 4096 ./data/gist/gist_base.fvecs ./data/gist/clusters_4096_l2.npz
+python ./sample/python/kmeans_clustering.py --method qg --num-clusters 4096 ./data/gist/gist_base.fvecs ./data/gist/clusters_4096_l2.npz
 
 python ./sample/python/ivf_rabitq_indexing.py --total-bits 5 --clusters ./data/gist/clusters_4096_l2.npz ./data/gist/gist_base.fvecs ./data/gist/ivf_4096_5.index
 
 python ./sample/python/ivf_rabitq_querying.py ./data/gist/ivf_4096_5.index ./data/gist/gist_query.fvecs ./data/gist/gist_groundtruth.ivecs
 
 # indexing and querying for RabitQ+ with hnsw
-python ./sample/python/faiss_clustering.py --num-clusters 16 ./data/gist/gist_base.fvecs ./data/gist/clusters_16_l2.npz
+python ./sample/python/kmeans_clustering.py --method rabitq --num-clusters 16 ./data/gist/gist_base.fvecs ./data/gist/clusters_16_l2.npz
 
 python ./sample/python/hnsw_rabitq_indexing.py --total-bits 5 --clusters ./data/gist/clusters_16_l2.npz --degree 16 --ef-construction 200 ./data/gist/gist_base.fvecs ./data/gist/hnsw_5.index
 

@@ -46,16 +46,16 @@ Build an IVF index and search a batch of queries:
 
 ```python
 import numpy as np
-from rabitqlib import IvfIndex
+from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
 
 rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-cluster_ids = (np.arange(len(data)) % 5).astype(np.uint32)
-centroids = np.stack(
-    [data[cluster_ids == cluster].mean(axis=0) for cluster in range(5)]
-).astype(np.float32)
+clustering = RaBitQKMeans(
+    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
+)
+clustering.train(data)
 
 index = IvfIndex(
     dim=64,
@@ -64,7 +64,7 @@ index = IvfIndex(
     nbits=4,
     metric="l2",
 )
-index.build(data, centroids, cluster_ids)
+index.build(data, clustering.centroids, clustering.assignments)
 
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)

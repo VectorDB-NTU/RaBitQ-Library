@@ -70,6 +70,24 @@ Function resolve_optional_kernel(Function preferred, Function fallback, bool sup
 #define RABITQ_RESOLVE2(avx2, fallback) fallback
 #endif
 
+const auto kAccumulateClusterSumsFn = RABITQ_RESOLVE(
+    accumulate_cluster_sums_avx512,
+    accumulate_cluster_sums_avx2,
+    accumulate_cluster_sums_generic
+);
+
+void accumulate_cluster_sums(
+    const float* x,
+    const size_t* point_ids,
+    size_t count,
+    size_t dim,
+    const uint32_t* labels,
+    double* sums,
+    size_t* counts
+) {
+    kAccumulateClusterSumsFn(x, point_ids, count, dim, labels, sums, counts);
+}
+
 const auto kMatrixProductFn =
     RABITQ_RESOLVE(matrix_product_avx512, matrix_product_avx2, matrix_product_generic);
 

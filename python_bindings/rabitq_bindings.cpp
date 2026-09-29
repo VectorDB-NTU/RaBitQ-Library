@@ -1,3 +1,4 @@
+#include <pybind11/detail/common.h>
 #include <pybind11/pybind11.h>
 
 #include "rabitqlib/defines.hpp"
@@ -9,6 +10,7 @@ namespace py = pybind11;
 void register_hnsw(py::module_& m);
 void register_ivf(py::module_& m);
 void register_symqg(py::module_& m);
+void register_kmeans(py::module_& m);
 
 PYBIND11_MODULE(_rabitqlib, m) {
     m.doc() = "RabitQ Python bindings combined module";
@@ -28,4 +30,5 @@ PYBIND11_MODULE(_rabitqlib, m) {
     register_hnsw(m);
     register_ivf(m);
     register_symqg(m);
+    register_kmeans(m);
 }

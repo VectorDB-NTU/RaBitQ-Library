@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "rabitqlib"
 version = "0.4.0"
-description = "RaBitQ Python bindings for HNSW, IVF, and SymQG"
+description = "RaBitQ Python bindings for indexes and clustering"
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [

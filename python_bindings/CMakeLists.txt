@@ -20,6 +20,7 @@ pybind11_add_module(_rabitqlib
     hnsw_bindings.cpp
     ivf_bindings.cpp
     symqg_bindings.cpp
+    kmeans_bindings.cpp
 )
 
 target_include_directories(_rabitqlib PRIVATE

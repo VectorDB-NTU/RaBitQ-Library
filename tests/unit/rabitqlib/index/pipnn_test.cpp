@@ -1,12 +1,18 @@
 #include "rabitqlib/index/symqg/detail/pipnn.hpp"
 
 #include <gtest/gtest.h>
+#include <omp.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <vector>
+
+#include "rabitqlib/defines.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::symqg::detail {
 namespace {
@@ -107,6 +113,14 @@ TEST(PipnnTest, OverlappingPartitionsTerminateForDuplicateVectors) {
         EXPECT_GE(membership, 1U);
         EXPECT_LE(membership, 30U);
     }
+}
+
+TEST(PipnnTest, PreservesCallerThreadCount) {
+    const int previous = omp_get_max_threads();
+    std::vector<float> data(65 * 65, 0.5F);
+    const size_t requested = previous == 1 ? 2 : 1;
+    build_initial_graph(data.data(), 65, 65, 32, METRIC_L2, requested);
+    EXPECT_EQ(omp_get_max_threads(), previous);
 }
 
 TEST(PipnnTest, RejectsInvalidConfiguration) {

@@ -10,7 +10,7 @@ Set `quantization_bits=0` for raw vectors (default), or `4`/`8` for QG-quant.
 Quantized vectors share a rotated global centroid. Refinement temporarily
 reconstructs source vectors and estimates distances to stored target codes;
 reverse edges are rescored because these estimates are directional. Raw refinement
-uses owned raw vectors. No full reconstructed-vector cache is retained.
+uses owned raw vectors. No full reconstructed-vector cache is retained by default.
 
 ## Index Construction
 
@@ -39,29 +39,38 @@ window; `ef` controls the query search window. Python defaults to one thread.
 
 ### C++
 
-The C++ API uses the float-only `rabitqlib::symqg::QuantizedGraph` and `QGBuilder`.
-`QuantizedGraph<float>` retains the C++ template API, with its implementation
-compiled in `src/index/qg.cpp`. C++17 variable declarations can also omit `<float>`
-through class template argument deduction:
+The C++ API provides `rabitqlib::symqg::QuantizedGraph<float>` and `QGBuilder`.
+Only float vectors are supported; C++17 declarations may omit `<float>` through
+class template argument deduction:
 
 ```cpp
 QuantizedGraph<float>(
     size_t num, size_t dim, size_t max_deg,
     MetricType metric_type = METRIC_L2,
     RotatorType rotator_type = RotatorType::FhtKacRotator,
-    size_t quantization_bits = 0
+    size_t quantization_bits = 0, uint32_t seed = std::random_device{}()
 );
 QGBuilder(
     QuantizedGraph<float>& index, uint32_t ef_build, const float* data,
     size_t num_threads = std::numeric_limits<size_t>::max(),
-    QGInitialization init = QGInitialization::PiPNN
+    QGInitialization init = QGInitialization::PiPNN,
+    uint32_t seed = std::random_device{}(), bool cache_vectors = false
 );
 ```
 
-`data` contains `num * dim` floats; `max_deg` has the same constraints as Python's
-`max_degree`. C++ defaults to all available threads. Pass
-`QGInitialization::Random` as the final builder argument to use random initialization.
-The builder handles initialization internally.
+`data` contains `num * dim` floats; `max_deg` has Python's `max_degree`
+constraints. C++ defaults to all available threads. `build()` runs one refinement
+for PiPNN or three passes for `QGInitialization::Random`; `build(n)` requests
+`n >= 2` passes. The older overload with a numeric fifth argument uses that value
+as the random-initialization seed.
+
+`builder.reset(data)` reinitializes vectors of the same shape and reuses workspace.
+Input may be released after reset returns; rebuild before querying or saving.
+`cache_vectors=true` retains transformed vectors and query factors
+(`4 * num * padded_dim` bytes plus factors). [QGKMeans](../clustering.md#qgkmeans) enables
+this for its centroid graph; the cache is not persisted. The graph seed controls
+rotation, and the builder seed controls random initialization and fallback edges.
+PiPNN uses fixed internal seeds.
 
 ```cpp
 using namespace rabitqlib::symqg;

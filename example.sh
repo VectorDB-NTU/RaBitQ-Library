@@ -14,15 +14,15 @@ tar -xzvf ./data/gist/gist.tar.gz -C ./data/gist
 
 ./bin/symqg_querying ./data/gist/symqg_32.index ./data/gist/gist_query.fvecs ./data/gist/gist_groundtruth.ivecs
 
-# indexing and querying for RabitQ+ with ivf, please refer to python/ivf.py for more information about clustering
-python ./python/ivf.py ./data/gist/gist_base.fvecs 4096 ./data/gist/gist_centroids_4096.fvecs ./data/gist/gist_clusterids_4096.ivecs
+# Cluster with QGKMeans, then build and query an IVF index.
+./bin/qgkmeans ./data/gist/gist_base.fvecs 4096 ./data/gist/gist_centroids_4096.fvecs ./data/gist/gist_clusterids_4096.ivecs
 
 ./bin/ivf_rabitq_indexing ./data/gist/gist_base.fvecs ./data/gist/gist_centroids_4096.fvecs ./data/gist/gist_clusterids_4096.ivecs 3 ./data/gist/ivf_4096_3.index
 
 ./bin/ivf_rabitq_querying ./data/gist/ivf_4096_3.index ./data/gist/gist_query.fvecs ./data/gist/gist_groundtruth.ivecs
 
-# indexing and querying for RabitQ+ with hnsw, do clustering first
-python ./python/ivf.py ./data/gist/gist_base.fvecs 16 ./data/gist/gist_centroids_16.fvecs ./data/gist/gist_clusterids_16.ivecs
+# Cluster with RaBitQKMeans, then build and query an HNSW index.
+./bin/rabitqkmeans ./data/gist/gist_base.fvecs 16 ./data/gist/gist_centroids_16.fvecs ./data/gist/gist_clusterids_16.ivecs
 
 ./bin/hnsw_rabitq_indexing ./data/gist/gist_base.fvecs ./data/gist/gist_centroids_16.fvecs ./data/gist/gist_clusterids_16.ivecs 16 200 5 ./data/gist/hnsw_5.index
 

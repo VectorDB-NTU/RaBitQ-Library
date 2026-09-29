@@ -21,9 +21,11 @@ class BatchQuery {
     Lut<T> lookup_table_;
     T G_add_ = 0;
     T G_k1xSumq_ = 0;  // G_k1xSumq
-    MetricType metric_type_;
+    MetricType metric_type_ = METRIC_L2;
 
    public:
+    explicit BatchQuery() = default;
+
     explicit BatchQuery(
         const T* rotated_query, size_t padded_dim, MetricType metric_type = METRIC_L2
     )
@@ -47,6 +49,32 @@ class BatchQuery {
     void set_g_add(T dist) {
         // dist is squared L2 or 1 - dot_product; IP encoder factors already include 1.
         G_add_ = metric_type_ == METRIC_IP ? dist - T{1} : dist;
+    }
+
+    /**
+     * Reinitialize the query while reusing the lookup-table allocation.
+     * An optional correction must come from this exact rotated query.
+     */
+    void reset(
+        const T* rotated_query,
+        size_t padded_dim,
+        float* lut_float_scratch,
+        MetricType metric_type = METRIC_L2,
+        const T* k1xsumq = nullptr
+    ) {
+        metric_type_ = metric_type;
+        lookup_table_.reset(rotated_query, padded_dim, lut_float_scratch);
+
+        if (k1xsumq != nullptr) {
+            G_k1xSumq_ = *k1xsumq;
+        } else {
+            constexpr float c_1 = -((1 << 1) - 1) / 2.F;
+            const T sumq = std::accumulate(
+                rotated_query, rotated_query + padded_dim, static_cast<T>(0)
+            );
+            G_k1xSumq_ = sumq * c_1;
+        }
+        G_add_ = 0;
     }
 
     [[nodiscard]] const uint8_t* lut() const { return lookup_table_.lut(); }

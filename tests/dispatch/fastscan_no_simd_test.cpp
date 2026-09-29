@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
@@ -34,6 +35,33 @@ TEST(FastScanDispatchTest, UnsupportedCpuThrowsWithoutAccessingInputsOrOutput) {
         );
     }
     EXPECT_EQ(result, original);
+}
+
+TEST(FastScanDispatchTest, PointCodeAssignmentPropagatesUnsupportedCpuFromWorkers) {
+    constexpr size_t kDim = 64, kPoints = 65, kClusters = 2;
+    const std::array<float, kPoints * kDim> data{};
+    const std::array<float, kClusters * kDim> centroids{};
+    std::array<PID, kPoints> labels;
+    labels.fill(kPidMax);
+    std::array<float, kPoints> distances;
+    distances.fill(-1.0F);
+    rabitqkmeans::detail::RaBitQAssigner assigner(
+        kDim, kClusters, data.data(), kPoints, 2, rabitqkmeans::RaBitQKMeansParameters{}
+    );
+    try {
+        assigner.assign(centroids.data(), labels.data(), distances.data());
+        FAIL() << "Point-code assignment must propagate an unsupported FastScan backend";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(
+            error.what(),
+            "Standard FastScan accumulation requires AVX2/FMA, AVX-512, or ARM NEON; "
+            "no supported SIMD backend is available"
+        );
+    }
+    for (size_t point = 0; point < kPoints; ++point) {
+        EXPECT_EQ(labels[point], kPidMax);
+        EXPECT_EQ(distances[point], -1.0F);
+    }
 }
 
 TEST(FastScanDispatchTest, InvalidDimensionStillRaisesInvalidArgument) {
