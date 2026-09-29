@@ -55,17 +55,16 @@ require a dataset download:
 
 ```python
 import numpy as np
-from rabitqlib import IvfIndex
+from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
 
 rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-# Assign vectors to five clusters and calculate their centroids.
-cluster_ids = (np.arange(len(data)) % 5).astype(np.uint32)
-centroids = np.stack(
-    [data[cluster_ids == cluster].mean(axis=0) for cluster in range(5)]
-).astype(np.float32)
+clustering = RaBitQKMeans(
+    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
+)
+clustering.train(data)
 
 index = IvfIndex(
     dim=64,
@@ -74,7 +73,7 @@ index = IvfIndex(
     nbits=4,
     metric="l2",
 )
-index.build(data, centroids, cluster_ids)
+index.build(data, clustering.centroids, clustering.assignments)
 
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
@@ -101,9 +100,10 @@ The `metric` argument accepts `"l2"` and `"ip"` (also spelled
 `"innerproduct"`). To search by cosine similarity, normalize database and
 query vectors first and use `metric="ip"`.
 
-Python bindings are also available for `HnswIndex` and `SymqgIndex`. The
-[Python examples](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/python)
-cover construction, querying, and index persistence.
+See the [Python examples](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/python)
+for IVF, HNSW, and SymphonyQG. For clustering, choose
+[RaBitQKMeans](clustering.md#rabitqkmeans) for flat assignment, recommended for small cluster
+counts, or [QGKMeans](clustering.md#qgkmeans) for graph assignment.
 
 <details>
 <summary>Build the Python bindings from source</summary>

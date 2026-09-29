@@ -22,7 +22,7 @@ def main(args=None) -> None:
     data = read_fvecs(args.data_file)
     print(f"Data shape: {data.shape}")
 
-    # 2. Load clusters computed in a separate Faiss process.
+    # 2. Load clusters computed by RaBitQKMeans or QGKMeans.
     centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
     print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
 
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--clusters",
         required=True,
-        help="Clustering file produced by faiss_clustering.py for this data and metric",
+        help="Clustering file produced by kmeans_clustering.py for this data and metric",
     )
     parser.add_argument(
         "--degree",

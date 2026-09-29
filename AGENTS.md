@@ -17,6 +17,7 @@ factors estimate L2 distance or inner product.
 | --- | --- |
 | `include/rabitqlib/quantization/` | Encoding, packing, reconstruction, and byte layouts |
 | `include/rabitqlib/fastscan/` | FastScan interfaces and high-accuracy scanning |
+| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/index/{query,estimator}.hpp` | Query state and distance estimation |
 | `include/rabitqlib/simd/`, `src/simd/` | Kernel declarations, implementations, and dispatch |

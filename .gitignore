@@ -48,3 +48,6 @@ __pycache__/
 
 # macOS garbages
 .DS_Store
+
+# Generated documentation
+/docs/site/

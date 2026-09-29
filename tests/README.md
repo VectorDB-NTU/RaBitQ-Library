@@ -113,12 +113,15 @@ python -m pytest tests/python -ra -q
 Confirm the printed extension path belongs to the intended environment. The
 suite includes all three indexes, quantization, persistence, and Unicode paths.
 
-The example integration tests additionally need `faiss-cpu`. Wheel CI installs it
-as a test dependency and runs Faiss clustering and RaBitQ indexing/querying in
-separate subprocesses, with guards against importing both libraries together.
-These tests cover L2/IP and the saved clustering file used by the
-[Python examples](../sample/python/README.md). They skip the Faiss-dependent cases
-when Faiss is absent from a local test environment.
+The [Python example tests](python/test_examples.py) cover RaBitQKMeans and
+QGKMeans clustering, L2/IP indexing, saved cluster files, and queries without
+importing FAISS. The [FAISS comparison tests](python/test_compare_with_faiss.py)
+cover both clustering methods and require `faiss-cpu`; wheel CI includes it as
+a test dependency.
+
+The [C++ clustering example tests](python/test_cpp_clustering_examples.py) check
+saved vectors, exact labels, and compatibility with the C++ index builders.
+Build the corresponding examples first; cases skip when their executables are absent.
 
 ## Installed CMake package test
 

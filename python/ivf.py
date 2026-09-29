@@ -1,37 +1,38 @@
-import sys
+import argparse
 from time import time
 
-import faiss
+from rabitqlib import FinalAssignmentMode, QGKMeans, RaBitQKMeans
 from utils.io import read_fvecs, write_fvecs, write_ivecs
 
 if __name__ == "__main__":
-    if len(sys.argv) < 5:
-        print(f"Usage: {sys.argv[0]} <arg1> <arg2> <arg3> <arg4> <arg5>")
-        print("arg1: path for data file, format .fvecs")
-        print("arg2: number of clusters")
-        print("arg3: path for centroid vectors")
-        print("arg4: path for cluster ids")
-        print("arg5: distance metric")
-        exit(1)
-
-    # path
-    data_path = sys.argv[1]
-    K = int(sys.argv[2])
-    centroids_path = sys.argv[3]
-    cluster_id_path = sys.argv[4]
-    if len(sys.argv) == 6:
-        distance_metric = sys.argv[5].lower()
-        if distance_metric == "l2":
-            metric = faiss.METRIC_L2
-            print("Using L2 metric")
-        elif distance_metric in ["ip", "innerproduct"]:
-            metric = faiss.METRIC_INNER_PRODUCT
-            print("Using InnerProduct metric")
-        else:
-            raise ValueError("Unsupported distance metric. Use 'l2' or 'ip'.")
-    else:
-        metric = faiss.METRIC_L2  # by default, L2 metric
-        print("Using L2 metric by default")
+    parser = argparse.ArgumentParser(
+        description="Cluster vectors and save fvecs/ivecs outputs."
+    )
+    parser.add_argument("data_path")
+    parser.add_argument("num_clusters", type=int)
+    parser.add_argument("centroids_path")
+    parser.add_argument("cluster_id_path")
+    parser.add_argument(
+        "metric",
+        nargs="?",
+        default="l2",
+        type=str.lower,
+        choices=["l2", "ip", "innerproduct"],
+    )
+    parser.add_argument(
+        "--method",
+        choices=["rabitq", "qg"],
+        default="qg",
+        help="rabitq for few centroids; qg for many",
+    )
+    args = parser.parse_args()
+    data_path = args.data_path
+    K = args.num_clusters
+    centroids_path = args.centroids_path
+    cluster_id_path = args.cluster_id_path
+    metric = "l2" if args.metric == "l2" else "ip"
+    clustering_type = RaBitQKMeans if args.method == "rabitq" else QGKMeans
+    print(f"Using {metric.upper()} metric with {clustering_type.__name__}")
 
     X = read_fvecs(data_path)
 
@@ -40,15 +41,20 @@ if __name__ == "__main__":
     t1 = time()
 
     # cluster data vectors
-    index = faiss.index_factory(dim, f"IVF{K},Flat", metric)
-    index.verbose = True
-    index.train(X)
+    kmeans = clustering_type(
+        dim,
+        K,
+        spherical=metric == "ip",
+        final_assignment=FinalAssignmentMode.Exact,
+        verbose=True,
+    )
+    kmeans.train(X)
 
     t2 = time()
     print(f"Time for training ivf {t2 - t1} secs")
 
-    centroids = index.quantizer.reconstruct_n(0, index.nlist)
-    _, cluster_id = index.quantizer.search(X, 1)
+    centroids = kmeans.centroids
+    cluster_id = kmeans.assignments.reshape(-1, 1)
 
     write_ivecs(cluster_id_path, cluster_id)
     write_fvecs(centroids_path, centroids)

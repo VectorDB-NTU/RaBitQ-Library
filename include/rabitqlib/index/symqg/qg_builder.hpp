@@ -11,6 +11,7 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
+#include <random>
 #include <stdexcept>
 #include <unordered_set>
 #include <vector>
@@ -47,6 +48,15 @@ class QGBuilder {
     std::vector<CandidateList> pruned_neighbors_;  // recorded pruned neighbors
     std::vector<VisitedSet> visited_list_;         // per-thread visited sets
     std::vector<uint32_t> degrees_;                // record degree of qg
+    uint32_t seed_;                                // base seed for graph initialization
+    std::optional<QuantizedGraph<float>::BuildCache> cache_;
+    std::vector<CandidateList> candidates_;
+    std::vector<CandidateList> reverse_buffer_;
+    std::vector<std::vector<float>> rotated_neighbors_;
+
+    const QuantizedGraph<float>::BuildCache* build_cache() const {
+        return cache_ ? &*cache_ : nullptr;
+    }
     void random_init();
     void search_new_neighbors(bool refine);
     void heuristic_prune(PID, CandidateList&, CandidateList&, bool);
@@ -59,13 +69,24 @@ class QGBuilder {
 
     void initialize_storage(const float* data);
 
-    QGBuilder(QuantizedGraph<float>& index, uint32_t ef_build, size_t num_threads)
+    QGBuilder(
+        QuantizedGraph<float>& index,
+        uint32_t ef_build,
+        size_t num_threads,
+        uint32_t seed = std::random_device{}(),
+        bool cache_vectors = false
+    )
         : qg_{index}
         , ef_build_{ef_build}
         , num_threads_{resolve_num_threads(num_threads)}
         , num_nodes_{qg_.num_vertices()}
         , dim_{qg_.dimension()}
-        , degree_bound_(qg_.degree_bound()) {}
+        , degree_bound_(qg_.degree_bound())
+        , seed_(seed) {
+        if (cache_vectors) {
+            cache_.emplace();
+        }
+    }
 
    public:
     explicit QGBuilder(
@@ -73,22 +94,50 @@ class QGBuilder {
         uint32_t ef_build,
         const float* data,
         size_t num_threads = std::numeric_limits<size_t>::max(),
-        QGInitialization init = QGInitialization::PiPNN
+        QGInitialization init = QGInitialization::PiPNN,
+        uint32_t seed = std::random_device{}(),
+        bool cache_vectors = false
     )
-        : QGBuilder(index, ef_build, num_threads) {
-        if (data == nullptr) {
-            throw std::invalid_argument("QGBuilder data must not be null");
-        }
+        : QGBuilder(index, ef_build, num_threads, seed, cache_vectors) {
         if (init != QGInitialization::PiPNN && init != QGInitialization::Random) {
             throw std::invalid_argument("Unknown QG initialization");
         }
-        if (init == QGInitialization::PiPNN) {
-            auto seed = detail::build_initial_graph(
+        seeded_ = init == QGInitialization::PiPNN;
+        reset(data);
+    }
+
+    // Preserve the seeded random-initialization overload used before PiPNN.
+    QGBuilder(
+        QuantizedGraph<float>& index,
+        uint32_t ef_build,
+        const float* data,
+        size_t num_threads,
+        uint32_t seed,
+        bool cache_vectors = false
+    )
+        : QGBuilder(
+              index,
+              ef_build,
+              data,
+              num_threads,
+              QGInitialization::Random,
+              seed,
+              cache_vectors
+          ) {}
+
+    /** Replace vectors and restart the selected initializer, retaining workspace.
+     * Cached vectors and queries are owned; input may be released after reset.
+     */
+    void reset(const float* data) {
+        if (data == nullptr) {
+            throw std::invalid_argument("QGBuilder data must not be null");
+        }
+        if (seeded_) {
+            auto initial = detail::build_initial_graph(
                 data, num_nodes_, dim_, degree_bound_, qg_.metric_type_, num_threads_
             );
-            initialize_seed(data, seed.offsets, seed.neighbors);
-        } else if (init == QGInitialization::Random) {
-            seeded_ = false;
+            initialize_seed(data, initial.offsets, initial.neighbors);
+        } else {
             initialize_storage(data);
             random_init();
         }
@@ -104,7 +153,9 @@ class QGBuilder {
             offsets.back() != neighbors.size()) {
             throw std::invalid_argument("Seed graph offsets must delimit every vertex");
         }
-        for (size_t i = 0; i < num_nodes_; ++i) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
             if (offsets[i] > offsets[i + 1] || offsets[i + 1] > neighbors.size() ||
                 offsets[i + 1] - offsets[i] > degree_bound_) {
                 throw std::invalid_argument(
@@ -143,7 +194,12 @@ class QGBuilder {
                     row.emplace_back(id, 0.0F);
                 }
                 degrees_[i] = row.size();
-                qg_.update_qg(i, row);
+                qg_.update_qg(
+                    i,
+                    row,
+                    build_cache(),
+                    &rotated_neighbors_[static_cast<size_t>(omp_get_thread_num())]
+                );
             }
         }
     }
@@ -208,19 +264,62 @@ inline void QGBuilder::initialize_storage(const float* data) {
     if (data == nullptr) {
         throw std::invalid_argument("QGBuilder data must not be null");
     }
-    // Allocate refinement scratch only after PiPNN's dense workspace is released.
+    // Allocate refinement scratch after PiPNN releases its dense workspace.
+    // Clear old graph-dependent state on reset while retaining vector capacities.
     new_neighbors_.resize(num_nodes_);
     pruned_neighbors_.resize(num_nodes_);
-    visited_list_ = std::vector<VisitedSet>(
-        num_threads_,
-        VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
-    );
+    reverse_buffer_.resize(num_nodes_);
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
+        new_neighbors_[i].clear();
+        pruned_neighbors_[i].clear();
+        reverse_buffer_[i].clear();
+    }
+    if (visited_list_.empty()) {
+        visited_list_ = std::vector<VisitedSet>(
+            num_threads_,
+            VisitedSet(num_nodes_, std::min(ef_build_ * ef_build_, num_nodes_ / 10))
+        );
+    }
     degrees_.assign(num_nodes_, degree_bound_);
+    candidates_.resize(num_threads_);
+    rotated_neighbors_.resize(num_threads_);
     std::vector<float> centroid = compute_centroid(data, num_nodes_, dim_, num_threads_);
 
     qg_.ready_ = false;
     qg_.set_quantization_centroid(centroid.data());
     qg_.copy_vectors(data, num_threads_);
+
+    if (cache_) {
+        const size_t padded_dim = qg_.padded_dim_;
+        cache_->rotated_vectors.resize(num_nodes_ * padded_dim);
+#pragma omp parallel for num_threads(num_threads_) schedule(static)
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+             ++index) {
+            const size_t id = static_cast<size_t>(index);
+            float* row = cache_->rotated_vectors.data() + id * padded_dim;
+            if (qg_.is_quantized()) {
+                qg_.reconstruct_quantized_vector(id, row);
+            } else {
+                qg_.rotator_->rotate(qg_.get_vector(id), row);
+            }
+        }
+        cache_->queries.clear();
+        if (qg_.is_quantized()) {
+            cache_->queries.reserve(num_nodes_);
+            for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+                 ++index) {
+                const size_t id = static_cast<size_t>(index);
+                cache_->queries.emplace_back(
+                    cache_->rotated_vectors.data() + id * padded_dim,
+                    qg_.centroid_.data(),
+                    padded_dim,
+                    qg_.metric_type_
+                );
+            }
+        }
+    }
 
     PID entry_point = 0;
     if (qg_.is_quantized()) {
@@ -265,7 +364,8 @@ inline void QGBuilder::add_pruned_edges(
     while (new_result.size() < degree_bound_ && start < pruned_list.size()) {
         const auto& cur = pruned_list[start];
         bool occlude = false;
-        const float* cur_data = qg_.prepare_build_query(cur.id, reconstructed, prepared);
+        const float* cur_data =
+            qg_.prepare_build_query(cur.id, reconstructed, prepared, build_cache());
         float dik_sqr = cur.distance;
 
         if (nei_set.find(cur.id) != nei_set.end()) {
@@ -330,7 +430,7 @@ inline void QGBuilder::heuristic_prune(
 
         pruned_results.emplace_back(pool[start]);  // add current candidate to result
         const float* data_j =
-            qg_.prepare_build_query(candidate_id, reconstructed, prepared);
+            qg_.prepare_build_query(candidate_id, reconstructed, prepared, build_cache());
 
         // i : current vertex
         // j : neighbor added in this iter
@@ -361,24 +461,26 @@ inline void QGBuilder::heuristic_prune(
  * @param refine refine = true means recording pruned candidates
  */
 inline void QGBuilder::search_new_neighbors(bool refine) {
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const size_t i = static_cast<size_t>(index);
         PID cur_id = i;
         auto tid = omp_get_thread_num();
-        CandidateList candidates;
+        CandidateList& candidates = candidates_[tid];
+        candidates.clear();
         VisitedSet& vis = visited_list_[tid];
         candidates.reserve(2 * kMaxCandidatePoolSize);
         vis.clear();
-        qg_.find_candidates(cur_id, ef_build_, candidates, vis, degrees_);
+        qg_.find_candidates(cur_id, ef_build_, candidates, vis, degrees_, build_cache());
 
         // Seeded construction keeps its initial edges only in QG. Materialize
         // their scores on demand, after the caller can release the input/CSR.
         if (new_neighbors_[cur_id].empty() && degrees_[cur_id] != 0) {
             std::vector<float> reconstructed;
             std::optional<QuantizedQuery> prepared;
-            const float* source = qg_.prepare_build_query(cur_id, reconstructed, prepared);
+            const float* source =
+                qg_.prepare_build_query(cur_id, reconstructed, prepared, build_cache());
             const auto ids = qg_.get_neighbors(cur_id);
             for (size_t j = 0; j < degrees_[cur_id]; ++j) {
                 if (ids[j] != cur_id && !vis.get(ids[j])) {
@@ -414,11 +516,13 @@ inline void QGBuilder::search_new_neighbors(bool refine) {
 
 inline void QGBuilder::add_reverse_edges(bool refine) {
     std::vector<std::mutex> locks(num_nodes_);
-    std::vector<CandidateList> reverse_buffer(num_nodes_);
+    for (auto& row : reverse_buffer_) {
+        row.clear();
+    }
 
     // Keep new_neighbors_ read-only while reverse candidates are collected. Mutating a
     // destination row here races with another worker reading that row as its source.
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const PID data_id = static_cast<PID>(index);
@@ -439,23 +543,23 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
             std::lock_guard lock(locks[destination]);
             const size_t missing_slots =
                 degree_bound_ - std::min(degree_bound_, destination_neighbors.size());
-            if (reverse_buffer[destination].size() <
+            if (reverse_buffer_[destination].size() <
                 kMaxCandidatePoolSize + missing_slots) {
-                reverse_buffer[destination].emplace_back(data_id, nei.distance);
+                reverse_buffer_[destination].emplace_back(data_id, nei.distance);
             }
         }
     }
 
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const PID data_id = static_cast<PID>(index);
-        CandidateList& tmp_pool = reverse_buffer[data_id];
+        CandidateList& tmp_pool = reverse_buffer_[data_id];
         if (qg_.is_quantized() && !tmp_pool.empty()) {
             // RaBitQ estimates are directional: score destination -> source afresh.
             std::vector<float> reconstructed;
             std::optional<QuantizedQuery> prepared;
-            qg_.prepare_build_query(data_id, reconstructed, prepared);
+            qg_.prepare_build_query(data_id, reconstructed, prepared, build_cache());
             for (auto& candidate : tmp_pool) {
                 candidate.distance = qg_.quantized_distance(*prepared, candidate.id);
             }
@@ -472,14 +576,18 @@ inline void QGBuilder::add_reverse_edges(bool refine) {
 inline void QGBuilder::random_init() {
     const PID min_id = 0;
     const PID max_id = num_nodes_ - 1;
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const size_t i = static_cast<size_t>(index);
+        new_neighbors_[i].clear();
+        pruned_neighbors_[i].clear();
+        std::mt19937 rng(seed_ ^ static_cast<uint32_t>(i));
+        std::uniform_int_distribution<PID> distribution(min_id, max_id);
         std::unordered_set<PID> neighbor_set;
         neighbor_set.reserve(degree_bound_);
         while (neighbor_set.size() < degree_bound_) {
-            PID rand_id = rand_integer<PID>(min_id, max_id);
+            const PID rand_id = distribution(rng);
             if (rand_id != i) {
                 neighbor_set.emplace(rand_id);
             }
@@ -487,7 +595,8 @@ inline void QGBuilder::random_init() {
 
         std::vector<float> reconstructed;
         std::optional<QuantizedQuery> prepared;
-        const float* cur_data = qg_.prepare_build_query(i, reconstructed, prepared);
+        const float* cur_data =
+            qg_.prepare_build_query(i, reconstructed, prepared, build_cache());
         new_neighbors_[i].reserve(degree_bound_);
         for (PID cur_neigh : neighbor_set) {
             new_neighbors_[i].emplace_back(
@@ -497,7 +606,12 @@ inline void QGBuilder::random_init() {
         }
 
         degrees_[i] = new_neighbors_[i].size();
-        qg_.update_qg(i, new_neighbors_[i]);
+        qg_.update_qg(
+            i,
+            new_neighbors_[i],
+            build_cache(),
+            &rotated_neighbors_[static_cast<size_t>(omp_get_thread_num())]
+        );
     }
 }
 
@@ -507,7 +621,7 @@ inline void QGBuilder::random_init() {
  *
  */
 inline void QGBuilder::graph_refine() {
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const size_t i = static_cast<size_t>(index);
@@ -526,6 +640,8 @@ inline void QGBuilder::graph_refine() {
         std::sort(pruned_list.begin(), pruned_list.end());
 
         // use binary search to get refined results
+        CandidateList successful_result;
+        successful_result.reserve(degree_bound_);
         float left = 0.5;
         float right = 1.0;
         size_t iter = 0;
@@ -536,14 +652,23 @@ inline void QGBuilder::graph_refine() {
                 left = mid;
             } else {
                 right = mid;
+                successful_result = new_result;
             }
         }
 
-        // update neighbors with larger cosine value since we want to retain more edges
-        add_pruned_edges(cur_neighbors, pruned_list, new_result, right);
+        // Every successful right endpoint was already evaluated at that exact threshold.
+        if (!successful_result.empty()) {
+            new_result.swap(successful_result);
+        } else {
+            add_pruned_edges(cur_neighbors, pruned_list, new_result, right);
+        }
 
         // if the vertex still doesn't have enough neighbors, use random vertices
         if (new_result.size() < degree_bound_) {
+            std::mt19937 rng(seed_ ^ static_cast<uint32_t>(i) ^ 0x80000000U);
+            std::uniform_int_distribution<PID> distribution(
+                0, static_cast<PID>(num_nodes_) - 1
+            );
             std::unordered_set<PID> ids;
             ids.reserve(degree_bound_);
             for (auto& neighbor : new_result) {
@@ -551,9 +676,10 @@ inline void QGBuilder::graph_refine() {
             }
             std::vector<float> reconstructed;
             std::optional<QuantizedQuery> prepared;
-            const float* source = qg_.prepare_build_query(i, reconstructed, prepared);
+            const float* source =
+                qg_.prepare_build_query(i, reconstructed, prepared, build_cache());
             while (new_result.size() < degree_bound_) {
-                PID rand_id = rand_integer<PID>(0, static_cast<PID>(num_nodes_) - 1);
+                const PID rand_id = distribution(rng);
                 if (rand_id != static_cast<PID>(i) && ids.find(rand_id) == ids.end()) {
                     new_result.emplace_back(
                         rand_id,
@@ -570,7 +696,9 @@ inline void QGBuilder::graph_refine() {
 
 inline void QGBuilder::iter(bool refine) {
     if (refine) {
-        for (size_t i = 0; i < num_nodes_; ++i) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
             pruned_neighbors_[i].clear();
             pruned_neighbors_[i].reserve(kMaxPrunedSize);
         }
@@ -586,11 +714,16 @@ inline void QGBuilder::iter(bool refine) {
     }
 
     // update qg
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads_)
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const size_t i = static_cast<size_t>(index);
-        qg_.update_qg(i, new_neighbors_[i]);
+        qg_.update_qg(
+            i,
+            new_neighbors_[i],
+            build_cache(),
+            &rotated_neighbors_[static_cast<size_t>(omp_get_thread_num())]
+        );
         degrees_[i] = new_neighbors_[i].size();
     }
 }

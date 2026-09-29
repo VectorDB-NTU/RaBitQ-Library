@@ -1,17 +1,21 @@
-"""Run Faiss in its own process and save clusters for the RaBitQ examples."""
+"""Train RaBitQKMeans or QGKMeans and save clusters for the index examples."""
 
 import argparse
 import os
 from time import time
 
-import faiss
 import numpy as np
+from rabitqlib import FinalAssignmentMode, QGKMeans, RaBitQKMeans
 
 from utils import read_fvecs
 
 
 def cluster_data(
-    data: np.ndarray, num_clusters: int, metric: str, num_threads: int
+    data: np.ndarray,
+    num_clusters: int,
+    metric: str,
+    num_threads: int,
+    method: str = "qg",
 ) -> tuple[np.ndarray, np.ndarray]:
     if not 1 <= num_clusters <= len(data):
         raise ValueError("num_clusters must be between 1 and the number of data points")
@@ -19,27 +23,32 @@ def cluster_data(
         raise ValueError("num_threads must be non-negative")
     if metric not in ("l2", "ip"):
         raise ValueError("metric must be l2 or ip")
+    if method not in ("rabitq", "qg"):
+        raise ValueError("method must be rabitq or qg")
+    clustering_type = RaBitQKMeans if method == "rabitq" else QGKMeans
     hardware_threads = os.cpu_count() or 1
     threads = (
         hardware_threads if num_threads == 0 else min(num_threads, hardware_threads)
     )
-    faiss.omp_set_num_threads(threads)
     print(f"Clustering metric: {metric.upper()}, threads: {threads}")
-    faiss_metric = faiss.METRIC_L2 if metric == "l2" else faiss.METRIC_INNER_PRODUCT
-    index = faiss.index_factory(data.shape[1], f"IVF{num_clusters},Flat", faiss_metric)
-    index.verbose = True
+    kmeans = clustering_type(
+        data.shape[1],
+        num_clusters,
+        spherical=metric == "ip",
+        num_threads=threads,
+        final_assignment=FinalAssignmentMode.Exact,
+        verbose=True,
+    )
     start = time()
-    index.train(data)
-    print(f"IVF training time: {time() - start:.2f}s")
-    centroids = index.quantizer.reconstruct_n(0, index.nlist)
-    _, labels = index.quantizer.search(data, 1)
-    return centroids, labels.ravel().astype(np.uint32)
+    kmeans.train(data)
+    print(f"{clustering_type.__name__} training time: {time() - start:.2f}s")
+    return kmeans.centroids, kmeans.assignments
 
 
 def main(args) -> None:
     data = read_fvecs(args.data_file)
     centroids, cluster_ids = cluster_data(
-        data, args.num_clusters, args.metric, args.num_threads
+        data, args.num_clusters, args.metric, args.num_threads, args.method
     )
     # Open the exact requested path; np.savez otherwise appends .npz automatically.
     with open(args.clusters_file, "wb") as output:
@@ -57,6 +66,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--num-clusters", type=int, default=256)
     parser.add_argument("--metric", choices=["l2", "ip"], default="l2")
+    parser.add_argument(
+        "--method",
+        choices=["rabitq", "qg"],
+        default="qg",
+        help="rabitq for few centroids; qg for many (requires k > graph_degree)",
+    )
     parser.add_argument(
         "--num-threads",
         type=int,

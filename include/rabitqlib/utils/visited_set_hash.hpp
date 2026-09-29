@@ -81,6 +81,8 @@ class HashBasedVisitedSet {
         stl_hash_.clear();
     }
 
+    [[nodiscard]] bool initialized() const noexcept { return !table_.empty(); }
+
     [[nodiscard]] bool get(PID data_id) const {
         PID val = this->table_[hash1(data_id)];
         if (val == data_id) {

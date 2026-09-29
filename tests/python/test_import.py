@@ -1,7 +1,7 @@
 """Tests for module import and class construction."""
 
 import pytest
-from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
+from rabitqlib import HnswIndex, IvfIndex, QGKMeans, SymqgIndex
 
 # ── import ────────────────────────────────────────────────────────────────────
 
@@ -10,6 +10,7 @@ def test_all_classes_importable():
     assert HnswIndex is not None
     assert IvfIndex is not None
     assert SymqgIndex is not None
+    assert QGKMeans is not None
 
 
 # ── valid construction ────────────────────────────────────────────────────────

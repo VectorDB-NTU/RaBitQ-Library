@@ -6,6 +6,18 @@
 #include "matrix_kernels.hpp"
 
 namespace rabitqlib::simd {
+void accumulate_cluster_sums_avx512(
+    const float* x,
+    const size_t* point_ids,
+    size_t count,
+    size_t dim,
+    const uint32_t* labels,
+    double* sums,
+    size_t* counts
+) {
+    accumulate_cluster_sums_impl(x, point_ids, count, dim, labels, sums, counts);
+}
+
 void matrix_product_avx512(
     const float* left,
     const float* right,

@@ -24,6 +24,7 @@ nav:
       - SymphonyQG: index/qg.md
   - Integrations:
       - Zvec: integrations/zvec.md
+  - Clustering: clustering.md
 
 theme:
   name: material

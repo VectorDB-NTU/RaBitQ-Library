@@ -28,7 +28,7 @@ HierarchicalNSW::construct(size_t cluster_num,
 
 - **data**: Pointer to the raw data vectors.
 - **data_num**: The number of data vectors.
-- **centroids**: Centroids computed by K-means clustering on the raw data vectors (we recommend `cluster_num = 16`).  
+- **centroids**: Centroids computed by [RaBitQKMeans](../clustering.md#rabitqkmeans); the examples use `cluster_num = 16`.
 - **cluster_ids**: Array of length `data_num`; every entry must be in the range `[0, cluster_num)`.
 - **num_threads**: Number of threads to use (default: 0, which auto-selects).
 - **faster**: If `true`, enables the faster quantizer.
