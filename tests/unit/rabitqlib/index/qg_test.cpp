@@ -377,9 +377,11 @@ TEST(BatchQueryTest, PreparedSumPreservesLookupTableAndMetric) {
 }
 
 TEST(QuantizedGraphSearchTest, ScratchSearchMatchesRegularSearch) {
-    constexpr size_t kNumPoints = 257;
     for (const size_t kDim : {64U, 65U, 1025U, 4097U}) {
         SCOPED_TRACE(kDim);
+        // Cover IDs beyond 255 at small dimensions; wide vectors need only
+        // a non-complete graph with the same degree and search window.
+        const size_t kNumPoints = kDim <= 65 ? 257 : 65;
         constexpr size_t kDegree = 32;
         constexpr size_t kEfSearch = 1;
         const size_t kNumQueries = kDim == 64 ? 256 : 16;
@@ -395,7 +397,9 @@ TEST(QuantizedGraphSearchTest, ScratchSearchMatchesRegularSearch) {
                 QuantizedGraph<float> graph(
                     kNumPoints, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits, 42
                 );
-                QGBuilder builder(graph, kDegree, data.data(), 1, 42);
+                // Graph construction is setup here; cache vectors to avoid repeated
+                // reconstruction. CachedResetMatchesFreshConstruction checks parity.
+                QGBuilder builder(graph, kDegree, data.data(), 1, 42, true);
                 graph.set_ef(kEfSearch);
 
                 std::vector<float> rotated_query(graph.padded_dim());
@@ -512,7 +516,7 @@ TEST(QuantizedGraphSearchTest, SingleResultMatchesTopKWithTiesAndHints) {
                     QuantizedGraph<float> graph(
                         kCount, dim, 32, metric, RotatorType::FhtKacRotator, bits, 42
                     );
-                    QGBuilder builder(graph, 64, data.data(), 1, 42);
+                    QGBuilder builder(graph, 64, data.data(), 1, 42, true);
                     builder.build();
                     graph.set_ef(kCount);
                     std::vector<float> rotated(graph.padded_dim());
