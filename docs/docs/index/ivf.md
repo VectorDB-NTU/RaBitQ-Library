@@ -156,3 +156,56 @@ remaining quantized bits or the stored raw vectors. Raw reranking computes
 squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top `k` results after scanning the selected clusters.
+
+## Updating an Index
+A constructed or loaded index can gain and lose points without the original
+data. The index file format does not change.
+
+```c++
+void IVF::add(
+    const float* data,
+    size_t n,
+    const PID* cluster_ids = nullptr,
+    bool faster = false,
+    size_t num_threads = std::numeric_limits<size_t>::max()
+);
+
+size_t IVF::remove(const PID* ids_to_remove, size_t n);
+```
+
+- **data**, **n**: `n` new vectors, quantized like `construct` does. Vector `i`
+  receives the PID `max_elements() + i`, so PIDs stay dense.
+- **cluster_ids**: The cluster of each new vector, in `[0, cluster_num)`. When
+  it is `nullptr`, each vector goes to its nearest centroid, chosen the same way
+  a query is routed.
+- **faster**, **num_threads**: Same as in `construct`.
+- **ids_to_remove**: PIDs to remove. Every PID must be below `max_elements()`; nothing is
+  removed if one is not. `remove` returns how many were newly removed and can be
+  repeated safely.
+
+In Python:
+
+```python
+new_ids = index.add(vectors)                       # route to the nearest centroids
+new_ids = index.add(vectors, cluster_ids=labels)   # or choose the clusters
+removed = index.remove(new_ids[:10])
+```
+
+`add` builds the grown index next to the old one and swaps it in, so it needs
+memory for both while it runs, and the index is unchanged if it throws.
+Each call takes time proportional to the whole index rather than to the number of
+new vectors, so prefer a few large calls to many small ones. In C++, `construct`
+expects `max_elements()` rows once points have been added. It is not safe to call
+`add` or `remove` while another thread searches the same index.
+
+The centroids and the rotation are fixed when the index is constructed, so
+`add` never retrains them. If the added vectors come from a different distribution,
+or the index grows many times beyond its original size, recall at a given
+`nprobe` can drop. Rebuild from the original data with new centroids when
+recall matters more than the cost of a rebuild.
+
+`remove` hides points from search but keeps their storage. Removed points still
+count in `max_elements()` and cannot be restored. Search may return fewer than
+`k` results once points are removed: the missing slots hold `kPidMax` (`2**32 - 1`
+in Python) with an infinite distance, as when the probed clusters hold fewer than
+`k` points. Removal is stored inside the index, so it survives `save` and `load`.

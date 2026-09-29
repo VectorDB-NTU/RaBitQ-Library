@@ -97,7 +97,16 @@ ids, distances = index.search(queries, k=10, nprobe=5, high_accuracy=False)
 # Omit high_accuracy, or pass None, to use automatic selection.
 ```
 
-See the [IVF guide](index/ivf.md) for storage costs and persistence compatibility.
+An IVF index can also grow and shrink after it is built, without the original data:
+
+```python
+new_vectors = rng.standard_normal((50, 64)).astype(np.float32)
+new_ids = index.add(new_vectors)  # nearest-centroid routing; ids 500..549
+index.remove(new_ids[:10])        # hide ten of them from later searches
+```
+
+See the [IVF guide](index/ivf.md) for storage costs, persistence compatibility, and
+the limits of updating an index.
 
 The `metric` argument accepts `"l2"` and `"ip"` (also spelled
 `"innerproduct"`). To search by cosine similarity, normalize database and

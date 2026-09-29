@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -89,6 +90,76 @@ class IvfIndex {
             num_threads
         );
         built_ = true;
+    }
+
+    py::array_t<rabitqlib::PID> add(
+        py::handle data,
+        const py::object& cluster_ids,
+        size_t num_threads = 1,
+        bool fast_quantization = false
+    ) {
+        auto data_array = ensure_2d_array<float>(data, "data");
+        if (!built_) {
+            throw std::runtime_error("IvfIndex must be built or loaded before add");
+        }
+        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
+            throw std::invalid_argument("data dimension does not match index dim");
+        }
+        const auto rows = static_cast<size_t>(data_array.shape(0));
+
+        // Validate cluster IDs as int64 first: casting straight to uint32 would wrap
+        // negative or oversized values onto valid clusters.
+        std::vector<rabitqlib::PID> assigned;
+        if (!cluster_ids.is_none()) {
+            auto cluster_ids_array = ensure_1d_integer_array(cluster_ids, "cluster_ids");
+            if (static_cast<size_t>(cluster_ids_array.shape(0)) != rows) {
+                throw std::invalid_argument(
+                    "cluster_ids length must match number of rows in data"
+                );
+            }
+            assigned.reserve(rows);
+            for (py::ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
+                const int64_t id = cluster_ids_array.data()[i];
+                if (id < 0 || static_cast<uint64_t>(id) >= num_clusters_) {
+                    throw std::invalid_argument("cluster_ids must be in [0, num_clusters)");
+                }
+                assigned.push_back(static_cast<rabitqlib::PID>(id));
+            }
+        }
+
+        const size_t first = index_->max_elements();
+        index_->add(
+            data_array.data(),
+            rows,
+            assigned.empty() ? nullptr : assigned.data(),
+            fast_quantization,
+            num_threads
+        );
+        max_elements_ = index_->max_elements();
+
+        auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
+        auto* ids_data = ids.mutable_data();
+        for (size_t i = 0; i < rows; ++i) {
+            ids_data[i] = static_cast<rabitqlib::PID>(first + i);
+        }
+        return ids;
+    }
+
+    size_t remove(py::handle ids) {
+        auto ids_array = ensure_1d_integer_array(ids, "ids");
+        if (!built_) {
+            throw std::runtime_error("IvfIndex must be built or loaded before remove");
+        }
+        std::vector<rabitqlib::PID> to_remove;
+        to_remove.reserve(static_cast<size_t>(ids_array.shape(0)));
+        for (py::ssize_t i = 0; i < ids_array.shape(0); ++i) {
+            const int64_t id = ids_array.data()[i];
+            if (id < 0 || static_cast<uint64_t>(id) >= max_elements_) {
+                throw std::invalid_argument("ids must be in [0, max_elements)");
+            }
+            to_remove.push_back(static_cast<rabitqlib::PID>(id));
+        }
+        return index_->remove(to_remove.data(), to_remove.size());
     }
 
     py::tuple search(
@@ -209,6 +280,24 @@ void register_ivf(py::module_& m) {
             py::arg("cluster_ids"),
             py::arg("num_threads") = 1,
             py::arg("fast_quantization") = false
+        )
+        .def(
+            "add",
+            &IvfIndex::add,
+            py::arg("data"),
+            py::arg("cluster_ids") = py::none(),
+            py::arg("num_threads") = 1,
+            py::arg("fast_quantization") = false,
+            "Append vectors without the original data and return their ids. Vectors "
+            "are quantized against the existing centroids, which do not move. Without "
+            "cluster_ids each vector goes to its nearest centroid."
+        )
+        .def(
+            "remove",
+            &IvfIndex::remove,
+            py::arg("ids"),
+            "Exclude ids from later search results and return how many were newly "
+            "removed. Removed vectors keep their storage and cannot be restored."
         )
         .def(
             "search",

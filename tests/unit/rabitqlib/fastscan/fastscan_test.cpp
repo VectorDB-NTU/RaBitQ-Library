@@ -130,6 +130,32 @@ TEST(FastScanPackingTest, MatchesBitReferenceIncludingTailsAndUnalignedBuffers) 
     }
 }
 
+TEST(FastScanPackingTest, UnpackInvertsPackIncludingTailsAndDoesNotOverrun) {
+    for (size_t dim : {8U, 16U, 24U, 56U, 64U, 72U, 128U, 768U}) {
+        for (size_t num = 0; num <= 65; ++num) {
+            SCOPED_TRACE(::testing::Message() << "dim=" << dim << " num=" << num);
+            const size_t cols = dim / 8;
+            std::vector<uint8_t> input(num * cols);
+            uint32_t state = 7;
+            for (auto& value : input) {
+                state = state * 1664525U + 1013904223U;
+                value = static_cast<uint8_t>(state >> 24);
+            }
+            std::vector<uint8_t> packed(((num + 31) / 32) * 32 * cols, 0xFF);
+            pack_codes(dim, input.data(), num, packed.data());
+            const auto packed_original = packed;
+
+            // Guard bytes on both sides detect writes outside the first `num` codes.
+            std::vector<uint8_t> output(num * cols + 2, 0xA5);
+            unpack_codes(dim, packed.data(), num, output.data() + 1);
+            EXPECT_EQ(output.front(), 0xA5);
+            EXPECT_EQ(output.back(), 0xA5);
+            EXPECT_TRUE(std::equal(input.begin(), input.end(), output.begin() + 1));
+            EXPECT_EQ(packed, packed_original);
+        }
+    }
+}
+
 constexpr size_t kMaxDim = 768;
 
 TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) {

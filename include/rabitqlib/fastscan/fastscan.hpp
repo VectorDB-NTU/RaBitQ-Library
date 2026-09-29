@@ -117,6 +117,43 @@ inline void pack_codes(
     }
 }
 
+/**
+ * @brief Inverse of pack_codes: recover the compact quantization codes of the first `num`
+ * vectors from their packed blocks. Padding lanes of a partial final batch are ignored.
+ *
+ * @param padded_dim dimension of quantized data (i.e., quantization code)
+ * @param blocks packed quantization code, as produced by pack_codes
+ * @param num   number of quantization code to recover
+ * @param quantization_code recovered codes, num * padded_dim / 8 bytes
+ */
+inline void unpack_codes(
+    size_t padded_dim, const uint8_t* blocks, size_t num, uint8_t* quantization_code
+) {
+    const size_t cols = padded_dim / 8;
+
+    for (size_t row = 0; row < num; row += kBatchSize) {
+        for (size_t i = 0; i < cols; ++i) {
+            for (size_t j = 0; j < 16; ++j) {
+                // blocks[j] holds the high nibbles of vector kPerm0[j] and the low nibbles
+                // of vector kPerm0[j] + 16 packed together; blocks[j + 16] holds the rest.
+                const size_t first = row + kPerm0[j];
+                const auto a = static_cast<uint8_t>(
+                    ((blocks[j] & 0x0F) << 4) | (blocks[j + 16] & 0x0F)
+                );
+                const auto b =
+                    static_cast<uint8_t>((blocks[j] & 0xF0) | (blocks[j + 16] >> 4));
+                if (first < num) {
+                    quantization_code[first * cols + i] = a;
+                }
+                if (first + 16 < num) {
+                    quantization_code[(first + 16) * cols + i] = b;
+                }
+            }
+            blocks += 32;
+        }
+    }
+}
+
 // Accumulate one batch into int32_t results. Throws if a result exceeds int32_t.
 // dim must be a positive multiple of 16.
 // Requires AVX2/FMA, AVX-512, or ARM NEON; otherwise throws std::runtime_error.
