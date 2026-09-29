@@ -40,8 +40,11 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 ### Install
 
 ```bash
-python -m pip install rabitqlib
+python -m pip install "rabitqlib>=0.5.0"
 ```
+
+The clustering examples require 0.5.0 or newer. For unreleased changes,
+[install from a checkout](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes).
 
 Wheels target the platforms above and require no compiler or CMake.
 Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not

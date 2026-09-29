@@ -140,8 +140,10 @@ In your PR, describe:
 - Any compatibility implications or performance measurements relevant to the change.
 
 **CI and merge requirements:** CI selects jobs from the changed files and may
-run broader checks than your focused local tests. Before merging a C++ change,
-the full [static analysis check](DEVELOPMENT.md#static-analysis) is required.
+run broader checks than your focused local tests. Core library and binding changes
+require the full [static analysis check](DEVELOPMENT.md#static-analysis) before merging.
+Tests and examples are intentionally excluded from CI clang-tidy; use focused
+local analysis for substantial logic changes.
 If a tool or supported CPU is unavailable, explain that in the PR so the
 maintainer can help arrange validation. See [CI routing](MAINTAINING.md#checks-selected-by-changed-files)
 for details.

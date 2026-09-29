@@ -19,11 +19,11 @@ def parse_args():
         help="optional float32 .npy or row-major .bin matrix",
     )
     parser.add_argument("--n", type=int, default=1_000_000)
-    parser.add_argument("--d", type=int, default=256)
+    parser.add_argument("--d", type=int, default=500)
     parser.add_argument("--k", type=int, default=4_000)
     parser.add_argument("--niter", type=int, default=25)
-    parser.add_argument("--threads", type=int, default=32)
-    parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--threads", type=int, default=48)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--num-seeds", type=int, default=1, help="number of consecutive training seeds"
     )

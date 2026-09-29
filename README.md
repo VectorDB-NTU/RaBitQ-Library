@@ -35,6 +35,10 @@
 
 ## News
 
+- **September 2026 — Native clustering (0.5.0):** Train k-means directly in C++
+  or Python with RaBitQKMeans and QGKMeans, with approximate or exact final
+  assignment. See the [clustering guide](docs/docs/clustering.md).
+
 - **September 2026 — Platform support:** CPython 3.11–3.14 wheels cover Linux
   x86-64 and ARM64, Windows x86-64, and macOS 14+ ARM64. C++ source builds are
   validated on these platforms. See the
@@ -48,8 +52,11 @@
 ## Install
 
 ```bash
-python -m pip install --upgrade rabitqlib
+python -m pip install --upgrade "rabitqlib>=0.5.0"
 ```
+
+The examples below require 0.5.0 or newer. For unreleased changes,
+[install from a checkout](CONTRIBUTING.md#python-changes).
 
 Wheels: CPython 3.11–3.14 on Linux x86-64 and ARM64, Windows x86-64, and
 macOS 14+ ARM64 (Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512

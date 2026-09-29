@@ -36,10 +36,10 @@ indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
 
 ## Start with Python
 
-Install the latest release from PyPI:
+The example requires 0.5.0 or newer; see [installation options](quick_start.md#install).
 
 ```bash
-python -m pip install rabitqlib
+python -m pip install "rabitqlib>=0.5.0"
 ```
 
 Build an IVF index and search a batch of queries:

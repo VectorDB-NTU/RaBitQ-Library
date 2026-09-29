@@ -14,11 +14,17 @@ only the affected job groups:
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
 | C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
 | Compiled Python bindings | C++ formatting and clang-tidy, plus Python checks and wheel tests |
-| Python tests | Python checks and wheel tests |
-| Python scripts or examples | Python lint |
+| Python tests | Python lint, source-install smoke tests, and wheel tests |
+| `tests/python/test_cpp_clustering_examples.py` | Python lint and C++ checks; examples run in the Ubuntu job |
+| `tests/python/conftest.py` | Python lint, C++ checks, and Python builds/wheels |
+| `sample/python/` | Python lint, source-install smoke tests, comparison tests, and wheels |
+| Scripts under `python/` | Python lint |
 | CMake configuration | C++ tests and clang-tidy, plus Python builds/wheels |
 | `pyproject.toml` | Python lint, builds, and wheels; no C++ checks |
 | Shell scripts | ShellCheck and any check driven by the changed script |
+
+See [CI coverage](tests/README.md#ci-coverage) for full-suite versus smoke-test
+ownership, dedicated FAISS comparisons, and emulated SIMD checks.
 
 The optional include-cleaner report is available through
 `./scripts/check-includes.sh` and no longer runs on every C++ change. Shared
@@ -45,7 +51,7 @@ and tests the release wheels, pushes `vX.Y.Z` at that tested commit, publishes
 to PyPI, and creates a GitHub Release with generated notes and wheel assets.
 A later successful commit can release an untagged version if the version-bump
 commit failed CI. Ordinary commits with an already released version do not
-publish again.
+publish again. Keep published tags unchanged; each release gets a new tag.
 
 The workflow uses the repository token to create tags and the existing `pypi`
 environment with Trusted Publishing for PyPI. Repository tag rules and any

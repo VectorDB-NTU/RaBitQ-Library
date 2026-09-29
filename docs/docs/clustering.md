@@ -5,6 +5,9 @@ centroid means from the original float32 data, accumulate in float64, and requir
 no external clustering package. Choose the class explicitly; neither switches
 algorithms based on the cluster count.
 
+Both classes require RaBitQ Library 0.5.0 or newer; see
+[installation options](quick_start.md#install).
+
 ## Choose a method
 
 | Class | Assignment | Recommended use | Cluster count |
@@ -167,7 +170,7 @@ Load data with `--input data.npy`, or `--input data.bin --d D` for raw row-major
 float32 data. Choose a thread count within the available hardware limit.
 
 ```bash
-python sample/python/compare_with_faiss.py --threads 48 --num-seeds 2 --repeats 2
+python sample/python/compare_with_faiss.py --threads 48
 ```
 
 All three methods receive the same full dataset, iteration limit, cluster count,

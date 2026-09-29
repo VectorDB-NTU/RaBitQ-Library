@@ -53,7 +53,7 @@ or after changing `.clang-format`; CI always checks complete files.
 clang-tidy performs semantic checks and is kept separate from clang-format.
 The required baseline contains focused correctness, portability, and
 performance checks. Install the pinned analyzer and the dependencies needed to
-configure every first-party target:
+configure the core library and Python bindings:
 
 ```bash
 sudo apt-get install clang-tidy-15 libomp-15-dev cmake ninja-build
@@ -85,8 +85,10 @@ hnswlib are excluded. New checks should be added incrementally after their
 existing first-party findings are fixed.
 
 Focused clang-tidy checks on affected code are sufficient during iteration.
-For first-party C++ changes, run the full check above before merging and report
-whether validation was focused or complete.
+For core library or binding changes, run the full check above before merging.
+Tests and examples are intentionally excluded from CI clang-tidy; use focused
+local analysis for substantial changes to their logic. Report whether validation
+was focused or complete.
 
 ### Include dependency reports
 

@@ -61,7 +61,7 @@ Tool versions and installation instructions are maintained in [DEVELOPMENT.md](D
 | --- | --- |
 | Repository Markdown, including this file | Review accuracy, local links, and `git diff --check`; no code build required |
 | MkDocs content, configuration, or dependencies | Above, plus `python -m mkdocs build --strict --config-file docs/mkdocs.yml` |
-| First-party C++ | `./scripts/check-format.sh` and affected build/tests; focused clang-tidy checks are sufficient during iteration, with the full `./scripts/check-tidy.sh build-tidy` required before merging |
+| First-party C++ | `./scripts/check-format.sh` and affected build/tests; core/binding changes require full `./scripts/check-tidy.sh build-tidy` before merging (focused checks suffice during iteration). Tests/examples are excluded from CI clang-tidy; use focused local analysis for substantial logic changes. |
 | Python sources | `./scripts/check-python.sh` and affected Python tests via `python -m pytest` |
 | Bindings or Python-visible C++ behavior | C++ and Python checks above; rebuild/install the package in the existing environment before testing, then verify the imported package/extension paths and that the extension includes the current changes |
 | SIMD, metrics, packing, layouts, or index formats | Before building, audit every backend and consumer sharing the contract; build and run relevant reference/compatibility tests with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` |
