@@ -411,6 +411,66 @@ TEST(RaBitQKMeansTest, FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts) {
     }
 }
 
+TEST(RaBitQKMeansTest, TrainsAtMaximumDimension) {
+    // A partial FastScan batch keeps the maximum-width training check small.
+    constexpr size_t kDim = 65536, kPoints = 5, kClusters = 2;
+    std::vector<float> data(kPoints * kDim);
+    for (size_t point = 0; point < kPoints; ++point) {
+        // Exercise the full extent, including the last coordinate, without
+        // making the distance check depend on long float accumulation chains.
+        for (size_t dim = 1023; dim < kDim; dim += 1024) {
+            data[point * kDim + dim] =
+                static_cast<float>(static_cast<int>((dim + point * 7) % 19) - 9) / 256.0F;
+        }
+    }
+    const auto original = data;
+    for (const auto mode : {FinalAssignmentMode::Approximate, FinalAssignmentMode::Exact}) {
+        SCOPED_TRACE(static_cast<int>(mode));
+        RaBitQKMeansParameters parameters;
+        parameters.niter = 2;
+        parameters.num_threads = 2;
+        parameters.final_assignment = mode;
+        RaBitQKMeans model(kDim, kClusters, parameters);
+        model.train(kPoints, data.data());
+        ASSERT_EQ(model.iteration_stats.size(), 2U);
+        ASSERT_EQ(model.centroids.size(), kClusters * kDim);
+        ASSERT_EQ(model.assignments.size(), kPoints);
+        ASSERT_EQ(model.distances.size(), kPoints);
+        EXPECT_EQ(data, original);
+        EXPECT_TRUE(std::all_of(
+            model.centroids.begin(),
+            model.centroids.end(),
+            [](float value) { return std::isfinite(value); }
+        ));
+        double objective = 0;
+        for (size_t point = 0; point < kPoints; ++point) {
+            ASSERT_LT(model.assignments[point], kClusters);
+            const double selected = scalar_centroid_distance(
+                data.data() + point * kDim,
+                model.centroids.data() + model.assignments[point] * kDim,
+                kDim,
+                false
+            );
+            EXPECT_NEAR(model.distances[point], selected, 2e-6 * std::max(1.0, selected));
+            objective += selected;
+            if (mode == FinalAssignmentMode::Exact) {
+                for (size_t cluster = 0; cluster < kClusters; ++cluster) {
+                    EXPECT_LE(
+                        selected,
+                        scalar_centroid_distance(
+                            data.data() + point * kDim,
+                            model.centroids.data() + cluster * kDim,
+                            kDim,
+                            false
+                        )
+                    );
+                }
+            }
+        }
+        EXPECT_NEAR(model.final_obj, objective, 2e-6 * std::max(1.0, objective));
+    }
+}
+
 TEST(RaBitQKMeansTest, PointCodesPreserveBorrowedCentroidsDuringRetraining) {
     constexpr size_t kDim = 65, kPoints = 129;
     std::mt19937 rng(945);

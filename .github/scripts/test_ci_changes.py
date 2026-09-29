@@ -44,6 +44,13 @@ class ChangeSelectionTest(unittest.TestCase):
             },
             "python_bindings/__init__.py": {"python_quality", "python_build", "wheels"},
             "python_bindings/licenses/LLVM-OpenMP.txt": {"python_build", "wheels"},
+            "tests/python/test_cpp_clustering_examples.py": {"cpp", "python_quality"},
+            "tests/python/conftest.py": {
+                "cpp",
+                "python_quality",
+                "python_build",
+                "wheels",
+            },
             "tests/python/test_ivf.py": {"python_quality", "python_build", "wheels"},
             "tests/python/fixtures/ivf_legacy_4bit.index": {
                 "python_build",

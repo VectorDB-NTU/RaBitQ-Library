@@ -411,8 +411,8 @@ def test_training_size_warning_is_opt_in(capfd, verbose):
     assert ("please provide at least" in captured.err) == verbose
 
 
-@pytest.mark.parametrize("dim", [4096, 4097, 65535, 65536])
-@pytest.mark.parametrize("bits", [0, 4, 8])
+# C++ covers the full dimension/storage matrix; check binding outputs here.
+@pytest.mark.parametrize("dim,bits", [(4097, 0), (65535, 4), (65536, 8)])
 def test_large_dimensions(dim, bits):
     x = np.zeros((33, dim), dtype=np.float32)
     x[np.arange(33), np.arange(33)] = 1
