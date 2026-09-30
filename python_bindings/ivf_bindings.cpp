@@ -128,6 +128,13 @@ class IvfIndex {
         }
 
         const size_t first = index_->max_elements();
+        // Allocate the returned IDs before committing any changes to the index.
+        auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
+        auto* ids_data = ids.mutable_data();
+        for (size_t i = 0; i < rows; ++i) {
+            ids_data[i] = static_cast<rabitqlib::PID>(first + i);
+        }
+
         index_->add(
             data_array.data(),
             rows,
@@ -136,12 +143,6 @@ class IvfIndex {
             num_threads
         );
         max_elements_ = index_->max_elements();
-
-        auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
-        auto* ids_data = ids.mutable_data();
-        for (size_t i = 0; i < rows; ++i) {
-            ids_data[i] = static_cast<rabitqlib::PID>(first + i);
-        }
         return ids;
     }
 
