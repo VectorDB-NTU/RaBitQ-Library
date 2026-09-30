@@ -53,6 +53,19 @@ void pack(const uint8_t* raw, uint8_t* compact, size_t dim) {
     }
 }
 
+// Inverse of pack, over the same mapping. Not a search path, so scalar only.
+template <size_t Bits>
+void unpack(const uint8_t* compact, uint8_t* raw, size_t dim) {
+    for (size_t i = 0; i < dim; ++i) {
+        unsigned code = 0;
+        for (size_t b = 0; b < Bits; ++b) {
+            const size_t pos = packed_bit<Bits>(i, b);
+            code |= ((compact[pos / 8] >> (pos % 8)) & 1U) << b;
+        }
+        raw[i] = static_cast<uint8_t>(code);
+    }
+}
+
 template <size_t Bits>
 float excode_ip(const float* query, const uint8_t* compact, size_t dim) {
     double sum = 0;
@@ -101,6 +114,39 @@ RABITQ_PACK(5)
 RABITQ_PACK(6)
 RABITQ_PACK(7)
 #undef RABITQ_PACK
+
+void unpacking_excode_generic(
+    const uint8_t* compact, uint8_t* raw, size_t dim, size_t bits
+) {
+    switch (bits) {
+        case 1:
+            unpack<1>(compact, raw, dim);
+            break;
+        case 2:
+            unpack<2>(compact, raw, dim);
+            break;
+        case 3:
+            unpack<3>(compact, raw, dim);
+            break;
+        case 4:
+            unpack<4>(compact, raw, dim);
+            break;
+        case 5:
+            unpack<5>(compact, raw, dim);
+            break;
+        case 6:
+            unpack<6>(compact, raw, dim);
+            break;
+        case 7:
+            unpack<7>(compact, raw, dim);
+            break;
+        case 8:
+            unpack<8>(compact, raw, dim);
+            break;
+        default:
+            throw std::invalid_argument("ex_bits must be in [1, 8]");
+    }
+}
 
 namespace excode_ipimpl {
 #define RABITQ_IP(Block, Bits)                              \

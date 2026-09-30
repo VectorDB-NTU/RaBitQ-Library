@@ -53,6 +53,14 @@ TEST(PortableKernels, PackingMatchesDispatchedBytesAndDotProducts) {
                 pack[bits - 2](raw.data(), scalar.data(), dim);
                 EXPECT_EQ(scalar, dispatched);
             }
+
+            // The inverse has to return exactly what was packed, whichever
+            // backend did the packing.
+            std::vector<uint8_t> roundtrip(dim, 0xFF);
+            quant::rabitq_impl::ex_bits::unpacking_rabitqplus_code(
+                dispatched.data(), roundtrip.data(), dim, bits
+            );
+            EXPECT_EQ(roundtrip, raw);
             EXPECT_EQ(ip[bits - 1](query.data(), dispatched.data(), dim), expected);
             EXPECT_EQ(
                 select_excode_ipfunc(bits)(query.data(), dispatched.data(), dim), expected
