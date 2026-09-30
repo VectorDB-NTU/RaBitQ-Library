@@ -431,6 +431,44 @@ TEST(HnswResizeTest, SurvivesSaveAndLoad) {
     std::filesystem::remove(path);
 }
 
+// Labels must not depend on the order threads happen to finish in, and every
+// added point must still be reachable.
+TEST(HnswAddTest, ParallelAddKeepsLabelsAndTheGraph) {
+    constexpr size_t kBuilt = 256;
+    constexpr size_t kAdded = 256;
+    constexpr size_t kTotal = kBuilt + kAdded;
+    AddFixture fixture(kTotal, 53);
+
+    HierarchicalNSW index(kTotal, AddFixture::kDim, 4, kTotal, kTotal);
+    index.construct(
+        1,
+        fixture.centroid.data(),
+        kBuilt,
+        fixture.data.data(),
+        fixture.cluster_ids.data(),
+        8,
+        false
+    );
+    const auto labels = index.add(
+        fixture.data.data() + (kBuilt * AddFixture::kDim),
+        kAdded,
+        fixture.cluster_ids.data(),
+        false,
+        8
+    );
+
+    ASSERT_EQ(labels.size(), kAdded);
+    for (size_t i = 0; i < kAdded; ++i) {
+        EXPECT_EQ(labels[i], kBuilt + i);
+    }
+    EXPECT_EQ(index.num_points(), kTotal);
+
+    const auto results = index.search(fixture.data.data(), kTotal, 1, kTotal, 1);
+    for (size_t i = 0; i < kTotal; ++i) {
+        EXPECT_EQ(results[i][0].second, i);
+    }
+}
+
 TEST(HnswAddTest, AddIntoAnEmptyIndexBuildsFromScratch) {
     constexpr size_t kCount = 96;
     AddFixture fixture(kCount, 17);

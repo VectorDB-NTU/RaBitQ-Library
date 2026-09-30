@@ -1,5 +1,10 @@
-// The construct path with get_quant_dist in place of get_data_dist: rawDataPtr_
-// dangles once construct returns, so these link using the stored codes.
+// Insertion into a built index: the construct path with get_quant_dist in place
+// of get_data_dist, because rawDataPtr_ dangles once construct returns.
+//
+// add routes, draws every level, allocates every link list, then reserves one
+// block of slots before inserting in parallel. Levels come first because the
+// generator is shared; the slots are one block so labels do not depend on which
+// thread finishes first.
 #pragma once
 
 #include <algorithm>
@@ -339,40 +344,18 @@ inline PID HierarchicalNSW::mutually_connect_quant(
     return next_closest_entry_point;
 }
 
-inline PID HierarchicalNSW::add_point_quant(
-    const float* vec, PID cluster_id, const quant::RabitqConfig& config
+// The slot, the level and the link list are all decided by the caller, so this
+// can run on many threads at once and the labels do not depend on their order.
+inline void HierarchicalNSW::add_point_quant(
+    PID cur_c,
+    int curlevel,
+    char* link_list,
+    const float* vec,
+    PID cluster_id,
+    const quant::RabitqConfig& config
 ) {
     detail::quant_query().clear();
-    int curlevel = get_random_level(mult_);
-
-    // Allocated before the slot is claimed so a failure leaves the index untouched.
-    std::unique_ptr<char, void (*)(void*)> link_list(nullptr, std::free);
-    if (curlevel > 0) {
-        auto* raw =
-            static_cast<char*>(std::calloc(1, (size_links_per_element_ * curlevel) + 1));
-        if (raw == nullptr) {
-            throw std::runtime_error(
-                "Not enough memory: add_point_quant failed to allocate linklist"
-            );
-        }
-        link_list.reset(raw);
-    }
-
-    PID cur_c = 0;
-    PID label = 0;
-    {
-        std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
-        if (cur_element_count_ >= max_elements_) {
-            throw std::runtime_error("The number of elements exceeds the specified limit");
-        }
-        cur_c = static_cast<PID>(cur_element_count_.load());
-        label = cur_c;
-        if (label_lookup_.find(label) != label_lookup_.end()) {
-            throw std::runtime_error("Label already present");
-        }
-        cur_element_count_++;
-        label_lookup_[label] = cur_c;
-    }
+    const PID label = cur_c;
 
     std::unique_lock<std::mutex> lock_el(link_list_locks_[cur_c]);
     element_levels_[cur_c] = curlevel;
@@ -404,7 +387,7 @@ inline PID HierarchicalNSW::add_point_quant(
     );
 
     if (curlevel > 0) {
-        linkLists_[cur_c] = link_list.release();
+        linkLists_[cur_c] = link_list;
     }
 
     if (static_cast<signed>(curr_obj) != -1) {
@@ -448,7 +431,6 @@ inline PID HierarchicalNSW::add_point_quant(
         enterpoint_node_ = cur_c;
         maxlevel_ = curlevel;
     }
-    return label;
 }
 
 // Grows the capacity. Every pointer into the level-0 block is invalidated, so
@@ -508,7 +490,7 @@ inline void HierarchicalNSW::resize(size_t new_max_elements) {
 }
 
 inline std::vector<PID> HierarchicalNSW::add(
-    const float* data, size_t n, const PID* cluster_ids, bool faster
+    const float* data, size_t n, const PID* cluster_ids, bool faster, size_t num_threads
 ) {
     if (data_level0_memory_ == nullptr || centroids_memory_ == nullptr ||
         rotator_ == nullptr || num_cluster_ == 0) {
@@ -538,8 +520,8 @@ inline std::vector<PID> HierarchicalNSW::add(
         }
     } else {
         const auto* centroids = reinterpret_cast<const float*>(centroids_memory_);
-        std::vector<float> rotated(padded_dim_);
-        for (size_t i = 0; i < n; ++i) {
+        rabitqlib::ivf::parallel_for(0, n, num_threads, [&](size_t i, size_t) {
+            std::vector<float> rotated(padded_dim_);
             rotator_->rotate(data + (i * dim_), rotated.data());
             float best = std::numeric_limits<float>::max();
             for (size_t c = 0; c < num_cluster_; ++c) {
@@ -551,7 +533,7 @@ inline std::vector<PID> HierarchicalNSW::add(
                     assigned[i] = static_cast<PID>(c);
                 }
             }
-        }
+        });
     }
 
     quant::RabitqConfig config;
@@ -559,10 +541,61 @@ inline std::vector<PID> HierarchicalNSW::add(
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
-    std::vector<PID> labels;
-    labels.reserve(n);
+    // Drawn here because the generator is shared: the inserts below run in
+    // parallel and must not touch it.
+    std::vector<int> levels(n);
     for (size_t i = 0; i < n; ++i) {
-        labels.push_back(add_point_quant(data + (i * dim_), assigned[i], config));
+        levels[i] = get_random_level(mult_);
+    }
+
+    // Every link list is allocated before any of them is installed, so running
+    // out of memory leaves the index untouched.
+    std::vector<std::unique_ptr<char, void (*)(void*)>> link_lists;
+    link_lists.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        char* raw = nullptr;
+        if (levels[i] > 0) {
+            raw =
+                static_cast<char*>(std::calloc(1, (size_links_per_element_ * levels[i]) + 1)
+                );
+            if (raw == nullptr) {
+                throw std::runtime_error(
+                    "Not enough memory: HNSW add failed to allocate a link list"
+                );
+            }
+        }
+        link_lists.emplace_back(raw, std::free);
+    }
+
+    // One contiguous block of slots, so a point keeps its label whatever order
+    // the threads finish in.
+    PID first = 0;
+    {
+        std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
+        if (cur_element_count_ + n > max_elements_) {
+            throw std::runtime_error("The number of elements exceeds the specified limit");
+        }
+        first = static_cast<PID>(cur_element_count_.load());
+        for (size_t i = 0; i < n; ++i) {
+            label_lookup_[static_cast<PID>(first + i)] = static_cast<PID>(first + i);
+        }
+        cur_element_count_ += n;
+    }
+
+    rabitqlib::ivf::parallel_for(0, n, num_threads, [&](size_t i, size_t) {
+        add_point_quant(
+            static_cast<PID>(first + i),
+            levels[i],
+            link_lists[i].release(),
+            data + (i * dim_),
+            assigned[i],
+            config
+        );
+    });
+
+    std::vector<PID> labels(n);
+    for (size_t i = 0; i < n; ++i) {
+        labels[i] = static_cast<PID>(first + i);
     }
     return labels;
 }

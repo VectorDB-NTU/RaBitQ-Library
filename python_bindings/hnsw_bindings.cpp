@@ -109,7 +109,10 @@ class HnswIndex {
     }
 
     py::array_t<rabitqlib::PID> add(
-        py::handle data, const py::object& cluster_ids, bool fast_quantization = false
+        py::handle data,
+        const py::object& cluster_ids,
+        size_t num_threads = 1,
+        bool fast_quantization = false
     ) {
         auto data_array = ensure_2d_array<float>(data, "data");
         if (!built_) {
@@ -146,7 +149,8 @@ class HnswIndex {
             data_array.data(),
             rows,
             assigned.empty() ? nullptr : assigned.data(),
-            fast_quantization
+            fast_quantization,
+            num_threads
         );
         std::copy(labels.begin(), labels.end(), ids.mutable_data());
         return ids;
@@ -295,6 +299,7 @@ void register_hnsw(py::module_& m) {
             &HnswIndex::add,
             py::arg("data"),
             py::arg("cluster_ids") = py::none(),
+            py::arg("num_threads") = 1,
             py::arg("fast_quantization") = false
         )
         .def("resize", &HnswIndex::resize, py::arg("max_elements"))
