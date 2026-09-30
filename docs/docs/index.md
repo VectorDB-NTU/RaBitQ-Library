@@ -39,7 +39,7 @@ indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
 The example requires 0.5.0 or newer; see [installation options](quick_start.md#install).
 
 ```bash
-python -m pip install "rabitqlib>=0.5.0"
+python -m pip install "rabitqlib>=0.5.1"
 ```
 
 Build an IVF index and search a batch of queries:
@@ -69,6 +69,9 @@ index.build(data, clustering.centroids, clustering.assignments)
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 ```
+
+Starting with 0.5.1, IVF also supports [adding and removing vectors](index/ivf.md#updating-an-index)
+without rebuilding the index or retaining the original dataset.
 
 [Continue to the complete quick start](quick_start.md){ .md-button .md-button--primary }
 
