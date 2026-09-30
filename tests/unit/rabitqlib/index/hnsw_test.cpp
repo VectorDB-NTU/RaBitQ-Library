@@ -209,7 +209,6 @@ TEST(HnswAddTest, RejectsBadInputWithoutDisturbingTheIndex) {
     std::vector<PID> bad_cluster(8, 5);
 
     EXPECT_THROW(index.add(nullptr, 8, fixture.cluster_ids.data()), std::invalid_argument);
-    EXPECT_THROW(index.add(extra, 8, nullptr), std::invalid_argument);
     EXPECT_THROW(index.add(extra, 8, bad_cluster.data()), std::invalid_argument);
     // More points than the remaining capacity.
     EXPECT_THROW(index.add(extra, 9, fixture.cluster_ids.data()), std::invalid_argument);
@@ -301,6 +300,53 @@ TEST(HnswAddTest, DoesNotReuseScratchAcrossIndexes) {
         for (size_t i = 0; i < kCount; ++i) {
             EXPECT_EQ(results[i][0].second, i);
         }
+    }
+}
+
+TEST(HnswAddTest, RoutesToTheNearestCentroidWhenNoClustersGiven) {
+    constexpr size_t kBuilt = 128;
+    constexpr size_t kAdded = 32;
+    constexpr size_t kTotal = kBuilt + kAdded;
+    constexpr size_t kClusters = 4;
+    AddFixture fixture(kTotal, 29);
+
+    // Well-separated centroids, so the nearest one is unambiguous.
+    std::vector<float> centroids(kClusters * AddFixture::kDim, 0.0F);
+    for (size_t c = 0; c < kClusters; ++c) {
+        centroids[(c * AddFixture::kDim) + c] = 50.0F;
+    }
+    std::vector<PID> cluster_ids(kTotal);
+    for (size_t i = 0; i < kTotal; ++i) {
+        cluster_ids[i] = static_cast<PID>(i % kClusters);
+        // Push each point hard towards its centroid.
+        for (size_t d = 0; d < AddFixture::kDim; ++d) {
+            fixture.data[(i * AddFixture::kDim) + d] +=
+                centroids[(cluster_ids[i] * AddFixture::kDim) + d];
+        }
+    }
+
+    HierarchicalNSW index(kTotal, AddFixture::kDim, 4, 8, 50);
+    index.construct(
+        kClusters,
+        centroids.data(),
+        kBuilt,
+        fixture.data.data(),
+        cluster_ids.data(),
+        1,
+        false
+    );
+    const auto labels =
+        index.add(fixture.data.data() + (kBuilt * AddFixture::kDim), kAdded, nullptr);
+    ASSERT_EQ(labels.size(), kAdded);
+
+    for (size_t i = 0; i < kAdded; ++i) {
+        EXPECT_EQ(index.cluster_id_of(labels[i]), cluster_ids[kBuilt + i]);
+    }
+    const auto results = index.search(
+        fixture.data.data() + (kBuilt * AddFixture::kDim), kAdded, 1, kTotal, 1
+    );
+    for (size_t i = 0; i < kAdded; ++i) {
+        EXPECT_EQ(results[i][0].second, kBuilt + i);
     }
 }
 

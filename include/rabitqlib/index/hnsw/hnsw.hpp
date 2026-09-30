@@ -62,6 +62,9 @@ class HierarchicalNSW {
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
     [[nodiscard]] size_t max_elements() const { return max_elements_; }
     [[nodiscard]] size_t num_points() const { return cur_element_count_; }
+    [[nodiscard]] PID cluster_id_of(PID internal_id) const {
+        return get_clusterid_by_internalid(internal_id);
+    }
 
     void save(const char*) const;
     void load(const char*);
@@ -70,7 +73,7 @@ class HierarchicalNSW {
 
     // Inserts points using the stored codes, labelling them num_points() + i.
     // Single-threaded, and throws rather than growing past max_elements().
-    std::vector<PID> add(const float*, size_t, const PID*, bool = false);
+    std::vector<PID> add(const float*, size_t, const PID* = nullptr, bool = false);
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float*, size_t, size_t, size_t, size_t
     );

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -460,7 +461,7 @@ inline std::vector<PID> HierarchicalNSW::add(
     if (n == 0) {
         return {};
     }
-    if (data == nullptr || cluster_ids == nullptr) {
+    if (data == nullptr) {
         throw std::invalid_argument("HNSW add inputs must not be null");
     }
     if (n > max_elements_ - cur_element_count_) {
@@ -469,9 +470,31 @@ inline std::vector<PID> HierarchicalNSW::add(
     if (n > buffer::kSearchBufferMaxPointCount - cur_element_count_) {
         throw std::invalid_argument("HNSW add: point count exceeds the supported ID range");
     }
-    for (size_t i = 0; i < n; ++i) {
-        if (cluster_ids[i] >= num_cluster_) {
-            throw std::invalid_argument("HNSW cluster ID is out of range");
+    // Either the caller names the cluster of every point, or each one goes to its
+    // nearest centroid, ordered the way a query is routed.
+    std::vector<PID> assigned(n, 0);
+    if (cluster_ids != nullptr) {
+        for (size_t i = 0; i < n; ++i) {
+            if (cluster_ids[i] >= num_cluster_) {
+                throw std::invalid_argument("HNSW cluster ID is out of range");
+            }
+            assigned[i] = cluster_ids[i];
+        }
+    } else {
+        const auto* centroids = reinterpret_cast<const float*>(centroids_memory_);
+        std::vector<float> rotated(padded_dim_);
+        for (size_t i = 0; i < n; ++i) {
+            rotator_->rotate(data + (i * dim_), rotated.data());
+            float best = std::numeric_limits<float>::max();
+            for (size_t c = 0; c < num_cluster_; ++c) {
+                const float dist = raw_dist_func_(
+                    rotated.data(), centroids + (c * padded_dim_), padded_dim_
+                );
+                if (dist < best) {
+                    best = dist;
+                    assigned[i] = static_cast<PID>(c);
+                }
+            }
         }
     }
 
@@ -483,7 +506,7 @@ inline std::vector<PID> HierarchicalNSW::add(
     std::vector<PID> labels;
     labels.reserve(n);
     for (size_t i = 0; i < n; ++i) {
-        labels.push_back(add_point_quant(data + (i * dim_), cluster_ids[i], config));
+        labels.push_back(add_point_quant(data + (i * dim_), assigned[i], config));
     }
     return labels;
 }
