@@ -395,6 +395,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#add-and-remove-ivf-vectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add and remove IVF vectors
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1119,6 +1130,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#add-and-remove-ivf-vectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add and remove IVF vectors
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1246,9 +1268,10 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 
 <h2 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h2>
 <h3 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.5.0"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.5.1"</span>
 </code></pre></div>
-<p>The clustering examples require 0.5.0 or newer. For unreleased changes,
+<p>The clustering examples require 0.5.0 or newer; the IVF update example requires
+0.5.1 or newer. For unreleased changes,
 <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes">install from a checkout</a>.</p>
 <p>Wheels target the platforms above and require no compiler or CMake.
 Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
@@ -1292,13 +1315,16 @@ FastScan for 1–3-bit codes and raw vectors. To override that choice:</p>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">high_accuracy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Omit high_accuracy, or pass None, to use automatic selection.</span>
 </code></pre></div>
-<p>An IVF index can also grow and shrink after it is built, without the original data:</p>
+<h3 id="add-and-remove-ivf-vectors">Add and remove IVF vectors<a class="headerlink" href="#add-and-remove-ivf-vectors" title="Permanent link">&para;</a></h3>
+<p>Starting with 0.5.1, a built or loaded IVF index can accept new vectors and exclude
+existing vectors from search without the original dataset:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">new_vectors</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="mi">50</span><span class="p">,</span> <span class="mi">64</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">)</span>  <span class="c1"># nearest-centroid routing; ids 500..549</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>        <span class="c1"># hide ten of them from later searches</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">)</span>  <span class="c1"># automatic cluster routing; ids 500..549</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>  <span class="c1"># returns 10; storage is retained</span>
 </code></pre></div>
-<p>See the <a href="../index/ivf/">IVF guide</a> for storage costs, persistence compatibility, and
-the limits of updating an index.</p>
+<p>Batch additions because each <code>add()</code> copies the index storage. Removed IDs are
+not reused, and both additions and removals survive save/load. See the
+<a href="../index/ivf/#updating-an-index">IVF update guide</a> for costs and limits.</p>
 <p>The <code>metric</code> argument accepts <code>"l2"</code> and <code>"ip"</code> (also spelled
 <code>"innerproduct"</code>). To search by cosine similarity, normalize database and
 query vectors first and use <code>metric="ip"</code>.</p>

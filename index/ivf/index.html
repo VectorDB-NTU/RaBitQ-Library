@@ -1321,8 +1321,9 @@ squared L2 or <code>1 - dot(query, vector)</code> in the original coordinates; t
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top <code>k</code> results after scanning the selected clusters.</p>
 <h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
-<p>A constructed or loaded index can gain and lose points without the original
-data. The index file format does not change.</p>
+<p>Starting with 0.5.1, C++ <code>IVF</code> and Python <code>IvfIndex</code> support <code>add()</code> and <code>remove()</code>
+on a constructed or loaded index without the original dataset. These methods
+are specific to IVF. The index file format does not change.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::add</span><span class="p">(</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
@@ -1335,22 +1336,32 @@ data. The index file format does not change.</p>
 </code></pre></div>
 <ul>
 <li><strong>data</strong>, <strong>n</strong>: <code>n</code> new vectors, quantized like <code>construct</code> does. Vector <code>i</code>
-  receives the PID <code>max_elements() + i</code>, so PIDs stay dense.</li>
+  receives the PID <code>max_elements() + i</code>, using the count before the call. Existing
+  IDs stay unchanged, and removed IDs are never reused.</li>
 <li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, cluster_num)</code>. When
-  it is <code>nullptr</code>, each vector goes to its nearest centroid, chosen the same way
-  a query is routed.</li>
+  it is <code>nullptr</code>, vectors use the same centroid routing as queries. Routing is
+  exhaustive below 20,000 clusters and uses approximate HNSW search otherwise.</li>
 <li><strong>faster</strong>, <strong>num_threads</strong>: Same as in <code>construct</code>.</li>
 <li><strong>ids_to_remove</strong>: PIDs to remove. Every PID must be below <code>max_elements()</code>; nothing is
   removed if one is not. <code>remove</code> returns how many were newly removed and can be
   repeated safely.</li>
 </ul>
 <p>In Python:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>                       <span class="c1"># route to the nearest centroids</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">cluster_ids</span><span class="o">=</span><span class="n">labels</span><span class="p">)</span>   <span class="c1"># or choose the clusters</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">fast_quantization</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="c1"># To choose clusters explicitly, use this instead of the call above:</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="c1"># new_ids = index.add(vectors, cluster_ids=labels)</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
 </code></pre></div>
-<p>In C++, <code>construct</code> expects <code>max_elements()</code> rows once points have been added. It is
-not safe to call <code>add</code> or <code>remove</code> while another thread searches the same index.</p>
+<p>Python <code>vectors</code> has shape <code>(n, index.dim)</code> and is converted to contiguous float32.
+<code>add()</code> returns a uint32 array of the new IDs. Optional <code>cluster_ids</code> must be a
+one-dimensional integer array or sequence with one valid cluster ID per vector;
+<code>remove()</code> likewise accepts a one-dimensional integer array or sequence of point
+IDs and returns the number newly removed. Duplicate IDs count once. Python
+<code>num_threads</code> defaults to 1; <code>fast_quantization</code> defaults to <code>False</code>.</p>
+<p>The stored point count (<code>max_elements()</code> in C++, <code>index.max_elements</code> in Python)
+increases after <code>add()</code> and includes removed points. Rebuilding with C++
+<code>construct</code> or Python <code>build</code> expects that many rows. Calls to <code>add()</code> or <code>remove()</code>
+must not overlap with searches or other updates on the same index.</p>
 <h3 id="cost-of-add">Cost of <code>add</code><a class="headerlink" href="#cost-of-add" title="Permanent link">&para;</a></h3>
 <p><code>add</code> builds the grown index next to the old one and swaps it in, so the index is
 unchanged if it throws. Every call copies the whole storage, so:</p>
@@ -1373,7 +1384,8 @@ or the index grows many times beyond its original size, recall at a given
 recall matters more than the cost of a rebuild.</p>
 <h3 id="how-removal-is-stored">How removal is stored<a class="headerlink" href="#how-removal-is-stored" title="Permanent link">&para;</a></h3>
 <p><code>remove</code> hides points from search but keeps their storage. Removed points still
-count in <code>max_elements()</code> and cannot be restored.</p>
+count in <code>max_elements()</code> and cannot be restored. Each nonempty call scans all
+stored point IDs, so batch removals when possible.</p>
 <p>A removed point has its <code>f_add</code> value set to <code>+inf</code>. That value is the constant
 term of the distance estimate, so the estimated distance and the lower bound of the
 point are <code>+inf</code> for every bit width, metric, and SIMD backend. The point never
