@@ -290,7 +290,8 @@ void register_ivf(py::module_& m) {
             py::arg("fast_quantization") = false,
             "Append vectors without the original data and return their ids. Vectors "
             "are quantized against the existing centroids, which do not move. Without "
-            "cluster_ids each vector goes to its nearest centroid."
+            "cluster_ids each vector goes to its nearest centroid. Each call copies "
+            "the whole index, so add many vectors per call rather than one at a time."
         )
         .def(
             "remove",

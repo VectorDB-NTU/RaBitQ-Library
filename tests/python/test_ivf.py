@@ -538,13 +538,18 @@ def test_add_rejects_invalid_arguments():
         unbuilt.add(new[:2])
 
 
-@pytest.mark.parametrize("nbits", [1, 4, 32])
+@pytest.mark.parametrize("nbits", [1, 2, 3, 4, 5, 6, 7, 8, 9, 32])
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
+@pytest.mark.parametrize("high_accuracy", [False, True])
+def test_remove_excludes_points_and_survives_reload(
+    tmp_path, nbits, metric, high_accuracy
+):
     idx, old, new, _ = _dynamic_index(nbits=nbits, metric=metric)
     count = len(old)
     queries = new[:5]
-    before_ids, before_dists = idx.search(queries, k=count, nprobe=3)
+    before_ids, before_dists = idx.search(
+        queries, k=count, nprobe=3, high_accuracy=high_accuracy
+    )
 
     removed = np.array([0, 5, 6, count - 1, 5])
     assert idx.remove(removed) == 4
@@ -553,7 +558,9 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     assert idx.max_elements == count
 
     def check(index):
-        ids, dists = index.search(queries, k=count, nprobe=3)
+        ids, dists = index.search(
+            queries, k=count, nprobe=3, high_accuracy=high_accuracy
+        )
         alive = count - 4
         for q in range(len(queries)):
             keep = ~np.isin(before_ids[q], removed)
@@ -561,7 +568,9 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
             np.testing.assert_array_equal(dists[q, :alive], before_dists[q][keep])
             assert np.all(ids[q, alive:] == np.iinfo(np.uint32).max)
             assert np.all(np.isinf(dists[q, alive:]))
-        top, top_dists = index.search(queries, k=10, nprobe=3)
+        top, top_dists = index.search(
+            queries, k=10, nprobe=3, high_accuracy=high_accuracy
+        )
         assert not np.isin(top, removed).any()
         assert np.isfinite(top_dists).all()
 
@@ -574,9 +583,19 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
 
     # Adding repacks partial batches that contain removed points; they must stay removed.
     loaded.add(new)
-    ids, _ = loaded.search(queries, k=count + len(new), nprobe=3)
+    idx.add(new)
+    ids, dists = loaded.search(
+        queries, k=count + len(new), nprobe=3, high_accuracy=high_accuracy
+    )
     assert not np.isin(ids, removed).any()
     assert np.count_nonzero(ids[0] != np.iinfo(np.uint32).max) == count + len(new) - 4
+
+    # A reloaded index grows exactly like the original.
+    expected_ids, expected_dists = idx.search(
+        queries, k=count + len(new), nprobe=3, high_accuracy=high_accuracy
+    )
+    np.testing.assert_array_equal(ids, expected_ids)
+    np.testing.assert_array_equal(dists, expected_dists)
 
 
 def test_remove_rejects_invalid_ids_without_removing_anything():

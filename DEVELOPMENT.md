@@ -354,6 +354,18 @@ compatibility test fixture or an explicit rejection path. IVF, HNSW, and Symphon
 formats and must each be reviewed. SymphonyQG includes a versioned quantized format plus a legacy
 raw-format fallback; preserve both unless a breaking change is explicitly requested.
 
+IVF `remove` stores a removed point as `f_add = +inf` inside the existing batch data, so it needs no
+discriminator. No index written before `remove` existed has an infinite `f_add`, so nothing in an old
+file is reinterpreted, and a file that has removals loads in release 0.5.0 too, where those points
+never appear in results. Keep this convention when touching IVF code:
+
+- Every estimator and scan path must turn `f_add = +inf` into an infinite estimated distance and an
+  infinite lower bound, and never into NaN. A NaN distance would enter the result buffer.
+- `fastscan::unpack_codes` must stay the exact inverse of `pack_codes`; `IVF::add` uses it to refill
+  the partial last batch of a cluster.
+- `IvfRemoveTest.ExcludesRemovedPointsOnEveryScanPath`, `IvfRemoveTest.SurvivesSaveLoadAndLaterAdds`,
+  and `FastScanPackingTest.UnpackInvertsPackIncludingTailsAndDoesNotOverrun` guard these rules.
+
 ### Change Python bindings
 
 Shared NumPy and string conversion helpers live in `python_bindings/bindings_common.hpp`. Register
