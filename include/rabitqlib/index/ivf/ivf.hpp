@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <ios>
 #include <limits>
@@ -65,6 +66,20 @@ class IVF {
 
     void
     quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, const quant::RabitqConfig&);
+
+    void
+    extend_cluster(const Cluster&, const std::vector<PID>&, const float*, const float*, PID, char*, char*, PID*, const quant::RabitqConfig&)
+        const;
+
+    // True if `n` points cannot be addressed by the storage size computations
+    [[nodiscard]] bool exceeds_storage(size_t n) const {
+        const size_t max_size = std::numeric_limits<size_t>::max();
+        const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
+        const size_t rerank_bytes = rerank_vector_bytes();
+        return n > max_size / sizeof(PID) || n > max_size / sizeof(float) / padded_dim_ ||
+               n > max_size / batch_bytes ||
+               (rerank_bytes != 0 && n > max_size / rerank_bytes);
+    }
 
     [[nodiscard]] size_t ids_bytes() const { return sizeof(PID) * num_; }
 
@@ -161,6 +176,7 @@ class IVF {
 
     ~IVF();
 
+    // Number of stored points, including any removed with `remove`. `add` increases it.
     [[nodiscard]] size_t max_elements() const { return num_; }
     [[nodiscard]] size_t dimension() const { return dim_; }
     [[nodiscard]] size_t nbits() const { return raw_reranking_ ? 32 : ex_bits_ + 1; }
@@ -168,6 +184,48 @@ class IVF {
     [[nodiscard]] RotatorType rotator_type() const { return type_; }
 
     void construct(const float*, const float*, const PID*, bool, size_t);
+
+    /**
+     * @brief Append points to a constructed or loaded index without the original data.
+     *
+     * Points are quantized against the centroids and rotator the index already holds, so
+     * the centroids never move: recall can degrade if the added data drifts away from the
+     * data the centroids were trained on. Point `i` of `data` receives PID
+     * `max_elements() + i`. The index is unchanged if this throws.
+     *
+     * The grown index is built next to the old one, so a call needs memory for both and
+     * takes time proportional to the whole index, not just to `n`: prefer a few large
+     * calls to many small ones. `construct` expects `max_elements()` rows afterwards.
+     * Not safe to call while another thread searches, adds or removes.
+     *
+     * @param data New points (n * dim)
+     * @param n Number of new points
+     * @param cluster_ids Cluster of each new point, or nullptr to route each point to its
+     * nearest centroid the same way a query is routed
+     * @param faster Same meaning as in construct
+     * @param num_threads Threads used for routing and quantization
+     */
+    void add(
+        const float* data,
+        size_t n,
+        const PID* cluster_ids = nullptr,
+        bool faster = false,
+        size_t num_threads = std::numeric_limits<size_t>::max()
+    );
+
+    /**
+     * @brief Exclude points from all later search results.
+     *
+     * A removed point keeps its storage, still counts in `max_elements()`, and search may
+     * return fewer than k results (unfilled slots use kPidMax). Removal is stored in the
+     * index, so it survives save and load, and is idempotent. Removed points cannot be
+     * restored. Not safe to call while another thread searches or adds.
+     *
+     * @param ids_to_remove PIDs to remove
+     * @param n Number of PIDs
+     * @return Number of points newly removed
+     */
+    size_t remove(const PID* ids_to_remove, size_t n);
 
     void save(const char*) const;
 
@@ -216,11 +274,7 @@ inline IVF::IVF(
     }
     padded_dim_ = round_up_to_multiple(dim_, 64);
     const size_t max_size = std::numeric_limits<size_t>::max();
-    const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
-    const size_t rerank_bytes = rerank_vector_bytes();
-    if (n > max_size / sizeof(PID) || n > max_size / sizeof(float) / padded_dim_ ||
-        n > max_size / batch_bytes || (rerank_bytes != 0 && n > max_size / rerank_bytes) ||
-        cluster_num > max_size / sizeof(float) / padded_dim_ ||
+    if (exceeds_storage(n) || cluster_num > max_size / sizeof(float) / padded_dim_ ||
         (type == RotatorType::MatrixRotator && dim > max_size / sizeof(float) / padded_dim_
         )) {
         throw std::invalid_argument("IVF configuration exceeds addressable storage");
@@ -400,6 +454,277 @@ inline void IVF::quantize_cluster(
             ex_data += ExDataMap<float>::data_bytes(padded_dim_, ex_bits_) * n;
         }
     }
+}
+
+inline void IVF::add(
+    const float* data, size_t n, const PID* cluster_ids, bool faster, size_t num_threads
+) {
+    if (!ready_ || initer_ == nullptr || rotator_ == nullptr ||
+        cluster_lst_.size() != num_cluster_ || batch_storage_.empty() ||
+        id_storage_.size() != num_) {
+        throw std::logic_error("IVF index must be constructed or loaded before add");
+    }
+    if (n == 0) {
+        return;
+    }
+    if (data == nullptr) {
+        throw std::invalid_argument("IVF add data must not be null");
+    }
+    if (n > buffer::kSearchBufferMaxPointCount - num_) {
+        throw std::invalid_argument("IVF point count exceeds the supported ID range");
+    }
+    const size_t new_num = num_ + n;
+    if (exceeds_storage(new_num)) {
+        throw std::invalid_argument("IVF configuration exceeds addressable storage");
+    }
+
+    /* Assign every new point to a cluster */
+    std::vector<PID> assigned(n);
+    if (cluster_ids != nullptr) {
+        for (size_t i = 0; i < n; ++i) {
+            if (cluster_ids[i] >= num_cluster_) {
+                throw std::invalid_argument("Cluster ID is out of range");
+            }
+            assigned[i] = cluster_ids[i];
+        }
+    } else {
+        parallel_for(0, n, num_threads, [&](size_t row, size_t /*thread_id*/) {
+            std::vector<float> rotated(padded_dim_);
+            std::vector<AnnCandidate<float>> nearest(1);
+            rotator_->rotate(data + (row * dim_), rotated.data());
+            initer_->centroids_distances(rotated.data(), 1, nearest);
+            assigned[row] = nearest[0].id;
+        });
+    }
+
+    std::vector<std::vector<PID>> rows_of(num_cluster_);
+    for (size_t i = 0; i < n; ++i) {
+        rows_of[assigned[i]].push_back(static_cast<PID>(i));
+    }
+    std::vector<size_t> new_sizes(num_cluster_);
+    for (size_t i = 0; i < num_cluster_; ++i) {
+        new_sizes[i] = cluster_lst_[i].num() + rows_of[i].size();
+    }
+
+    /* Build the grown storage on the side so the index is unchanged on failure */
+    ByteStorage new_batch(batch_data_bytes(new_sizes));
+    ByteStorage new_ex;
+    FloatStorage new_raw;
+    const size_t rerank_bytes = rerank_vector_bytes();
+    if (raw_reranking_) {
+        new_raw = FloatStorage(new_num * dim_);
+    } else if (rerank_bytes > 0) {
+        new_ex = ByteStorage(new_num * rerank_bytes);
+    }
+    IdStorage new_ids(new_num);
+    char* new_rerank = raw_reranking_ ? reinterpret_cast<char*>(new_raw.data())
+                                      : reinterpret_cast<char*>(new_ex.data());
+
+    std::vector<size_t> batch_offset(num_cluster_);
+    std::vector<size_t> vector_offset(num_cluster_);
+    size_t added_batches = 0;
+    size_t added_vectors = 0;
+    for (size_t i = 0; i < num_cluster_; ++i) {
+        batch_offset[i] = added_batches;
+        vector_offset[i] = added_vectors;
+        added_batches += div_round_up(new_sizes[i], fastscan::kBatchSize);
+        added_vectors += new_sizes[i];
+    }
+
+    quant::RabitqConfig config;
+    if (faster) {
+        config = quant::faster_config(padded_dim_, ex_bits_ + 1);
+    }
+
+    const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
+    const PID first_pid = static_cast<PID>(num_);
+    // An exception must not leave an OpenMP region, so keep the first one and rethrow it.
+    std::exception_ptr failure;
+#pragma omp parallel for schedule(dynamic) num_threads(resolve_num_threads(num_threads))
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_cluster_);
+         ++index) {
+        const size_t i = static_cast<size_t>(index);
+        try {
+            extend_cluster(
+                cluster_lst_[i],
+                rows_of[i],
+                data,
+                initer_->centroid(static_cast<PID>(i)),
+                first_pid,
+                reinterpret_cast<char*>(new_batch.data()) + (batch_offset[i] * batch_bytes),
+                rerank_bytes > 0 ? new_rerank + (vector_offset[i] * rerank_bytes) : nullptr,
+                new_ids.data() + vector_offset[i],
+                config
+            );
+        } catch (...) {
+#pragma omp critical(rabitq_ivf_add_failure)
+            if (!failure) {
+                failure = std::current_exception();
+            }
+        }
+    }
+    if (failure) {
+        std::rethrow_exception(failure);
+    }
+
+    /* Commit. Rebuilding the cluster list reuses its capacity, so it cannot throw. */
+    batch_storage_.swap(new_batch);
+    ex_storage_.swap(new_ex);
+    raw_storage_.swap(new_raw);
+    id_storage_.swap(new_ids);
+    num_ = new_num;
+    cluster_lst_.clear();
+    init_clusters(new_sizes);
+}
+
+/**
+ * @brief Copy one cluster into its grown storage and append new points to it.
+ *
+ * Full batches, rerank data and IDs are copied unchanged. The old partial tail batch is
+ * unpacked and repacked together with the new points, so the result is byte-identical to
+ * quantizing the same points in the same order in one construct call.
+ */
+inline void IVF::extend_cluster(
+    const Cluster& old_cluster,
+    const std::vector<PID>& rows,
+    const float* data,
+    const float* rotated_centroid,
+    PID first_pid,
+    char* batch_dst,
+    char* rerank_dst,
+    PID* ids_dst,
+    const quant::RabitqConfig& config
+) const {
+    const size_t old_num = old_cluster.num();
+    const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
+    const size_t rerank_bytes = rerank_vector_bytes();
+    const size_t cols = padded_dim_ / 8;
+
+    if (rows.empty()) {
+        const size_t old_batches = div_round_up(old_num, fastscan::kBatchSize);
+        std::copy_n(old_cluster.batch_data(), old_batches * batch_bytes, batch_dst);
+        std::copy_n(old_cluster.ex_data(), old_num * rerank_bytes, rerank_dst);
+        std::copy_n(old_cluster.ids(), old_num, ids_dst);
+        return;
+    }
+
+    const size_t full_batches = old_num / fastscan::kBatchSize;
+    const size_t kept = old_num - (full_batches * fastscan::kBatchSize);
+    const size_t tail_num = kept + rows.size();
+
+    std::copy_n(old_cluster.batch_data(), full_batches * batch_bytes, batch_dst);
+    std::copy_n(old_cluster.ex_data(), old_num * rerank_bytes, rerank_dst);
+    std::copy_n(old_cluster.ids(), old_num, ids_dst);
+
+    /* Codes and factors of every point in the tail, old points first */
+    std::vector<uint8_t> codes(tail_num * cols);
+    std::vector<float> f_add(tail_num);
+    std::vector<float> f_rescale(tail_num);
+    std::vector<float> f_error(tail_num);
+    if (kept > 0) {
+        ConstBatchDataMap<float> old_tail(
+            old_cluster.batch_data() + (full_batches * batch_bytes), padded_dim_
+        );
+        fastscan::unpack_codes(padded_dim_, old_tail.bin_code(), kept, codes.data());
+        old_tail.f_add().copy_to(f_add.data(), kept);
+        old_tail.f_rescale().copy_to(f_rescale.data(), kept);
+        old_tail.f_error().copy_to(f_error.data(), kept);
+    }
+
+    std::vector<float> rotated(padded_dim_);
+    for (size_t j = 0; j < rows.size(); ++j) {
+        const float* vector = data + (static_cast<size_t>(rows[j]) * dim_);
+        const size_t lane = kept + j;
+        rotator_->rotate(vector, rotated.data());
+        quant::quantize_compact_one_bit(
+            rotated.data(),
+            rotated_centroid,
+            padded_dim_,
+            codes.data() + (lane * cols),
+            f_add[lane],
+            f_rescale[lane],
+            f_error[lane],
+            metric_type_
+        );
+        char* rerank = rerank_dst + ((old_num + j) * rerank_bytes);
+        if (raw_reranking_) {
+            std::memcpy(rerank, vector, rerank_bytes);
+        } else if (ex_bits_ > 0) {
+            quant::quantize_compact_ex_bits(
+                rotated.data(),
+                rotated_centroid,
+                padded_dim_,
+                ex_bits_,
+                rerank,
+                metric_type_,
+                config
+            );
+        }
+        ids_dst[old_num + j] = first_pid + rows[j];
+    }
+
+    /* Repack the tail into batches */
+    char* batch = batch_dst + (full_batches * batch_bytes);
+    for (size_t start = 0; start < tail_num; start += fastscan::kBatchSize) {
+        const size_t count = std::min(fastscan::kBatchSize, tail_num - start);
+        BatchDataMap<float> cur_batch(batch, padded_dim_);
+        fastscan::pack_codes(
+            padded_dim_, codes.data() + (start * cols), count, cur_batch.bin_code()
+        );
+        for (size_t i = 0; i < count; ++i) {
+            cur_batch.f_add()[i] = f_add[start + i];
+            cur_batch.f_rescale()[i] = f_rescale[start + i];
+            cur_batch.f_error()[i] = f_error[start + i];
+        }
+        batch += batch_bytes;
+    }
+}
+
+inline size_t IVF::remove(const PID* ids_to_remove, size_t n) {
+    if (!ready_ || initer_ == nullptr || rotator_ == nullptr ||
+        cluster_lst_.size() != num_cluster_ || batch_storage_.empty() ||
+        id_storage_.size() != num_) {
+        throw std::logic_error("IVF index must be constructed or loaded before remove");
+    }
+    if (n == 0) {
+        return 0;
+    }
+    if (ids_to_remove == nullptr) {
+        throw std::invalid_argument("IVF remove IDs must not be null");
+    }
+
+    // Validate every ID before changing anything
+    std::vector<bool> marked(num_, false);
+    for (size_t i = 0; i < n; ++i) {
+        if (ids_to_remove[i] >= num_) {
+            throw std::invalid_argument("IVF remove ID is out of range");
+        }
+        marked[ids_to_remove[i]] = true;
+    }
+
+    // A point whose f_add is +inf has +inf estimated and lower-bound distances in every
+    // scan path, so it never enters the result buffer or triggers reranking.
+    constexpr float kRemoved = std::numeric_limits<float>::infinity();
+    const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
+    size_t removed = 0;
+    for (const auto& cluster : cluster_lst_) {
+        const PID* cluster_ids = cluster.ids();
+        for (size_t pos = 0; pos < cluster.num(); ++pos) {
+            if (!marked[cluster_ids[pos]]) {
+                continue;
+            }
+            BatchDataMap<float> cur_batch(
+                cluster.batch_data() + ((pos / fastscan::kBatchSize) * batch_bytes),
+                padded_dim_
+            );
+            const size_t lane = pos % fastscan::kBatchSize;
+            if (static_cast<float>(cur_batch.f_add()[lane]) != kRemoved) {
+                cur_batch.f_add()[lane] = kRemoved;
+                ++removed;
+            }
+        }
+    }
+    return removed;
 }
 
 inline void IVF::save(const char* filename) const {

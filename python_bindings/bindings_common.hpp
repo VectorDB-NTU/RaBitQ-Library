@@ -68,4 +68,21 @@ inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_1d_array
     return array;
 }
 
+// Like ensure_1d_array<int64_t>, but refuses input whose dtype is not an integer. forcecast
+// would otherwise truncate floats and turn booleans or numeric strings into ids, and
+// callers use these ids to remove points permanently. An empty sequence has no dtype to
+// check.
+inline py::array_t<int64_t, py::array::c_style | py::array::forcecast>
+ensure_1d_integer_array(py::handle value, const char* name) {
+    auto typed = py::array::ensure(value);
+    if (!typed) {
+        throw std::invalid_argument(std::string(name) + " must be a NumPy array");
+    }
+    const char kind = typed.dtype().kind();
+    if (typed.size() > 0 && kind != 'i' && kind != 'u') {
+        throw std::invalid_argument(std::string(name) + " must contain integers");
+    }
+    return ensure_1d_array<int64_t>(value, name);
+}
+
 }  // namespace rabitqlib::python_bindings

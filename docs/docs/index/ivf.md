@@ -156,3 +156,85 @@ remaining quantized bits or the stored raw vectors. Raw reranking computes
 squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top `k` results after scanning the selected clusters.
+
+## Updating an Index
+A constructed or loaded index can gain and lose points without the original
+data. The index file format does not change.
+
+```c++
+void IVF::add(
+    const float* data,
+    size_t n,
+    const PID* cluster_ids = nullptr,
+    bool faster = false,
+    size_t num_threads = std::numeric_limits<size_t>::max()
+);
+
+size_t IVF::remove(const PID* ids_to_remove, size_t n);
+```
+
+- **data**, **n**: `n` new vectors, quantized like `construct` does. Vector `i`
+  receives the PID `max_elements() + i`, so PIDs stay dense.
+- **cluster_ids**: The cluster of each new vector, in `[0, cluster_num)`. When
+  it is `nullptr`, each vector goes to its nearest centroid, chosen the same way
+  a query is routed.
+- **faster**, **num_threads**: Same as in `construct`.
+- **ids_to_remove**: PIDs to remove. Every PID must be below `max_elements()`; nothing is
+  removed if one is not. `remove` returns how many were newly removed and can be
+  repeated safely.
+
+In Python:
+
+```python
+new_ids = index.add(vectors)                       # route to the nearest centroids
+new_ids = index.add(vectors, cluster_ids=labels)   # or choose the clusters
+removed = index.remove(new_ids[:10])
+```
+
+In C++, `construct` expects `max_elements()` rows once points have been added. It is
+not safe to call `add` or `remove` while another thread searches the same index.
+
+### Cost of `add`
+
+`add` builds the grown index next to the old one and swaps it in, so the index is
+unchanged if it throws. Every call copies the whole storage, so:
+
+- It needs memory for both copies while it runs.
+- Each call has a fixed cost that grows with the size of the whole index, on top of a
+  cost per new vector. **Add many vectors per call rather than one at a time.**
+
+On an index of 1,000,000 vectors with 128 dimensions, 1,024 clusters and 1 bit
+(8 threads, portable build, Intel i7-12700KF), adding 1,000 vectors in one call took
+about 5 ms, and adding the same vectors one call each took about 3 s (2.8 s and 3.7 s
+in two runs). For that 33 MB file, a process that had just loaded it held about
+65 MB, and peaked at about 100 MB during one `add` of 1,000 vectors.
+
+There is no spare capacity: every `add` moves the data.
+
+### Recall after `add`
+
+The centroids and the rotation are fixed when the index is constructed, so
+`add` never retrains them. If the added vectors come from a different distribution,
+or the index grows many times beyond its original size, recall at a given
+`nprobe` can drop. Rebuild from the original data with new centroids when
+recall matters more than the cost of a rebuild.
+
+### How removal is stored
+
+`remove` hides points from search but keeps their storage. Removed points still
+count in `max_elements()` and cannot be restored.
+
+A removed point has its `f_add` value set to `+inf`. That value is the constant
+term of the distance estimate, so the estimated distance and the lower bound of the
+point are `+inf` for every bit width, metric, and SIMD backend. The point never
+enters the result buffer and never triggers reranking. Any code that estimates
+IVF distances must keep this behavior and must never turn `+inf` into NaN.
+
+Search may return fewer than `k` results once points are removed: the missing slots
+hold `kPidMax` (`2**32 - 1` in Python) with an infinite distance, as when the probed
+clusters hold fewer than `k` points.
+
+The value lives in the ordinary batch data, so the file format does not change and
+removal survives `save` and `load`. No file written before `remove` existed has an
+infinite `f_add`, so nothing in an old file is reinterpreted. A file that has
+removals also loads in release 0.5.0, where the removed points never appear in results.

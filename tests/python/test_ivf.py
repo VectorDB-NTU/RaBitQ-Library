@@ -437,3 +437,226 @@ def test_hnsw_inner_product_routing_roundtrip(tmp_path):
     ids, distances = loaded.search(query, k=1, nprobe=1, num_threads=4)
     assert np.all(ids == 0)
     np.testing.assert_allclose(distances, -99.0, rtol=0, atol=1e-5)
+
+
+# ── add / remove ──────────────────────────────────────────────────────────────
+
+
+def _dynamic_index(nbits=4, metric="l2", count=120, dim=65, clusters=3, seed=61):
+    """A small built index plus the points that were not built into it."""
+    rng = np.random.default_rng(seed)
+    data = rng.standard_normal((count * 2, dim)).astype(np.float32)
+    centroids = rng.standard_normal((clusters, dim)).astype(np.float32)
+    if metric == "ip":
+        assigned = np.argmax(data @ centroids.T, axis=1)
+    else:
+        gap = data[:, None, :] - centroids[None, :, :]
+        assigned = np.argmin(np.einsum("ncd,ncd->nc", gap, gap), axis=1)
+    assigned = assigned.astype(np.uint32)
+    idx = IvfIndex(dim, count, clusters, nbits, metric)
+    idx.build(data[:count], centroids, assigned[:count])
+    return idx, data[:count], data[count:], assigned[count:]
+
+
+def test_add_returns_ids_and_makes_points_searchable():
+    idx, old, new, _ = _dynamic_index(nbits=32)
+    added = idx.add(new)
+    assert added.dtype == np.uint32
+    np.testing.assert_array_equal(added, np.arange(len(old), len(old) + len(new)))
+    assert idx.max_elements == len(old) + len(new)
+    # k may now exceed the original point count; raw storage makes the ranking exact.
+    ids, dists = idx.search(new[:3], k=len(old) + len(new), nprobe=3)
+    np.testing.assert_array_equal(ids[:, 0], added[:3])
+    np.testing.assert_allclose(dists[:, 0], 0, atol=1e-4)
+    for row in ids:
+        np.testing.assert_array_equal(np.sort(row), np.arange(len(old) + len(new)))
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("nbits", [1, 4, 32])
+def test_add_routing_matches_explicit_cluster_ids(tmp_path, metric, nbits):
+    idx, _, new, assigned = _dynamic_index(nbits=nbits, metric=metric)
+    base = tmp_path / "base.index"
+    idx.save(str(base))
+    saved = {}
+    for name, kwargs in (
+        ("routed", {}),
+        ("explicit", {"cluster_ids": assigned}),
+        ("threaded", {"num_threads": 4}),
+        ("int64", {"cluster_ids": assigned.astype(np.int64)}),
+    ):
+        # Reloading gives each copy the same rotator, so the bytes are comparable.
+        copy = IvfIndex.load(str(base))
+        copy.add(new, **kwargs)
+        path = tmp_path / f"{name}.index"
+        copy.save(str(path))
+        saved[name] = path.read_bytes()
+    assert len(set(saved.values())) == 1
+
+
+def test_add_chunks_match_a_single_add(tmp_path):
+    idx, _, new, assigned = _dynamic_index()
+    base = tmp_path / "base.index"
+    idx.save(str(base))
+    whole = IvfIndex.load(str(base))
+    whole.add(new, assigned)
+    parts = IvfIndex.load(str(base))
+    for chunk in np.array_split(np.arange(len(new)), [1, 33, 34, 90]):
+        ids = parts.add(new[chunk], assigned[chunk])
+        assert len(ids) == len(chunk)
+    a, b = tmp_path / "a.index", tmp_path / "b.index"
+    whole.save(str(a))
+    parts.save(str(b))
+    assert a.read_bytes() == b.read_bytes()
+
+
+def test_add_accepts_fast_quantization_and_other_dtypes():
+    idx, _, new, _ = _dynamic_index()
+    idx.add(new[:10].astype(np.float64), fast_quantization=True)
+    assert idx.max_elements == 130
+    assert len(idx.add(new[:0])) == 0
+    assert idx.max_elements == 130
+
+
+def test_add_rejects_invalid_arguments():
+    idx, old, new, assigned = _dynamic_index()
+    with pytest.raises(ValueError, match="dimension"):
+        idx.add(new[:, :10])
+    with pytest.raises(ValueError, match="2D"):
+        idx.add(new[0])
+    with pytest.raises(ValueError, match="length"):
+        idx.add(new, assigned[:-1])
+    for bad in (-1, 3, 2**32):  # 2**32 would wrap to cluster 0 if cast to uint32 first
+        cluster_ids = assigned.astype(np.int64)
+        cluster_ids[0] = bad
+        with pytest.raises(ValueError, match="cluster_ids"):
+            idx.add(new, cluster_ids)
+    assert idx.max_elements == len(old)
+
+    unbuilt = IvfIndex(65, 4, 1, 4)
+    with pytest.raises(RuntimeError, match="built or loaded"):
+        unbuilt.add(new[:2])
+
+
+@pytest.mark.parametrize("nbits", [1, 2, 3, 4, 5, 6, 7, 8, 9, 32])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("high_accuracy", [False, True])
+def test_remove_excludes_points_and_survives_reload(
+    tmp_path, nbits, metric, high_accuracy
+):
+    idx, old, new, _ = _dynamic_index(nbits=nbits, metric=metric)
+    count = len(old)
+    queries = new[:5]
+    before_ids, before_dists = idx.search(
+        queries, k=count, nprobe=3, high_accuracy=high_accuracy
+    )
+
+    removed = np.array([0, 5, 6, count - 1, 5])
+    assert idx.remove(removed) == 4
+    assert idx.remove(removed) == 0
+    assert idx.remove([]) == 0
+    assert idx.max_elements == count
+
+    def check(index):
+        ids, dists = index.search(
+            queries, k=count, nprobe=3, high_accuracy=high_accuracy
+        )
+        alive = count - 4
+        for q in range(len(queries)):
+            keep = ~np.isin(before_ids[q], removed)
+            np.testing.assert_array_equal(ids[q, :alive], before_ids[q][keep])
+            np.testing.assert_array_equal(dists[q, :alive], before_dists[q][keep])
+            assert np.all(ids[q, alive:] == np.iinfo(np.uint32).max)
+            assert np.all(np.isinf(dists[q, alive:]))
+        top, top_dists = index.search(
+            queries, k=10, nprobe=3, high_accuracy=high_accuracy
+        )
+        assert not np.isin(top, removed).any()
+        assert np.isfinite(top_dists).all()
+
+    check(idx)
+    path = tmp_path / "removed.index"
+    idx.save(str(path))
+    loaded = IvfIndex.load(str(path))
+    check(loaded)
+    assert loaded.remove(removed) == 0
+
+    # Adding repacks partial batches that contain removed points; they must stay removed.
+    loaded.add(new)
+    idx.add(new)
+    ids, dists = loaded.search(
+        queries, k=count + len(new), nprobe=3, high_accuracy=high_accuracy
+    )
+    assert not np.isin(ids, removed).any()
+    assert np.count_nonzero(ids[0] != np.iinfo(np.uint32).max) == count + len(new) - 4
+
+    # A reloaded index grows exactly like the original.
+    expected_ids, expected_dists = idx.search(
+        queries, k=count + len(new), nprobe=3, high_accuracy=high_accuracy
+    )
+    np.testing.assert_array_equal(ids, expected_ids)
+    np.testing.assert_array_equal(dists, expected_dists)
+
+
+def test_remove_rejects_invalid_ids_without_removing_anything():
+    idx, old, new, _ = _dynamic_index()
+    count = len(old)
+    before = idx.search(new[:3], k=count, nprobe=3)
+    # 2**32 + 1 would wrap to point 1 if it were cast to uint32 first.
+    for bad in (-1, count, 2**32 + 1):
+        with pytest.raises(ValueError, match="ids"):
+            idx.remove([0, 1, bad])
+    with pytest.raises(ValueError, match="1D"):
+        idx.remove(np.zeros((2, 2), dtype=np.int64))
+    after = idx.search(new[:3], k=count, nprobe=3)
+    np.testing.assert_array_equal(before[0], after[0])
+    np.testing.assert_array_equal(before[1], after[1])
+
+    unbuilt = IvfIndex(65, 4, 1, 4)
+    with pytest.raises(RuntimeError, match="built or loaded"):
+        unbuilt.remove([0])
+
+
+def test_removing_every_point_leaves_a_searchable_index():
+    idx, old, new, _ = _dynamic_index()
+    assert idx.remove(np.arange(len(old))) == len(old)
+    ids, dists = idx.search(new[:2], k=5, nprobe=3)
+    assert np.all(ids == np.iinfo(np.uint32).max)
+    assert np.all(np.isinf(dists))
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        [2.7],
+        [-0.5],
+        np.array(
+            [1.0, 2.0]
+        ),  # integral floats are refused too: the dtype is the contract
+        np.array([True, False]),  # a boolean mask is not a list of ids
+        ["3"],
+        np.array([1, 2], dtype=object),
+    ],
+)
+def test_remove_and_add_refuse_non_integer_ids(bad):
+    idx, old, new, assigned = _dynamic_index()
+    before = idx.search(new[:3], k=len(old), nprobe=3)
+    with pytest.raises(ValueError, match="integers"):
+        idx.remove(bad)
+    if len(bad) == 2:
+        with pytest.raises(ValueError, match="integers"):
+            idx.add(new[:2], cluster_ids=bad)
+    after = idx.search(new[:3], k=len(old), nprobe=3)
+    np.testing.assert_array_equal(before[0], after[0])
+    assert idx.max_elements == len(old)
+
+
+def test_remove_and_add_accept_any_integer_dtype_and_empty_input():
+    idx, old, new, assigned = _dynamic_index()
+    assert idx.remove([]) == 0
+    assert idx.remove(np.array([], dtype=np.float64)) == 0  # no dtype to check
+    assert idx.remove([1, 2]) == 2
+    assert idx.remove(np.array([3, 4], dtype=np.uint8)) == 2
+    assert idx.remove(np.array([5], dtype=np.int16)) == 1
+    assert len(idx.add(new[:3], cluster_ids=[0, 1, 2])) == 3
+    assert len(idx.add(new[:3], cluster_ids=np.array([0, 1, 2], dtype=np.uint16))) == 3

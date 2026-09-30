@@ -6,11 +6,14 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <ios>
 #include <iterator>
 #include <limits>
+#include <optional>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -390,6 +393,501 @@ TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
 
     IVF loaded;
     EXPECT_THROW(loaded.load(path.c_str()), std::runtime_error);
+    std::remove(path.c_str());
+}
+
+// ── add / remove ────────────────────────────────────────────────────────────────────────
+
+constexpr size_t kDynDim = 65;  // pads to 128, so padded and original dimensions differ
+constexpr size_t kDynClusters = 4;
+
+std::vector<float> random_rows(size_t rows, uint32_t seed) {
+    std::mt19937 gen(seed);
+    std::normal_distribution<float> normal;
+    std::vector<float> values(rows * kDynDim);
+    for (auto& value : values) {
+        value = normal(gen);
+    }
+    return values;
+}
+
+// Nearest centroid in the original space: smallest L2 distance, or largest inner product.
+std::vector<PID> nearest_centroids(
+    const std::vector<float>& centroids, const float* rows, size_t count, MetricType metric
+) {
+    std::vector<PID> assigned(count);
+    for (size_t i = 0; i < count; ++i) {
+        double best = std::numeric_limits<double>::infinity();
+        for (size_t c = 0; c < kDynClusters; ++c) {
+            double dist = 0;
+            for (size_t d = 0; d < kDynDim; ++d) {
+                const double x = rows[i * kDynDim + d];
+                const double y = centroids[c * kDynDim + d];
+                dist += metric == METRIC_L2 ? (x - y) * (x - y) : -x * y;
+            }
+            if (dist < best) {
+                best = dist;
+                assigned[i] = static_cast<PID>(c);
+            }
+        }
+    }
+    return assigned;
+}
+
+std::string read_file(const std::string& path) {
+    std::ifstream input(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+std::string saved_bytes(const IVF& index, const std::string& path) {
+    index.save(path.c_str());
+    return read_file(path);
+}
+
+// Exact distance as the index defines it: squared L2, or 1 - inner product.
+double exact_distance(const float* a, const float* b, MetricType metric) {
+    double dist = metric == METRIC_L2 ? 0.0 : 1.0;
+    for (size_t d = 0; d < kDynDim; ++d) {
+        const double x = a[d];
+        const double y = b[d];
+        dist += metric == METRIC_L2 ? (x - y) * (x - y) : -x * y;
+    }
+    return dist;
+}
+
+struct Hits {
+    std::vector<PID> ids;
+    std::vector<float> distances;
+};
+
+// Ranks every point: k is the point count and every cluster is probed.
+Hits search_everything(
+    const IVF& index, const float* query, std::optional<bool> hacc = std::nullopt
+) {
+    const size_t k = index.max_elements();
+    Hits hits{std::vector<PID>(k), std::vector<float>(k)};
+    if (hacc.has_value()) {
+        index.search(query, k, kDynClusters, hits.ids.data(), hits.distances.data(), *hacc);
+    } else {
+        index.search(query, k, kDynClusters, hits.ids.data(), hits.distances.data());
+    }
+    return hits;
+}
+
+TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
+    constexpr size_t kOld = 200;
+    constexpr size_t kNew = 200;
+    const auto points = random_rows(kOld + kNew, 11);
+    const auto centroids = random_rows(kDynClusters, 12);
+    const float* extra = points.data() + (kOld * kDynDim);
+    const std::string base_path = ::testing::TempDir() + "rabitq_ivf_add_base.index";
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_add.index";
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        const auto assigned =
+            nearest_centroids(centroids, points.data(), kOld + kNew, metric);
+        for (size_t bits : {1UL, 4UL, 9UL, 32UL}) {
+            SCOPED_TRACE(
+                ::testing::Message()
+                << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
+            );
+            IVF base(kOld, kDynDim, kDynClusters, bits, metric);
+            base.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+            base.save(base_path.c_str());
+
+            // Every index below starts from the same file, so they share one rotator.
+            IVF single;
+            single.load(base_path.c_str());
+            single.add(extra, kNew, assigned.data() + kOld, false, 1);
+            ASSERT_EQ(single.max_elements(), kOld + kNew);
+            const std::string expected = saved_bytes(single, path);
+
+            IVF routed;
+            routed.load(base_path.c_str());
+            routed.add(extra, kNew, nullptr, false, 1);
+            EXPECT_TRUE(saved_bytes(routed, path) == expected) << "routed";
+
+            // Chunk sizes put the tail batch of each cluster on and off a batch boundary.
+            IVF chunked;
+            chunked.load(base_path.c_str());
+            size_t done = 0;
+            for (size_t chunk : std::array<size_t, 6>{1, 31, 32, 7, 1, kNew - 72}) {
+                chunked.add(
+                    extra + (done * kDynDim), chunk, assigned.data() + kOld + done, false, 1
+                );
+                done += chunk;
+            }
+            ASSERT_EQ(done, kNew);
+            EXPECT_TRUE(saved_bytes(chunked, path) == expected) << "chunked";
+
+            IVF threaded;
+            threaded.load(base_path.c_str());
+            threaded.add(extra, kNew, nullptr, false, 4);
+            EXPECT_TRUE(saved_bytes(threaded, path) == expected) << "threaded";
+        }
+    }
+    std::remove(base_path.c_str());
+    std::remove(path.c_str());
+}
+
+TEST(IvfAddTest, KeepsExistingDistancesAndQuantizesNewPointsAccurately) {
+    constexpr size_t kOld = 150;
+    constexpr size_t kNew = 150;
+    constexpr size_t kQueries = 8;
+    const auto points = random_rows(kOld + kNew, 21);
+    const auto centroids = random_rows(kDynClusters, 22);
+    const auto queries = random_rows(kQueries, 23);
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        const auto assigned =
+            nearest_centroids(centroids, points.data(), kOld + kNew, metric);
+        for (size_t bits : {1UL, 2UL, 4UL, 9UL, 32UL}) {
+            SCOPED_TRACE(
+                ::testing::Message()
+                << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
+            );
+            IVF index(kOld, kDynDim, kDynClusters, bits, metric);
+            index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+            std::vector<Hits> before;
+            for (size_t q = 0; q < kQueries; ++q) {
+                before.push_back(search_everything(index, queries.data() + (q * kDynDim)));
+            }
+
+            index.add(points.data() + (kOld * kDynDim), kNew, nullptr, false, 1);
+
+            double old_error = 0;
+            double new_error = 0;
+            for (size_t q = 0; q < kQueries; ++q) {
+                const float* query = queries.data() + (q * kDynDim);
+                const auto after = search_everything(index, query);
+                std::vector<float> by_id(kOld + kNew, std::nanf(""));
+                for (size_t r = 0; r < after.ids.size(); ++r) {
+                    ASSERT_LT(after.ids[r], kOld + kNew) << "every point is still ranked";
+                    by_id[after.ids[r]] = after.distances[r];
+                }
+                // A tail batch is unpacked and repacked; old points must not change at all.
+                for (size_t r = 0; r < before[q].ids.size(); ++r) {
+                    EXPECT_EQ(by_id[before[q].ids[r]], before[q].distances[r]);
+                }
+                for (size_t id = 0; id < kOld + kNew; ++id) {
+                    const double error = std::abs(
+                        by_id[id] -
+                        exact_distance(query, points.data() + (id * kDynDim), metric)
+                    );
+                    (id < kOld ? old_error : new_error) += error;
+                }
+            }
+            old_error /= kQueries * kOld;
+            new_error /= kQueries * kNew;
+            // Mis-encoded points would be off by the spread of the data, not by a factor.
+            EXPECT_LT(new_error, 3 * old_error + 1e-4) << old_error << " vs " << new_error;
+        }
+    }
+}
+
+TEST(IvfAddTest, AddedRawVectorsAreRerankedExactly) {
+    constexpr size_t kOld = 40;
+    constexpr size_t kNew = 60;
+    const auto points = random_rows(kOld + kNew, 31);
+    const auto centroids = random_rows(kDynClusters, 32);
+    const auto queries = random_rows(3, 33);
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        IVF index(kOld, kDynDim, kDynClusters, 32, metric);
+        const auto assigned = nearest_centroids(centroids, points.data(), kOld, metric);
+        index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        index.add(points.data() + (kOld * kDynDim), kNew, nullptr, false, 1);
+        for (size_t q = 0; q < 3; ++q) {
+            const float* query = queries.data() + (q * kDynDim);
+            const auto hits = search_everything(index, query);
+            for (size_t r = 0; r < hits.ids.size(); ++r) {
+                EXPECT_NEAR(
+                    hits.distances[r],
+                    exact_distance(query, points.data() + (hits.ids[r] * kDynDim), metric),
+                    1e-4
+                );
+            }
+            EXPECT_TRUE(std::is_sorted(hits.distances.begin(), hits.distances.end()));
+        }
+    }
+}
+
+TEST(IvfAddTest, FasterQuantizationIsSupportedAndDeterministic) {
+    constexpr size_t kOld = 100;
+    constexpr size_t kNew = 50;
+    const auto points = random_rows(kOld + kNew, 41);
+    const auto centroids = random_rows(kDynClusters, 42);
+    const auto assigned =
+        nearest_centroids(centroids, points.data(), kOld + kNew, METRIC_L2);
+    const std::string base_path = ::testing::TempDir() + "rabitq_ivf_add_faster_base.index";
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_add_faster.index";
+
+    IVF base(kOld, kDynDim, kDynClusters, 5);
+    base.construct(points.data(), centroids.data(), assigned.data(), true, 1);
+    base.save(base_path.c_str());
+    IVF first;
+    IVF second;
+    first.load(base_path.c_str());
+    second.load(base_path.c_str());
+    first.add(points.data() + (kOld * kDynDim), kNew, assigned.data() + kOld, true, 1);
+    second.add(points.data() + (kOld * kDynDim), kNew, assigned.data() + kOld, true, 2);
+    EXPECT_TRUE(saved_bytes(first, path) == saved_bytes(second, path));
+    const auto hits = search_everything(first, points.data() + (kOld * kDynDim));
+    EXPECT_EQ(hits.ids.size(), kOld + kNew);
+    EXPECT_TRUE(std::none_of(hits.distances.begin(), hits.distances.end(), [](float x) {
+        return std::isnan(x);
+    }));
+    std::remove(base_path.c_str());
+    std::remove(path.c_str());
+}
+
+TEST(IvfAddTest, RoutesNewPointsWithHNSWCentroids) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kCount = 20000;
+    // Centroid i has first coordinate i + 1, so an inner product with e0 is largest for the
+    // last centroid and the routing decision is unambiguous.
+    std::vector<float> centroids(kCount * kDim, 0.0F);
+    for (size_t i = 0; i < kCount; ++i) {
+        centroids[i * kDim] = static_cast<float>(i + 1);
+    }
+    std::array<float, kDim> first{};
+    first[0] = 1.0F;
+    const PID cluster = 0;
+    IVF index(1, kDim, kCount, 32, METRIC_IP);
+    index.construct(first.data(), centroids.data(), &cluster, false, 4);
+
+    std::array<float, kDim> second{};
+    second[0] = 2.0F;
+    index.add(second.data(), 1, nullptr, false, 2);
+    ASSERT_EQ(index.max_elements(), 2U);
+
+    // The query is routed by the same rule, so it reaches the cluster that received the
+    // point.
+    std::array<PID, 1> result{kPidMax};
+    std::array<float, 1> distance{};
+    index.search(second.data(), 1, 1, result.data(), distance.data());
+    EXPECT_EQ(result[0], 1U);
+    EXPECT_NEAR(distance[0], 1.0F - 4.0F, 1e-5F);
+}
+
+TEST(IvfAddTest, RejectsBadInputAndLeavesTheIndexUnchanged) {
+    constexpr size_t kNum = 70;
+    const auto points = random_rows(kNum + 1, 51);
+    const auto centroids = random_rows(kDynClusters, 52);
+    const auto assigned = nearest_centroids(centroids, points.data(), kNum, METRIC_L2);
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_add_reject.index";
+
+    IVF unbuilt(kNum, kDynDim, kDynClusters, 4);
+    EXPECT_THROW(unbuilt.add(points.data(), 1), std::logic_error);
+    IVF unconfigured;
+    EXPECT_THROW(unconfigured.add(points.data(), 1), std::logic_error);
+
+    IVF index(kNum, kDynDim, kDynClusters, 4);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const std::string expected = saved_bytes(index, path);
+
+    const std::array<PID, 2> bad_clusters{0, static_cast<PID>(kDynClusters)};
+    EXPECT_THROW(index.add(points.data(), 2, bad_clusters.data()), std::invalid_argument);
+    EXPECT_THROW(index.add(nullptr, 1), std::invalid_argument);
+    // The ID check happens before the data is read.
+    EXPECT_THROW(
+        index.add(points.data(), buffer::kSearchBufferMaxPointCount), std::invalid_argument
+    );
+    EXPECT_NO_THROW(index.add(nullptr, 0));
+    EXPECT_NO_THROW(index.add(points.data(), 0));
+    EXPECT_EQ(index.max_elements(), kNum);
+    EXPECT_TRUE(saved_bytes(index, path) == expected);
+    std::remove(path.c_str());
+}
+
+TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
+    constexpr size_t kNum = 200;
+    constexpr size_t kQueries = 5;
+    const auto points = random_rows(kNum, 61);
+    const auto centroids = random_rows(kDynClusters, 62);
+    const auto queries = random_rows(kQueries, 63);
+
+    std::vector<PID> removed_ids;
+    std::vector<bool> is_removed(kNum, false);
+    for (PID id = 0; id < kNum; id += 3) {
+        removed_ids.push_back(id);
+        is_removed[id] = true;
+    }
+    removed_ids.push_back(kNum - 1);  // the last point sits in a partial batch
+    is_removed[kNum - 1] = true;
+    removed_ids.push_back(0);  // repeated IDs count once
+    const size_t unique_removed =
+        static_cast<size_t>(std::count(is_removed.begin(), is_removed.end(), true));
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        const auto assigned = nearest_centroids(centroids, points.data(), kNum, metric);
+        // 1-3 bits use standard FastScan, 4-9 bits and raw storage exercise other paths too
+        for (size_t bits : {1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL, 32UL}) {
+            for (bool hacc : {false, true}) {
+                SCOPED_TRACE(
+                    ::testing::Message() << "metric=" << (metric == METRIC_L2 ? "l2" : "ip")
+                                         << " bits=" << bits << " hacc=" << hacc
+                );
+                IVF index(kNum, kDynDim, kDynClusters, bits, metric);
+                index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+                std::vector<Hits> before;
+                for (size_t q = 0; q < kQueries; ++q) {
+                    before.push_back(
+                        search_everything(index, queries.data() + (q * kDynDim), hacc)
+                    );
+                }
+
+                EXPECT_EQ(
+                    index.remove(removed_ids.data(), removed_ids.size()), unique_removed
+                );
+                EXPECT_EQ(index.remove(removed_ids.data(), removed_ids.size()), 0U);
+                EXPECT_EQ(index.max_elements(), kNum);
+
+                for (size_t q = 0; q < kQueries; ++q) {
+                    const auto after =
+                        search_everything(index, queries.data() + (q * kDynDim), hacc);
+                    // Survivors keep their order and distances; the rest are sentinels.
+                    size_t next = 0;
+                    for (size_t r = 0; r < kNum; ++r) {
+                        if (is_removed[before[q].ids[r]]) {
+                            continue;
+                        }
+                        ASSERT_EQ(after.ids[next], before[q].ids[r]);
+                        ASSERT_EQ(after.distances[next], before[q].distances[r]);
+                        ++next;
+                    }
+                    ASSERT_EQ(next, kNum - unique_removed);
+                    for (size_t r = next; r < kNum; ++r) {
+                        EXPECT_EQ(after.ids[r], kPidMax);
+                        EXPECT_EQ(
+                            after.distances[r], std::numeric_limits<float>::infinity()
+                        );
+                    }
+
+                    // A small k must still be filled from the survivors only.
+                    std::array<PID, 10> top{};
+                    std::array<float, 10> top_distances{};
+                    index.search(
+                        queries.data() + (q * kDynDim),
+                        top.size(),
+                        kDynClusters,
+                        top.data(),
+                        top_distances.data(),
+                        hacc
+                    );
+                    for (size_t r = 0; r < top.size(); ++r) {
+                        ASSERT_LT(top[r], kNum);
+                        EXPECT_FALSE(is_removed[top[r]]);
+                        EXPECT_TRUE(std::isfinite(top_distances[r]));
+                    }
+                }
+            }
+        }
+    }
+}
+
+TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
+    constexpr size_t kOld = 100;
+    constexpr size_t kNew = 60;
+    constexpr size_t kQueries = 4;
+    const auto points = random_rows(kOld + kNew, 71);
+    const auto centroids = random_rows(kDynClusters, 72);
+    const auto queries = random_rows(kQueries, 73);
+    const std::vector<PID> removed{1, 33, 34, 98, 99};
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_remove.index";
+
+    // Counts the live results, checking that no removed point appears and that the unfilled
+    // slots hold the sentinel with an infinite distance.
+    auto count_live = [&removed](const Hits& hits) {
+        size_t live = 0;
+        for (size_t r = 0; r < hits.ids.size(); ++r) {
+            if (hits.ids[r] == kPidMax) {
+                EXPECT_EQ(hits.distances[r], std::numeric_limits<float>::infinity());
+                continue;
+            }
+            ++live;
+            EXPECT_EQ(std::count(removed.begin(), removed.end(), hits.ids[r]), 0);
+            EXPECT_TRUE(std::isfinite(hits.distances[r]));
+        }
+        return live;
+    };
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        const auto assigned = nearest_centroids(centroids, points.data(), kOld, metric);
+        for (size_t bits : {1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL, 32UL}) {
+            for (bool hacc : {false, true}) {
+                SCOPED_TRACE(
+                    ::testing::Message() << "metric=" << (metric == METRIC_L2 ? "l2" : "ip")
+                                         << " bits=" << bits << " hacc=" << hacc
+                );
+                IVF index(kOld, kDynDim, kDynClusters, bits, metric);
+                index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+                ASSERT_EQ(index.remove(removed.data(), removed.size()), removed.size());
+                index.save(path.c_str());
+
+                IVF loaded;
+                loaded.load(path.c_str());
+                ASSERT_EQ(loaded.max_elements(), kOld);
+                for (size_t q = 0; q < kQueries; ++q) {
+                    const float* query = queries.data() + (q * kDynDim);
+                    const auto expected = search_everything(index, query, hacc);
+                    const auto actual = search_everything(loaded, query, hacc);
+                    EXPECT_EQ(actual.ids, expected.ids);
+                    EXPECT_EQ(actual.distances, expected.distances);
+                    EXPECT_EQ(count_live(actual), kOld - removed.size());
+                }
+                EXPECT_EQ(loaded.remove(removed.data(), removed.size()), 0U);
+
+                // Adding repacks the tail batches that hold removed points; they must stay
+                // removed, and a reloaded index must grow exactly like the original.
+                const float* added = points.data() + (kOld * kDynDim);
+                index.add(added, kNew, nullptr, false, 1);
+                loaded.add(added, kNew, nullptr, false, 1);
+                ASSERT_EQ(loaded.max_elements(), kOld + kNew);
+                for (size_t q = 0; q < kQueries; ++q) {
+                    const float* query = queries.data() + (q * kDynDim);
+                    const auto expected = search_everything(index, query, hacc);
+                    const auto actual = search_everything(loaded, query, hacc);
+                    EXPECT_EQ(actual.ids, expected.ids);
+                    EXPECT_EQ(actual.distances, expected.distances);
+                    EXPECT_EQ(count_live(actual), kOld + kNew - removed.size());
+                }
+            }
+        }
+    }
+    std::remove(path.c_str());
+}
+
+TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
+    constexpr size_t kNum = 70;
+    const auto points = random_rows(kNum, 81);
+    const auto centroids = random_rows(kDynClusters, 82);
+    const auto assigned = nearest_centroids(centroids, points.data(), kNum, METRIC_L2);
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_remove_reject.index";
+
+    const PID id = 0;
+    IVF unbuilt(kNum, kDynDim, kDynClusters, 4);
+    EXPECT_THROW(unbuilt.remove(&id, 1), std::logic_error);
+
+    IVF index(kNum, kDynDim, kDynClusters, 4);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const std::string expected = saved_bytes(index, path);
+
+    const std::array<PID, 2> out_of_range{3, static_cast<PID>(kNum)};
+    EXPECT_THROW(index.remove(out_of_range.data(), 2), std::invalid_argument);
+    EXPECT_THROW(index.remove(nullptr, 1), std::invalid_argument);
+    EXPECT_EQ(index.remove(nullptr, 0), 0U);
+    EXPECT_TRUE(saved_bytes(index, path) == expected);
+
+    // Removing everything leaves a searchable index that returns only sentinels.
+    std::vector<PID> everything(kNum);
+    for (size_t i = 0; i < kNum; ++i) {
+        everything[i] = static_cast<PID>(i);
+    }
+    EXPECT_EQ(index.remove(everything.data(), kNum), kNum);
+    const auto hits = search_everything(index, points.data());
+    for (size_t r = 0; r < kNum; ++r) {
+        EXPECT_EQ(hits.ids[r], kPidMax);
+    }
     std::remove(path.c_str());
 }
 
