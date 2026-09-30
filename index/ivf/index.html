@@ -810,6 +810,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#updating-an-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating an Index
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating an Index">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cost-of-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost of add
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recall-after-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recall after add
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-removal-is-stored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How removal is stored
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1065,6 +1115,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#updating-an-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating an Index
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating an Index">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cost-of-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cost of add
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recall-after-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recall after add
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-removal-is-stored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How removal is stored
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1220,6 +1320,72 @@ remaining quantized bits or the stored raw vectors. Raw reranking computes
 squared L2 or <code>1 - dot(query, vector)</code> in the original coordinates; the search
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top <code>k</code> results after scanning the selected clusters.</p>
+<h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
+<p>A constructed or loaded index can gain and lose points without the original
+data. The index file format does not change.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::add</span><span class="p">(</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span><span class="p">,</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">faster</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">()</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">);</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">IVF::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">ids_to_remove</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+</code></pre></div>
+<ul>
+<li><strong>data</strong>, <strong>n</strong>: <code>n</code> new vectors, quantized like <code>construct</code> does. Vector <code>i</code>
+  receives the PID <code>max_elements() + i</code>, so PIDs stay dense.</li>
+<li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, cluster_num)</code>. When
+  it is <code>nullptr</code>, each vector goes to its nearest centroid, chosen the same way
+  a query is routed.</li>
+<li><strong>faster</strong>, <strong>num_threads</strong>: Same as in <code>construct</code>.</li>
+<li><strong>ids_to_remove</strong>: PIDs to remove. Every PID must be below <code>max_elements()</code>; nothing is
+  removed if one is not. <code>remove</code> returns how many were newly removed and can be
+  repeated safely.</li>
+</ul>
+<p>In Python:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>                       <span class="c1"># route to the nearest centroids</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">cluster_ids</span><span class="o">=</span><span class="n">labels</span><span class="p">)</span>   <span class="c1"># or choose the clusters</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+</code></pre></div>
+<p>In C++, <code>construct</code> expects <code>max_elements()</code> rows once points have been added. It is
+not safe to call <code>add</code> or <code>remove</code> while another thread searches the same index.</p>
+<h3 id="cost-of-add">Cost of <code>add</code><a class="headerlink" href="#cost-of-add" title="Permanent link">&para;</a></h3>
+<p><code>add</code> builds the grown index next to the old one and swaps it in, so the index is
+unchanged if it throws. Every call copies the whole storage, so:</p>
+<ul>
+<li>It needs memory for both copies while it runs.</li>
+<li>Each call has a fixed cost that grows with the size of the whole index, on top of a
+  cost per new vector. <strong>Add many vectors per call rather than one at a time.</strong></li>
+</ul>
+<p>On an index of 1,000,000 vectors with 128 dimensions, 1,024 clusters and 1 bit
+(8 threads, portable build, Intel i7-12700KF), adding 1,000 vectors in one call took
+about 5 ms, and adding the same vectors one call each took about 3 s (2.8 s and 3.7 s
+in two runs). For that 33 MB file, a process that had just loaded it held about
+65 MB, and peaked at about 100 MB during one <code>add</code> of 1,000 vectors.</p>
+<p>There is no spare capacity: every <code>add</code> moves the data.</p>
+<h3 id="recall-after-add">Recall after <code>add</code><a class="headerlink" href="#recall-after-add" title="Permanent link">&para;</a></h3>
+<p>The centroids and the rotation are fixed when the index is constructed, so
+<code>add</code> never retrains them. If the added vectors come from a different distribution,
+or the index grows many times beyond its original size, recall at a given
+<code>nprobe</code> can drop. Rebuild from the original data with new centroids when
+recall matters more than the cost of a rebuild.</p>
+<h3 id="how-removal-is-stored">How removal is stored<a class="headerlink" href="#how-removal-is-stored" title="Permanent link">&para;</a></h3>
+<p><code>remove</code> hides points from search but keeps their storage. Removed points still
+count in <code>max_elements()</code> and cannot be restored.</p>
+<p>A removed point has its <code>f_add</code> value set to <code>+inf</code>. That value is the constant
+term of the distance estimate, so the estimated distance and the lower bound of the
+point are <code>+inf</code> for every bit width, metric, and SIMD backend. The point never
+enters the result buffer and never triggers reranking. Any code that estimates
+IVF distances must keep this behavior and must never turn <code>+inf</code> into NaN.</p>
+<p>Search may return fewer than <code>k</code> results once points are removed: the missing slots
+hold <code>kPidMax</code> (<code>2**32 - 1</code> in Python) with an infinite distance, as when the probed
+clusters hold fewer than <code>k</code> points.</p>
+<p>The value lives in the ordinary batch data, so the file format does not change and
+removal survives <code>save</code> and <code>load</code>. No file written before <code>remove</code> existed has an
+infinite <code>f_add</code>, so nothing in an old file is reinterpreted. A file that has
+removals also loads in release 0.5.0, where the removed points never appear in results.</p>
 
 
 
