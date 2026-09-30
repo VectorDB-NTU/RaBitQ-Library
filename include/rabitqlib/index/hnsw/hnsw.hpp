@@ -61,11 +61,16 @@ class HierarchicalNSW {
     [[nodiscard]] size_t ef_construction() const { return ef_construction_; }
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
     [[nodiscard]] size_t max_elements() const { return max_elements_; }
+    [[nodiscard]] size_t num_points() const { return cur_element_count_; }
 
     void save(const char*) const;
     void load(const char*);
 
     void construct(size_t, const float*, size_t, const float*, PID*, size_t, bool);
+
+    // Inserts points using the stored codes, labelling them num_points() + i.
+    // Single-threaded, and throws rather than growing past max_elements().
+    std::vector<PID> add(const float*, size_t, const PID*, bool = false);
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float*, size_t, size_t, size_t, size_t
     );
@@ -354,6 +359,14 @@ class HierarchicalNSW {
     }
 
     void add_point(PID, PID, const quant::RabitqConfig&);
+
+    // Post-construction insertion, all defined in hnsw_quant.hpp.
+    void reconstruct_rotated(PID, float*) const;
+    float get_quant_dist(PID target, PID query) const;
+    maxheap<std::pair<float, PID>> search_base_layer_quant(PID, PID, int);
+    void get_neighbors_by_heuristic2_quant(maxheap<std::pair<float, PID>>&, size_t);
+    PID mutually_connect_quant(PID, maxheap<std::pair<float, PID>>&, int);
+    PID add_point_quant(const float*, PID, const quant::RabitqConfig&);
 
     maxheap<std::pair<float, PID>> search_base_layer(PID, PID, int);
 
@@ -1520,3 +1533,6 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
 }
 
 }  // namespace rabitqlib::hnsw
+
+// Included last: these definitions need the complete class.
+#include "rabitqlib/index/hnsw/hnsw_quant.hpp"  // IWYU pragma: export
