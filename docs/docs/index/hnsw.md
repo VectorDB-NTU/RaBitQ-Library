@@ -109,7 +109,8 @@ std::vector<PID> HierarchicalNSW::add(
     const float* data,
     size_t n,
     const PID* cluster_ids = nullptr,
-    bool faster = false
+    bool faster = false,
+    size_t num_threads = 1
 );
 
 void HierarchicalNSW::resize(size_t new_max_elements);
@@ -120,7 +121,9 @@ void HierarchicalNSW::resize(size_t new_max_elements);
 - **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When it
   is `nullptr`, each vector goes to its nearest centroid, chosen the same way a
   query is routed.
-- **faster**: Same as in `construct`.
+- **faster**, **num_threads**: Same as in `construct`. A point keeps the label
+  `num_points() + i` whatever order the threads finish in, because the slots are
+  reserved as one block before the inserts start.
 - **new_max_elements**: The new capacity. It must be at least `num_points()`.
 
 In Python:
@@ -132,7 +135,7 @@ index.resize(index.max_elements + 100_000)
 ```
 
 It is not safe to call `add` or `resize` while another thread searches the same
-index, and `add` inserts one point at a time rather than in parallel.
+index.
 
 ### Capacity
 
@@ -155,16 +158,7 @@ compared against is rebuilt from its stored RaBitQ code, sign bit and extra bits
 together, and the other side is scored straight from its codes. This is the same
 approach quantized SymphonyQG construction takes.
 
-Graph quality therefore depends on how a point arrived. On SIFT-1M restricted to
-100,000 vectors (M = 32, 9 bits, 500 queries, recall@10 against exact
-neighbors), an index built entirely by `construct` and one whose last fifth
-arrived through `add` are indistinguishable:
-
-| built by | ef 10 | ef 50 | ef 100 | ef 200 |
-| --- | --- | --- | --- | --- |
-| all `construct` | 0.829 | 0.982 | 0.992 | 0.993 |
-| 80% `construct`, 20% `add` | 0.826 | 0.981 | 0.991 | 0.993 |
-| 50% `construct`, 50% `add` | 0.828 | 0.983 | 0.993 | 0.995 |
+Graph quality therefore depends on how a point arrived.
 
 ### Recall after `add`
 
