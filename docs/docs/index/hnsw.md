@@ -98,3 +98,78 @@ Repeat until `candidate_set` is empty:
    - Insert the neighbor into `candidate_set` with its (possibly refined) estimated distance.  
 
 The search terminates when `candidate_set` is empty.
+
+## Updating an Index
+
+A constructed or loaded index can gain points without the original data. The
+index file format does not change.
+
+```c++
+std::vector<PID> HierarchicalNSW::add(
+    const float* data,
+    size_t n,
+    const PID* cluster_ids = nullptr,
+    bool faster = false
+);
+
+void HierarchicalNSW::resize(size_t new_max_elements);
+```
+
+- **data**, **n**: `n` new vectors in the original coordinates. Vector `i` receives
+  the label `num_points() + i`, so labels stay dense, and `add` returns them.
+- **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When it
+  is `nullptr`, each vector goes to its nearest centroid, chosen the same way a
+  query is routed.
+- **faster**: Same as in `construct`.
+- **new_max_elements**: The new capacity. It must be at least `num_points()`.
+
+In Python:
+
+```python
+new_ids = index.add(vectors)                       # route to the nearest centroids
+new_ids = index.add(vectors, cluster_ids=labels)   # or choose the clusters
+index.resize(index.max_elements + 100_000)
+```
+
+It is not safe to call `add` or `resize` while another thread searches the same
+index, and `add` inserts one point at a time rather than in parallel.
+
+### Capacity
+
+`add` never grows the index: it throws once `num_points()` reaches
+`max_elements()`, and `resize` is the only way to raise that. An index built with
+spare capacity absorbs points with no reallocation at all, so sizing
+`max_elements` ahead of time is the cheap path.
+
+`resize` rebuilds the base-layer storage and copies it, so it needs memory for
+both copies while it runs and costs time proportional to the whole index. It
+invalidates every pointer into the index. The per-node upper-layer link lists are
+not copied, only their pointer table.
+
+### How added points are linked
+
+`construct` borrows the caller's vectors and links points using exact distances
+between them. That pointer is not retained, so `add` cannot use it, and instead
+scores candidates with the estimator the search already uses: the vector being
+compared against is rebuilt from its stored RaBitQ code, sign bit and extra bits
+together, and the other side is scored straight from its codes. This is the same
+approach quantized SymphonyQG construction takes.
+
+Graph quality therefore depends on how a point arrived. On SIFT-1M restricted to
+100,000 vectors (M = 32, 9 bits, 500 queries, recall@10 against exact
+neighbors), an index built entirely by `construct` and one whose last fifth
+arrived through `add` are indistinguishable:
+
+| built by | ef 10 | ef 50 | ef 100 | ef 200 |
+| --- | --- | --- | --- | --- |
+| all `construct` | 0.829 | 0.982 | 0.992 | 0.993 |
+| 80% `construct`, 20% `add` | 0.826 | 0.981 | 0.991 | 0.993 |
+| 50% `construct`, 50% `add` | 0.828 | 0.983 | 0.993 | 0.995 |
+
+### Recall after `add`
+
+The centroids and the rotation are fixed when the index is constructed, so `add`
+never retrains them. If the added vectors come from a different distribution, or
+the index grows many times beyond its original size, recall can drop. Rebuild
+from the original data with new centroids when recall matters more than the cost
+of a rebuild.
