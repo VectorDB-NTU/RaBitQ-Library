@@ -451,6 +451,62 @@ inline PID HierarchicalNSW::add_point_quant(
     return label;
 }
 
+// Grows the capacity. Every pointer into the level-0 block is invalidated, so
+// this must not run while another thread searches.
+inline void HierarchicalNSW::resize(size_t new_max_elements) {
+    if (new_max_elements < cur_element_count_) {
+        throw std::invalid_argument("HNSW resize: capacity below the element count");
+    }
+    if (new_max_elements > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("HNSW resize: capacity exceeds the supported ID range");
+    }
+    if (new_max_elements == max_elements_) {
+        return;
+    }
+    if (new_max_elements > std::numeric_limits<size_t>::max() / size_data_per_element_) {
+        throw std::invalid_argument("HNSW resize: capacity exceeds addressable storage");
+    }
+
+    // Everything new is built before anything old is released, so a failure
+    // leaves the index as it was. realloc is not an option: the level-0 block
+    // comes from aligned_alloc, which realloc does not keep aligned.
+    const size_t level0_bytes = new_max_elements * size_data_per_element_;
+    std::unique_ptr<char, void (*)(char*)> level0(
+        memory::huge_page_allocate<char>(level0_bytes),
+        [](char* ptr) { memory::aligned_deallocate(ptr); }
+    );
+    if (level0 == nullptr) {
+        throw std::bad_alloc();
+    }
+    std::memset(level0.get(), 0, level0_bytes);
+    std::memcpy(
+        level0.get(), data_level0_memory_, cur_element_count_ * size_data_per_element_
+    );
+
+    std::unique_ptr<char*, void (*)(char**)> links(
+        static_cast<char**>(std::calloc(new_max_elements, sizeof(char*))),
+        [](char** ptr) { std::free(ptr); }
+    );
+    if (links == nullptr) {
+        throw std::bad_alloc();
+    }
+    std::memcpy(links.get(), linkLists_, cur_element_count_ * sizeof(char*));
+
+    std::vector<int> levels(element_levels_);
+    levels.resize(new_max_elements);
+    std::vector<std::mutex> locks(new_max_elements);
+    auto pool = std::make_unique<VisitedListPool>(1, new_max_elements);
+
+    memory::aligned_deallocate(data_level0_memory_);
+    data_level0_memory_ = level0.release();
+    std::free(reinterpret_cast<void*>(linkLists_));
+    linkLists_ = links.release();
+    element_levels_.swap(levels);
+    link_list_locks_.swap(locks);
+    visited_list_pool_ = std::move(pool);
+    max_elements_ = new_max_elements;
+}
+
 inline std::vector<PID> HierarchicalNSW::add(
     const float* data, size_t n, const PID* cluster_ids, bool faster
 ) {

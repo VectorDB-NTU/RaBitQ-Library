@@ -350,6 +350,87 @@ TEST(HnswAddTest, RoutesToTheNearestCentroidWhenNoClustersGiven) {
     }
 }
 
+TEST(HnswResizeTest, GrowsCapacityAndKeepsTheGraph) {
+    constexpr size_t kBuilt = 128;
+    constexpr size_t kAdded = 64;
+    constexpr size_t kTotal = kBuilt + kAdded;
+    AddFixture fixture(kTotal, 37);
+
+    HierarchicalNSW index(kBuilt, AddFixture::kDim, 4, 8, 50);
+    index.construct(
+        1,
+        fixture.centroid.data(),
+        kBuilt,
+        fixture.data.data(),
+        fixture.cluster_ids.data(),
+        1,
+        false
+    );
+    ASSERT_EQ(index.max_elements(), kBuilt);
+
+    // Full: adding anything must fail, and leave the index usable.
+    EXPECT_THROW(
+        index.add(fixture.data.data() + (kBuilt * AddFixture::kDim), 1, nullptr),
+        std::invalid_argument
+    );
+    EXPECT_EQ(index.num_points(), kBuilt);
+
+    EXPECT_THROW(index.resize(kBuilt - 1), std::invalid_argument);
+    index.resize(kTotal);
+    EXPECT_EQ(index.max_elements(), kTotal);
+    EXPECT_EQ(index.num_points(), kBuilt);
+
+    // Points placed before the resize survive it.
+    const auto before = index.search(fixture.data.data(), 16, 1, kBuilt, 1);
+    for (size_t i = 0; i < 16; ++i) {
+        EXPECT_EQ(before[i][0].second, i);
+    }
+
+    index.add(fixture.data.data() + (kBuilt * AddFixture::kDim), kAdded, nullptr);
+    EXPECT_EQ(index.num_points(), kTotal);
+
+    const auto results = index.search(fixture.data.data(), kTotal, 1, kTotal, 1);
+    for (size_t i = 0; i < kTotal; ++i) {
+        EXPECT_EQ(results[i][0].second, i);
+    }
+}
+
+TEST(HnswResizeTest, SurvivesSaveAndLoad) {
+    constexpr size_t kBuilt = 64;
+    constexpr size_t kTotal = 96;
+    AddFixture fixture(kTotal, 41);
+
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "hnsw_resize_roundtrip.index";
+    {
+        HierarchicalNSW index(kBuilt, AddFixture::kDim, 4, 8, 50);
+        index.construct(
+            1,
+            fixture.centroid.data(),
+            kBuilt,
+            fixture.data.data(),
+            fixture.cluster_ids.data(),
+            1,
+            false
+        );
+        index.resize(kTotal);
+        index.add(
+            fixture.data.data() + (kBuilt * AddFixture::kDim), kTotal - kBuilt, nullptr
+        );
+        index.save(path.string().c_str());
+    }
+
+    HierarchicalNSW loaded;
+    loaded.load(path.string().c_str());
+    EXPECT_EQ(loaded.max_elements(), kTotal);
+    EXPECT_EQ(loaded.num_points(), kTotal);
+    const auto results = loaded.search(fixture.data.data(), kTotal, 1, kTotal, 1);
+    for (size_t i = 0; i < kTotal; ++i) {
+        EXPECT_EQ(results[i][0].second, i);
+    }
+    std::filesystem::remove(path);
+}
+
 TEST(HnswAddTest, AddIntoAnEmptyIndexBuildsFromScratch) {
     constexpr size_t kCount = 96;
     AddFixture fixture(kCount, 17);

@@ -74,6 +74,9 @@ class HierarchicalNSW {
     // Inserts points using the stored codes, labelling them num_points() + i.
     // Single-threaded, and throws rather than growing past max_elements().
     std::vector<PID> add(const float*, size_t, const PID* = nullptr, bool = false);
+
+    // Grows max_elements(). Invalidates every pointer into the index.
+    void resize(size_t);
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float*, size_t, size_t, size_t, size_t
     );
