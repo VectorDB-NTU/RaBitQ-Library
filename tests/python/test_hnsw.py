@@ -254,7 +254,9 @@ def test_add_rejects_bad_cluster_ids(partial_hnsw, base_data):
     with pytest.raises(ValueError, match="cluster_ids"):
         partial_hnsw.add(base_data[400:], cluster_ids=-np.ones(rows, dtype=np.int64))
     with pytest.raises(ValueError, match="cluster_ids"):
-        partial_hnsw.add(base_data[400:], cluster_ids=np.zeros(rows - 1, dtype=np.int64))
+        partial_hnsw.add(
+            base_data[400:], cluster_ids=np.zeros(rows - 1, dtype=np.int64)
+        )
     assert partial_hnsw.num_points == 400
 
 
@@ -294,7 +296,9 @@ def test_resize_below_element_count_raises(partial_hnsw):
     assert partial_hnsw.max_elements == N_VECTORS
 
 
-def test_added_points_survive_save_and_load(partial_hnsw, base_data, clusters, tmp_path):
+def test_added_points_survive_save_and_load(
+    partial_hnsw, base_data, clusters, tmp_path
+):
     _, cluster_ids = clusters
     partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
     before_ids, before_dists = partial_hnsw.search(base_data, k=_TOPK, ef=_EF)
