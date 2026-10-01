@@ -866,6 +866,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#updating-an-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating an Index
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating an Index">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#capacity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capacity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-added-points-are-linked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How added points are linked
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recall-after-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recall after add
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1121,6 +1171,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#updating-an-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updating an Index
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Updating an Index">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#capacity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Capacity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-added-points-are-linked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How added points are linked
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recall-after-add" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recall after add
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1233,6 +1333,68 @@ supported.</p>
 <li>Insert the neighbor into <code>candidate_set</code> with its (possibly refined) estimated distance.  </li>
 </ol>
 <p>The search terminates when <code>candidate_set</code> is empty.</p>
+<h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
+<p>A constructed or loaded index can gain points without the original data. The
+index file format does not change.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">PID</span><span class="o">&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">add</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">faster</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">);</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HierarchicalNSW::resize</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">new_max_elements</span><span class="p">);</span>
+</code></pre></div>
+<ul>
+<li><strong>data</strong>, <strong>n</strong>: <code>n</code> new vectors in the original coordinates. Vector <code>i</code> receives
+  the label <code>num_points() + i</code>, so labels stay dense, and <code>add</code> returns them.</li>
+<li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, num_clusters)</code>. When it
+  is <code>nullptr</code>, each vector goes to its nearest centroid, chosen the same way a
+  query is routed.</li>
+<li><strong>faster</strong>, <strong>num_threads</strong>: Same as in <code>construct</code>. A point keeps the label
+  <code>num_points() + i</code> whatever order the threads finish in, because the slots are
+  reserved as one block before the inserts start.</li>
+<li><strong>new_max_elements</strong>: The new capacity. It must be at least <code>num_points()</code>.
+  In C++, initialize the index through its parameterized constructor or <code>load</code>
+  before calling <code>resize</code>.</li>
+</ul>
+<p>In Python:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>                       <span class="c1"># route to the nearest centroids</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">cluster_ids</span><span class="o">=</span><span class="n">labels</span><span class="p">)</span>   <span class="c1"># or choose the clusters</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">index</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">max_elements</span> <span class="o">+</span> <span class="mi">100_000</span><span class="p">)</span>
+</code></pre></div>
+<p>It is not safe to call <code>add</code> or <code>resize</code> while another thread searches the same
+index.</p>
+<p><code>add</code> prepares the result IDs, quantized vectors, and link-list allocations before
+changing the graph or point count. A failure during preparation leaves those
+unchanged. A failure during graph linking can leave the batch counted in
+<code>num_points()</code> with only some points reachable through the graph. The index
+remains safe to search, save, load, and destroy; inspect <code>num_points()</code> before
+retrying, or rebuild to restore full reachability.</p>
+<h3 id="capacity">Capacity<a class="headerlink" href="#capacity" title="Permanent link">&para;</a></h3>
+<p><code>add</code> never grows the index: it throws once <code>num_points()</code> reaches
+<code>max_elements()</code>, and <code>resize</code> is the only way to raise that. An index built with
+spare capacity absorbs points with no reallocation at all, so sizing
+<code>max_elements</code> ahead of time is the cheap path.</p>
+<p><code>resize</code> rebuilds the base-layer storage and copies it, so it needs memory for
+both copies while it runs and costs time proportional to the whole index. It
+invalidates every pointer into the index. The per-node upper-layer link lists are
+not copied, only their pointer table.</p>
+<h3 id="how-added-points-are-linked">How added points are linked<a class="headerlink" href="#how-added-points-are-linked" title="Permanent link">&para;</a></h3>
+<p><code>construct</code> borrows the caller's vectors and links points using exact distances
+between them. That pointer is not retained, so <code>add</code> cannot use it, and instead
+scores candidates with the estimator the search already uses: the vector being
+compared against is rebuilt from its stored RaBitQ code, sign bit and extra bits
+together, and the other side is scored straight from its codes. This is the same
+approach quantized SymphonyQG construction takes.</p>
+<p>Graph quality therefore depends on how a point arrived.</p>
+<h3 id="recall-after-add">Recall after <code>add</code><a class="headerlink" href="#recall-after-add" title="Permanent link">&para;</a></h3>
+<p>The centroids and the rotation are fixed when the index is constructed, so <code>add</code>
+never retrains them. If the added vectors come from a different distribution, or
+the index grows many times beyond its original size, recall can drop. Rebuild
+from the original data with new centroids when recall matters more than the cost
+of a rebuild.</p>
 
 
 
