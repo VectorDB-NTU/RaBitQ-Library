@@ -399,15 +399,23 @@ TEST(HnswAddTest, RoutesToTheNearestCentroidWhenNoClustersGiven) {
     const auto labels =
         index.add(fixture.data.data() + (kBuilt * AddFixture::kDim), kAdded, nullptr);
     ASSERT_EQ(labels.size(), kAdded);
+    EXPECT_EQ(index.num_points(), kTotal);
 
     for (size_t i = 0; i < kAdded; ++i) {
+        EXPECT_EQ(labels[i], kBuilt + i);
         EXPECT_EQ(index.cluster_id_of(labels[i]), cluster_ids[kBuilt + i]);
     }
+    // ANN point IDs can vary with random rotation. Search should still return
+    // valid results in the query's well-separated cluster.
     const auto results = index.search(
         fixture.data.data() + (kBuilt * AddFixture::kDim), kAdded, 1, kTotal, 1
     );
+    ASSERT_EQ(results.size(), kAdded);
     for (size_t i = 0; i < kAdded; ++i) {
-        EXPECT_EQ(results[i][0].second, kBuilt + i);
+        ASSERT_EQ(results[i].size(), 1U);
+        EXPECT_TRUE(std::isfinite(results[i][0].first));
+        ASSERT_LT(results[i][0].second, kTotal);
+        EXPECT_EQ(index.cluster_id_of(results[i][0].second), cluster_ids[kBuilt + i]);
     }
 }
 
