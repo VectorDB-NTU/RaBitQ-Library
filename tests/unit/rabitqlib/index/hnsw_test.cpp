@@ -808,7 +808,9 @@ std::unique_ptr<HierarchicalNSW> build_for_remove(
     return index;
 }
 
-// With k and ef at the point count, the search visits every reachable point.
+// With k and ef at the point count, the search returns every point reachable
+// from the entry point. HNSW does not promise that every point is reachable, so
+// the tests compare against the same index without removals.
 Results search_everything(
     HierarchicalNSW& index, const AddFixture& fixture, size_t queries
 ) {
@@ -828,6 +830,18 @@ Results without_removed(const Results& before, const std::vector<bool>& removed)
         );
     }
     return kept;
+}
+
+// A copy through save and load: the same rotator, codes and graph.
+std::unique_ptr<HierarchicalNSW> copy_of(
+    const HierarchicalNSW& index, const std::string& name
+) {
+    const std::string path = ::testing::TempDir() + name;
+    index.save(path.c_str());
+    auto copy = std::make_unique<HierarchicalNSW>();
+    copy->load(path.c_str());
+    std::remove(path.c_str());
+    return copy;
 }
 
 std::vector<char> saved_bytes(const HierarchicalNSW& index, const std::string& path) {
@@ -891,7 +905,10 @@ TEST(HnswRemoveTest, RemovingTheEntryPointKeepsSearchWorking) {
         );
         AddFixture fixture(kCount, 61);
         auto index = build_for_remove(fixture, kCount, kCount, config);
+        const Results before = search_everything(*index, fixture, 1);
         const PID entry = HnswPruningTestAccess::entry_point_label(*index);
+        std::vector<bool> removed(kCount, false);
+        removed[entry] = true;
         ASSERT_EQ(index->remove(&entry, 1), 1U);
 
         // Every search starts at the removed entry point and must still return k
@@ -903,8 +920,7 @@ TEST(HnswRemoveTest, RemovingTheEntryPointKeepsSearchWorking) {
                 EXPECT_NE(hit.second, entry);
             }
         }
-        const Results everything = search_everything(*index, fixture, 1);
-        EXPECT_EQ(everything[0].size(), kCount - 1);
+        EXPECT_EQ(search_everything(*index, fixture, 1), without_removed(before, removed));
     }
 }
 
@@ -918,25 +934,24 @@ TEST(HnswRemoveTest, SearchReachesLivePointsThroughRemovedOnes) {
         );
         AddFixture fixture(kCount, 67);
         auto index = build_for_remove(fixture, kCount, kCount, config, 1, 4);
+        const Results before = search_everything(*index, fixture, kCount);
 
         // Keep one point in ten. Most paths between the survivors now pass through
-        // removed points, which search must still walk through.
+        // removed points, which search must still walk through to reach every
+        // survivor it reached before.
         std::vector<PID> labels;
-        std::vector<PID> live;
+        std::vector<bool> removed(kCount, false);
         for (PID label = 0; label < kCount; ++label) {
-            (label % kStride == 0 ? live : labels).push_back(label);
+            if (label % kStride != 0) {
+                labels.push_back(label);
+                removed[label] = true;
+            }
         }
         ASSERT_EQ(index->remove(labels.data(), labels.size()), labels.size());
 
-        const Results results = search_everything(*index, fixture, kCount);
-        for (size_t q = 0; q < kCount; q += kStride) {
-            std::vector<PID> found;
-            for (const auto& hit : results[q]) {
-                found.push_back(hit.second);
-            }
-            std::sort(found.begin(), found.end());
-            EXPECT_EQ(found, live) << "query " << q;
-        }
+        EXPECT_EQ(
+            search_everything(*index, fixture, kCount), without_removed(before, removed)
+        );
     }
 }
 
@@ -946,6 +961,7 @@ TEST(HnswRemoveTest, UsesLabelsNotInternalIds) {
     AddFixture fixture(kCount, 71);
     auto index = build_for_remove(fixture, kCount, kCount, config);
     HnswPruningTestAccess::reverse_labels(*index);
+    const Results before = search_everything(*index, fixture, 1);
 
     // Every fifth label below kCount / 2: no removed label shares a slot with
     // another removed label, so treating labels as slots would hide other points.
@@ -957,14 +973,7 @@ TEST(HnswRemoveTest, UsesLabelsNotInternalIds) {
     }
     ASSERT_EQ(index->remove(labels.data(), labels.size()), labels.size());
 
-    const Results results = search_everything(*index, fixture, 1);
-    std::vector<bool> found(kCount, false);
-    for (const auto& hit : results[0]) {
-        found[hit.second] = true;
-    }
-    for (PID label = 0; label < kCount; ++label) {
-        EXPECT_EQ(found[label], !removed[label]) << "label " << label;
-    }
+    EXPECT_EQ(search_everything(*index, fixture, 1), without_removed(before, removed));
 }
 
 TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
@@ -979,6 +988,7 @@ TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
         );
         AddFixture fixture(kTotal, 73);
         auto index = build_for_remove(fixture, kBuilt, kBuilt, config);
+        const auto plain = copy_of(*index, "rabitq_hnsw_remove_plain.index");
         std::vector<PID> labels;
         std::vector<bool> removed(kTotal, false);
         for (PID label = 1; label < kBuilt; label += 4) {
@@ -999,23 +1009,18 @@ TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
         loaded.resize(kTotal);
         EXPECT_EQ(search_everything(loaded, fixture, 4), expected);
 
-        // New points can be linked through removed ones, and both copies grow the
-        // same way.
+        // New points can be linked through removed ones. All three copies grow the
+        // same graph, and the removed points stay hidden in the two that have them.
         const float* extra = fixture.data.data() + (kBuilt * AddFixture::kDim);
-        index->add(extra, kAdded, fixture.cluster_ids.data());
-        loaded.add(extra, kAdded, fixture.cluster_ids.data());
+        plain->resize(kTotal);
+        for (HierarchicalNSW* copy : {index.get(), &loaded, plain.get()}) {
+            copy->add(extra, kAdded, fixture.cluster_ids.data());
+        }
         const Results grown = search_everything(*index, fixture, kTotal);
         EXPECT_EQ(search_everything(loaded, fixture, kTotal), grown);
-        for (size_t q = 0; q < kTotal; ++q) {
-            ASSERT_EQ(grown[q].size(), kTotal - labels.size());
-            for (const auto& hit : grown[q]) {
-                EXPECT_FALSE(removed[hit.second]) << hit.second;
-            }
-        }
-        const auto top = index->search(extra, kAdded, 1, kTotal, 1);
-        for (size_t i = 0; i < kAdded; ++i) {
-            EXPECT_EQ(top[i][0].second, kBuilt + i);
-        }
+        EXPECT_EQ(
+            grown, without_removed(search_everything(*plain, fixture, kTotal), removed)
+        );
     }
     std::remove(path.c_str());
 }

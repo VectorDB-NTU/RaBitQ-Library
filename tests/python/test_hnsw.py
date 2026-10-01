@@ -341,6 +341,8 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     count = len(old)
     queries = new[:5]
     before_ids, before_dists = _everything(idx, queries)
+    plain_path = tmp_path / "plain.index"
+    idx.save(str(plain_path))
 
     removed = np.array([0, 5, 6, count - 1, 5])
     assert idx.remove(removed) == 4
@@ -368,16 +370,25 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     check(loaded)
     assert loaded.remove(removed) == 0
 
-    # New points link through removed ones, which stay hidden.
-    for index in (idx, loaded):
+    # New points link through removed ones, which stay hidden. add can leave a
+    # point unreachable with or without removals, so compare with a copy saved
+    # before the removal instead of expecting every point.
+    plain = HnswIndex.load(str(plain_path))
+    for index in (idx, loaded, plain):
         index.resize(count + len(new))
         index.add(new)
     ids, dists = _everything(loaded, queries)
-    assert not np.isin(ids, removed).any()
-    assert np.count_nonzero(ids[0] != _NO_ID) == count + len(new) - 4
     expected_ids, expected_dists = _everything(idx, queries)
     np.testing.assert_array_equal(ids, expected_ids)
     np.testing.assert_array_equal(dists, expected_dists)
+    plain_ids, plain_dists = _everything(plain, queries)
+    for q in range(len(queries)):
+        keep = ~np.isin(plain_ids[q], removed) & (plain_ids[q] != _NO_ID)
+        found = np.count_nonzero(keep)
+        assert found >= 0.95 * (count + len(new) - 4)
+        np.testing.assert_array_equal(ids[q, :found], plain_ids[q][keep])
+        np.testing.assert_array_equal(dists[q, :found], plain_dists[q][keep])
+        assert np.all(ids[q, found:] == _NO_ID)
 
 
 def test_remove_rejects_invalid_ids_without_removing_anything():
