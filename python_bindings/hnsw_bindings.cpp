@@ -5,6 +5,7 @@
 #include <pybind11/pytypes.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -106,6 +107,64 @@ class HnswIndex {
         );
         built_ = true;
     }
+
+    py::array_t<rabitqlib::PID> add(
+        py::handle data,
+        const py::object& cluster_ids,
+        size_t num_threads = 1,
+        bool fast_quantization = false
+    ) {
+        auto data_array = ensure_2d_array<float>(data, "data");
+        if (!built_) {
+            throw std::runtime_error("HnswIndex must be built or loaded before add");
+        }
+        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
+            throw std::invalid_argument("data dimension does not match index dim");
+        }
+        const auto rows = static_cast<size_t>(data_array.shape(0));
+
+        // Validate as int64 first: casting straight to uint32 would wrap negative
+        // or oversized values onto valid clusters.
+        std::vector<rabitqlib::PID> assigned;
+        if (!cluster_ids.is_none()) {
+            auto cluster_ids_array = ensure_1d_integer_array(cluster_ids, "cluster_ids");
+            if (static_cast<size_t>(cluster_ids_array.shape(0)) != rows) {
+                throw std::invalid_argument(
+                    "cluster_ids length must match number of rows in data"
+                );
+            }
+            assigned.reserve(rows);
+            for (py::ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
+                const int64_t id = cluster_ids_array.data()[i];
+                if (id < 0 || static_cast<uint64_t>(id) >= num_clusters_) {
+                    throw std::invalid_argument("cluster_ids must be in [0, num_clusters)");
+                }
+                assigned.push_back(static_cast<rabitqlib::PID>(id));
+            }
+        }
+
+        // Allocated before the index is touched.
+        auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
+        const auto labels = index_->add(
+            data_array.data(),
+            rows,
+            assigned.empty() ? nullptr : assigned.data(),
+            fast_quantization,
+            num_threads
+        );
+        std::copy(labels.begin(), labels.end(), ids.mutable_data());
+        return ids;
+    }
+
+    void resize(size_t new_max_elements) {
+        if (!built_) {
+            throw std::runtime_error("HnswIndex must be built or loaded before resize");
+        }
+        index_->resize(new_max_elements);
+        max_elements_ = index_->max_elements();
+    }
+
+    [[nodiscard]] size_t num_points() const { return built_ ? index_->num_points() : 0; }
 
     py::tuple search(py::handle queries, size_t k, size_t ef = 0, size_t num_threads = 1) {
         auto query_array = ensure_2d_array<float>(queries, "queries");
@@ -235,10 +294,20 @@ void register_hnsw(py::module_& m) {
             py::arg("ef") = 0,
             py::arg("num_threads") = 1
         )
+        .def(
+            "add",
+            &HnswIndex::add,
+            py::arg("data"),
+            py::arg("cluster_ids") = py::none(),
+            py::arg("num_threads") = 1,
+            py::arg("fast_quantization") = false
+        )
+        .def("resize", &HnswIndex::resize, py::arg("max_elements"))
         .def("save", &HnswIndex::save, py::arg("path"))
         .def_static("load", &HnswIndex::load, py::arg("path"))
         .def_property_readonly("dim", &HnswIndex::dim)
         .def_property_readonly("max_elements", &HnswIndex::max_elements)
+        .def_property_readonly("num_points", &HnswIndex::num_points)
         .def_property_readonly("nbits", &HnswIndex::nbits)
         .def_property_readonly("num_clusters", &HnswIndex::num_clusters)
         .def_property_readonly("is_built", &HnswIndex::is_built)

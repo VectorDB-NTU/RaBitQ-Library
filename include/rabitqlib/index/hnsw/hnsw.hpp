@@ -61,11 +61,50 @@ class HierarchicalNSW {
     [[nodiscard]] size_t ef_construction() const { return ef_construction_; }
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
     [[nodiscard]] size_t max_elements() const { return max_elements_; }
+    [[nodiscard]] size_t num_points() const { return cur_element_count_; }
+    [[nodiscard]] PID cluster_id_of(PID internal_id) const {
+        return get_clusterid_by_internalid(internal_id);
+    }
 
     void save(const char*) const;
     void load(const char*);
 
     void construct(size_t, const float*, size_t, const float*, PID*, size_t, bool);
+
+    /**
+     * @brief Insert points into a constructed or loaded index.
+     *
+     * Linked with the stored quantized codes, not the exact vectors construct uses,
+     * which are not kept. Centroids and rotation are never retrained. Point `i` gets
+     * the label `num_points() + i` whatever `num_threads` is. Throws rather than
+     * growing past `max_elements()`. Not safe to call while another thread searches.
+     * Preparation failures leave the graph and point count unchanged. A failure
+     * during linking may leave a partially linked batch counted in the index,
+     * which remains safe to search, save, load, and destroy.
+     *
+     * @param data New points, `n * dim` floats in the original coordinates
+     * @param n Number of new points
+     * @param cluster_ids Cluster of each point in `[0, num_clusters)`, or nullptr to
+     * route each one to its nearest centroid
+     * @param faster Same meaning as in `construct`
+     * @param num_threads Threads used to route and insert
+     * @return The label given to each new point
+     */
+    std::vector<PID> add(
+        const float*, size_t, const PID* = nullptr, bool = false, size_t = 1
+    );
+
+    /**
+     * @brief Grow the number of points the index can hold.
+     *
+     * Reallocates and copies the base layer, so it needs room for both copies and
+     * costs time proportional to the whole index. Unchanged if it throws, and
+     * invalidates every pointer into the index.
+     * Requires initialization through the parameterized constructor or `load`.
+     *
+     * @param new_max_elements The new capacity, at least `num_points()`
+     */
+    void resize(size_t);
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float*, size_t, size_t, size_t, size_t
     );
@@ -124,6 +163,7 @@ class HierarchicalNSW {
     };
 
    private:
+    friend struct HnswPruningTestAccess;
     friend maxheap<std::pair<float, PID>> detail::search_knn_neon(
         HierarchicalNSW&, const float*, size_t
     );
@@ -360,6 +400,14 @@ class HierarchicalNSW {
     PID mutually_connect_new_element(PID, maxheap<std::pair<float, PID>>&, int);
 
     void get_neighbors_by_heuristic2(maxheap<std::pair<float, PID>>&, size_t);
+
+    // The same steps once the original data is gone, defined in hnsw_quant.hpp.
+    void reconstruct_rotated(PID, float*) const;
+    float get_quant_dist(PID target, PID query) const;
+    void add_point_quant(PID, int, std::unique_ptr<char, void (*)(void*)>&);
+    maxheap<std::pair<float, PID>> search_base_layer_quant(PID, PID, int);
+    PID mutually_connect_quant(PID, maxheap<std::pair<float, PID>>&, int);
+    void get_neighbors_by_heuristic2_quant(maxheap<std::pair<float, PID>>&, size_t);
 };
 
 inline HierarchicalNSW::HierarchicalNSW(
@@ -1520,3 +1568,6 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
 }
 
 }  // namespace rabitqlib::hnsw
+
+// Included last: these definitions need the complete class.
+#include "rabitqlib/index/hnsw/hnsw_quant.hpp"  // IWYU pragma: export

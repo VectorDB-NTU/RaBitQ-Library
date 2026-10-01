@@ -47,6 +47,12 @@ target_link_libraries(fastscan_no_simd_test PRIVATE GTest::gtest_main rabitq_hea
 rabitq_enable_warnings(fastscan_no_simd_test)
 gtest_discover_tests(fastscan_no_simd_test DISCOVERY_MODE PRE_TEST)
 
+# Keep the global allocation-failure override isolated from the main suite.
+add_executable(hnsw_add_allocation_test failures/hnsw_add_allocation_test.cpp)
+target_link_libraries(hnsw_add_allocation_test PRIVATE GTest::gtest_main rabitq_headers)
+rabitq_enable_warnings(hnsw_add_allocation_test)
+gtest_discover_tests(hnsw_add_allocation_test DISCOVERY_MODE PRE_TEST)
+
 # Message to verify files are found
 message(STATUS "Discovered test files:")
 foreach(TEST_SRC ${UNIT_TESTS} ${INTEG_TESTS})

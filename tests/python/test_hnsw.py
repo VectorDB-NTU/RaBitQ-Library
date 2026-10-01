@@ -179,3 +179,136 @@ def test_load_rejects_count_larger_than_capacity(built_hnsw, tmp_path):
         index_file.write((1).to_bytes(np.dtype(np.uintp).itemsize, byteorder="little"))
     with pytest.raises(RuntimeError, match="HNSW"):
         HnswIndex.load(str(path))
+
+
+# ── add and resize ────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def partial_hnsw(base_data, clusters):
+    """Built from the first 400 vectors, with room for the remaining 100."""
+    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    centroids, cluster_ids = clusters
+    idx.build(base_data[:400], centroids, cluster_ids[:400])
+    return idx
+
+
+def test_add_returns_dense_labels(partial_hnsw, base_data, clusters):
+    _, cluster_ids = clusters
+    assert partial_hnsw.num_points == 400
+    ids = partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    np.testing.assert_array_equal(ids, np.arange(400, N_VECTORS))
+    assert partial_hnsw.num_points == N_VECTORS
+
+
+def test_add_makes_points_searchable(partial_hnsw, base_data, clusters):
+    # A sparse graph can isolate the odd point, as it can after build, so this
+    # asks for near-perfect self-retrieval rather than exact.
+    _, cluster_ids = clusters
+    partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    ids, distances = partial_hnsw.search(base_data[400:], k=1, ef=N_VECTORS)
+    found = np.count_nonzero(ids[:, 0] == np.arange(400, N_VECTORS))
+    assert found >= 0.95 * (N_VECTORS - 400)
+    assert np.isfinite(distances).all()
+
+
+def test_add_into_a_dense_graph_retrieves_every_point(base_data, clusters):
+    # Keeping every neighbor removes the pruning that isolates points, so the
+    # added points must all be found.
+    centroids, cluster_ids = clusters
+    idx = HnswIndex(DIM, N_VECTORS, M=N_VECTORS, ef_construction=N_VECTORS, nbits=4)
+    idx.build(base_data[:400], centroids, cluster_ids[:400])
+    idx.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    ids, _ = idx.search(base_data[400:], k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(400, N_VECTORS))
+
+
+def test_add_without_cluster_ids_routes(partial_hnsw, base_data, clusters):
+    _, cluster_ids = clusters
+    ids = partial_hnsw.add(base_data[400:])
+    np.testing.assert_array_equal(ids, np.arange(400, N_VECTORS))
+    # Round-robin clusters, so routing should recover the original assignment for
+    # most points; the centroids are close together and a few land elsewhere.
+    found, _ = partial_hnsw.search(base_data[400:], k=1, ef=N_VECTORS)
+    assert np.count_nonzero(found[:, 0] == np.arange(400, N_VECTORS)) >= 0.95 * 100
+
+
+def test_add_preserves_earlier_points(partial_hnsw, base_data, clusters):
+    _, cluster_ids = clusters
+    before, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
+    partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    after, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(before[:, 0], after[:, 0])
+
+
+def test_add_beyond_capacity_raises(partial_hnsw, base_data):
+    with pytest.raises(ValueError, match="capacity"):
+        partial_hnsw.add(base_data)
+    assert partial_hnsw.num_points == 400
+
+
+def test_add_rejects_bad_cluster_ids(partial_hnsw, base_data):
+    rows = N_VECTORS - 400
+    with pytest.raises(ValueError, match="cluster_ids"):
+        partial_hnsw.add(base_data[400:], cluster_ids=np.full(rows, N_CLUSTERS))
+    with pytest.raises(ValueError, match="cluster_ids"):
+        partial_hnsw.add(base_data[400:], cluster_ids=-np.ones(rows, dtype=np.int64))
+    with pytest.raises(ValueError, match="cluster_ids"):
+        partial_hnsw.add(
+            base_data[400:], cluster_ids=np.zeros(rows - 1, dtype=np.int64)
+        )
+    assert partial_hnsw.num_points == 400
+
+
+def test_add_rejects_wrong_dimension(partial_hnsw):
+    with pytest.raises(ValueError, match="dimension"):
+        partial_hnsw.add(np.zeros((4, DIM + 1), dtype=np.float32))
+
+
+def test_add_before_build_raises(base_data):
+    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    with pytest.raises(RuntimeError, match="built or loaded"):
+        idx.add(base_data[:4])
+
+
+def test_resize_grows_capacity_and_allows_more(base_data, clusters):
+    centroids, cluster_ids = clusters
+    idx = HnswIndex(DIM, 400, M=8, ef_construction=50, nbits=4)
+    idx.build(base_data[:400], centroids, cluster_ids[:400])
+    assert idx.max_elements == 400
+
+    with pytest.raises(ValueError, match="capacity"):
+        idx.add(base_data[400:])
+
+    idx.resize(N_VECTORS)
+    assert idx.max_elements == N_VECTORS
+    assert idx.num_points == 400
+
+    idx.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    assert idx.num_points == N_VECTORS
+    ids, _ = idx.search(base_data[:10], k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(10))
+
+
+def test_resize_below_element_count_raises(partial_hnsw):
+    with pytest.raises(ValueError, match="element count"):
+        partial_hnsw.resize(10)
+    assert partial_hnsw.max_elements == N_VECTORS
+
+
+def test_added_points_survive_save_and_load(
+    partial_hnsw, base_data, clusters, tmp_path
+):
+    _, cluster_ids = clusters
+    partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    before_ids, before_dists = partial_hnsw.search(base_data, k=_TOPK, ef=_EF)
+
+    path = str(tmp_path / "hnsw-added.index")
+    partial_hnsw.save(path)
+    loaded = HnswIndex.load(path)
+
+    assert loaded.num_points == N_VECTORS
+    assert loaded.max_elements == N_VECTORS
+    after_ids, after_dists = loaded.search(base_data, k=_TOPK, ef=_EF)
+    np.testing.assert_array_equal(before_ids, after_ids)
+    np.testing.assert_allclose(before_dists, after_dists, rtol=1e-5)
