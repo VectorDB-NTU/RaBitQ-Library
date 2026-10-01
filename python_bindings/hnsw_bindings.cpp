@@ -164,6 +164,25 @@ class HnswIndex {
         max_elements_ = index_->max_elements();
     }
 
+    size_t remove(py::handle ids) {
+        auto ids_array = ensure_1d_integer_array(ids, "ids");
+        if (!built_) {
+            throw std::runtime_error("HnswIndex must be built or loaded before remove");
+        }
+        // Labels are dense: construct gives 0..n-1 and add continues from num_points.
+        const size_t count = index_->num_points();
+        std::vector<rabitqlib::PID> to_remove;
+        to_remove.reserve(static_cast<size_t>(ids_array.shape(0)));
+        for (py::ssize_t i = 0; i < ids_array.shape(0); ++i) {
+            const int64_t id = ids_array.data()[i];
+            if (id < 0 || static_cast<uint64_t>(id) >= count) {
+                throw std::invalid_argument("ids must be in [0, num_points)");
+            }
+            to_remove.push_back(static_cast<rabitqlib::PID>(id));
+        }
+        return index_->remove(to_remove.data(), to_remove.size());
+    }
+
     [[nodiscard]] size_t num_points() const { return built_ ? index_->num_points() : 0; }
 
     py::tuple search(py::handle queries, size_t k, size_t ef = 0, size_t num_threads = 1) {
@@ -303,6 +322,14 @@ void register_hnsw(py::module_& m) {
             py::arg("fast_quantization") = false
         )
         .def("resize", &HnswIndex::resize, py::arg("max_elements"))
+        .def(
+            "remove",
+            &HnswIndex::remove,
+            py::arg("ids"),
+            "Exclude ids from later search results and return how many were newly "
+            "removed. Removed points stay in the graph and in num_points, and cannot "
+            "be restored."
+        )
         .def("save", &HnswIndex::save, py::arg("path"))
         .def_static("load", &HnswIndex::load, py::arg("path"))
         .def_property_readonly("dim", &HnswIndex::dim)

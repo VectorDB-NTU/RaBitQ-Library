@@ -312,3 +312,127 @@ def test_added_points_survive_save_and_load(
     after_ids, after_dists = loaded.search(base_data, k=_TOPK, ef=_EF)
     np.testing.assert_array_equal(before_ids, after_ids)
     np.testing.assert_allclose(before_dists, after_dists, rtol=1e-5)
+
+
+# ── remove ────────────────────────────────────────────────────────────────────
+
+_NO_ID = np.iinfo(np.uint32).max
+
+
+def _removable(nbits=4, metric="l2", count=120, dim=64, seed=61):
+    """A small built index with room for as many points again, plus those points."""
+    rng = np.random.default_rng(seed)
+    data = rng.standard_normal((count * 2, dim)).astype(np.float32)
+    centroids = data[:count].mean(axis=0, keepdims=True)
+    idx = HnswIndex(dim, count, M=8, ef_construction=50, nbits=nbits, metric=metric)
+    idx.build(data[:count], centroids, np.zeros(count, dtype=np.uint32))
+    return idx, data[:count], data[count:]
+
+
+def _everything(index, queries):
+    """With k and ef at the point count, search visits every reachable point."""
+    return index.search(queries, k=index.num_points, ef=index.num_points)
+
+
+@pytest.mark.parametrize("nbits", [1, 2, 4, 8, 9])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
+    idx, old, new = _removable(nbits=nbits, metric=metric)
+    count = len(old)
+    queries = new[:5]
+    before_ids, before_dists = _everything(idx, queries)
+
+    removed = np.array([0, 5, 6, count - 1, 5])
+    assert idx.remove(removed) == 4
+    assert idx.remove(removed) == 0
+    assert idx.remove([]) == 0
+    assert idx.num_points == count
+
+    def check(index):
+        ids, dists = _everything(index, queries)
+        alive = count - 4
+        for q in range(len(queries)):
+            keep = ~np.isin(before_ids[q], removed)
+            np.testing.assert_array_equal(ids[q, :alive], before_ids[q][keep])
+            np.testing.assert_array_equal(dists[q, :alive], before_dists[q][keep])
+            assert np.all(ids[q, alive:] == _NO_ID)
+            assert np.all(np.isinf(dists[q, alive:]))
+        top, top_dists = index.search(queries, k=10, ef=10)
+        assert not np.isin(top, removed).any()
+        assert np.isfinite(top_dists).all()
+
+    check(idx)
+    path = tmp_path / "removed.index"
+    idx.save(str(path))
+    loaded = HnswIndex.load(str(path))
+    check(loaded)
+    assert loaded.remove(removed) == 0
+
+    # New points link through removed ones, which stay hidden.
+    for index in (idx, loaded):
+        index.resize(count + len(new))
+        index.add(new)
+    ids, dists = _everything(loaded, queries)
+    assert not np.isin(ids, removed).any()
+    assert np.count_nonzero(ids[0] != _NO_ID) == count + len(new) - 4
+    expected_ids, expected_dists = _everything(idx, queries)
+    np.testing.assert_array_equal(ids, expected_ids)
+    np.testing.assert_array_equal(dists, expected_dists)
+
+
+def test_remove_rejects_invalid_ids_without_removing_anything():
+    idx, old, new = _removable()
+    count = len(old)
+    before = _everything(idx, new[:3])
+    # 2**32 + 1 would wrap to point 1 if it were cast to uint32 first.
+    for bad in (-1, count, 2**32 + 1):
+        with pytest.raises(ValueError, match="ids"):
+            idx.remove([0, 1, bad])
+    with pytest.raises(ValueError, match="1D"):
+        idx.remove(np.zeros((2, 2), dtype=np.int64))
+    after = _everything(idx, new[:3])
+    np.testing.assert_array_equal(before[0], after[0])
+    np.testing.assert_array_equal(before[1], after[1])
+    assert idx.remove([0, 1]) == 2
+
+    unbuilt = HnswIndex(64, 4, M=8, ef_construction=50, nbits=4)
+    with pytest.raises(RuntimeError, match="built or loaded"):
+        unbuilt.remove([0])
+
+
+def test_removing_every_point_returns_only_sentinels():
+    idx, old, new = _removable()
+    assert idx.remove(np.arange(len(old))) == len(old)
+    ids, dists = idx.search(new[:2], k=5, ef=10)
+    assert np.all(ids == _NO_ID)
+    assert np.all(np.isinf(dists))
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        [2.7],
+        [-0.5],
+        # Integral floats are refused too: the dtype is the contract.
+        np.array([1.0, 2.0]),
+        np.array([True, False]),  # a boolean mask is not a list of ids
+        ["3"],
+        np.array([1, 2], dtype=object),
+    ],
+)
+def test_remove_refuses_non_integer_ids(bad):
+    idx, old, new = _removable()
+    before = _everything(idx, new[:3])
+    with pytest.raises(ValueError, match="integers"):
+        idx.remove(bad)
+    after = _everything(idx, new[:3])
+    np.testing.assert_array_equal(before[0], after[0])
+
+
+def test_remove_accepts_any_integer_dtype_and_empty_input():
+    idx, _, _ = _removable()
+    assert idx.remove([]) == 0
+    assert idx.remove(np.array([], dtype=np.float64)) == 0  # no dtype to check
+    assert idx.remove([1, 2]) == 2
+    assert idx.remove(np.array([3, 4], dtype=np.uint8)) == 2
+    assert idx.remove(np.array([5], dtype=np.int16)) == 1
