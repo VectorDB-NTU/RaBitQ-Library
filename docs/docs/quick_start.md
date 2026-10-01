@@ -40,10 +40,11 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 ### Install
 
 ```bash
-python -m pip install "rabitqlib>=0.5.0"
+python -m pip install "rabitqlib>=0.5.1"
 ```
 
-The clustering examples require 0.5.0 or newer. For unreleased changes,
+The clustering examples require 0.5.0 or newer; the IVF update example requires
+0.5.1 or newer. For unreleased changes,
 [install from a checkout](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes).
 
 Wheels target the platforms above and require no compiler or CMake.
@@ -97,16 +98,20 @@ ids, distances = index.search(queries, k=10, nprobe=5, high_accuracy=False)
 # Omit high_accuracy, or pass None, to use automatic selection.
 ```
 
-An IVF index can also grow and shrink after it is built, without the original data:
+### Add and remove IVF vectors
+
+Starting with 0.5.1, a built or loaded IVF index can accept new vectors and exclude
+existing vectors from search without the original dataset:
 
 ```python
 new_vectors = rng.standard_normal((50, 64)).astype(np.float32)
-new_ids = index.add(new_vectors)  # nearest-centroid routing; ids 500..549
-index.remove(new_ids[:10])        # hide ten of them from later searches
+new_ids = index.add(new_vectors)  # automatic cluster routing; ids 500..549
+removed = index.remove(new_ids[:10])  # returns 10; storage is retained
 ```
 
-See the [IVF guide](index/ivf.md) for storage costs, persistence compatibility, and
-the limits of updating an index.
+Batch additions because each `add()` copies the index storage. Removed IDs are
+not reused, and both additions and removals survive save/load. See the
+[IVF update guide](index/ivf.md#updating-an-index) for costs and limits.
 
 The `metric` argument accepts `"l2"` and `"ip"` (also spelled
 `"innerproduct"`). To search by cosine similarity, normalize database and

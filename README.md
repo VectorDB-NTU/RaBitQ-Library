@@ -35,6 +35,10 @@
 
 ## News
 
+- **September 2026 — IVF updates (0.5.1):** Add vectors to a built or loaded IVF
+  index with `add()` and exclude vectors from search with `remove()`. See the [IVF update guide](docs/docs/index/ivf.md#updating-an-index)
+  for costs and limits.
+
 - **September 2026 — Native clustering (0.5.0):** Train k-means directly in C++
   or Python with RaBitQKMeans and QGKMeans, with approximate or exact final
   assignment. See the [clustering guide](docs/docs/clustering.md).
@@ -52,10 +56,11 @@
 ## Install
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.5.0"
+python -m pip install --upgrade "rabitqlib>=0.5.1"
 ```
 
-The examples below require 0.5.0 or newer. For unreleased changes,
+The build/search examples below require 0.5.0 or newer; IVF `add()`/`remove()`
+require 0.5.1 or newer. For unreleased changes,
 [install from a checkout](CONTRIBUTING.md#python-changes).
 
 Wheels: CPython 3.11–3.14 on Linux x86-64 and ARM64, Windows x86-64, and

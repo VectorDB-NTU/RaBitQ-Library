@@ -158,8 +158,10 @@ API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top `k` results after scanning the selected clusters.
 
 ## Updating an Index
-A constructed or loaded index can gain and lose points without the original
-data. The index file format does not change.
+
+Starting with 0.5.1, C++ `IVF` and Python `IvfIndex` support `add()` and `remove()`
+on a constructed or loaded index without the original dataset. These methods
+are specific to IVF. The index file format does not change.
 
 ```c++
 void IVF::add(
@@ -174,10 +176,11 @@ size_t IVF::remove(const PID* ids_to_remove, size_t n);
 ```
 
 - **data**, **n**: `n` new vectors, quantized like `construct` does. Vector `i`
-  receives the PID `max_elements() + i`, so PIDs stay dense.
+  receives the PID `max_elements() + i`, using the count before the call. Existing
+  IDs stay unchanged, and removed IDs are never reused.
 - **cluster_ids**: The cluster of each new vector, in `[0, cluster_num)`. When
-  it is `nullptr`, each vector goes to its nearest centroid, chosen the same way
-  a query is routed.
+  it is `nullptr`, vectors use the same centroid routing as queries. Routing is
+  exhaustive below 20,000 clusters and uses approximate HNSW search otherwise.
 - **faster**, **num_threads**: Same as in `construct`.
 - **ids_to_remove**: PIDs to remove. Every PID must be below `max_elements()`; nothing is
   removed if one is not. `remove` returns how many were newly removed and can be
@@ -186,13 +189,23 @@ size_t IVF::remove(const PID* ids_to_remove, size_t n);
 In Python:
 
 ```python
-new_ids = index.add(vectors)                       # route to the nearest centroids
-new_ids = index.add(vectors, cluster_ids=labels)   # or choose the clusters
+new_ids = index.add(vectors, num_threads=1, fast_quantization=False)
+# To choose clusters explicitly, use this instead of the call above:
+# new_ids = index.add(vectors, cluster_ids=labels)
 removed = index.remove(new_ids[:10])
 ```
 
-In C++, `construct` expects `max_elements()` rows once points have been added. It is
-not safe to call `add` or `remove` while another thread searches the same index.
+Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float32.
+`add()` returns a uint32 array of the new IDs. Optional `cluster_ids` must be a
+one-dimensional integer array or sequence with one valid cluster ID per vector;
+`remove()` likewise accepts a one-dimensional integer array or sequence of point
+IDs and returns the number newly removed. Duplicate IDs count once. Python
+`num_threads` defaults to 1; `fast_quantization` defaults to `False`.
+
+The stored point count (`max_elements()` in C++, `index.max_elements` in Python)
+increases after `add()` and includes removed points. Rebuilding with C++
+`construct` or Python `build` expects that many rows. Calls to `add()` or `remove()`
+must not overlap with searches or other updates on the same index.
 
 ### Cost of `add`
 
@@ -222,7 +235,8 @@ recall matters more than the cost of a rebuild.
 ### How removal is stored
 
 `remove` hides points from search but keeps their storage. Removed points still
-count in `max_elements()` and cannot be restored.
+count in `max_elements()` and cannot be restored. Each nonempty call scans all
+stored point IDs, so batch removals when possible.
 
 A removed point has its `f_add` value set to `+inf`. That value is the constant
 term of the distance estimate, so the estimated distance and the lower bound of the
