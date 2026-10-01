@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -12,7 +13,67 @@
 #include <vector>
 
 namespace rabitqlib::hnsw {
+
+struct HnswPruningTestAccess {
+    static void quantize(HierarchicalNSW& index, PID id, const float* rotated) {
+        const auto* centroid = reinterpret_cast<const float*>(index.centroids_memory_);
+        quant::quantize_compact_one_bit(
+            rotated, centroid, index.padded_dim_, index.get_bindata_by_internalid(id)
+        );
+    }
+
+    static float distance(const HierarchicalNSW& index, PID target, PID query) {
+        return index.get_quant_dist(target, query);
+    }
+
+    static std::vector<PID> connect(HierarchicalNSW& index, PID incoming) {
+        PID* neighbors = index.get_linklist0(0);
+        index.set_list_count(neighbors, index.maxM0_);
+        for (size_t i = 0; i < index.maxM0_; ++i) {
+            neighbors[i + 1] = static_cast<PID>(i + 1);
+        }
+        std::fill_n(index.get_linklist0(incoming), index.maxM0_ + 1, PID{0});
+        detail::quant_query().clear();
+        maxheap<std::pair<float, PID>> candidates;
+        candidates.emplace(index.get_quant_dist(0, incoming), 0);
+        index.mutually_connect_quant(incoming, candidates, 0);
+        return {neighbors + 1, neighbors + 1 + index.get_list_count(neighbors)};
+    }
+};
+
 namespace {
+
+TEST(HnswPruningTest, ScoresNewAndExistingNeighborsWithTheSameQuery) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kCount = 6;
+    constexpr PID kIncoming = kCount - 1;
+    std::vector<float> data(kCount * kDim, 2.0F);
+    std::fill_n(data.begin(), kDim, 1.0F);
+    // A sparse residual reconstructs with a much larger norm than its source.
+    // Scoring its codes and using its reconstruction as a query differ sharply.
+    std::fill_n(data.begin() + (kIncoming * kDim), kDim, 0.01F);
+    data[kIncoming * kDim] = 8.0F;
+    std::vector<float> centroid(kDim, 0.0F);
+    std::vector<PID> clusters(kCount, 0);
+    HierarchicalNSW index(kCount, kDim, 1, 2, 10);
+    index.construct(1, centroid.data(), kCount, data.data(), clusters.data(), 1, false);
+
+    // Set codes directly in the rotated domain to avoid random rotation changing
+    // the asymmetry, then fill node 0's base-layer list to force pruning.
+    for (PID id = 0; id < kCount; ++id) {
+        HnswPruningTestAccess::quantize(index, id, data.data() + (id * kDim));
+    }
+    detail::quant_query().clear();
+    const float existing_distance = HnswPruningTestAccess::distance(index, 1, 0);
+    EXPECT_LT(HnswPruningTestAccess::distance(index, kIncoming, 0), existing_distance);
+    EXPECT_GT(HnswPruningTestAccess::distance(index, 0, kIncoming), existing_distance);
+
+    // The new point is closest when node 0 is the query. Its duplicate existing
+    // neighbors are pruned; the reversed estimate instead retains an old point.
+    EXPECT_EQ(
+        HnswPruningTestAccess::connect(index, kIncoming), std::vector<PID>{kIncoming}
+    );
+}
 
 TEST(HnswConfigurationTest, RejectsUnsupportedMetric) {
     EXPECT_THROW(
@@ -350,6 +411,47 @@ TEST(HnswAddTest, RoutesToTheNearestCentroidWhenNoClustersGiven) {
     }
 }
 
+TEST(HnswResizeTest, RejectsUninitializedIndex) {
+    HierarchicalNSW index;
+    for (const size_t capacity : {10U, 0U}) {
+        SCOPED_TRACE(capacity);
+        try {
+            index.resize(capacity);
+            FAIL() << "Resizing an uninitialized index must fail";
+        } catch (const std::logic_error& error) {
+            EXPECT_STREQ(error.what(), "HNSW index must be initialized before resize");
+        }
+        EXPECT_EQ(index.max_elements(), 0U);
+        EXPECT_EQ(index.num_points(), 0U);
+    }
+}
+
+TEST(HnswResizeTest, AllowsResizeBeforeConstruction) {
+    constexpr size_t kBuilt = 64;
+    constexpr size_t kCapacity = 128;
+    AddFixture fixture(kBuilt, 43);
+    HierarchicalNSW index(kBuilt, AddFixture::kDim, 4, 8, 50);
+
+    ASSERT_NO_THROW(index.resize(kCapacity));
+    EXPECT_EQ(index.max_elements(), kCapacity);
+    EXPECT_EQ(index.num_points(), 0U);
+    ASSERT_NO_THROW(index.construct(
+        1,
+        fixture.centroid.data(),
+        kBuilt,
+        fixture.data.data(),
+        fixture.cluster_ids.data(),
+        1,
+        false
+    ));
+    const auto results = index.search(fixture.data.data(), 8, 1, kBuilt, 1);
+    ASSERT_EQ(results.size(), 8U);
+    for (size_t i = 0; i < results.size(); ++i) {
+        ASSERT_EQ(results[i].size(), 1U);
+        EXPECT_EQ(results[i][0].second, i);
+    }
+}
+
 TEST(HnswResizeTest, GrowsCapacityAndKeepsTheGraph) {
     constexpr size_t kBuilt = 128;
     constexpr size_t kAdded = 64;
@@ -424,6 +526,8 @@ TEST(HnswResizeTest, SurvivesSaveAndLoad) {
     loaded.load(path.string().c_str());
     EXPECT_EQ(loaded.max_elements(), kTotal);
     EXPECT_EQ(loaded.num_points(), kTotal);
+    ASSERT_NO_THROW(loaded.resize(kTotal + 8));
+    EXPECT_EQ(loaded.max_elements(), kTotal + 8);
     const auto results = loaded.search(fixture.data.data(), kTotal, 1, kTotal, 1);
     for (size_t i = 0; i < kTotal; ++i) {
         EXPECT_EQ(results[i][0].second, i);

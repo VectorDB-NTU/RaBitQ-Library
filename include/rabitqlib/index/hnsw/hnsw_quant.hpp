@@ -1,10 +1,10 @@
 // Insertion into a built index: the construct path with get_quant_dist in place
 // of get_data_dist, because rawDataPtr_ dangles once construct returns.
 //
-// add routes, draws every level, allocates every link list, then reserves one
-// block of slots before inserting in parallel. Levels come first because the
-// generator is shared; the slots are one block so labels do not depend on which
-// thread finishes first.
+// add routes, draws every level, allocates every link list and quantizes every
+// point before reserving one block of slots and linking in parallel. Levels come
+// first because the generator is shared; the slots are one block so labels do
+// not depend on which thread finishes first.
 #pragma once
 
 #include <algorithm>
@@ -154,7 +154,7 @@ inline float HierarchicalNSW::get_quant_dist(PID target, PID query) const {
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
     PID ep_id, PID cur_c, int layer
 ) {
-    VisitedSet* vl = visited_list_pool_->get_free_vislist();
+    std::unique_ptr<VisitedSet> vl(visited_list_pool_->get_free_vislist());
 
     maxheap<std::pair<float, PID>> top_candidates;
     minheap<std::pair<float, PID>> candidate_set;
@@ -202,7 +202,8 @@ inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
             }
         }
     }
-    visited_list_pool_->release_vis_list(vl);
+    visited_list_pool_->release_vis_list(vl.get());
+    vl.release();
     return top_candidates;
 }
 
@@ -321,7 +322,7 @@ inline PID HierarchicalNSW::mutually_connect_quant(
                 data[sz_link_list_other] = cur_c;
                 set_list_count(ll_other, sz_link_list_other + 1);
             } else {
-                float d_max = get_quant_dist(selected_neighbor, cur_c);
+                float d_max = get_quant_dist(cur_c, selected_neighbor);
                 maxheap<std::pair<float, PID>> candidates;
                 candidates.emplace(d_max, cur_c);
                 for (size_t j = 0; j < sz_link_list_other; j++) {
@@ -347,18 +348,11 @@ inline PID HierarchicalNSW::mutually_connect_quant(
 // The slot, the level and the link list are all decided by the caller, so this
 // can run on many threads at once and the labels do not depend on their order.
 inline void HierarchicalNSW::add_point_quant(
-    PID cur_c,
-    int curlevel,
-    char* link_list,
-    const float* vec,
-    PID cluster_id,
-    const quant::RabitqConfig& config
+    PID cur_c, int curlevel, std::unique_ptr<char, void (*)(void*)>& link_list
 ) {
     detail::quant_query().clear();
-    const PID label = cur_c;
 
     std::unique_lock<std::mutex> lock_el(link_list_locks_[cur_c]);
-    element_levels_[cur_c] = curlevel;
 
     std::unique_lock<std::mutex> templock(global_);
     int maxlevelcopy = maxlevel_;
@@ -366,76 +360,80 @@ inline void HierarchicalNSW::add_point_quant(
         templock.unlock();
     }
     PID curr_obj = enterpoint_node_;
+    const PID previous_entry_point = curr_obj;
 
-    std::memset(
-        data_level0_memory_ + (cur_c * size_data_per_element_), 0, size_data_per_element_
-    );
-    std::memcpy(get_external_label_pt(cur_c), &label, sizeof(PID));
-    std::memcpy(get_clusterid_pt(cur_c), &cluster_id, sizeof(PID));
+    linkLists_[cur_c] = link_list.release();
+    element_levels_[cur_c] = curlevel;
 
-    std::vector<float> rotated_data(padded_dim_);
-    rotator_->rotate(vec, rotated_data.data());
-    quant::quantize_split_single(
-        rotated_data.data(),
-        reinterpret_cast<float*>(centroids_memory_) + (cluster_id * padded_dim_),
-        padded_dim_,
-        ex_bits_,
-        get_bindata_by_internalid(cur_c),
-        get_exdata_by_internalid(cur_c),
-        metric_type_,
-        config
-    );
-
-    if (curlevel > 0) {
-        linkLists_[cur_c] = link_list;
-    }
-
-    if (static_cast<signed>(curr_obj) != -1) {
-        if (curlevel < maxlevelcopy) {
-            float curdist = get_quant_dist(curr_obj, cur_c);
-            for (int level = maxlevelcopy; level > curlevel; level--) {
-                bool changed = true;
-                while (changed) {
-                    changed = false;
-                    std::unique_lock<std::mutex> lock(link_list_locks_[curr_obj]);
-                    PID* data = get_linklist(curr_obj, level);
-                    int size = get_list_count(data);
-                    auto* datal = data + 1;
-                    for (int i = 0; i < size; i++) {
-                        PID cand = datal[i];
-                        if (cand >= cur_element_count_) {
-                            throw std::runtime_error("cand error");
-                        }
-                        float d = get_quant_dist(cand, cur_c);
-                        if (d < curdist) {
-                            curdist = d;
-                            curr_obj = cand;
-                            changed = true;
+    try {
+        if (static_cast<signed>(curr_obj) != -1) {
+            if (curlevel < maxlevelcopy) {
+                float curdist = get_quant_dist(curr_obj, cur_c);
+                for (int level = maxlevelcopy; level > curlevel; level--) {
+                    bool changed = true;
+                    while (changed) {
+                        changed = false;
+                        std::unique_lock<std::mutex> lock(link_list_locks_[curr_obj]);
+                        PID* data = get_linklist(curr_obj, level);
+                        int size = get_list_count(data);
+                        auto* datal = data + 1;
+                        for (int i = 0; i < size; i++) {
+                            PID cand = datal[i];
+                            if (cand >= cur_element_count_) {
+                                throw std::runtime_error("cand error");
+                            }
+                            float d = get_quant_dist(cand, cur_c);
+                            if (d < curdist) {
+                                curdist = d;
+                                curr_obj = cand;
+                                changed = true;
+                            }
                         }
                     }
                 }
             }
+
+            for (int level = std::min(curlevel, maxlevelcopy); level >= 0; level--) {
+                maxheap<std::pair<float, PID>> top_candidates =
+                    search_base_layer_quant(curr_obj, cur_c, level);
+                curr_obj = mutually_connect_quant(cur_c, top_candidates, level);
+            }
+        } else {
+            enterpoint_node_ = cur_c;
+            maxlevel_ = curlevel;
         }
 
-        for (int level = std::min(curlevel, maxlevelcopy); level >= 0; level--) {
-            maxheap<std::pair<float, PID>> top_candidates =
-                search_base_layer_quant(curr_obj, cur_c, level);
-            curr_obj = mutually_connect_quant(cur_c, top_candidates, level);
+        if (curlevel > maxlevelcopy) {
+            enterpoint_node_ = cur_c;
+            maxlevel_ = curlevel;
         }
-    } else {
-        enterpoint_node_ = cur_c;
-        maxlevel_ = curlevel;
-    }
-
-    if (curlevel > maxlevelcopy) {
-        enterpoint_node_ = cur_c;
-        maxlevel_ = curlevel;
+    } catch (...) {
+        // Upper layers may already expose this node. Keep a route to the old
+        // graph if base-layer linking was interrupted before choosing neighbors.
+        PID* base_links = get_linklist0(cur_c);
+        if (previous_entry_point != kPidMax && get_list_count(base_links) == 0) {
+            base_links[1] = previous_entry_point;
+            set_list_count(base_links, 1);
+        }
+        // An interrupted promotion has no incoming links above the previous
+        // maximum level. Discard those levels so save/load sees a valid graph.
+        if (curlevel > maxlevelcopy) {
+            element_levels_[cur_c] = std::max(0, maxlevelcopy);
+            if (element_levels_[cur_c] == 0) {
+                std::free(linkLists_[cur_c]);
+                linkLists_[cur_c] = nullptr;
+            }
+        }
+        throw;
     }
 }
 
 // Grows the capacity. Every pointer into the level-0 block is invalidated, so
 // this must not run while another thread searches.
 inline void HierarchicalNSW::resize(size_t new_max_elements) {
+    if (size_data_per_element_ == 0) {
+        throw std::logic_error("HNSW index must be initialized before resize");
+    }
     if (new_max_elements < cur_element_count_) {
         throw std::invalid_argument("HNSW resize: capacity below the element count");
     }
@@ -508,6 +506,7 @@ inline std::vector<PID> HierarchicalNSW::add(
     if (n > buffer::kSearchBufferMaxPointCount - cur_element_count_) {
         throw std::invalid_argument("HNSW add: point count exceeds the supported ID range");
     }
+    std::vector<PID> labels(n);
     // Either the caller names the cluster of every point, or each one goes to its
     // nearest centroid, ordered the way a query is routed.
     std::vector<PID> assigned(n, 0);
@@ -567,36 +566,61 @@ inline std::vector<PID> HierarchicalNSW::add(
         link_lists.emplace_back(raw, std::free);
     }
 
-    // One contiguous block of slots, so a point keeps its label whatever order
-    // the threads finish in.
-    PID first = 0;
+    // Prepare every code before publishing the slots. If quantization or worker
+    // creation fails, the graph and point count are unchanged.
     {
         std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
         if (cur_element_count_ + n > max_elements_) {
             throw std::runtime_error("The number of elements exceeds the specified limit");
         }
-        first = static_cast<PID>(cur_element_count_.load());
+        const auto first = static_cast<PID>(cur_element_count_.load());
+        rabitqlib::ivf::parallel_for(0, n, num_threads, [&](size_t i, size_t) {
+            const auto id = static_cast<PID>(first + i);
+            labels[i] = id;
+            std::memset(
+                data_level0_memory_ + (id * size_data_per_element_),
+                0,
+                size_data_per_element_
+            );
+            std::memcpy(get_external_label_pt(id), &id, sizeof(PID));
+            std::memcpy(get_clusterid_pt(id), &assigned[i], sizeof(PID));
+            std::vector<float> rotated_data(padded_dim_);
+            rotator_->rotate(data + (i * dim_), rotated_data.data());
+            quant::quantize_split_single(
+                rotated_data.data(),
+                reinterpret_cast<float*>(centroids_memory_) + (assigned[i] * padded_dim_),
+                padded_dim_,
+                ex_bits_,
+                get_bindata_by_internalid(id),
+                get_exdata_by_internalid(id),
+                metric_type_,
+                config
+            );
+        });
+        size_t registered = 0;
+        try {
+            for (; registered < n; ++registered) {
+                label_lookup_[labels[registered]] = labels[registered];
+            }
+        } catch (...) {
+            for (size_t i = 0; i < registered; ++i) {
+                label_lookup_.erase(labels[i]);
+            }
+            throw;
+        }
+        // Unstarted inserts are valid level-0 nodes with owned codes. Their
+        // upper-layer lists remain under RAII until an insert takes ownership.
         for (size_t i = 0; i < n; ++i) {
-            label_lookup_[static_cast<PID>(first + i)] = static_cast<PID>(first + i);
+            element_levels_[labels[i]] = 0;
+            linkLists_[labels[i]] = nullptr;
         }
         cur_element_count_ += n;
     }
 
     rabitqlib::ivf::parallel_for(0, n, num_threads, [&](size_t i, size_t) {
-        add_point_quant(
-            static_cast<PID>(first + i),
-            levels[i],
-            link_lists[i].release(),
-            data + (i * dim_),
-            assigned[i],
-            config
-        );
+        add_point_quant(labels[i], levels[i], link_lists[i]);
     });
 
-    std::vector<PID> labels(n);
-    for (size_t i = 0; i < n; ++i) {
-        labels[i] = static_cast<PID>(first + i);
-    }
     return labels;
 }
 

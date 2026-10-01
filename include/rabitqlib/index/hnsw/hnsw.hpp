@@ -78,6 +78,9 @@ class HierarchicalNSW {
      * which are not kept. Centroids and rotation are never retrained. Point `i` gets
      * the label `num_points() + i` whatever `num_threads` is. Throws rather than
      * growing past `max_elements()`. Not safe to call while another thread searches.
+     * Preparation failures leave the graph and point count unchanged. A failure
+     * during linking may leave a partially linked batch counted in the index,
+     * which remains safe to search, save, load, and destroy.
      *
      * @param data New points, `n * dim` floats in the original coordinates
      * @param n Number of new points
@@ -97,6 +100,7 @@ class HierarchicalNSW {
      * Reallocates and copies the base layer, so it needs room for both copies and
      * costs time proportional to the whole index. Unchanged if it throws, and
      * invalidates every pointer into the index.
+     * Requires initialization through the parameterized constructor or `load`.
      *
      * @param new_max_elements The new capacity, at least `num_points()`
      */
@@ -159,6 +163,7 @@ class HierarchicalNSW {
     };
 
    private:
+    friend struct HnswPruningTestAccess;
     friend maxheap<std::pair<float, PID>> detail::search_knn_neon(
         HierarchicalNSW&, const float*, size_t
     );
@@ -399,7 +404,7 @@ class HierarchicalNSW {
     // The same steps once the original data is gone, defined in hnsw_quant.hpp.
     void reconstruct_rotated(PID, float*) const;
     float get_quant_dist(PID target, PID query) const;
-    void add_point_quant(PID, int, char*, const float*, PID, const quant::RabitqConfig&);
+    void add_point_quant(PID, int, std::unique_ptr<char, void (*)(void*)>&);
     maxheap<std::pair<float, PID>> search_base_layer_quant(PID, PID, int);
     PID mutually_connect_quant(PID, maxheap<std::pair<float, PID>>&, int);
     void get_neighbors_by_heuristic2_quant(maxheap<std::pair<float, PID>>&, size_t);

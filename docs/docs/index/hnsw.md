@@ -125,6 +125,8 @@ void HierarchicalNSW::resize(size_t new_max_elements);
   `num_points() + i` whatever order the threads finish in, because the slots are
   reserved as one block before the inserts start.
 - **new_max_elements**: The new capacity. It must be at least `num_points()`.
+  In C++, initialize the index through its parameterized constructor or `load`
+  before calling `resize`.
 
 In Python:
 
@@ -136,6 +138,13 @@ index.resize(index.max_elements + 100_000)
 
 It is not safe to call `add` or `resize` while another thread searches the same
 index.
+
+`add` prepares the result IDs, quantized vectors, and link-list allocations before
+changing the graph or point count. A failure during preparation leaves those
+unchanged. A failure during graph linking can leave the batch counted in
+`num_points()` with only some points reachable through the graph. The index
+remains safe to search, save, load, and destroy; inspect `num_points()` before
+retrying, or rebuild to restore full reachability.
 
 ### Capacity
 
