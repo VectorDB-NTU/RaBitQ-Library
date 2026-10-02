@@ -911,6 +911,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#removing-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removing points
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Removing points">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-ef-after-removals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing ef after removals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-removal-is-stored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How removal is stored
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1216,6 +1255,45 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#removing-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removing points
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Removing points">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-ef-after-removals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing ef after removals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-removal-is-stored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How removal is stored
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1285,7 +1363,7 @@ supported.</p>
 <p>Each indexed element is stored in the following layout:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>[number of edges]
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>[edges]
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>[cluster ID]
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>[cluster ID]       (its high bit marks a removed point, see Removing points)
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>[external label]
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>[BinData (1-bit * dim + factors)]
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>[ExData (ex-bits * dim + factors)]
@@ -1333,6 +1411,11 @@ supported.</p>
 <li>Insert the neighbor into <code>candidate_set</code> with its (possibly refined) estimated distance.  </li>
 </ol>
 <p>The search terminates when <code>candidate_set</code> is empty.</p>
+<p>A point hidden by <code>remove</code> never enters <code>boundedKNN</code>, so search never returns it,
+but it still enters <code>candidate_set</code> and the search keeps walking through it. A
+removed entry point keeps the estimate already computed for it (the full-bits one
+when nbits &gt; 1). A removed neighbor is not refined and enters <code>candidate_set</code> with
+its 1-bit estimate.</p>
 <h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
 <p>A constructed or loaded index can gain points without the original data. The
 index file format does not change.</p>
@@ -1395,6 +1478,43 @@ never retrains them. If the added vectors come from a different distribution, or
 the index grows many times beyond its original size, recall can drop. Rebuild
 from the original data with new centroids when recall matters more than the cost
 of a rebuild.</p>
+<h3 id="removing-points">Removing points<a class="headerlink" href="#removing-points" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">HierarchicalNSW::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">labels</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+</code></pre></div>
+<ul>
+<li><strong>labels</strong>, <strong>n</strong>: Labels of the points to remove, as returned by <code>add</code> and
+  <code>search</code>. Every label must be in the index; nothing is removed if one is not.
+  <code>remove</code> returns how many points were newly removed, so repeating a label or a
+  call is safe.</li>
+</ul>
+<p>In Python:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span>   <span class="c1"># ids in [0, num_points)</span>
+</code></pre></div>
+<p>A removed point keeps its codes, its links, and its place in the graph. Search
+still walks through it and <code>add</code> may link new points to it, which keeps the graph
+connected, as in hnswlib. Search never returns it, so a query can get fewer than
+<code>k</code> results once points are removed: in Python the missing slots hold <code>kPidMax</code>
+(<code>2**32 - 1</code>) with an infinite distance. Removed points still count in
+<code>num_points()</code> and cannot be restored. It is not safe to call <code>remove</code> while
+another thread searches or adds to the same index.</p>
+<h4 id="choosing-ef-after-removals">Choosing <code>ef</code> after removals<a class="headerlink" href="#choosing-ef-after-removals" title="Permanent link">&para;</a></h4>
+<p>Removed points still take slots in the <code>efSearch</code> candidate set, so a search with
+<code>efSearch</code> close to <code>k</code> finds fewer live points as removals accumulate. <code>search</code>
+uses the <code>efSearch</code> it is given. To keep about the same number of live candidates
+as before the removals, scale it by the share of live points:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>efSearch * num_points() / (num_points() - removed points)
+</code></pre></div>
+<p>Callers that track how many points they removed can apply this directly.</p>
+<h4 id="how-removal-is-stored">How removal is stored<a class="headerlink" href="#how-removal-is-stored" title="Permanent link">&para;</a></h4>
+<p><code>remove</code> sets the high bit of the point's stored cluster ID. <code>construct</code> and <code>load</code>
+limit the number of clusters to 2^31, so no real cluster ID has that bit, and
+every reader of the cluster ID masks it off. The mark lives in the base layer, so
+it survives <code>save</code>, <code>load</code>, and <code>resize</code>, and a file without removals is
+unchanged.</p>
+<p>A file that has removals cannot be read by earlier releases. Releases 0.3.7
+through 0.5.1 check every cluster ID on <code>load</code> and reject the file as invalid
+instead of returning removed points. Releases before 0.3.7 do not check cluster
+IDs, so do not open such a file with them.</p>
 
 
 
