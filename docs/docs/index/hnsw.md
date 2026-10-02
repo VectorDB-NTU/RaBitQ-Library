@@ -47,7 +47,7 @@ Each indexed element is stored in the following layout:
 ```
 [number of edges]
 [edges]
-[cluster ID]
+[cluster ID]       (its high bit marks a removed point, see Removing points)
 [external label]
 [BinData (1-bit * dim + factors)]
 [ExData (ex-bits * dim + factors)]
@@ -98,6 +98,12 @@ Repeat until `candidate_set` is empty:
    - Insert the neighbor into `candidate_set` with its (possibly refined) estimated distance.  
 
 The search terminates when `candidate_set` is empty.
+
+A point hidden by `remove` never enters `boundedKNN`, so search never returns it,
+but it still enters `candidate_set` and the search keeps walking through it. A
+removed entry point keeps the estimate already computed for it (the full-bits one
+when nbits > 1). A removed neighbor is not refined and enters `candidate_set` with
+its 1-bit estimate.
 
 ## Updating an Index
 
@@ -176,3 +182,54 @@ never retrains them. If the added vectors come from a different distribution, or
 the index grows many times beyond its original size, recall can drop. Rebuild
 from the original data with new centroids when recall matters more than the cost
 of a rebuild.
+
+### Removing points
+
+```c++
+size_t HierarchicalNSW::remove(const PID* labels, size_t n);
+```
+
+- **labels**, **n**: Labels of the points to remove, as returned by `add` and
+  `search`. Every label must be in the index; nothing is removed if one is not.
+  `remove` returns how many points were newly removed, so repeating a label or a
+  call is safe.
+
+In Python:
+
+```python
+removed = index.remove(ids)   # ids in [0, num_points)
+```
+
+A removed point keeps its codes, its links, and its place in the graph. Search
+still walks through it and `add` may link new points to it, which keeps the graph
+connected, as in hnswlib. Search never returns it, so a query can get fewer than
+`k` results once points are removed: in Python the missing slots hold `kPidMax`
+(`2**32 - 1`) with an infinite distance. Removed points still count in
+`num_points()` and cannot be restored. It is not safe to call `remove` while
+another thread searches or adds to the same index.
+
+#### Choosing `ef` after removals
+
+Removed points still take slots in the `efSearch` candidate set, so a search with
+`efSearch` close to `k` finds fewer live points as removals accumulate. `search`
+uses the `efSearch` it is given. To keep about the same number of live candidates
+as before the removals, scale it by the share of live points:
+
+```text
+efSearch * num_points() / (num_points() - removed points)
+```
+
+Callers that track how many points they removed can apply this directly.
+
+#### How removal is stored
+
+`remove` sets the high bit of the point's stored cluster ID. `construct` and `load`
+limit the number of clusters to 2^31, so no real cluster ID has that bit, and
+every reader of the cluster ID masks it off. The mark lives in the base layer, so
+it survives `save`, `load`, and `resize`, and a file without removals is
+unchanged.
+
+A file that has removals cannot be read by earlier releases. Releases 0.3.7
+through 0.5.1 check every cluster ID on `load` and reject the file as invalid
+instead of returning removed points. Releases before 0.3.7 do not check cluster
+IDs, so do not open such a file with them.

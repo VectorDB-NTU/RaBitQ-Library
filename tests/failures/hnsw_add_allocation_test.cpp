@@ -224,5 +224,30 @@ TEST(HnswAddAllocationTest, EveryAllocationFailureLeavesUsableIndex) {
     }
     std::filesystem::remove(path);
 }
+
+TEST(HnswRemoveAllocationTest, FailureRemovesNothing) {
+    Fixture fixture;
+    HierarchicalNSW index(kCapacity, kDim, 4, 2, 10, 1);
+    auto ids = fixture.clusters;
+    index.construct(
+        1, fixture.centroid.data(), kCapacity, fixture.data.data(), ids.data(), 1, false
+    );
+    const auto before =
+        index.search(fixture.data.data(), kCapacity, kCapacity, kCapacity, 1);
+    const std::array<PID, 3> labels{0, 4, 7};
+    bool failed = false;
+    {
+        // The only allocation in remove holds the resolved internal ids.
+        AllocationFailure failure(0, labels.size() * sizeof(PID));
+        try {
+            index.remove(labels.data(), labels.size());
+        } catch (const std::bad_alloc&) { failed = true; }
+    }
+    ASSERT_TRUE(failed);
+    EXPECT_EQ(
+        index.search(fixture.data.data(), kCapacity, kCapacity, kCapacity, 1), before
+    );
+    EXPECT_EQ(index.remove(labels.data(), labels.size()), labels.size());
+}
 }  // namespace
 }  // namespace rabitqlib::hnsw

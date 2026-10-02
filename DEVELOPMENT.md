@@ -366,6 +366,21 @@ never appear in results. Keep this convention when touching IVF code:
 - `IvfRemoveTest.ExcludesRemovedPointsOnEveryScanPath`, `IvfRemoveTest.SurvivesSaveLoadAndLaterAdds`,
   and `FastScanPackingTest.UnpackInvertsPackIncludingTailsAndDoesNotOverrun` guard these rules.
 
+HNSW `remove` sets the high bit (`kRemovedMask`) of the stored cluster ID. `construct` and `load`
+cap the number of clusters at 2^31, so no index written before `remove` existed has that bit set and
+nothing in an old file is reinterpreted. A file that has removals is rejected by releases 0.3.7
+through 0.5.1, whose `load` range-checks every cluster ID; that rejection is the compatibility path.
+This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW code:
+
+- Read cluster IDs only through `get_clusterid_by_internalid`, which masks the bit. Estimators,
+  routing, and the `add` reconstruction index centroids with it.
+- A removed point stays in the graph: base-layer search still inserts it into `candidate_set`, and
+  `add` may link to it. Only the result buffer skips it, including when it is the entry point.
+- `load` masks the bit before range-checking the cluster ID.
+- `HnswRemoveTest.SearchReachesLivePointsThroughRemovedOnes`,
+  `HnswRemoveTest.SurvivesSaveLoadResizeAndLaterAdds`, and
+  `HnswRemoveTest.LoadRejectsAnOutOfRangeClusterEvenWithTheMark` guard these rules.
+
 ### Change Python bindings
 
 Shared NumPy and string conversion helpers live in `python_bindings/bindings_common.hpp`. Register

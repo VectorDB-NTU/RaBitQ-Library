@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -38,6 +41,32 @@ struct HnswPruningTestAccess {
         candidates.emplace(index.get_quant_dist(0, incoming), 0);
         index.mutually_connect_quant(incoming, candidates, 0);
         return {neighbors + 1, neighbors + 1 + index.get_list_count(neighbors)};
+    }
+
+    static PID entry_point_label(const HierarchicalNSW& index) {
+        return index.get_external_label(index.enterpoint_node_);
+    }
+
+    static PID internal_id(const HierarchicalNSW& index, PID label) {
+        return index.label_lookup_.at(label);
+    }
+
+    static void set_raw_cluster_id(HierarchicalNSW& index, PID label, PID value) {
+        std::memcpy(
+            index.get_clusterid_pt(index.label_lookup_.at(label)), &value, sizeof(PID)
+        );
+    }
+
+    // Give internal slot i the label count - 1 - i, as parallel construction can
+    // when threads take slots out of order.
+    static void reverse_labels(HierarchicalNSW& index) {
+        const size_t count = index.num_points();
+        index.label_lookup_.clear();
+        for (size_t i = 0; i < count; ++i) {
+            const auto label = static_cast<PID>(count - 1 - i);
+            index.set_external_label(static_cast<PID>(i), label);
+            index.label_lookup_.emplace(label, static_cast<PID>(i));
+        }
     }
 };
 
@@ -735,6 +764,353 @@ TEST_F(HnswSaveTest, RejectsTruncatedRotatorWithoutLosingExistingIndex) {
         EXPECT_NE(std::string(error.what()).find("HNSW"), std::string::npos);
     }
     EXPECT_EQ(loaded.search(data_.data(), 1, 2, kCount, 1), expected);
+}
+
+using Results = std::vector<std::vector<std::pair<float, PID>>>;
+
+struct RemoveCase {
+    MetricType metric;
+    size_t bits;
+};
+
+std::vector<RemoveCase> remove_cases() {
+    std::vector<RemoveCase> cases;
+    for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
+        for (const size_t bits : {1U, 2U, 4U, 8U, 9U}) {
+            cases.push_back({metric, bits});
+        }
+    }
+    return cases;
+}
+
+// Constructs the first `count` points of `fixture` into an index that has room
+// for `capacity`.
+std::unique_ptr<HierarchicalNSW> build_for_remove(
+    AddFixture& fixture,
+    size_t count,
+    size_t capacity,
+    const RemoveCase& config,
+    size_t num_threads = 1,
+    size_t M = 8
+) {
+    auto index = std::make_unique<HierarchicalNSW>(
+        capacity, AddFixture::kDim, config.bits, M, 50, 100, config.metric
+    );
+    index->construct(
+        1,
+        fixture.centroid.data(),
+        count,
+        fixture.data.data(),
+        fixture.cluster_ids.data(),
+        num_threads,
+        false
+    );
+    return index;
+}
+
+// With k and ef at the point count, the search returns every point reachable
+// from the entry point. HNSW does not promise that every point is reachable, so
+// the tests compare against the same index without removals.
+Results search_everything(
+    HierarchicalNSW& index, const AddFixture& fixture, size_t queries
+) {
+    const size_t count = index.num_points();
+    return index.search(fixture.data.data(), queries, count, count, 1);
+}
+
+// `before` without the removed labels, in the same order.
+Results without_removed(const Results& before, const std::vector<bool>& removed) {
+    Results kept(before.size());
+    for (size_t q = 0; q < before.size(); ++q) {
+        std::copy_if(
+            before[q].begin(),
+            before[q].end(),
+            std::back_inserter(kept[q]),
+            [&](const std::pair<float, PID>& hit) { return !removed[hit.second]; }
+        );
+    }
+    return kept;
+}
+
+// A copy through save and load: the same rotator, codes and graph.
+std::unique_ptr<HierarchicalNSW> copy_of(
+    const HierarchicalNSW& index, const std::string& name
+) {
+    const std::string path = ::testing::TempDir() + name;
+    index.save(path.c_str());
+    auto copy = std::make_unique<HierarchicalNSW>();
+    copy->load(path.c_str());
+    std::remove(path.c_str());
+    return copy;
+}
+
+std::vector<char> saved_bytes(const HierarchicalNSW& index, const std::string& path) {
+    index.save(path.c_str());
+    std::ifstream file(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
+    constexpr size_t kCount = 120;
+    constexpr size_t kQueries = 8;
+    for (const auto& config : remove_cases()) {
+        SCOPED_TRACE(
+            ::testing::Message()
+            << "metric " << static_cast<int>(config.metric) << " bits " << config.bits
+        );
+        AddFixture fixture(kCount, 59);
+        auto index = build_for_remove(fixture, kCount, kCount, config);
+        const Results before = search_everything(*index, fixture, kQueries);
+
+        // Every third point, the last one, and a repeated label.
+        std::vector<PID> labels;
+        std::vector<bool> removed(kCount, false);
+        for (PID label = 0; label < kCount; label += 3) {
+            labels.push_back(label);
+            removed[label] = true;
+        }
+        labels.push_back(kCount - 1);
+        removed[kCount - 1] = true;
+        labels.push_back(0);
+        const auto unique =
+            static_cast<size_t>(std::count(removed.begin(), removed.end(), true));
+
+        EXPECT_EQ(index->remove(labels.data(), labels.size()), unique);
+        EXPECT_EQ(index->remove(labels.data(), labels.size()), 0U);
+        EXPECT_EQ(index->num_points(), kCount);
+
+        // Survivors keep their order and their distances.
+        EXPECT_EQ(
+            search_everything(*index, fixture, kQueries), without_removed(before, removed)
+        );
+
+        // A small ef still fills k with live points only.
+        const auto top = index->search(fixture.data.data(), kQueries, 10, 10, 1);
+        for (const auto& hits : top) {
+            EXPECT_EQ(hits.size(), 10U);
+            for (const auto& hit : hits) {
+                EXPECT_FALSE(removed[hit.second]) << hit.second;
+                EXPECT_TRUE(std::isfinite(hit.first));
+            }
+        }
+    }
+}
+
+TEST(HnswRemoveTest, RemovingTheEntryPointKeepsSearchWorking) {
+    constexpr size_t kCount = 160;
+    for (const auto& config : remove_cases()) {
+        SCOPED_TRACE(
+            ::testing::Message()
+            << "metric " << static_cast<int>(config.metric) << " bits " << config.bits
+        );
+        AddFixture fixture(kCount, 61);
+        auto index = build_for_remove(fixture, kCount, kCount, config);
+        const Results before = search_everything(*index, fixture, 1);
+        const PID entry = HnswPruningTestAccess::entry_point_label(*index);
+        std::vector<bool> removed(kCount, false);
+        removed[entry] = true;
+        ASSERT_EQ(index->remove(&entry, 1), 1U);
+
+        // Every search starts at the removed entry point and must still return k
+        // live points without it.
+        const auto results = index->search(fixture.data.data(), kCount, 10, 10, 1);
+        for (const auto& hits : results) {
+            EXPECT_EQ(hits.size(), 10U);
+            for (const auto& hit : hits) {
+                EXPECT_NE(hit.second, entry);
+            }
+        }
+        EXPECT_EQ(search_everything(*index, fixture, 1), without_removed(before, removed));
+    }
+}
+
+TEST(HnswRemoveTest, SearchReachesLivePointsThroughRemovedOnes) {
+    constexpr size_t kCount = 200;
+    constexpr size_t kStride = 10;
+    for (const auto& config : remove_cases()) {
+        SCOPED_TRACE(
+            ::testing::Message()
+            << "metric " << static_cast<int>(config.metric) << " bits " << config.bits
+        );
+        AddFixture fixture(kCount, 67);
+        auto index = build_for_remove(fixture, kCount, kCount, config, 1, 4);
+        const Results before = search_everything(*index, fixture, kCount);
+
+        // Keep one point in ten. Most paths between the survivors now pass through
+        // removed points, which search must still walk through to reach every
+        // survivor it reached before.
+        std::vector<PID> labels;
+        std::vector<bool> removed(kCount, false);
+        for (PID label = 0; label < kCount; ++label) {
+            if (label % kStride != 0) {
+                labels.push_back(label);
+                removed[label] = true;
+            }
+        }
+        ASSERT_EQ(index->remove(labels.data(), labels.size()), labels.size());
+
+        EXPECT_EQ(
+            search_everything(*index, fixture, kCount), without_removed(before, removed)
+        );
+    }
+}
+
+TEST(HnswRemoveTest, UsesLabelsNotInternalIds) {
+    constexpr size_t kCount = 256;
+    const RemoveCase config{METRIC_L2, 4};
+    AddFixture fixture(kCount, 71);
+    auto index = build_for_remove(fixture, kCount, kCount, config);
+    HnswPruningTestAccess::reverse_labels(*index);
+    const Results before = search_everything(*index, fixture, 1);
+
+    // Every fifth label below kCount / 2: no removed label shares a slot with
+    // another removed label, so treating labels as slots would hide other points.
+    std::vector<PID> labels;
+    std::vector<bool> removed(kCount, false);
+    for (PID label = 0; label < kCount / 2; label += 5) {
+        labels.push_back(label);
+        removed[label] = true;
+    }
+    ASSERT_EQ(index->remove(labels.data(), labels.size()), labels.size());
+
+    EXPECT_EQ(search_everything(*index, fixture, 1), without_removed(before, removed));
+}
+
+TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
+    constexpr size_t kBuilt = 96;
+    constexpr size_t kAdded = 32;
+    constexpr size_t kTotal = kBuilt + kAdded;
+    const std::string path = ::testing::TempDir() + "rabitq_hnsw_remove_roundtrip.index";
+    for (const auto& config : remove_cases()) {
+        SCOPED_TRACE(
+            ::testing::Message()
+            << "metric " << static_cast<int>(config.metric) << " bits " << config.bits
+        );
+        AddFixture fixture(kTotal, 73);
+        auto index = build_for_remove(fixture, kBuilt, kBuilt, config);
+        const auto plain = copy_of(*index, "rabitq_hnsw_remove_plain.index");
+        std::vector<PID> labels;
+        std::vector<bool> removed(kTotal, false);
+        for (PID label = 1; label < kBuilt; label += 4) {
+            labels.push_back(label);
+            removed[label] = true;
+        }
+        ASSERT_EQ(index->remove(labels.data(), labels.size()), labels.size());
+        const Results expected = search_everything(*index, fixture, 4);
+
+        index->save(path.c_str());
+        HierarchicalNSW loaded;
+        loaded.load(path.c_str());
+        EXPECT_EQ(search_everything(loaded, fixture, 4), expected);
+        EXPECT_EQ(loaded.remove(labels.data(), labels.size()), 0U);
+
+        // Resizing copies the marks with the rest of the base layer.
+        index->resize(kTotal);
+        loaded.resize(kTotal);
+        EXPECT_EQ(search_everything(loaded, fixture, 4), expected);
+
+        // New points can be linked through removed ones. All three copies grow the
+        // same graph, and the removed points stay hidden in the two that have them.
+        const float* extra = fixture.data.data() + (kBuilt * AddFixture::kDim);
+        plain->resize(kTotal);
+        for (HierarchicalNSW* copy : {index.get(), &loaded, plain.get()}) {
+            copy->add(extra, kAdded, fixture.cluster_ids.data());
+        }
+        const Results grown = search_everything(*index, fixture, kTotal);
+        EXPECT_EQ(search_everything(loaded, fixture, kTotal), grown);
+        EXPECT_EQ(
+            grown, without_removed(search_everything(*plain, fixture, kTotal), removed)
+        );
+    }
+    std::remove(path.c_str());
+}
+
+TEST(HnswRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
+    constexpr size_t kCount = 64;
+    const PID one = 3;
+    HierarchicalNSW unbuilt;
+    try {
+        unbuilt.remove(&one, 1);
+        FAIL() << "Removing from an index that was never built must fail";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(
+            error.what(), "HNSW index must be constructed or loaded before remove"
+        );
+    }
+    HierarchicalNSW unconstructed(kCount, AddFixture::kDim, 4, 8, 50);
+    EXPECT_THROW(unconstructed.remove(&one, 1), std::logic_error);
+
+    AddFixture fixture(kCount, 79);
+    auto index = build_for_remove(fixture, kCount, kCount, {METRIC_L2, 4});
+    const std::string path = ::testing::TempDir() + "rabitq_hnsw_remove_rejects.index";
+    const auto expected = saved_bytes(*index, path);
+
+    const std::vector<PID> unknown{3, kCount};
+    try {
+        index->remove(unknown.data(), unknown.size());
+        FAIL() << "An unknown label must be rejected";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "HNSW remove label is not in the index");
+    }
+    EXPECT_THROW(index->remove(nullptr, 1), std::invalid_argument);
+    EXPECT_EQ(index->remove(nullptr, 0), 0U);
+    EXPECT_EQ(saved_bytes(*index, path), expected);
+
+    // Label 3 was valid in the rejected call, so it is still there to remove.
+    EXPECT_EQ(index->remove(&one, 1), 1U);
+    std::remove(path.c_str());
+}
+
+TEST(HnswRemoveTest, RemovingEveryPointReturnsNoResults) {
+    constexpr size_t kBuilt = 64;
+    constexpr size_t kAdded = 16;
+    AddFixture fixture(kBuilt + kAdded, 83);
+    auto index = build_for_remove(fixture, kBuilt, kBuilt, {METRIC_IP, 1});
+    std::vector<PID> labels(kBuilt);
+    for (PID label = 0; label < kBuilt; ++label) {
+        labels[label] = label;
+    }
+    ASSERT_EQ(index->remove(labels.data(), labels.size()), kBuilt);
+    for (const auto& hits : index->search(fixture.data.data(), 4, 10, 10, 1)) {
+        EXPECT_TRUE(hits.empty());
+    }
+    for (const auto& hits : search_everything(*index, fixture, 4)) {
+        EXPECT_TRUE(hits.empty());
+    }
+
+    // The graph of removed points still carries new ones.
+    index->resize(kBuilt + kAdded);
+    const float* extra = fixture.data.data() + (kBuilt * AddFixture::kDim);
+    index->add(extra, kAdded, fixture.cluster_ids.data());
+    const auto results = index->search(extra, kAdded, 1, kBuilt + kAdded, 1);
+    for (size_t i = 0; i < kAdded; ++i) {
+        ASSERT_EQ(results[i].size(), 1U);
+        EXPECT_GE(results[i][0].second, kBuilt);
+    }
+}
+
+TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
+    constexpr size_t kCount = 32;
+    AddFixture fixture(kCount, 89);
+    auto index = build_for_remove(fixture, kCount, kCount, {METRIC_L2, 4});
+    const PID one = 5;
+    ASSERT_EQ(index->remove(&one, 1), 1U);
+
+    const std::string path = ::testing::TempDir() + "rabitq_hnsw_remove_bad_cluster.index";
+    index->save(path.c_str());
+    HierarchicalNSW loaded;
+    ASSERT_NO_THROW(loaded.load(path.c_str()));
+
+    // Cluster 1 does not exist in a one-cluster index, marked or not.
+    HnswPruningTestAccess::set_raw_cluster_id(*index, one, 0x80000001U);
+    index->save(path.c_str());
+    try {
+        loaded.load(path.c_str());
+        FAIL() << "A marked out-of-range cluster ID must be rejected";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "HNSW: invalid or truncated index file");
+    }
+    std::remove(path.c_str());
 }
 
 }  // namespace

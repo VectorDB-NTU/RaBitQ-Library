@@ -206,7 +206,7 @@ jobs:
           simd_filter+=':RaBitQKMeansTest.FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts'
           simd_filter+=':IvfPersistenceTest.ReloadsRawAndQuantizedStorage'
           simd_filter+=':HnswSaveTest.SuccessfulSavePreservesSearchAfterLoading'
-          simd_filter+=':IvfAddTest.*:IvfRemoveTest.*'
+          simd_filter+=':IvfAddTest.*:IvfRemoveTest.*:HnswRemoveTest.*'
           for cpu_model in hsw icl; do
             RABITQ_TEST_CPU="$cpu_model" "$RUNNER_TEMP/sde/sde64" "-$cpu_model" -- \
               build-install/tests/rabitq_tests --gtest_filter="$simd_filter"

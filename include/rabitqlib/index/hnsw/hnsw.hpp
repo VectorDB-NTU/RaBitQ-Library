@@ -105,6 +105,23 @@ class HierarchicalNSW {
      * @param new_max_elements The new capacity, at least `num_points()`
      */
     void resize(size_t);
+
+    /**
+     * @brief Exclude points from all later search results.
+     *
+     * A removed point keeps its codes and its place in the graph: search and `add`
+     * still traverse it and may link new points to it, but search never returns it,
+     * so a query may get fewer than k results. A removed point still counts in
+     * `num_points()`. Removal is stored in the index, so it survives save and load,
+     * and is idempotent. Removed points cannot be restored. Every label is checked
+     * before anything changes. Not safe to call while another thread searches or adds.
+     *
+     * @param labels Labels of the points to remove, as returned by `add` or `search`
+     * @param n Number of labels
+     * @return Number of points newly removed
+     */
+    size_t remove(const PID*, size_t);
+
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float*, size_t, size_t, size_t, size_t
     );
@@ -181,6 +198,13 @@ class HierarchicalNSW {
     );
 
     static constexpr PID kMaxLabelOperationLock = 65536;
+    // `remove` sets the high bit of a point's stored cluster ID. construct and load
+    // keep num_cluster_ at or below 2^31, so a real cluster ID never has it.
+    static constexpr PID kRemovedMask = 0x80000000U;
+    static_assert(
+        buffer::kSearchBufferMaxPointCount <= kRemovedMask,
+        "cluster IDs must leave the removal bit free"
+    );
     size_t max_elements_{0};
     mutable std::atomic<size_t> cur_element_count_{0};  // current number of elements
     size_t size_data_per_element_{0};
@@ -313,11 +337,20 @@ class HierarchicalNSW {
         );
     }
 
-    PID get_clusterid_by_internalid(PID internal_id) const {
+    // The stored cluster ID with the removal mark, as save and load see it.
+    PID get_raw_clusterid(PID internal_id) const {
         return *(reinterpret_cast<PID*>(
             data_level0_memory_ + (internal_id * size_data_per_element_) +
             size_links_level0_
         ));
+    }
+
+    PID get_clusterid_by_internalid(PID internal_id) const {
+        return get_raw_clusterid(internal_id) & ~kRemovedMask;
+    }
+
+    bool is_removed(PID internal_id) const {
+        return (get_raw_clusterid(internal_id) & kRemovedMask) != 0;
     }
 
     char* get_clusterid_pt(PID internal_id) const {
@@ -716,7 +749,8 @@ inline void HierarchicalNSW::load(const char* filename) {
         std::memcpy(&level0_degree, row, sizeof(level0_degree));
         std::memcpy(&cluster_id, row + loaded.size_links_level0_, sizeof(cluster_id));
         std::memcpy(&label, row + loaded.label_offset_, sizeof(label));
-        if (cluster_id >= loaded.num_cluster_ || level0_degree > loaded.maxM0_) {
+        if ((cluster_id & ~kRemovedMask) >= loaded.num_cluster_ ||
+            level0_degree > loaded.maxM0_) {
             invalid_file();
         }
         for (size_t edge = 0; edge < level0_degree; ++edge) {
@@ -1364,6 +1398,43 @@ inline std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     return results;
 }
 
+inline size_t HierarchicalNSW::remove(const PID* labels, size_t n) {
+    if (data_level0_memory_ == nullptr || centroids_memory_ == nullptr ||
+        rotator_ == nullptr || num_cluster_ == 0) {
+        throw std::logic_error("HNSW index must be constructed or loaded before remove");
+    }
+    if (n == 0) {
+        return 0;
+    }
+    if (labels == nullptr) {
+        throw std::invalid_argument("HNSW remove labels must not be null");
+    }
+
+    // Resolve every label before marking any point, so an unknown label removes
+    // nothing.
+    std::vector<PID> internal_ids(n);
+    {
+        std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
+        for (size_t i = 0; i < n; ++i) {
+            const auto found = label_lookup_.find(labels[i]);
+            if (found == label_lookup_.end()) {
+                throw std::invalid_argument("HNSW remove label is not in the index");
+            }
+            internal_ids[i] = found->second;
+        }
+    }
+
+    size_t removed = 0;
+    for (const PID id : internal_ids) {
+        if (!is_removed(id)) {
+            const PID marked = get_raw_clusterid(id) | kRemovedMask;
+            std::memcpy(get_clusterid_pt(id), &marked, sizeof(PID));
+            ++removed;
+        }
+    }
+    return removed;
+}
+
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn(
     const float* rotated_query, size_t TOPK
 ) {
@@ -1495,11 +1566,12 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
     float est_dist = start_estimate_record.est_dist;
     float low_dist = start_estimate_record.low_dist;
 
-    // Insert initial candidate.
-    boundedKNN.insert({ResultRecord(est_dist, low_dist), ep_id});
+    // Insert initial candidate. A removed point is still explored, never returned.
+    if (!is_removed(ep_id)) {
+        boundedKNN.insert({ResultRecord(est_dist, low_dist), ep_id});
+        distk = est_dist;
+    }
     candidate_set.insert(ep_id, est_dist);
-
-    distk = est_dist;
 
     vl->set(ep_id);
 
@@ -1538,7 +1610,9 @@ inline void HierarchicalNSW::searchBaseLayerST_AdaptiveRerankOptDirect(
                 q_to_centroids, query_wrapper, candidate_id, candest
             );
 
-            bool flag_update_KNNs = boundedKNN.size() < TOPK || candest.low_dist < distk;
+            // A removed neighbor keeps its binary estimate and stays in candidate_set.
+            bool flag_update_KNNs = !is_removed(static_cast<PID>(candidate_id)) &&
+                                    (boundedKNN.size() < TOPK || candest.low_dist < distk);
 
             if (flag_update_KNNs) {
                 // Compute the full estimate if promising.
