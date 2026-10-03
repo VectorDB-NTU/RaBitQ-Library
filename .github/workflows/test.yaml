@@ -256,7 +256,7 @@ jobs:
     name: Native Apple Silicon C++
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       OMP_NUM_THREADS: "2"
