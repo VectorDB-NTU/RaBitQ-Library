@@ -21,6 +21,7 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/simd/matrix_dispatch.hpp"
+#include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -55,6 +56,8 @@ namespace detail {
 
 // Inputs have already passed clustering validation. GEMM only screens candidates;
 // final distances and tie breaking retain the scalar double-precision arithmetic.
+// Optional previous assignments contain n valid centroid IDs and may alias the
+// output. Recompute their distances against the current, updated centroids.
 inline void exact_assign(
     const float* x,
     const float* centroids,
@@ -64,27 +67,41 @@ inline void exact_assign(
     bool spherical,
     uint32_t num_threads,
     PID* assignments,
-    float* distances
+    float* distances,
+    const PID* previous_assignments = nullptr
 ) {
-    constexpr size_t kPointBlock = 64;
+    constexpr size_t kMaxPointBlock = 128;
+    // Larger row blocks amortize packing on the AVX-512 Eigen backend. Retain
+    // smaller blocks on other backends and require at least two blocks per
+    // worker to avoid doubling the work of a worker handling a small tail.
+    const size_t point_block =
+        cpu::has_avx512_core() && k >= 256 && n / num_threads >= 2 * kMaxPointBlock
+            ? kMaxPointBlock
+            : 64;
     constexpr size_t kCentroidBlock = 256;
-    const size_t blocks = 1 + (n - 1) / kPointBlock;
+    const size_t blocks = 1 + (n - 1) / point_block;
     const auto threads = static_cast<uint32_t>(std::min<size_t>(num_threads, blocks));
     std::vector<double> centroid_norms(k);
     std::vector<std::vector<float>> products(
-        threads, std::vector<float>(kPointBlock * std::min(k, kCentroidBlock))
+        threads, std::vector<float>(point_block * std::min(k, kCentroidBlock))
     );
     std::vector<std::exception_ptr> errors(threads);
 
-#pragma omp parallel for num_threads(threads) schedule(static)
-    for (std::ptrdiff_t cluster = 0; cluster < static_cast<std::ptrdiff_t>(k); ++cluster) {
-        double norm = 0.0;
-        for (size_t dim = 0; dim < d; ++dim) {
-            const double value = centroids[static_cast<size_t>(cluster) * d + dim];
-            norm += value * value;
+    const auto exact_distance = [d, spherical](const float* vector, const float* centroid) {
+        double distance = 0.0;
+        if (spherical) {
+            for (size_t dim = 0; dim < d; ++dim) {
+                distance -= static_cast<double>(vector[dim]) * centroid[dim];
+            }
+            distance += 1.0;
+        } else {
+            for (size_t dim = 0; dim < d; ++dim) {
+                const double difference = static_cast<double>(vector[dim]) - centroid[dim];
+                distance += difference * difference;
+            }
         }
-        centroid_norms[static_cast<size_t>(cluster)] = norm;
-    }
+        return distance;
+    };
 
     // For d <= 65536, this exceeds the float dot-product error bound
     // gamma_d * sum(abs(x_i*c_i)), using 2*abs(x_i*c_i) <= x_i^2+c_i^2.
@@ -101,8 +118,20 @@ inline void exact_assign(
         omp_set_num_threads(1);
         const auto thread = static_cast<size_t>(omp_get_thread_num());
         float* dots = products[thread].data();
-        std::array<double, kPointBlock> point_norms{};
-        std::array<double, kPointBlock> best_distances{};
+        std::array<double, kMaxPointBlock> point_norms{};
+        std::array<double, kMaxPointBlock> best_distances{};
+        // Reuse this worker team for norms and assignment. The implicit barrier
+        // publishes all centroid norms before any matrix tile is screened.
+#pragma omp for schedule(static)
+        for (std::ptrdiff_t cluster = 0; cluster < static_cast<std::ptrdiff_t>(k);
+             ++cluster) {
+            double norm = 0.0;
+            for (size_t dim = 0; dim < d; ++dim) {
+                const double value = centroids[static_cast<size_t>(cluster) * d + dim];
+                norm += value * value;
+            }
+            centroid_norms[static_cast<size_t>(cluster)] = norm;
+        }
 #pragma omp for schedule(static)
         for (std::ptrdiff_t block = 0; block < static_cast<std::ptrdiff_t>(blocks);
              ++block) {
@@ -110,8 +139,8 @@ inline void exact_assign(
                 continue;
             }
             try {
-                const size_t first_point = static_cast<size_t>(block) * kPointBlock;
-                const size_t rows = std::min(kPointBlock, n - first_point);
+                const size_t first_point = static_cast<size_t>(block) * point_block;
+                const size_t rows = std::min(point_block, n - first_point);
                 for (size_t row = 0; row < rows; ++row) {
                     const float* vector = x + (first_point + row) * d;
                     double norm = 0.0;
@@ -121,6 +150,14 @@ inline void exact_assign(
                     }
                     point_norms[row] = norm;
                     best_distances[row] = std::numeric_limits<double>::infinity();
+                    if (previous_assignments != nullptr) {
+                        const size_t point = first_point + row;
+                        const PID previous = previous_assignments[point];
+                        assert(previous < k);
+                        best_distances[row] =
+                            exact_distance(vector, centroids + previous * d);
+                        assignments[point] = previous;
+                    }
                 }
                 for (size_t first_cluster = 0; first_cluster < k;
                      first_cluster += kCentroidBlock) {
@@ -148,22 +185,12 @@ inline void exact_assign(
                                 continue;
                             }
                             const float* centroid = centroids + cluster * d;
-                            double distance = 0.0;
-                            if (spherical) {
-                                for (size_t dim = 0; dim < d; ++dim) {
-                                    distance -=
-                                        static_cast<double>(vector[dim]) * centroid[dim];
-                                }
-                                distance += 1.0;
-                            } else {
-                                for (size_t dim = 0; dim < d; ++dim) {
-                                    const double difference =
-                                        static_cast<double>(vector[dim]) - centroid[dim];
-                                    distance += difference * difference;
-                                }
-                            }
-                            // Visit in ascending ID order, retaining the first exact tie.
-                            if (distance < best_distances[row]) {
+                            const double distance = exact_distance(vector, centroid);
+                            // The hint may have a higher ID than an equally good
+                            // centroid. Preserve the original lowest-ID tie rule.
+                            if (distance < best_distances[row] ||
+                                (distance == best_distances[row] &&
+                                 cluster < assignments[point])) {
                                 assignments[point] = static_cast<PID>(cluster);
                                 best_distances[row] = distance;
                             }
@@ -289,10 +316,10 @@ class LloydKMeans : public Parameters {
         double previous_obj = std::numeric_limits<double>::infinity();
 
         for (size_t iteration = 0; iteration < niter; ++iteration) {
-            previous_centroids = centroids;
-            assigner.assign(
-                previous_centroids.data(), assignments.data(), distances.data()
-            );
+            assigner.assign(centroids.data(), assignments.data(), distances.data());
+            // Assignment has finished borrowing the current centroids. Keep them
+            // for the shift calculation and overwrite the other buffer with means.
+            previous_centroids.swap(centroids);
 
             const double obj = std::accumulate(distances.begin(), distances.end(), 0.0);
             std::fill(sums.begin(), sums.end(), 0.0);
@@ -332,7 +359,8 @@ class LloydKMeans : public Parameters {
                 spherical,
                 threads,
                 assignments.data(),
-                distances.data()
+                distances.data(),
+                assignments.data()
             );
         } else {
             assigner.assign(centroids.data(), assignments.data(), distances.data(), true);

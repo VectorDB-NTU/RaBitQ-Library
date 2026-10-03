@@ -196,22 +196,15 @@ class IvfIndex {
             dists_data, dists_data + dists.size(), std::numeric_limits<float>::infinity()
         );
 
-        rabitqlib::ivf::parallel_for(
-            0,
+        index_->search_batch(
+            query_array.data(),
             nq,
-            num_threads,
-            [&](size_t idx, size_t /*threadId*/) {
-                const float* query = query_array.data() + (idx * dim_);
-                auto* result_ids = ids_data + (idx * k);
-                auto* result_dists = dists_data + (idx * k);
-                if (high_accuracy.has_value()) {
-                    index_->search(
-                        query, k, nprobe, result_ids, result_dists, *high_accuracy
-                    );
-                } else {
-                    index_->search(query, k, nprobe, result_ids, result_dists);
-                }
-            }
+            k,
+            nprobe,
+            ids_data,
+            dists_data,
+            high_accuracy,
+            num_threads
         );
 
         return py::make_tuple(ids, dists);

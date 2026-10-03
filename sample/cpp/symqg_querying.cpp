@@ -68,21 +68,16 @@ int run(int argc, char** argv) {
             size_t total_correct = 0;
             float total_time = 0;
             qg.set_ef(ef);
-            std::vector<PID> results(topk);
-            std::vector<float> dists(topk);
+            std::vector<PID> results(total_count);
+            std::vector<float> dists(total_count);
+            stopw.reset();
+            qg.search_batch(query.data(), nq, topk, results.data(), dists.data());
+            total_time = stopw.get_elapsed_micro();
             for (size_t z = 0; z < nq; z++) {
-                stopw.reset();
-                qg.search(
-                    &query(static_cast<Eigen::Index>(z), 0),
-                    topk,
-                    results.data(),
-                    dists.data()
-                );
-                total_time += stopw.get_elapsed_micro();
                 for (size_t y = 0; y < topk; y++) {
                     for (size_t k = 0; k < topk; k++) {
                         if (gt(static_cast<Eigen::Index>(z),
-                               static_cast<Eigen::Index>(k)) == results[y]) {
+                               static_cast<Eigen::Index>(k)) == results[z * topk + y]) {
                             total_correct++;
                             break;
                         }

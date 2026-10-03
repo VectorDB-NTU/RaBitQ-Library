@@ -75,6 +75,41 @@ def test_single_query(built_ivf, query_data):
     assert dists.shape == (1, 1)
 
 
+@pytest.mark.parametrize("bits", [1, 2, 3, 4, 5, 6, 7, 8, 9, 32])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_batch_search_matches_individual_queries(bits, metric):
+    rng = np.random.default_rng(73)
+    data = rng.standard_normal((97, 65)).astype(np.float32)
+    queries = rng.standard_normal((13, 65)).astype(np.float32)
+    centroids = data[:4].copy()
+    labels = np.arange(len(data), dtype=np.uint32) % 3
+    index = IvfIndex(65, len(data), 4, bits, metric=metric)
+    index.build(data, centroids, labels)
+    for hacc in [None, False, True]:
+        for nprobe in [1, 99]:
+            kwargs = dict(k=7, nprobe=nprobe, high_accuracy=hacc)
+            individual = [index.search(q[None, :], **kwargs) for q in queries]
+            expected_ids = np.concatenate([result[0] for result in individual])
+            expected_distances = np.concatenate([result[1] for result in individual])
+            for threads in [1, 4]:
+                ids, distances = index.search(queries, num_threads=threads, **kwargs)
+                np.testing.assert_array_equal(ids, expected_ids)
+                np.testing.assert_array_equal(distances, expected_distances)
+                one_ids, one_distances = index.search(
+                    queries[:1], num_threads=threads, **kwargs
+                )
+                np.testing.assert_array_equal(one_ids, expected_ids[:1])
+                np.testing.assert_array_equal(one_distances, expected_distances[:1])
+                empty_ids, empty_distances = index.search(
+                    queries[:0], num_threads=threads, **kwargs
+                )
+                assert empty_ids.shape == empty_distances.shape == (0, 7)
+    index.remove(np.arange(len(data)))
+    ids, distances = index.search(queries, k=7, nprobe=4, num_threads=4)
+    assert np.all(ids == np.iinfo(np.uint32).max)
+    assert np.all(np.isinf(distances))
+
+
 def test_k_equals_one(built_ivf, query_data):
     ids, dists = built_ivf.search(query_data, k=1, nprobe=1)
     assert ids.shape == (N_QUERIES, 1)
@@ -660,3 +695,31 @@ def test_remove_and_add_accept_any_integer_dtype_and_empty_input():
     assert idx.remove(np.array([5], dtype=np.int16)) == 1
     assert len(idx.add(new[:3], cluster_ids=[0, 1, 2])) == 3
     assert len(idx.add(new[:3], cluster_ids=np.array([0, 1, 2], dtype=np.uint16))) == 3
+
+
+@pytest.mark.parametrize("bits", [1, 4, 9, 32])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_rebuild_matches_incremental_encoding_with_empty_clusters(
+    tmp_path, bits, metric
+):
+    rng = np.random.default_rng(731)
+    data = rng.standard_normal((130, 65), dtype=np.float32)
+    centers = rng.standard_normal((4, 65), dtype=np.float32)
+    labels = np.full(130, 3, dtype=np.uint32)
+    labels[0] = 1
+    labels[1:33] = 2
+    incremental = IvfIndex(65, 1, 4, nbits=bits, metric=metric)
+    incremental.build(data[:1], centers, labels[:1], num_threads=1)
+    incremental.add(data[1:], cluster_ids=labels[1:], num_threads=1)
+    path = tmp_path / "incremental.index"
+    incremental.save(str(path))
+    expected_bytes = path.read_bytes()
+    expected_ids, expected_distances = incremental.search(data[:3], k=10, nprobe=4)
+    rebuilt = IvfIndex.load(str(path))
+    for threads in (1, 4):
+        rebuilt.build(data, centers, labels, num_threads=threads)
+        rebuilt.save(str(path))
+        assert path.read_bytes() == expected_bytes
+        ids, distances = rebuilt.search(data[:3], k=10, nprobe=4)
+        np.testing.assert_array_equal(ids, expected_ids)
+        np.testing.assert_array_equal(distances, expected_distances)

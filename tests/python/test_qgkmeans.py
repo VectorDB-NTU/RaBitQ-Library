@@ -151,10 +151,11 @@ def test_exact_final_assignment_preserves_shifted_l2_accuracy():
 
 
 @pytest.mark.parametrize("spherical", [False, True])
-def test_exact_final_assignment_uses_first_duplicate_centroid(spherical):
+@pytest.mark.parametrize("model_type", [QGKMeans, RaBitQKMeans])
+def test_exact_final_assignment_uses_first_duplicate_centroid(spherical, model_type):
     x = np.zeros((65, 65), dtype=np.float32)
     x[:, 0] = 1.0
-    clustering = QGKMeans(
+    clustering = model_type(
         65,
         K,
         niter=1,

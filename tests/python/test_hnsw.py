@@ -296,6 +296,30 @@ def test_resize_below_element_count_raises(partial_hnsw):
     assert partial_hnsw.max_elements == N_VECTORS
 
 
+@pytest.mark.parametrize("nbits", [1, 9])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_resize_across_allocation_threshold_preserves_search(tmp_path, nbits, metric):
+    rng = np.random.default_rng(73)
+    data = rng.standard_normal((97, 65)).astype(np.float32)
+    queries = rng.standard_normal((7, 65)).astype(np.float32)
+    centroids = data.mean(axis=0, keepdims=True)
+    index = HnswIndex(65, len(data), M=8, nbits=nbits, metric=metric)
+    index.build(data, centroids, np.zeros(len(data), dtype=np.uint32))
+    expected_ids, expected_distances = index.search(queries, k=7, ef=97)
+
+    # The level-0 allocation moves from below 2 MiB to above it and back.
+    for capacity in [32768, len(data)]:
+        index.resize(capacity)
+        path = str(tmp_path / "resized.index")
+        index.save(path)
+        index = HnswIndex.load(path)
+        assert index.max_elements == capacity
+        assert index.num_points == len(data)
+        ids, distances = index.search(queries, k=7, ef=97)
+        np.testing.assert_array_equal(ids, expected_ids)
+        np.testing.assert_array_equal(distances, expected_distances)
+
+
 def test_added_points_survive_save_and_load(
     partial_hnsw, base_data, clusters, tmp_path
 ):

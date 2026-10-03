@@ -919,8 +919,7 @@ inline void HierarchicalNSW::construct(
 
     num_cluster_ = cluster_num;
     const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
-    centroids_memory_ =
-        static_cast<char*>(memory::aligned_allocate_bytes(64, centroids_bytes));
+    centroids_memory_ = memory::huge_page_allocate<char>(centroids_bytes);
     if (centroids_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids");
     }

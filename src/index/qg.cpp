@@ -1,10 +1,14 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 
+#include <omp.h>
+
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <ios>
 #include <limits>
@@ -29,6 +33,7 @@
 #include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 #include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
@@ -164,7 +169,7 @@ void QuantizedGraph<float>::copy_vectors(const float* data, size_t num_threads) 
         {
             std::vector<float> rotated_data(padded_dim_);
             std::vector<uint8_t> quantized_data(padded_dim_);
-#pragma omp for schedule(dynamic)
+#pragma omp for schedule(static)
             for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
                  ++index) {
                 const size_t i = static_cast<size_t>(index);
@@ -195,7 +200,7 @@ void QuantizedGraph<float>::copy_vectors(const float* data, size_t num_threads) 
         }
         return;
     }
-#pragma omp parallel for schedule(dynamic) num_threads(thread_count)
+#pragma omp parallel for schedule(static) num_threads(thread_count)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
          ++index) {
         const size_t i = static_cast<size_t>(index);
@@ -431,6 +436,99 @@ void QuantizedGraph<float>::search(
         result_pool,
         visited
     );
+}
+
+void QuantizedGraph<float>::search_batch(
+    const float* queries,
+    size_t num_queries,
+    uint32_t knn,
+    uint32_t* results,
+    float* dists,
+    size_t num_threads
+) {
+    if (num_queries == 0) {
+        return;
+    }
+    validate_search(queries, knn, results, dists);
+    const size_t max_values = std::numeric_limits<size_t>::max() / sizeof(float);
+    if (num_queries > max_values / dim_ || num_queries > max_values / knn) {
+        throw std::length_error("QuantizedGraph query batch is too large");
+    }
+    if (num_queries == 1) {
+        search(queries, knn, results, dists);
+        return;
+    }
+
+    struct SearchScratch {
+        std::vector<float> rotated_query;
+        std::vector<float> estimated_distances;
+        std::vector<float> lookup_table;
+        BatchQuery<float> batch_query;
+        buffer::SearchBuffer<float> search_pool;
+        buffer::SearchBuffer<float> result_pool;
+        VisitedSet visited;
+
+        SearchScratch(size_t padded_dim, size_t degree, size_t ef, size_t k, size_t points)
+            : rotated_query(padded_dim)
+            , estimated_distances(degree)
+            , lookup_table(padded_dim * 4)
+            , search_pool(ef)
+            , result_pool(k)
+            , visited(points, points / 10) {}
+    };
+
+    const auto workers = static_cast<int>(std::min(
+        {resolve_num_threads(num_threads),
+         num_queries,
+         static_cast<size_t>(std::numeric_limits<int>::max())}
+    ));
+    std::atomic<bool> failed{false};
+    std::exception_ptr error;
+    const auto capture_error = [&] {
+#pragma omp critical(rabitq_symqg_search_error)
+        {
+            if (!error) {
+                error = std::current_exception();
+            }
+        }
+        failed.store(true, std::memory_order_relaxed);
+    };
+#pragma omp parallel num_threads(workers) if (workers > 1)
+    {
+        // Allocate and release scratch on its worker, retaining it across queries.
+        std::optional<SearchScratch> scratch;
+        try {
+            scratch.emplace(padded_dim_, degree_bound_, ef_, knn, num_points_);
+        } catch (...) { capture_error(); }
+#pragma omp for schedule(dynamic)
+        for (std::ptrdiff_t query_index = 0;
+             query_index < static_cast<std::ptrdiff_t>(num_queries);
+             ++query_index) {
+            if (failed.load(std::memory_order_relaxed)) {
+                continue;
+            }
+            const size_t i = static_cast<size_t>(query_index);
+            try {
+                auto& local = *scratch;
+                search_with_scratch(
+                    queries + i * dim_,
+                    knn,
+                    results + i * knn,
+                    dists + i * knn,
+                    local.rotated_query.data(),
+                    local.estimated_distances.data(),
+                    local.lookup_table.data(),
+                    local.batch_query,
+                    local.search_pool,
+                    local.result_pool,
+                    local.visited
+                );
+            } catch (...) { capture_error(); }
+        }
+    }
+    if (error) {
+        std::rethrow_exception(error);
+    }
 }
 
 void QuantizedGraph<float>::validate_search(

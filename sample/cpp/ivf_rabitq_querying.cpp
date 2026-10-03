@@ -95,21 +95,17 @@ int run(int argc, char** argv) {
                           << ").\n";
             }
             size_t total_correct = 0;
-            float total_time = 0;
-            std::vector<PID> results(topk);
+            std::vector<PID> results(nq * topk);
+            stopw.reset();
+            ivf.search_batch(
+                query.data(), nq, topk, nprobe, results.data(), nullptr, use_hacc
+            );
+            const float total_time = stopw.get_elapsed_micro();
             for (size_t i = 0; i < nq; i++) {
-                stopw.reset();
-                const float* vector = &query(static_cast<Eigen::Index>(i), 0);
-                if (use_hacc.has_value()) {
-                    ivf.search(vector, topk, nprobe, results.data(), *use_hacc);
-                } else {
-                    ivf.search(vector, topk, nprobe, results.data());
-                }
-                total_time += stopw.get_elapsed_micro();
                 for (size_t j = 0; j < topk; j++) {
                     for (size_t k = 0; k < topk; k++) {
                         if (gt(static_cast<Eigen::Index>(i),
-                               static_cast<Eigen::Index>(k)) == results[j]) {
+                               static_cast<Eigen::Index>(k)) == results[i * topk + j]) {
                             total_correct++;
                             break;
                         }

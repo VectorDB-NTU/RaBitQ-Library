@@ -379,28 +379,39 @@ void expect_exact_assignment_matches_scalar(
     }
     for (const uint32_t threads : {1U, 4U}) {
         SCOPED_TRACE(threads);
-        std::vector<PID> labels(points, kPidMax);
-        std::vector<float> distances(points, std::numeric_limits<float>::quiet_NaN());
-        detail::exact_assign(
-            data.data(),
-            centroids.data(),
-            points,
-            dimension,
-            clusters,
-            spherical,
-            threads,
-            labels.data(),
-            distances.data()
-        );
-        EXPECT_EQ(labels, expected_labels);
-        EXPECT_EQ(distances, expected_distances);
+        // Exercise no hint, separate hints, and in-place hints as used by Lloyd.
+        // The last centroid deliberately loses ties to earlier centroid IDs.
+        const std::vector<PID> previous(points, static_cast<PID>(clusters - 1));
+        for (const int hint_mode : {0, 1, 2}) {
+            SCOPED_TRACE(hint_mode);
+            std::vector<PID> labels =
+                hint_mode == 2 ? previous : std::vector<PID>(points, kPidMax);
+            std::vector<float> distances(points, std::numeric_limits<float>::quiet_NaN());
+            const PID* hints = hint_mode == 0
+                                   ? nullptr
+                                   : (hint_mode == 1 ? previous.data() : labels.data());
+            detail::exact_assign(
+                data.data(),
+                centroids.data(),
+                points,
+                dimension,
+                clusters,
+                spherical,
+                threads,
+                labels.data(),
+                distances.data(),
+                hints
+            );
+            EXPECT_EQ(labels, expected_labels);
+            EXPECT_EQ(distances, expected_distances);
+        }
     }
 }
 
 TEST(QGKMeansTest, ExactAssignmentMatchesScalarAcrossMatrixTileTails) {
     std::mt19937 rng(741);
     std::uniform_real_distribution<float> distribution(-2.0F, 2.0F);
-    for (const size_t size : {65U, 129U}) {
+    for (const size_t size : {65U, 129U, 257U}) {
         SCOPED_TRACE(size);
         std::vector<float> data(size * size);
         std::vector<float> centroids(257 * size);
@@ -421,6 +432,20 @@ TEST(QGKMeansTest, ExactAssignmentMatchesScalarAtMaximumDimension) {
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
     std::vector<float> data(3 * kDimension);
     std::vector<float> centroids(3 * kDimension);
+    std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
+    std::generate(centroids.begin(), centroids.end(), [&] { return distribution(rng); });
+    for (const bool spherical : {false, true}) {
+        SCOPED_TRACE(spherical);
+        expect_exact_assignment_matches_scalar(data, centroids, kDimension, spherical);
+    }
+}
+
+TEST(QGKMeansTest, ExactAssignmentMatchesScalarWithManyPointBlocks) {
+    constexpr size_t kDimension = 17;
+    std::mt19937 rng(385);
+    std::uniform_real_distribution<float> distribution(-2.0F, 2.0F);
+    std::vector<float> data(4097 * kDimension);
+    std::vector<float> centroids(257 * kDimension);
     std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
     std::generate(centroids.begin(), centroids.end(), [&] { return distribution(rng); });
     for (const bool spherical : {false, true}) {
@@ -455,8 +480,8 @@ TEST(QGKMeansTest, ExactAssignmentPreservesCallerOpenMPSettings) {
 #endif
     constexpr size_t kDimension = 65;
     const std::vector<float> centroids(3 * kDimension, 1.0F);
-    // Three rows reduce the requested team to one; 65 rows use two blocks.
-    for (const size_t points : {3U, 65U}) {
+    // Cover a single worker, a partial row block, and multiple workers.
+    for (const size_t points : {3U, 65U, 513U}) {
         SCOPED_TRACE(points);
         const std::vector<float> data(points * kDimension, 0.0F);
         std::vector<PID> labels(points);

@@ -29,7 +29,7 @@ index.build(data, ef_construction=200, num_threads=32, init="pipnn")
 index.save("qg_example.index")
 
 loaded = SymqgIndex.load("qg_example.index")
-ids, distances = loaded.search(queries, k=10, ef=100, num_threads=1)
+ids, distances = loaded.search_batch(queries, k=10, ef=100, num_threads=1)
 ```
 
 `init` defaults to `"pipnn"`; use `"random"` for random initialization.
@@ -117,6 +117,32 @@ std::vector<rabitqlib::PID> ids(10);
 std::vector<float> distances(10);
 qg.search(query.data(), 10, ids.data(), distances.data());
 ```
+
+For contiguous row-major batches, `search_batch()` reuses scratch storage within
+each worker and preserves the results of independent `search()` calls:
+
+```cpp
+// queries contains num_queries * qg.dimension() floats in the original dimension.
+std::vector<rabitqlib::PID> batch_ids(num_queries * 10);
+std::vector<float> batch_distances(num_queries * 10);
+qg.search_batch(
+    queries.data(), num_queries, 10, batch_ids.data(), batch_distances.data(), 4
+);
+```
+
+The C++ signature is `search_batch(queries, num_queries, k, ids, distances,
+num_threads=1)`. Set `ef >= k` with `set_ef()` before searching. Both output
+buffers are required and contain `num_queries * k` elements. Empty C++ batches
+do no work and may use null buffers. Inputs and outputs must not overlap.
+Concurrent searches need separate outputs; do not modify the index or call
+`set_ef()` while searches are running.
+
+Python provides `search_batch(queries, k, ef, num_threads=1)`; the existing
+`search()` accepts the same two-dimensional array and remains an equivalent
+entry point. Both return `(ids, distances)` arrays of shape `(num_queries, k)`,
+including empty batches. Both APIs default to one worker; `num_threads=0`
+selects the available hardware thread count, capped by the number of queries.
+Queries use the original dimension, including when the internal rotation pads it.
 
 See `sample/cpp/symqg_indexing.cpp`, `sample/cpp/symqg_querying.cpp`, and their
 Python counterparts for complete examples.

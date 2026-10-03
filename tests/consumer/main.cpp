@@ -7,6 +7,9 @@
 
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
+#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/symqg/qg.hpp"
+#include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace {
@@ -88,6 +91,36 @@ int main() {
     if (!check_clustering(flat, data)) {
         std::cerr << "Installed RaBitQKMeans returned invalid clustering results\n";
         return 1;
+    }
+
+    rabitqlib::ivf::IVF index(kPoints, kDimension, flat.k, 4);
+    index.construct(data.data(), flat.centroids.data(), flat.assignments.data(), false, 2);
+    std::vector<rabitqlib::PID> ids(kPoints);
+    std::vector<float> distances(kPoints);
+    index.search_batch(data.data(), kPoints, 1, flat.k, ids.data(), distances.data());
+    for (size_t i = 0; i < kPoints; ++i) {
+        rabitqlib::PID id = 0;
+        float distance = 0;
+        index.search(data.data() + i * kDimension, 1, flat.k, &id, &distance);
+        if (ids[i] != id || distances[i] != distance) {
+            std::cerr << "Installed IVF batch and single-query results differ\n";
+            return 1;
+        }
+    }
+
+    rabitqlib::symqg::QuantizedGraph<float> symqg(kPoints, kDimension, 32);
+    rabitqlib::symqg::QGBuilder builder(symqg, 64, data.data(), 2);
+    builder.build();
+    symqg.set_ef(64);
+    symqg.search_batch(data.data(), kPoints, 1, ids.data(), distances.data(), 2);
+    for (size_t i = 0; i < kPoints; ++i) {
+        rabitqlib::PID id = 0;
+        float distance = 0;
+        symqg.search(data.data() + i * kDimension, 1, &id, &distance);
+        if (ids[i] != id || distances[i] != distance) {
+            std::cerr << "Installed SymphonyQG batch and single-query results differ\n";
+            return 1;
+        }
     }
     return 0;
 }
