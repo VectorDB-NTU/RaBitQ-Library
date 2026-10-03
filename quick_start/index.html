@@ -406,6 +406,39 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#add-and-remove-hnsw-vectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add and remove HNSW vectors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#threading-and-file-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threading and file paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-the-python-bindings-from-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build the Python bindings from source
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -422,6 +455,39 @@
   
     <nav class="md-nav" aria-label="C++">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#c-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C++ examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-in-another-c-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use in another C++ project
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-the-c-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install the C++ library
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#run-the-c-tests-on-linux" class="md-nav__link">
@@ -1141,6 +1207,39 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#add-and-remove-hnsw-vectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add and remove HNSW vectors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#threading-and-file-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threading and file paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-the-python-bindings-from-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build the Python bindings from source
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1157,6 +1256,39 @@
   
     <nav class="md-nav" aria-label="C++">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#c-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C++ examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#use-in-another-c-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use in another C++ project
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-the-c-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install the C++ library
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#run-the-c-tests-on-linux" class="md-nav__link">
@@ -1268,10 +1400,12 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 
 <h2 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h2>
 <h3 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.5.1"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.5.2"</span>
 </code></pre></div>
 <p>The clustering examples require 0.5.0 or newer; the IVF update example requires
-0.5.1 or newer. For unreleased changes,
+0.5.1 or newer. HNSW <code>add()</code>/<code>resize()</code>/<code>remove()</code> require 0.5.2 or newer; see
+the <a href="../index/hnsw/#updating-an-index">HNSW update guide</a>. Python
+<code>SymqgIndex.search_batch()</code> also requires 0.5.2 or newer. For unreleased changes,
 <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes">install from a checkout</a>.</p>
 <p>Wheels target the platforms above and require no compiler or CMake.
 Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
@@ -1328,49 +1462,71 @@ not reused, and both additions and removals survive save/load. See the
 <p>The <code>metric</code> argument accepts <code>"l2"</code> and <code>"ip"</code> (also spelled
 <code>"innerproduct"</code>). To search by cosine similarity, normalize database and
 query vectors first and use <code>metric="ip"</code>.</p>
+<h3 id="add-and-remove-hnsw-vectors">Add and remove HNSW vectors<a class="headerlink" href="#add-and-remove-hnsw-vectors" title="Permanent link">&para;</a></h3>
+<p>With 0.5.2 or newer, reuse <code>data</code>, <code>queries</code>, and <code>clustering</code> from the IVF
+example above to build and update an HNSW index:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">HnswIndex</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">hnsw</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="p">(</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">dim</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">max_elements</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">M</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">)</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">hnsw</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">centroids</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">assignments</span><span class="p">)</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># HNSW needs explicit capacity growth before adding beyond max_elements.</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">new_vectors</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="mi">50</span><span class="p">,</span> <span class="mi">64</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">hnsw</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">hnsw</span><span class="o">.</span><span class="n">max_elements</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">))</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">)</span>  <span class="c1"># automatic nearest-centroid routing</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>  <span class="c1"># returns 10</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</code></pre></div>
+<p>Removed points remain in the graph and count toward capacity, but never appear
+in results. Additions and removals survive save/load; files containing HNSW
+removals require 0.5.2 or newer. Do not update an index while it is being searched.
+See the <a href="../index/hnsw/#updating-an-index">HNSW update guide</a> for recall and capacity
+considerations.</p>
 <p>See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/python">Python examples</a>
 for IVF, HNSW, and SymphonyQG. For clustering, choose
 <a href="../clustering/#rabitqkmeans">RaBitQKMeans</a> for flat assignment, recommended for small cluster
 counts, or <a href="../clustering/#qgkmeans">QGKMeans</a> for graph assignment.</p>
-<details>
-<summary>Build the Python bindings from source</summary>
-
-Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.20 or
+<h3 id="threading-and-file-paths">Threading and file paths<a class="headerlink" href="#threading-and-file-paths" title="Permanent link">&para;</a></h3>
+<p>For all three indexes, <code>build</code> and <code>search</code> interpret <code>num_threads=0</code> as the
+detected hardware thread count. Larger requests are capped at that count;
+smaller positive requests are respected. Operations may use fewer workers when
+there are fewer work items. If hardware detection is unavailable, one thread is
+used. Python index methods default to one thread when <code>num_threads</code> is omitted.</p>
+<p>Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
+in C++; Python paths are Unicode strings on all platforms.</p>
+<h3 id="build-the-python-bindings-from-source">Build the Python bindings from source<a class="headerlink" href="#build-the-python-bindings-from-source" title="Permanent link">&para;</a></h3>
+<p>Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.20 or
 newer, and OpenMP. To install the current development version on Ubuntu or
-Debian:
-
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>build-essential<span class="w"> </span>cmake<span class="w"> </span>libomp-dev
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-Library
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.
+Debian:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>build-essential<span class="w"> </span>cmake<span class="w"> </span>libomp-dev
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-Library
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.
 </code></pre></div>
-
-On Apple Silicon, use a native ARM64 Python environment. From the repository root:
-
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>brew<span class="w"> </span>install<span class="w"> </span>cmake<span class="w"> </span>ninja<span class="w"> </span>libomp
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.<span class="w"> </span>-Ccmake.define.OpenMP_ROOT<span class="o">=</span><span class="s2">"</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>libomp<span class="k">)</span><span class="s2">"</span>
+<p>On Apple Silicon, use a native ARM64 Python environment. From the repository root:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>brew<span class="w"> </span>install<span class="w"> </span>cmake<span class="w"> </span>ninja<span class="w"> </span>libomp
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.<span class="w"> </span>-Ccmake.define.OpenMP_ROOT<span class="o">=</span><span class="s2">"</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>libomp<span class="k">)</span><span class="s2">"</span>
 </code></pre></div>
-
-On Windows, install the build tools listed above, then run `python -m pip install .`
+<p>On Windows, install the build tools listed above, then run <code>python -m pip install .</code>
 from the repository root. For a portable source build on any supported platform,
-also pass `-Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`.
-
-</details>
-
+also pass <code>-Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code>.</p>
 <h2 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h2>
 <p>On Linux, clone the repository and build the library and examples:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-Library
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-Library
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
 </code></pre></div>
 <p>CMake enables native CPU tuning by default where supported by the compiler.
 For portable binaries within a supported OS and architecture, configure with
 <code>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code>; runtime kernel selection remains active.
 See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/README.md#quick-start">platform-specific build commands</a>
 for Linux ARM64, Windows, and Apple Silicon.</p>
+<h3 id="c-examples">C++ examples<a class="headerlink" href="#c-examples" title="Permanent link">&para;</a></h3>
 <p>Example executables are written to <code>bin/</code>. Their source demonstrates complete
 indexing and querying workflows:</p>
 <ul>
@@ -1379,10 +1535,53 @@ indexing and querying workflows:</p>
 <li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/symqg_indexing.cpp">SymphonyQG</a></li>
 <li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/quantizer.cpp">Low-level quantization</a></li>
 </ul>
+<p>The low-level quantization example is provided as source and is not currently a
+CMake target. For the GIST benchmark workflow, see
+<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/example.sh"><code>example.sh</code></a>.</p>
+<h3 id="use-in-another-c-project">Use in another C++ project<a class="headerlink" href="#use-in-another-c-project" title="Permanent link">&para;</a></h3>
+<p>The C++ API and ABI are still evolving. For reproducible builds, pin a release
+or commit and include RaBitQ-Library as a Git submodule:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>git<span class="w"> </span>submodule<span class="w"> </span>add<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git<span class="w"> </span>third_party/rabitqlib
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>&lt;release-or-commit&gt;
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>git<span class="w"> </span>add<span class="w"> </span>third_party/rabitqlib
+</code></pre></div>
+<p>Add the library and link its namespaced target in your <code>CMakeLists.txt</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_SAMPLES</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">add_subdirectory</span><span class="p">(</span><span class="s">third_party/rabitqlib</span><span class="p">)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::rabitqlib</span><span class="p">)</span>
+</code></pre></div>
+<p>Update the pinned revision deliberately when adopting upstream changes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>fetch
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>&lt;release-or-commit&gt;
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>git<span class="w"> </span>add<span class="w"> </span>third_party/rabitqlib
+</code></pre></div>
+<h3 id="install-the-c-library">Install the C++ library<a class="headerlink" href="#install-the-c-library" title="Permanent link">&para;</a></h3>
+<p>Installation is useful for package managers, container images, and shared server
+environments. Disable native optimization for use on other CPUs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-DRABITQ_BUILD_SAMPLES<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>-DCMAKE_INSTALL_PREFIX<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>cmake<span class="w"> </span>--install<span class="w"> </span>build
+</code></pre></div>
+<p>Consume the installed package with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="p">)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::rabitqlib</span><span class="p">)</span>
+</code></pre></div>
+<p>For a non-system prefix, point CMake to the installation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+</code></pre></div>
+<p>Both submodule and installed-package integration require OpenMP on the consuming
+system. The <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/consumer">downstream consumer test</a>
+provides a complete installed-package example.</p>
 <h3 id="run-the-c-tests-on-linux">Run the C++ tests on Linux<a class="headerlink" href="#run-the-c-tests-on-linux" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DRABITQ_BUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DRABITQ_BUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
 </code></pre></div>
 <p>GoogleTest is downloaded during test configuration.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>

@@ -1043,6 +1043,10 @@
 </ol>
 <p>RaBitQ has a unique advantage in reranking due to its theoretical error bound. It can skip reranking a candidate if the lower bound of its estimated distance is larger than the upper bound of the distance of the nearest neighbors. </p>
 <p>Based on error bounds, it is possible to rerank <strong>fewer than <span class="arithmatex"><span class="MathJax_Preview">K</span><script type="math/tex">K</script></span> vectors</strong> to achieve nearly perfect recall - it only reranks the vectors on the boundaries of KNNs.</p>
+<p>This is an application-level strategy, not a built-in disk-retrieval API.
+HNSW stores quantized vectors, so applications must retain raw vectors separately
+for exact reranking. <a href="../../index/ivf/#index-construction">IVF raw mode</a>
+(<code>nbits=32</code>) instead owns the original vectors and reranks them in memory.</p>
 <h2 id="algorithm-description">Algorithm Description<a class="headerlink" href="#algorithm-description" title="Permanent link">&para;</a></h2>
 <p>Let <span class="arithmatex"><span class="MathJax_Preview">K</span><script type="math/tex">K</script></span> be the number of nearest neighbors we target. After receiving the candidates and their estimated distances from an index, e.g., HNSW + RaBitQ, we perform the following strategy of reranking to minimize the number of retrieved raw vectors from disks.</p>
 <ol>

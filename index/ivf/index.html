@@ -1262,7 +1262,7 @@ the original data can be released after construction.</p>
 temporary storage uses at most <code>workers * 32 * padded_dim * sizeof(float)</code> bytes,
 independently of cluster sizes.</p>
 <p>After construction, you can directly save the index file to disk:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="n">outoput_index_file</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="n">output_index_file</span><span class="p">);</span>
 </code></pre></div>
 Raw-mode files use a magic/version header and include both the original vectors
 and the rotation state. Loading restores the mode automatically, so querying
@@ -1323,7 +1323,7 @@ remaining quantized bits or the stored raw vectors. Raw reranking computes
 squared L2 or <code>1 - dot(query, vector)</code> in the original coordinates; the search
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top <code>k</code> results after scanning the selected clusters.</p>
-<p>For multiple queries, <code>search_batch</code> distributes queries across workers.
+<p>Starting with 0.5.2, C++ <code>search_batch</code> distributes multiple queries across workers.
 Input queries are contiguous row-major float32
 vectors with shape <code>(num_queries, dimension())</code>; output buffers have shape
 <code>(num_queries, k)</code>.</p>
@@ -1340,8 +1340,9 @@ Python's existing <code>index.search(queries, k, nprobe, num_threads=4)</code> u
 batch path with the same output and precision rules.</p>
 <h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
 <p>Starting with 0.5.1, C++ <code>IVF</code> and Python <code>IvfIndex</code> support <code>add()</code> and <code>remove()</code>
-on a constructed or loaded index without the original dataset. These methods
-are specific to IVF. The index file format does not change.</p>
+on a constructed or loaded index without the original dataset. HNSW provides
+its own <a href="../hnsw/#updating-an-index">update APIs</a> starting with 0.5.2.
+IVF updates preserve the index file format.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::add</span><span class="p">(</span>
 <a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
 <a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>

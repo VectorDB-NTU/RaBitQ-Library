@@ -1417,8 +1417,10 @@ removed entry point keeps the estimate already computed for it (the full-bits on
 when nbits &gt; 1). A removed neighbor is not refined and enters <code>candidate_set</code> with
 its 1-bit estimate.</p>
 <h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
-<p>A constructed or loaded index can gain points without the original data. The
-index file format does not change.</p>
+<p>Starting with 0.5.2, a constructed or loaded index supports <code>add()</code>, <code>resize()</code>,
+and <code>remove()</code> without the original data. Adding points and resizing preserve
+the index file format; files with removals have
+<a href="#how-removal-is-stored">compatibility restrictions</a>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">PID</span><span class="o">&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">add</span><span class="p">(</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
@@ -1435,7 +1437,8 @@ index file format does not change.</p>
 <li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, num_clusters)</code>. When it
   is <code>nullptr</code>, each vector goes to its nearest centroid, chosen the same way a
   query is routed.</li>
-<li><strong>faster</strong>, <strong>num_threads</strong>: Same as in <code>construct</code>. A point keeps the label
+<li><strong>faster</strong>, <strong>num_threads</strong>: Same meaning as in <code>construct</code>, but <code>add</code> defaults
+  to one thread; pass <code>0</code> to auto-select. A point keeps the label
   <code>num_points() + i</code> whatever order the threads finish in, because the slots are
   reserved as one block before the inserts start.</li>
 <li><strong>new_max_elements</strong>: The new capacity. It must be at least <code>num_points()</code>.
@@ -1444,8 +1447,9 @@ index file format does not change.</p>
 </ul>
 <p>In Python:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>                       <span class="c1"># route to the nearest centroids</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">cluster_ids</span><span class="o">=</span><span class="n">labels</span><span class="p">)</span>   <span class="c1"># or choose the clusters</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">index</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">max_elements</span> <span class="o">+</span> <span class="mi">100_000</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># Alternatively, choose the clusters instead of the call above:</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># new_ids = index.add(vectors, cluster_ids=labels)</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">index</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">max_elements</span> <span class="o">+</span> <span class="mi">100_000</span><span class="p">)</span>
 </code></pre></div>
 <p>It is not safe to call <code>add</code> or <code>resize</code> while another thread searches the same
 index.</p>
