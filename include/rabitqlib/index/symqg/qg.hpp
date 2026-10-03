@@ -59,11 +59,14 @@ class QuantizedGraph<float> {
     std::vector<float> centroid_;   // rotated global centroid for qg-quant
     ex_ipfunc quantized_ip_func_ = nullptr;
 
-    using RowStorage = std::vector<float, memory::AlignedAllocator<float, 1 << 22, true>>;
+    using RowStorage =
+        std::vector<float, memory::DefaultInitAlignedAllocator<float, 64, true>>;
     // Complete rows are contiguous in both raw and quantized modes:
     // vector/code, neighbor quantization data, then packed neighbor IDs.
     // Typed storage establishes float lifetimes for raw vectors; packed portions
     // are accessed only as bytes, never as float values.
+    // Builders and load() fill rows before use; leave scalars uninitialized so
+    // construction workers first-touch their own pages instead of zeroing serially.
     RowStorage data_;
     std::unique_ptr<Rotator<float>> rotator_;  // data rotator
 
@@ -234,6 +237,25 @@ class QuantizedGraph<float> {
         uint32_t* __restrict__ results,
         float* __restrict__ dists
     );
+
+    /**
+     * Search contiguous row-major queries, using the window set by set_ef().
+     * queries contains num_queries * dimension() floats; results and dists
+     * each hold num_queries * knn elements. Empty batches do no work.
+     * Scratch is reused within each worker. num_threads defaults to one;
+     * zero selects the available hardware thread count, capped by the batch.
+     * Input and output buffers must not overlap. Concurrent searches require
+     * separate outputs and no index mutation, including set_ef().
+     */
+    void search_batch(
+        const float* queries,
+        size_t num_queries,
+        uint32_t knn,
+        uint32_t* results,
+        float* dists,
+        size_t num_threads = 1
+    );
+
     /**
      * Search using caller-owned scratch buffers.
      *

@@ -4,11 +4,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 
-#include <algorithm>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -22,7 +19,6 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/utils/rotator.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
 namespace py = pybind11;
 
@@ -118,45 +114,14 @@ class SymqgIndex {
         auto dists = py::array_t<float>(shape);
         auto* ids_data = ids.mutable_data();
         auto* dists_data = dists.mutable_data();
-
-        const auto* queries_data = query_array.data();
-        const auto workers = static_cast<int>(std::max<size_t>(
-            1,
-            std::min(
-                {resolve_num_threads(num_threads),
-                 nq,
-                 static_cast<size_t>(std::numeric_limits<int>::max())}
-            )
-        ));
-        std::atomic<bool> failed{false};
-        std::exception_ptr error;
-#pragma omp parallel for num_threads(workers) if (workers > 1) schedule(dynamic)
-        for (std::ptrdiff_t query_index = 0; query_index < static_cast<std::ptrdiff_t>(nq);
-             ++query_index) {
-            const size_t idx = static_cast<size_t>(query_index);
-            if (failed.load(std::memory_order_relaxed)) {
-                continue;
-            }
-            try {
-                index_->search(
-                    queries_data + (idx * dim_),
-                    static_cast<uint32_t>(k),
-                    ids_data + (idx * k),
-                    dists_data + (idx * k)
-                );
-            } catch (...) {
-#pragma omp critical(rabitq_symqg_search_error)
-                {
-                    if (!error) {
-                        error = std::current_exception();
-                    }
-                }
-                failed.store(true, std::memory_order_relaxed);
-            }
-        }
-        if (error) {
-            std::rethrow_exception(error);
-        }
+        index_->search_batch(
+            query_array.data(),
+            nq,
+            static_cast<uint32_t>(k),
+            ids_data,
+            dists_data,
+            num_threads
+        );
 
         return py::make_tuple(ids, dists);
     }
@@ -224,6 +189,14 @@ void register_symqg(py::module_& m) {
         )
         .def(
             "search",
+            &SymqgIndex::search,
+            py::arg("queries"),
+            py::arg("k"),
+            py::arg("ef"),
+            py::arg("num_threads") = 1
+        )
+        .def(
+            "search_batch",
             &SymqgIndex::search,
             py::arg("queries"),
             py::arg("k"),

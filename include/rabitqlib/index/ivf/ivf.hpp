@@ -1,7 +1,10 @@
 #pragma once
 
+#include <omp.h>
+
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -12,6 +15,7 @@
 #include <ios>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -65,7 +69,7 @@ class IVF {
     static constexpr uint32_t kRawFormatVersion = 1;
 
     void
-    quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, const quant::RabitqConfig&);
+    quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, float*, const quant::RabitqConfig&);
 
     void
     extend_cluster(const Cluster&, const std::vector<PID>&, const float*, const float*, PID, char*, char*, PID*, const quant::RabitqConfig&)
@@ -163,6 +167,8 @@ class IVF {
     scan_one_batch(const char* batch_data, const char* ex_data, const PID* ids, const SplitBatchQuery<float>& q_obj, buffer::SearchBuffer<float>& knns, size_t num_points, bool, const float*)
         const;
 
+    void validate_search(const float*, size_t, size_t, const PID*) const;
+
    public:
     explicit IVF() = default;
     explicit IVF(
@@ -237,6 +243,25 @@ class IVF {
     void search(const float*, size_t, size_t, PID*, bool) const;
 
     void search(const float*, size_t, size_t, PID*, float*, bool) const;
+
+    /**
+     * Search contiguous row-major queries using at most num_threads workers.
+     * queries contains num_queries * dimension() floats. results and optional
+     * dists each hold num_queries * k elements. Empty batches do no work.
+     * use_hacc defaults to the same automatic policy as search().
+     * Input and output buffers must not overlap. Concurrent calls are safe if
+     * the index is not being modified and their output buffers are separate.
+     */
+    void search_batch(
+        const float* queries,
+        size_t num_queries,
+        size_t k,
+        size_t nprobe,
+        PID* results,
+        float* dists = nullptr,
+        std::optional<bool> use_hacc = std::nullopt,
+        size_t num_threads = 1
+    ) const;
 
     [[nodiscard]] size_t padded_dim() const { return this->padded_dim_; }
 
@@ -333,7 +358,15 @@ inline void IVF::construct(
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
-    num_threads = resolve_num_threads(num_threads);
+    num_threads = std::min(resolve_num_threads(num_threads), num_cluster_);
+    const size_t scratch_points =
+        std::min(fastscan::kBatchSize, *std::max_element(counts.begin(), counts.end()));
+    // Each worker reuses one batch, independently of the largest cluster size.
+    // Allocate before entering OpenMP so allocation failures reach the caller.
+    std::vector<std::vector<float>> rotated_blocks(num_threads);
+    for (auto& block : rotated_blocks) {
+        block.resize(scratch_points * padded_dim_);
+    }
     /* Quantize each cluster */
 #pragma omp parallel for schedule(dynamic) num_threads(num_threads)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_cluster_);
@@ -342,7 +375,15 @@ inline void IVF::construct(
         const float* cur_centroid = centroids + (i * dim_);
         float* cur_rotated_c = &rotated_centroids[i * padded_dim_];
         Cluster& cp = cluster_lst_[i];
-        quantize_cluster(cp, id_lists[i], data, cur_centroid, cur_rotated_c, config);
+        quantize_cluster(
+            cp,
+            id_lists[i],
+            data,
+            cur_centroid,
+            cur_rotated_c,
+            rotated_blocks[static_cast<size_t>(omp_get_thread_num())].data(),
+            config
+        );
     }
 
     this->initer_->add_vectors(rotated_centroids.data(), num_threads);
@@ -407,6 +448,7 @@ inline void IVF::quantize_cluster(
     const float* data,
     const float* cur_centroid,
     float* rotated_centroid,
+    float* rotated_data,
     const quant::RabitqConfig& config
 ) {
     size_t num_points = IDs.size();
@@ -420,25 +462,24 @@ inline void IVF::quantize_cluster(
     // rotate centroid
     this->rotator_->rotate(cur_centroid, rotated_centroid);
 
-    // rotate vectors for this cluster
-    std::vector<float> rotated_data(padded_dim_ * num_points);
-    for (size_t i = 0; i < num_points; ++i) {
-        const float* vector = data + (IDs[i] * dim_);
-        rotator_->rotate(vector, rotated_data.data() + (i * padded_dim_));
-        if (raw_reranking_) {
-            std::memcpy(
-                cp.ex_data() + (i * rerank_vector_bytes()), vector, rerank_vector_bytes()
-            );
-        }
-    }
-
     char* batch_data = cp.batch_data();
     char* ex_data = cp.ex_data();
     for (size_t i = 0; i < num_points; i += fastscan::kBatchSize) {
         size_t n = std::min(fastscan::kBatchSize, num_points - i);
+        for (size_t j = 0; j < n; ++j) {
+            const float* vector = data + (IDs[i + j] * dim_);
+            rotator_->rotate(vector, rotated_data + (j * padded_dim_));
+            if (raw_reranking_) {
+                std::memcpy(
+                    cp.ex_data() + ((i + j) * rerank_vector_bytes()),
+                    vector,
+                    rerank_vector_bytes()
+                );
+            }
+        }
 
         quant::quantize_split_batch(
-            rotated_data.data() + (i * padded_dim_),
+            rotated_data,
             rotated_centroid,
             n,
             padded_dim_,
@@ -931,23 +972,7 @@ inline void IVF::search(
     float* __restrict__ dists,
     bool use_hacc
 ) const {
-    if (!ready_ || initer_ == nullptr || rotator_ == nullptr ||
-        cluster_lst_.size() != num_cluster_ || batch_storage_.empty() ||
-        id_storage_.size() != num_) {
-        throw std::logic_error("IVF index must be constructed or loaded before search");
-    }
-    if (query == nullptr) {
-        throw std::invalid_argument("IVF search query must not be null");
-    }
-    if (results == nullptr) {
-        throw std::invalid_argument("IVF search results must not be null");
-    }
-    if (k == 0 || k > num_ || k > buffer::kSearchBufferMaxPointCount) {
-        throw std::invalid_argument("IVF search k must be between 1 and the point count");
-    }
-    if (nprobe == 0) {
-        throw std::invalid_argument("IVF search nprobe must be positive");
-    }
+    validate_search(query, k, nprobe, results);
 
     nprobe = std::min(nprobe, num_cluster_);  // corner case
     std::vector<float> rotated_query(padded_dim_);
@@ -994,6 +1019,99 @@ inline void IVF::search(
         knns.copy_results(results);
     }
     std::fill(results + found, results + k, kPidMax);
+}
+
+inline void IVF::search_batch(
+    const float* queries,
+    size_t num_queries,
+    size_t k,
+    size_t nprobe,
+    PID* results,
+    float* dists,
+    std::optional<bool> use_hacc,
+    size_t num_threads
+) const {
+    if (num_queries == 0) {
+        return;
+    }
+    validate_search(queries, k, nprobe, results);
+    const size_t max_values = std::numeric_limits<size_t>::max() / sizeof(float);
+    if (num_queries > max_values / dim_ || num_queries > max_values / k) {
+        throw std::length_error("IVF query batch is too large");
+    }
+    nprobe = std::min(nprobe, num_cluster_);
+    const bool hacc = use_hacc.value_or(!raw_reranking_ && ex_bits_ > 2);
+    const size_t workers = num_queries == 1 || num_threads == 1
+                               ? 1
+                               : std::min(resolve_num_threads(num_threads), num_queries);
+    if (workers == 1) {
+        for (size_t i = 0; i < num_queries; ++i) {
+            search(
+                queries + i * dim_,
+                k,
+                nprobe,
+                results + i * k,
+                dists == nullptr ? nullptr : dists + i * k,
+                hacc
+            );
+        }
+        return;
+    }
+    std::atomic<bool> failed{false};
+    std::exception_ptr error;
+    const auto capture_error = [&] {
+#pragma omp critical(rabitq_ivf_search_error)
+        {
+            if (!error) {
+                error = std::current_exception();
+            }
+        }
+        failed.store(true, std::memory_order_relaxed);
+    };
+#pragma omp parallel for num_threads(workers) schedule(dynamic)
+    for (std::ptrdiff_t query_index = 0;
+         query_index < static_cast<std::ptrdiff_t>(num_queries);
+         ++query_index) {
+        if (failed.load(std::memory_order_relaxed)) {
+            continue;
+        }
+        const size_t i = static_cast<size_t>(query_index);
+        try {
+            search(
+                queries + i * dim_,
+                k,
+                nprobe,
+                results + i * k,
+                dists == nullptr ? nullptr : dists + i * k,
+                hacc
+            );
+        } catch (...) { capture_error(); }
+    }
+    if (error) {
+        std::rethrow_exception(error);
+    }
+}
+
+inline void IVF::validate_search(
+    const float* query, size_t k, size_t nprobe, const PID* results
+) const {
+    if (!ready_ || initer_ == nullptr || rotator_ == nullptr ||
+        cluster_lst_.size() != num_cluster_ || batch_storage_.empty() ||
+        id_storage_.size() != num_) {
+        throw std::logic_error("IVF index must be constructed or loaded before search");
+    }
+    if (query == nullptr) {
+        throw std::invalid_argument("IVF search query must not be null");
+    }
+    if (results == nullptr) {
+        throw std::invalid_argument("IVF search results must not be null");
+    }
+    if (k == 0 || k > num_ || k > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("IVF search k must be between 1 and the point count");
+    }
+    if (nprobe == 0) {
+        throw std::invalid_argument("IVF search nprobe must be positive");
+    }
 }
 
 inline void IVF::search_cluster(

@@ -37,7 +37,7 @@ def main(args=None) -> None:
     for i_probe, ef in enumerate(EFS):
         for r in range(args.test_rounds):
             t0 = perf_counter()
-            ids, _ = idx.search(
+            ids, _ = idx.search_batch(
                 queries, k=args.topk, ef=ef, num_threads=args.num_threads
             )
             elapsed = perf_counter() - t0  # seconds

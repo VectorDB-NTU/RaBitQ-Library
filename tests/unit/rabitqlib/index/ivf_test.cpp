@@ -12,6 +12,7 @@
 #include <ios>
 #include <iterator>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -24,6 +25,112 @@
 
 namespace rabitqlib::ivf {
 namespace {
+
+TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
+    constexpr size_t kNum = 97, kDim = 65, kClusters = 4, kQueries = 13, k = 7;
+    std::mt19937 rng(73);
+    std::uniform_real_distribution<float> random(-1, 1);
+    std::vector<float> data(kNum * kDim), centroids(kClusters * kDim);
+    std::vector<float> queries(kQueries * kDim);
+    std::vector<PID> labels(kNum);
+    std::generate(data.begin(), data.end(), [&] { return random(rng); });
+    std::generate(centroids.begin(), centroids.end(), [&] { return random(rng); });
+    std::generate(queries.begin(), queries.end(), [&] { return random(rng); });
+    for (size_t i = 0; i < kNum; ++i) {
+        labels[i] = static_cast<PID>(i % (kClusters - 1));
+    }
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 32U}) {
+            IVF index(kNum, kDim, kClusters, bits, metric);
+            index.construct(data.data(), centroids.data(), labels.data(), false, 1);
+            std::array<PID, kQueries * k> expected{}, actual{}, ids_only{};
+            std::array<float, kQueries * k> expected_distances{}, actual_distances{};
+            for (size_t nprobe : {1U, 99U}) {
+                for (std::optional<bool> hacc :
+                     {std::optional<bool>{},
+                      std::optional<bool>(false),
+                      std::optional<bool>(true)}) {
+                    for (size_t i = 0; i < kQueries; ++i) {
+                        index.search(
+                            queries.data() + i * kDim,
+                            k,
+                            nprobe,
+                            expected.data() + i * k,
+                            expected_distances.data() + i * k,
+                            hacc.value_or(bits >= 4 && bits <= 9)
+                        );
+                    }
+                    for (size_t threads : {1U, 4U}) {
+                        index.search_batch(
+                            queries.data(),
+                            kQueries,
+                            k,
+                            nprobe,
+                            actual.data(),
+                            actual_distances.data(),
+                            hacc,
+                            threads
+                        );
+                        index.search_batch(
+                            queries.data(),
+                            kQueries,
+                            k,
+                            nprobe,
+                            ids_only.data(),
+                            nullptr,
+                            hacc,
+                            threads
+                        );
+                        EXPECT_EQ(actual, expected);
+                        EXPECT_EQ(ids_only, expected);
+                        EXPECT_EQ(actual_distances, expected_distances);
+                    }
+                }
+            }
+            EXPECT_NO_THROW(index.search_batch(nullptr, 0, k, 1, nullptr));
+            EXPECT_THROW(
+                index.search_batch(
+                    queries.data(), std::numeric_limits<size_t>::max(), k, 1, actual.data()
+                ),
+                std::length_error
+            );
+            EXPECT_THROW(
+                index.search_batch(nullptr, 1, k, 1, actual.data()), std::invalid_argument
+            );
+            EXPECT_THROW(
+                index.search_batch(queries.data(), 1, 0, 1, actual.data()),
+                std::invalid_argument
+            );
+            EXPECT_THROW(
+                index.search_batch(queries.data(), 1, k, 0, actual.data()),
+                std::invalid_argument
+            );
+            EXPECT_THROW(
+                index.search_batch(queries.data(), 1, k, 1, nullptr), std::invalid_argument
+            );
+            std::vector<PID> removed(kNum);
+            std::iota(removed.begin(), removed.end(), PID{0});
+            index.remove(removed.data(), kNum);
+            index.search_batch(
+                queries.data(),
+                kQueries,
+                k,
+                4,
+                actual.data(),
+                actual_distances.data(),
+                std::nullopt,
+                4
+            );
+            for (size_t i = 0; i < actual.size(); ++i) {
+                EXPECT_EQ(actual[i], kPidMax);
+                EXPECT_EQ(actual_distances[i], std::numeric_limits<float>::infinity());
+            }
+        }
+    }
+    IVF empty;
+    PID id = 0;
+    EXPECT_THROW(empty.search_batch(queries.data(), 1, 1, 1, &id), std::logic_error);
+}
 
 TEST(IvfSearchTest, BatchCandidatesPreserveTiesAndTailCount) {
     buffer::SearchBuffer<float> knns(3);
@@ -527,6 +634,48 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
         }
     }
     std::remove(base_path.c_str());
+    std::remove(path.c_str());
+}
+
+TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAndTails) {
+    // Cluster sizes 0, 1, 32, 97 cover empty rows and multiple physical tail batches.
+    constexpr size_t kCount = 130;
+    const auto points = random_rows(kCount, 731);
+    const auto centroids = random_rows(kDynClusters, 732);
+    std::vector<PID> assigned(kCount, 3);
+    assigned[0] = 1;
+    std::fill(assigned.begin() + 1, assigned.begin() + 33, PID{2});
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_rebuild.index";
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (auto rotation : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
+            for (size_t bits : {1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL, 32UL}) {
+                SCOPED_TRACE(
+                    ::testing::Message() << "bits=" << bits << " metric=" << metric
+                );
+                IVF incremental(1, kDynDim, kDynClusters, bits, metric, rotation);
+                incremental.construct(
+                    points.data(), centroids.data(), assigned.data(), false, 1
+                );
+                incremental.add(
+                    points.data() + kDynDim, kCount - 1, assigned.data() + 1, false, 1
+                );
+                const std::string expected = saved_bytes(incremental, path);
+                IVF rebuilt;
+                rebuilt.load(path.c_str());
+                for (size_t threads : {1UL, 4UL}) {
+                    rebuilt.construct(
+                        points.data(), centroids.data(), assigned.data(), false, threads
+                    );
+                    EXPECT_EQ(saved_bytes(rebuilt, path), expected);
+                    const auto actual_hits = search_everything(rebuilt, points.data());
+                    const auto expected_hits =
+                        search_everything(incremental, points.data());
+                    EXPECT_EQ(actual_hits.ids, expected_hits.ids);
+                    EXPECT_EQ(actual_hits.distances, expected_hits.distances);
+                }
+            }
+        }
+    }
     std::remove(path.c_str());
 }
 

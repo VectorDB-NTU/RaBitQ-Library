@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <ios>
 #include <limits>
 #include <memory>
@@ -142,6 +143,9 @@ struct QGConstructionTestAccess {
             result.insert(result.end(), row, row + graph.row_offset_);
         }
         return result;
+    }
+    static void fill_storage(QuantizedGraph<float>& graph, float value) {
+        std::fill(graph.data_.begin(), graph.data_.end(), value);
     }
     static void check_contiguous_rows(QuantizedGraph<float>& graph) {
         const size_t vector_bytes =
@@ -1051,6 +1055,42 @@ TEST(QGConstructionTest, InitializesUnusedPartialBatchFactors) {
     }
 }
 
+TEST(QGConstructionTest, FullyInitializesRowsBeforeSearchAndSave) {
+    constexpr size_t kCount = 65, kDim = 65;
+    std::vector<float> data(kCount * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.13F);
+    }
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {0U, 4U, 8U}) {
+            for (auto init : {QGInitialization::PiPNN, QGInitialization::Random}) {
+                SCOPED_TRACE(
+                    ::testing::Message()
+                    << metric << "/" << bits << "/" << static_cast<int>(init)
+                );
+                QuantizedGraph<float> zeroed(
+                    kCount, kDim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                );
+                QuantizedGraph<float> poisoned(
+                    kCount, kDim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                );
+                QGConstructionTestAccess::fill_storage(zeroed, 0.0F);
+                QGConstructionTestAccess::fill_storage(
+                    poisoned, std::numeric_limits<float>::quiet_NaN()
+                );
+                QGBuilder zeroed_builder(zeroed, 48, data.data(), 1, init, 42);
+                QGBuilder poisoned_builder(poisoned, 48, data.data(), 1, init, 42);
+                zeroed_builder.build();
+                poisoned_builder.build();
+                EXPECT_EQ(
+                    QGConstructionTestAccess::rows(zeroed),
+                    QGConstructionTestAccess::rows(poisoned)
+                );
+            }
+        }
+    }
+}
+
 TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
     constexpr size_t kCount = 97, kDim = 65, kDegree = 64;
     constexpr std::array<size_t, 6> kDegrees{0, 1, 31, 32, 33, 64};
@@ -1073,6 +1113,9 @@ TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
             }
             QuantizedGraph<float> graph(
                 kCount, kDim, kDegree, metric, RotatorType::FhtKacRotator, bits
+            );
+            QGConstructionTestAccess::fill_storage(
+                graph, std::numeric_limits<float>::quiet_NaN()
             );
             auto builder = QGConstructionTestAccess::from_graph(
                 graph, 96, data.data(), offsets, edges, 2
@@ -1521,7 +1564,7 @@ TEST(QGSearchTest, RejectsInvalidKAndEfInsteadOfReturningPartialResults) {
     }));
 }
 
-TEST(QGSearchTest, ParallelQueriesMatchSerialAcrossIndexesAndSettings) {
+TEST(QGSearchTest, BatchAndParallelQueriesMatchSerialAcrossIndexesAndSettings) {
     constexpr size_t kNumQueries = 9;
     constexpr size_t kTopK = 5;
     for (size_t bits : {0U, 4U, 8U}) {
@@ -1574,10 +1617,165 @@ TEST(QGSearchTest, ParallelQueriesMatchSerialAcrossIndexesAndSettings) {
                         EXPECT_EQ(ids, serial_ids);
                         EXPECT_EQ(distances, serial_distances);
                     }
+                    for (size_t threads : {0U, 1U, 4U}) {
+                        SCOPED_TRACE(threads);
+                        std::array<PID, kNumQueries * kTopK> ids{};
+                        std::array<float, kNumQueries * kTopK> distances{};
+                        graph.search_batch(
+                            queries.data(),
+                            kNumQueries,
+                            kTopK,
+                            ids.data(),
+                            distances.data(),
+                            threads
+                        );
+                        EXPECT_EQ(ids, serial_ids);
+                        EXPECT_EQ(distances, serial_distances);
+                        std::fill_n(ids.data(), kTopK, kPidMax);
+                        std::fill_n(distances.data(), kTopK, -123.0F);
+                        graph.search_batch(
+                            queries.data(), 1, kTopK, ids.data(), distances.data(), threads
+                        );
+                        EXPECT_EQ(ids, serial_ids);
+                        EXPECT_EQ(distances, serial_distances);
+                    }
                 }
             }
         }
     }
+}
+
+TEST(QGSearchTest, BatchSearchValidatesBuffersSizesAndState) {
+    QuantizedGraph<float> graph(97, 65, 32, METRIC_L2, RotatorType::FhtKacRotator, 0, 42);
+    std::vector<float> data(97 * 65, 0.1F), distances(97);
+    std::vector<PID> ids(97);
+    EXPECT_NO_THROW(graph.search_batch(nullptr, 0, 0, nullptr, nullptr));
+    EXPECT_THROW(
+        graph.search_batch(data.data(), 1, 1, ids.data(), distances.data()),
+        std::logic_error
+    );
+    QGBuilder builder(graph, 64, data.data(), 1);
+    builder.build();
+    const auto reject = [&](const float* queries,
+                            size_t count,
+                            uint32_t k,
+                            PID* output,
+                            float* output_distances,
+                            const char* message) {
+        try {
+            graph.search_batch(queries, count, k, output, output_distances, 4);
+            FAIL() << "Invalid batch search accepted";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(error.what(), message);
+        }
+    };
+    reject(
+        data.data(),
+        2,
+        1,
+        ids.data(),
+        distances.data(),
+        "QuantizedGraph ef must be at least k"
+    );
+    graph.set_ef(64);
+    reject(
+        nullptr,
+        2,
+        1,
+        ids.data(),
+        distances.data(),
+        "QuantizedGraph search buffers must not be null"
+    );
+    reject(
+        data.data(),
+        2,
+        1,
+        nullptr,
+        distances.data(),
+        "QuantizedGraph search buffers must not be null"
+    );
+    reject(
+        data.data(),
+        2,
+        1,
+        ids.data(),
+        nullptr,
+        "QuantizedGraph search buffers must not be null"
+    );
+    for (uint32_t k : {0U, 98U}) {
+        reject(
+            data.data(),
+            2,
+            k,
+            ids.data(),
+            distances.data(),
+            "QuantizedGraph k must be between 1 and num_points"
+        );
+    }
+    graph.set_ef(1);
+    reject(
+        data.data(),
+        2,
+        2,
+        ids.data(),
+        distances.data(),
+        "QuantizedGraph ef must be at least k"
+    );
+    try {
+        graph.search_batch(
+            data.data(), std::numeric_limits<size_t>::max(), 1, ids.data(), distances.data()
+        );
+        FAIL() << "Oversized batch search accepted";
+    } catch (const std::length_error& error) {
+        EXPECT_STREQ(error.what(), "QuantizedGraph query batch is too large");
+    }
+    graph.set_ef(97);
+    const size_t oversized_output =
+        std::numeric_limits<size_t>::max() / sizeof(float) / 97 + 1;
+    EXPECT_THROW(
+        graph.search_batch(data.data(), oversized_output, 97, ids.data(), distances.data()),
+        std::length_error
+    );
+}
+
+TEST(QGSearchTest, ConcurrentBatchCallsMatchIndividualQueries) {
+    constexpr size_t kDimension = 65, kPoints = 65, kQueries = 9, k = 3;
+    std::vector<float> data(kPoints * kDimension);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.19F);
+    }
+    QuantizedGraph<float> graph(
+        kPoints, kDimension, 32, METRIC_IP, RotatorType::FhtKacRotator, 8, 42
+    );
+    QGBuilder builder(graph, 64, data.data(), 1);
+    builder.build();
+    graph.set_ef(48);
+    std::vector<PID> expected(2 * kQueries * k), actual(expected.size(), kPidMax);
+    std::vector<float> expected_distances(expected.size()), distances(expected.size());
+    for (size_t i = 0; i < 2 * kQueries; ++i) {
+        graph.search(
+            data.data() + i * kDimension,
+            k,
+            expected.data() + i * k,
+            expected_distances.data() + i * k
+        );
+    }
+    const auto search = [&](size_t start) {
+        graph.search_batch(
+            data.data() + start * kDimension,
+            kQueries,
+            k,
+            actual.data() + start * k,
+            distances.data() + start * k,
+            2
+        );
+    };
+    auto first = std::async(std::launch::async, search, 0);
+    auto second = std::async(std::launch::async, search, kQueries);
+    first.get();
+    second.get();
+    EXPECT_EQ(actual, expected);
+    EXPECT_EQ(distances, expected_distances);
 }
 
 }  // namespace
@@ -1615,6 +1813,18 @@ TEST(QuantizedGraphSearchTest, ScratchSearchRejectsIncompleteResults) {
         ),
         std::runtime_error
     );
+    std::vector<PID> batch_ids(2 * 66, kPidMax);
+    std::vector<float> batch_distances(2 * 66, -1.0F);
+    for (size_t threads : {1U, 4U}) {
+        try {
+            graph.search_batch(
+                data.data(), 2, 66, batch_ids.data(), batch_distances.data(), threads
+            );
+            FAIL() << "Incomplete batch results accepted";
+        } catch (const std::runtime_error& error) {
+            EXPECT_STREQ(error.what(), "QuantizedGraph search could not produce k results");
+        }
+    }
     EXPECT_TRUE(std::all_of(ids.begin(), ids.end(), [](PID id) { return id == kPidMax; }));
     EXPECT_TRUE(std::all_of(distances.begin(), distances.end(), [](float d) {
         return d == -1.0F;

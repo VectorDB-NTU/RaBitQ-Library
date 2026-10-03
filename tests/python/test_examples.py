@@ -88,6 +88,7 @@ def test_query_timing_handles_unchanged_clock(kind, elapsed, monkeypatch, capsys
     index = SimpleNamespace(
         dim=2, num_clusters=2, search=lambda *a, **kw: (ids, np.zeros((2, 1)))
     )
+    index.search_batch = index.search
     index_name = {"ivf": "IvfIndex", "hnsw": "HnswIndex", "symqg": "SymqgIndex"}[kind]
     monkeypatch.setattr(module, index_name, SimpleNamespace(load=lambda path: index))
     monkeypatch.setattr(module, "read_fvecs", lambda path: np.zeros((2, 2)))

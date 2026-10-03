@@ -42,6 +42,43 @@ inline void advise_huge_pages(void* ptr, size_t size) {
 #endif
 }
 
+inline constexpr size_t kHugePageSize = 2UL << 20;
+
+// Huge-page advice is opt-in and based on requested bytes, before rounding.
+// Small buffers retain their required alignment; Linux buffers of at least
+// 2 MiB also receive huge-page alignment. Other platforms avoid that padding.
+template <size_t Alignment, typename T, bool HugePage = false>
+inline T* align_allocate(size_t nbytes) {
+    static_assert(Alignment >= alignof(T));
+    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
+
+    if (nbytes == 0) {
+        return nullptr;
+    }
+
+    const bool huge_pages = HugePage && nbytes >= kHugePageSize;
+    size_t alignment = Alignment;
+#if defined(__linux__)
+    if (huge_pages && alignment < kHugePageSize) {
+        alignment = kHugePageSize;
+    }
+#endif
+    const size_t remainder = nbytes % alignment;
+    const size_t padding = remainder == 0 ? 0 : alignment - remainder;
+    if (nbytes > std::numeric_limits<size_t>::max() - padding) {
+        throw std::bad_array_new_length();
+    }
+    const size_t size = nbytes + padding;
+    void* ptr = aligned_allocate_bytes(alignment, size);
+    if (ptr == nullptr) {
+        throw std::bad_alloc();
+    }
+    if (huge_pages) {
+        advise_huge_pages(ptr, size);
+    }
+    return static_cast<T*>(ptr);
+}
+
 template <typename T, size_t Alignment = 64, bool HugePage = false>
 class AlignedAllocator {
    private:
@@ -50,18 +87,6 @@ class AlignedAllocator {
 
     template <typename U>
     using ReboundAllocator = AlignedAllocator<U, Alignment, HugePage>;
-
-    [[nodiscard]] static constexpr size_t aligned_size(size_t nbytes) {
-        const size_t remainder = nbytes % Alignment;
-        if (remainder == 0) {
-            return nbytes;
-        }
-        const size_t padding = Alignment - remainder;
-        if (nbytes > std::numeric_limits<size_t>::max() - padding) {
-            throw std::bad_array_new_length();
-        }
-        return nbytes + padding;
-    }
 
    public:
     using value_type = T;
@@ -94,22 +119,34 @@ class AlignedAllocator {
             throw std::bad_array_new_length();
         }
 
-        if (n == 0) {
-            return nullptr;
-        }
-
-        const auto nbytes = aligned_size(n * sizeof(T));
-        auto* ptr = aligned_allocate_bytes(Alignment, nbytes);
-        if (ptr == nullptr) {
-            throw std::bad_alloc();
-        }
-        if (HugePage) {
-            advise_huge_pages(ptr, nbytes);
-        }
-        return reinterpret_cast<T*>(ptr);
+        return align_allocate<Alignment, T, HugePage>(n * sizeof(T));
     }
 
     void deallocate(T* ptr, [[maybe_unused]] std::size_t n) { aligned_deallocate(ptr); }
+};
+
+// Retain alignment and object lifetimes without zero-filling scalar storage.
+// Callers must initialize every element before reading it.
+template <typename T, size_t Alignment = 64, bool HugePage = false>
+class DefaultInitAlignedAllocator : public AlignedAllocator<T, Alignment, HugePage> {
+    template <typename U>
+    using ReboundAllocator = DefaultInitAlignedAllocator<U, Alignment, HugePage>;
+
+   public:
+    template <typename U>
+    struct rebind {
+        using other = ReboundAllocator<U>;
+    };
+
+    constexpr DefaultInitAlignedAllocator() noexcept = default;
+
+    template <typename U>
+    constexpr explicit DefaultInitAlignedAllocator(const ReboundAllocator<U>&) noexcept {}
+
+    template <typename U>
+    void construct(U* ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
+        ::new (static_cast<void*>(ptr)) U;
+    }
 };
 
 template <typename T>
@@ -135,37 +172,12 @@ struct Allocator {
     }
 };
 
-template <size_t Alignment, typename T, bool HugePage = false>
-inline T* align_allocate(size_t nbytes) {
-    static_assert(Alignment >= alignof(T));
-    static_assert((Alignment & (Alignment - 1)) == 0, "Alignment must be a power of two");
-
-    if (nbytes == 0) {
-        return nullptr;
-    }
-
-    const size_t remainder = nbytes % Alignment;
-    const size_t padding = remainder == 0 ? 0 : Alignment - remainder;
-    if (nbytes > std::numeric_limits<size_t>::max() - padding) {
-        throw std::bad_array_new_length();
-    }
-    const size_t size = nbytes + padding;
-    void* ptr = aligned_allocate_bytes(Alignment, size);
-    if (ptr == nullptr) {
-        throw std::bad_alloc();
-    }
-    if (HugePage) {
-        advise_huge_pages(ptr, size);
-    }
-    return static_cast<T*>(ptr);
-}
-
-inline constexpr size_t kHugePageSize = 2UL << 20;
-
-// Allocate a large buffer backed by transparent huge pages.
+// Use the same size-aware policy as huge-page-enabled STL storage. Advice is
+// best-effort; actual page sizes remain under the operating system's control.
 template <typename T>
 inline T* huge_page_allocate(size_t nbytes) {
-    return align_allocate<kHugePageSize, T, true>(nbytes);
+    constexpr size_t kAlignment = alignof(T) > 64 ? alignof(T) : 64;
+    return align_allocate<kAlignment, T, true>(nbytes);
 }
 
 static inline void prefetch_l1(const void* addr) {

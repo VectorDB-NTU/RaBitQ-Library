@@ -83,6 +83,10 @@ vectors, and compute one-bit codes and factors. Quantized mode also computes
 float32 vectors instead. In raw mode, the index owns a copy of the input, so
 the original data can be released after construction.
 
+Construction reuses a rotation buffer of at most 32 vectors per worker. This
+temporary storage uses at most `workers * 32 * padded_dim * sizeof(float)` bytes,
+independently of cluster sizes.
+
 After construction, you can directly save the index file to disk:
 ```c++
 ivf.save(outoput_index_file);
@@ -156,6 +160,25 @@ remaining quantized bits or the stored raw vectors. Raw reranking computes
 squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top `k` results after scanning the selected clusters.
+
+For multiple queries, `search_batch` distributes queries across workers.
+Input queries are contiguous row-major float32
+vectors with shape `(num_queries, dimension())`; output buffers have shape
+`(num_queries, k)`.
+
+```cpp
+ivf.search_batch(queries, num_queries, k, nprobe, ids, distances,
+                 std::nullopt, 4);  // Automatic precision, up to four workers
+```
+
+The last two arguments are `std::optional<bool> use_hacc` (default
+`std::nullopt`) and `size_t num_threads` (default `1`, using OpenMP for parallel
+batches). Pass `true` or `false`
+for an explicit precision override. Distances may be `nullptr`. An empty batch
+does no work. Input and output buffers must not overlap. Simultaneous searches
+need separate output buffers, and must not overlap index updates.
+Python's existing `index.search(queries, k, nprobe, num_threads=4)` uses this
+batch path with the same output and precision rules.
 
 ## Updating an Index
 
