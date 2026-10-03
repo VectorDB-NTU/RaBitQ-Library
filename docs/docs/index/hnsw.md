@@ -107,8 +107,10 @@ its 1-bit estimate.
 
 ## Updating an Index
 
-A constructed or loaded index can gain points without the original data. The
-index file format does not change.
+Starting with 0.5.2, a constructed or loaded index supports `add()`, `resize()`,
+and `remove()` without the original data. Adding points and resizing preserve
+the index file format; files with removals have
+[compatibility restrictions](#how-removal-is-stored).
 
 ```c++
 std::vector<PID> HierarchicalNSW::add(
@@ -127,7 +129,8 @@ void HierarchicalNSW::resize(size_t new_max_elements);
 - **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When it
   is `nullptr`, each vector goes to its nearest centroid, chosen the same way a
   query is routed.
-- **faster**, **num_threads**: Same as in `construct`. A point keeps the label
+- **faster**, **num_threads**: Same meaning as in `construct`, but `add` defaults
+  to one thread; pass `0` to auto-select. A point keeps the label
   `num_points() + i` whatever order the threads finish in, because the slots are
   reserved as one block before the inserts start.
 - **new_max_elements**: The new capacity. It must be at least `num_points()`.
@@ -138,7 +141,8 @@ In Python:
 
 ```python
 new_ids = index.add(vectors)                       # route to the nearest centroids
-new_ids = index.add(vectors, cluster_ids=labels)   # or choose the clusters
+# Alternatively, choose the clusters instead of the call above:
+# new_ids = index.add(vectors, cluster_ids=labels)
 index.resize(index.max_elements + 100_000)
 ```
 

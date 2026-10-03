@@ -34,12 +34,26 @@ indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
   </div>
 </div>
 
+## New in 0.5.2
+
+- **HNSW updates:** [Add vectors, resize capacity, and remove points](index/hnsw.md#updating-an-index)
+  from a built or loaded index without retaining the original dataset.
+- **Batch search:** Native C++ batch APIs for [IVF](index/ivf.md#querying) and
+  [SymphonyQG](index/qg.md), plus Python `SymqgIndex.search_batch()`.
+  Existing Python `search()` calls use the batch paths too.
+- **Internal optimizations:** Clustering, batch-query scratch storage, and index
+  allocation improvements.
+
+HNSW files containing removed points require 0.5.2 or newer; see
+[removal compatibility](index/hnsw.md#how-removal-is-stored) before sharing indexes
+with older installations.
+
 ## Start with Python
 
 The example requires 0.5.0 or newer; see [installation options](quick_start.md#install).
 
 ```bash
-python -m pip install "rabitqlib>=0.5.1"
+python -m pip install "rabitqlib>=0.5.2"
 ```
 
 Build an IVF index and search a batch of queries:
@@ -72,6 +86,7 @@ print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 
 Starting with 0.5.1, IVF also supports [adding and removing vectors](index/ivf.md#updating-an-index)
 without rebuilding the index or retaining the original dataset.
+Starting with 0.5.2, HNSW supports [adding and removing vectors and resizing capacity](index/hnsw.md#updating-an-index).
 
 [Continue to the complete quick start](quick_start.md){ .md-button .md-button--primary }
 

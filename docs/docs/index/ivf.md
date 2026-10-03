@@ -89,7 +89,7 @@ independently of cluster sizes.
 
 After construction, you can directly save the index file to disk:
 ```c++
-ivf.save(outoput_index_file);
+ivf.save(output_index_file);
 ```
 Raw-mode files use a magic/version header and include both the original vectors
 and the rotation state. Loading restores the mode automatically, so querying
@@ -161,7 +161,7 @@ squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
 API is unchanged. Cluster selection and filtering remain approximate in both
 modes. Search returns the top `k` results after scanning the selected clusters.
 
-For multiple queries, `search_batch` distributes queries across workers.
+Starting with 0.5.2, C++ `search_batch` distributes multiple queries across workers.
 Input queries are contiguous row-major float32
 vectors with shape `(num_queries, dimension())`; output buffers have shape
 `(num_queries, k)`.
@@ -183,8 +183,9 @@ batch path with the same output and precision rules.
 ## Updating an Index
 
 Starting with 0.5.1, C++ `IVF` and Python `IvfIndex` support `add()` and `remove()`
-on a constructed or loaded index without the original dataset. These methods
-are specific to IVF. The index file format does not change.
+on a constructed or loaded index without the original dataset. HNSW provides
+its own [update APIs](hnsw.md#updating-an-index) starting with 0.5.2.
+IVF updates preserve the index file format.
 
 ```c++
 void IVF::add(

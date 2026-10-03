@@ -25,32 +25,29 @@ The implementation can be found in `rotator.hpp`.
 ### Example
 
 ```cpp
-// Initialize a rotator
-// Version 1 - the default rotator
-// vectors are padded to the smallest multiple of 64
-// storage - 4D bits, time - O(D * log D)
-rabitqlib::Rotator<float>* rotator = rabitqlib::choose_rotator<float>(
-    dim = dim, 
-    RotatorType type = RotatorType::FhtKacRotator);
+#include <memory>
+#include <vector>
+#include "rabitqlib/utils/rotator.hpp"
 
-// Initialize a rotator
-// Version 2 - the random orthogonal transformation
-// vectors are padded to the smallest multiple of 64
-// storage - D * D floats, time - O(D * D)
-rabitqlib::Rotator<float>* rotator = rabitqlib::choose_rotator<float>(
-    dim = dim, 
-    RotatorType type = RotatorType::MatrixRotator);
-
-// Apply a rotator to a vector
-size_t dim = 768;
-std::vector<float> x(dim);
-std::vector<float> x_prime(dim);
-... 
-rotator -> rotate(x.data(), x_prime.data())
-
-
-
+int main() {
+    const size_t dim = 769;  // deliberately not a multiple of 64
+    std::unique_ptr<rabitqlib::Rotator<float>> rotator(
+        rabitqlib::choose_rotator<float>(dim, rabitqlib::RotatorType::FhtKacRotator)
+    );
+    std::vector<float> x(dim, 1.0F);
+    std::vector<float> x_prime(rotator->size());  // 832 elements
+    rotator->rotate(x.data(), x_prime.data());
+}
 ```
+
+`choose_rotator` returns an owning pointer; wrap it in `std::unique_ptr`.
+Use the same rotator for data, centroids, and queries. Pass `rotator->size()`
+to quantization and estimation routines that operate on rotated vectors.
+
+For a random orthogonal transformation, select `RotatorType::MatrixRotator`.
+It keeps the input dimension by default; pass a padded dimension explicitly if
+subsequent packed-code operations require a multiple of 64. Its storage and
+computation cost are quadratic in the dimension.
 
 ## FFHT + Kac’s Walk
 ### Description

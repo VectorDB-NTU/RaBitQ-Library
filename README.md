@@ -27,47 +27,21 @@
 
 </div>
 
-> **Contributors welcome!** Help shape RaBitQ by reporting bugs, asking questions,
-> suggesting features, or contributing code, tests, documentation, and examples.
-> First-time contributors are welcome—[open an issue](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose)
-> or start with our [contribution guide](CONTRIBUTING.md#your-first-contribution)
-> and [starter tasks](CONTRIBUTING.md#starter-tasks).
-
 ## News
 
-- **September 2026 — IVF updates (0.5.1):** Add vectors to a built or loaded IVF
-  index with `add()` and exclude vectors from search with `remove()`. See the [IVF update guide](docs/docs/index/ivf.md#updating-an-index)
-  for costs and limits.
-
-- **September 2026 — Native clustering (0.5.0):** Train k-means directly in C++
-  or Python with RaBitQKMeans and QGKMeans, with approximate or exact final
-  assignment. See the [clustering guide](docs/docs/clustering.md).
-
-- **September 2026 — Platform support:** CPython 3.11–3.14 wheels cover Linux
-  x86-64 and ARM64, Windows x86-64, and macOS 14+ ARM64. C++ source builds are
-  validated on these platforms. See the
-  [platform requirements](docs/docs/quick_start.md#requirements).
-
-- **September 2026 — txtai integration:** [txtai](https://github.com/neuml/txtai)
-  now includes `rabitqlib` as an ANN backend with IVF and HNSW modes. See its
-  [RaBitQ configuration](https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq)
-  and the [integration discussion](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/110).
+- **October 2026 — v0.5.2:** [HNSW add, resize, and remove](docs/docs/index/hnsw.md#updating-an-index),
+  batch search for IVF and SymphonyQG, and clustering and allocation optimizations.
+- **September 2026 — Cross-platform support:** C++ builds and CPython 3.11–3.14
+  wheels for Linux x86-64/ARM64, Windows x86-64, and macOS 14+ ARM64.
 
 ## Install
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.5.1"
+python -m pip install --upgrade "rabitqlib>=0.5.2"
 ```
 
-The build/search examples below require 0.5.0 or newer; IVF `add()`/`remove()`
-require 0.5.1 or newer. For unreleased changes,
-[install from a checkout](CONTRIBUTING.md#python-changes).
-
-Wheels: CPython 3.11–3.14 on Linux x86-64 and ARM64, Windows x86-64, and
-macOS 14+ ARM64 (Apple Silicon). x86-64 uses AVX2/FMA with optional AVX-512
-acceleration; ARM64 uses NEON and portable scalar kernels. Linux ARM64 and
-macOS wheels bundle OpenMP. Linux ARM64 wheels carry
-`manylinux_2_27_aarch64` and `manylinux_2_28_aarch64` tags.
+Wheels cover the platforms above. x86-64 requires AVX2/FMA and optionally uses
+AVX-512; ARM64 uses NEON. See [platform requirements and source installation](docs/docs/quick_start.md#requirements).
 
 ## Python quick start
 
@@ -100,84 +74,43 @@ print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 print(ids[0])
 ```
 
-For all three indexes, `build` and `search` interpret `num_threads=0` as the
-detected hardware thread count. Larger requests are capped at that count;
-smaller positive requests are respected. Operations may use fewer workers when
-there are fewer work items. If hardware detection is unavailable, one thread is
-used. Python index methods default to one thread when `num_threads` is omitted.
-
-IVF and HNSW examples save clusters for reuse across index configurations.
-Choose RaBitQKMeans for flat assignment or QGKMeans for graph assignment;
-FAISS is needed only for the optional clustering comparison.
-
-Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
-in C++; Python paths are Unicode strings on all platforms.
-
-See the [Python examples](sample/python/README.md) for IVF, HNSW, and SymphonyQG.
-For clustering, use [RaBitQKMeans](docs/docs/clustering.md#rabitqkmeans) for small cluster
-counts or [QGKMeans](docs/docs/clustering.md#qgkmeans) for graph assignment. The
-[FAISS comparison](sample/python/compare_with_faiss.py) benchmarks both methods.
-
-<details>
-<summary>Build the Python bindings from source</summary>
-
-Source builds require a C++17 compiler, CMake 3.20 or newer, and OpenMP. On
-Windows, install Visual Studio 2026 with the Desktop development with C++
-workload, then run `python -m pip install .` from the repository root.
-On Ubuntu or Debian:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libomp-dev
-git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
-cd RaBitQ-Library
-python -m pip install .
-```
-
-</details>
+See the [quick start](docs/docs/quick_start.md) for index updates and
+[Python examples](sample/python/README.md) for all three indexes. Native
+[clustering](docs/docs/clustering.md) needs no external k-means package.
+See [threading and save/load paths](docs/docs/quick_start.md#threading-and-file-paths)
+for runtime conventions.
 
 ## Choose the right building block
 
-| Component | Best fit | Storage and search profile |
-| --- | --- | --- |
-| **Quantizer** | Integrating RaBitQ into an existing system | Low-level 1-bit or multi-bit encoding and distance estimation. |
-| **IVF** | Memory-efficient partitioned search | Stores quantized codes, or one-bit codes plus raw vectors for reranking. |
-| **HNSW** | Graph search with compact vectors | Adds graph links and searches directly from quantized codes. |
-| **SymphonyQG** | Fast graph search with a configurable memory/accuracy tradeoff | Uses raw vectors by default, or optional packed 4-bit/8-bit RaBitQ vectors, alongside per-neighborhood quantization data. |
+| Component | Use case |
+| --- | --- |
+| [Quantizer](docs/docs/rabitq/quantizer.md) | Integrate 1-bit or multi-bit encoding and distance estimation into your system. |
+| [IVF](docs/docs/index/ivf.md) | Memory-efficient partitioned search, with optional raw-vector reranking. |
+| [HNSW](docs/docs/index/hnsw.md) | Graph search directly over compact quantized vectors. |
+| [SymphonyQG](docs/docs/index/qg.md) | Fast graph search with raw or packed 4-bit/8-bit vector storage. |
 
-IVF and SymphonyQG use [FastScan](https://arxiv.org/abs/1704.07355) for batched
-estimates, while HNSW uses single-code kernels selected for the target architecture.
-
-In typical workloads, 4-bit, 5-bit, and 7-bit quantization can achieve roughly
-90%, 95%, and 99% recall, respectively, without reranking. Actual results
-depend on the dataset, index configuration, and search parameters.
+IVF and HNSW support adding and removing vectors; HNSW also supports explicit
+capacity resizing. See their guides for update costs and file compatibility.
+The library supports L2 and inner product; normalize vectors for cosine search.
 
 ## Why RaBitQ?
 
-| | |
-| --- | --- |
-| **Compact by design** | Choose [1-bit](https://doi.org/10.1145/3654970) or [multi-bit](https://doi.org/10.1145/3725413) codes to match your memory and accuracy target. |
-| **Accurate estimates** | An asymptotically optimal theoretical error bound supports reliable ordering and reranking. |
-| **Native CPU backends** | Runtime AVX2/AVX-512 selection on x86-64; NEON distance, packed-code, FastScan, rotation, query preparation, and HNSW search kernels on ARM64, with portable scalar fallbacks. |
-| **Ready for ANN search** | Use the quantizer directly or build complete IVF, HNSW, and [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) indexes. |
-| **Native clustering** | Choose [RaBitQKMeans](docs/docs/clustering.md#rabitqkmeans) with flat RaBitQ assignment or [QGKMeans](docs/docs/clustering.md#qgkmeans) with SymphonyQG assignment; neither needs an external k-means package. |
+- **Compact codes:** Choose 1-bit or multi-bit quantization for your memory and accuracy needs.
+- **Accurate estimates:** An asymptotically optimal error bound supports distance estimation.
+- **Native CPU acceleration:** Runtime AVX2/AVX-512 dispatch on x86-64 and NEON on ARM64.
 
-The library supports Euclidean distance and inner product. Cosine search is
-available by normalizing vectors before using inner product.
-
-RaBitQ is developed by the
-[VectorDB group](https://vectordb-ntu.github.io/) at Nanyang Technological
-University, Singapore. A GPU implementation is also available in
-[cuvs_rabitq](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq).
+Developed by the [VectorDB group](https://vectordb-ntu.github.io/) at Nanyang
+Technological University. For GPU support, see [cuvs_rabitq](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq).
 
 ## RaBitQ across the vector-search ecosystem
 
 The projects below illustrate adoption of RaBitQ techniques across vector
 search; this is not a list of direct dependencies on RaBitQ-Library.
 
-**Integration story:** [How zvec integrates RaBitQ-Library](docs/docs/integrations/zvec.md)
-traces its use of the library's quantizers and estimators inside zvec's IVF
-and HNSW implementations, with links to the source code.
+[txtai](https://github.com/neuml/txtai) uses the library as an ANN backend
+([configuration](https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq)).
+Read [how zvec integrates RaBitQ-Library](docs/docs/integrations/zvec.md) for
+another integration example.
 
 <table>
   <tr>
@@ -243,120 +176,40 @@ and HNSW implementations, with links to the source code.
 
 ## C++ quick start
 
-### Requirements
-
-- CMake 3.20 or newer
-- a C++17 compiler with OpenMP support
-- an x86-64 CPU with AVX2 and FMA, or an ARM64 CPU on Linux or macOS
-
-Clone and build the library and example programs:
+Requires CMake 3.20+, a C++17 compiler with OpenMP, and an x86-64 CPU with
+AVX2/FMA or an ARM64 CPU. Build the library and examples:
 
 ```bash
 git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
 cd RaBitQ-Library
-
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
 
-For MSVC, follow the [Windows build instructions](tests/README.md#prerequisites).
-For ARM64 source builds, see the [Linux ARM64](tests/README.md#linux-arm64)
-and [macOS ARM64](tests/README.md#macos-arm64) instructions.
-Local GCC/Clang builds enable `-march=native` by default; set
-`-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for portable binaries, as release
-wheels do. See [CPU dispatch details](DEVELOPMENT.md#dispatch-conventions-and-coverage)
-for backend requirements and fallbacks.
+Set `-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` for binaries that will run on
+other CPUs. See [platform-specific build instructions](tests/README.md#prerequisites).
 
 ### Use RaBitQ-Library in another C++ project
 
-The C++ API and ABI are still evolving. For reproducible builds, pin a release
-or commit and include RaBitQ-Library as a Git submodule:
-
-```bash
-git submodule add https://github.com/VectorDB-NTU/RaBitQ-Library.git third_party/rabitqlib
-git submodule update --init --recursive
-```
-
-Add the library and link its namespaced target in the consuming project's
-`CMakeLists.txt`:
+Add the repository as a submodule at `third_party/rabitqlib`, pin a release or
+commit, and link its CMake target:
 
 ```cmake
 set(RABITQ_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/rabitqlib)
-
 target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
 ```
 
-Update the pinned revision deliberately when you are ready to adopt upstream
-changes:
+The C++ API and ABI are evolving; update the pinned revision deliberately.
+For installed packages, use `find_package(rabitqlib CONFIG REQUIRED)` and the
+same target. Both approaches require OpenMP.
 
-```bash
-git -C third_party/rabitqlib fetch
-git -C third_party/rabitqlib checkout <release-or-commit>
-git add third_party/rabitqlib
-```
-
-<details>
-<summary>Optional: install the C++ library</summary>
-
-Installation is useful for package managers, container images, and shared
-server environments. Disable native optimization when the installed library
-may run on a different CPU from the build machine:
-
-```bash
-cmake -S . -B build \
-  -DRABITQ_BUILD_SAMPLES=OFF \
-  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build build --parallel
-cmake --install build
-```
-
-Consume the installed package with:
-
-```cmake
-find_package(rabitqlib CONFIG REQUIRED)
-target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
-```
-
-For a non-system prefix, point CMake to the installation when configuring the
-consumer:
-
-```bash
-cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/.local"
-cmake --build build --parallel
-```
-
-The [downstream consumer test](tests/consumer/) provides a minimal complete
-example of the installed-package workflow.
-
-</details>
-
-Both integration methods require OpenMP on the consuming system.
-
-The index example executables are written to `bin/`. Their source code shows
-the complete indexing and querying workflows:
-
-- [IVF + RaBitQ](sample/cpp/ivf_rabitq_indexing.cpp)
-- [HNSW + RaBitQ](sample/cpp/hnsw_rabitq_indexing.cpp)
-- [SymphonyQG](sample/cpp/symqg_indexing.cpp)
-
-A separate [RaBitQ quantization example](sample/cpp/quantizer.cpp) demonstrates
-the lower-level quantizer API; it is provided as source and is not currently a
-CMake target.
-
-To build and run the C++ test suite:
-
-```bash
-cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-```
-
-GoogleTest is downloaded during test configuration. For a full benchmark on
-the GIST dataset, see [`example.sh`](example.sh). More detailed API and
-algorithm guidance is available in the [documentation](docs/docs/index.md).
+See [submodule setup and version pinning](docs/docs/quick_start.md#use-in-another-c-project),
+[C++ installation](docs/docs/quick_start.md#install-the-c-library), and the
+[build and test guide](tests/README.md) for complete workflows.
+Examples: [C++ indexes and quantization](docs/docs/quick_start.md#c-examples).
+Benchmarks: [FAISS clustering comparison](docs/docs/clustering.md#compare-with-faiss)
+and [GIST workflow](example.sh).
 
 ## Citation
 
@@ -381,14 +234,10 @@ If RaBitQ helps your research or system, please cite:
 
 ## Contributing
 
-Contributions are welcome, including documentation and examples. Start with
-[your first contribution](CONTRIBUTING.md#your-first-contribution) or choose a
-[small starter task](CONTRIBUTING.md#starter-tasks). The guide explains which
-build, test, and formatting checks apply to your change.
-
-See [maintenance and feedback](ROADMAP.md) for the current maintainer. Use
-[GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose)
-for bugs, feature requests, and usage or contribution questions.
+Start with the [contribution guide](CONTRIBUTING.md#your-first-contribution)
+or [starter tasks](CONTRIBUTING.md#starter-tasks). Report bugs and request
+features through [GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose).
+See [maintenance and feedback](ROADMAP.md) for maintainer information.
 
 ## Acknowledgements
 

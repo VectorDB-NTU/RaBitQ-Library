@@ -32,6 +32,9 @@ loaded = SymqgIndex.load("qg_example.index")
 ids, distances = loaded.search_batch(queries, k=10, ef=100, num_threads=1)
 ```
 
+This example uses `search_batch()`, which requires 0.5.2 or newer. On earlier
+versions, use `search()` with the same arguments.
+
 `init` defaults to `"pipnn"`; use `"random"` for random initialization.
 Supported metrics are `"l2"` and `"ip"`. `max_degree` must be a multiple of 32
 and smaller than the point count. `ef_construction` controls the build search
@@ -118,8 +121,9 @@ std::vector<float> distances(10);
 qg.search(query.data(), 10, ids.data(), distances.data());
 ```
 
-For contiguous row-major batches, `search_batch()` reuses scratch storage within
-each worker and preserves the results of independent `search()` calls:
+Starting with 0.5.2, C++ `search_batch()` accepts contiguous row-major batches
+and reuses scratch storage within each worker, preserving the results of
+independent `search()` calls:
 
 ```cpp
 // queries contains num_queries * qg.dimension() floats in the original dimension.
@@ -137,8 +141,8 @@ do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 `set_ef()` while searches are running.
 
-Python provides `search_batch(queries, k, ef, num_threads=1)`; the existing
-`search()` accepts the same two-dimensional array and remains an equivalent
+Python provides `search_batch(queries, k, ef, num_threads=1)` starting with 0.5.2.
+The existing `search()` accepts the same two-dimensional array and remains an equivalent
 entry point. Both return `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. Both APIs default to one worker; `num_threads=0`
 selects the available hardware thread count, capped by the number of queries.

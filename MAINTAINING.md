@@ -13,7 +13,7 @@ only the affected job groups:
 | Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
 | C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
-| Compiled Python bindings | C++ formatting and clang-tidy, plus Python checks and wheel tests |
+| Compiled Python bindings | C++ formatting and clang-tidy, plus Python builds and wheel tests |
 | Python tests | Python lint, source-install smoke tests, and wheel tests |
 | `tests/python/test_cpp_clustering_examples.py` | Python lint and C++ checks; examples run in the Ubuntu job |
 | `tests/python/conftest.py` | Python lint, C++ checks, and Python builds/wheels |

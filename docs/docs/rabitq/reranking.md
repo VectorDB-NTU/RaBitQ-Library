@@ -9,6 +9,11 @@ RaBitQ has a unique advantage in reranking due to its theoretical error bound. I
 
 Based on error bounds, it is possible to rerank **fewer than $K$ vectors** to achieve nearly perfect recall - it only reranks the vectors on the boundaries of KNNs.
 
+This is an application-level strategy, not a built-in disk-retrieval API.
+HNSW stores quantized vectors, so applications must retain raw vectors separately
+for exact reranking. [IVF raw mode](../index/ivf.md#index-construction)
+(`nbits=32`) instead owns the original vectors and reranks them in memory.
+
 ## Algorithm Description
 Let $K$ be the number of nearest neighbors we target. After receiving the candidates and their estimated distances from an index, e.g., HNSW + RaBitQ, we perform the following strategy of reranking to minimize the number of retrieved raw vectors from disks.
 

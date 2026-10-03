@@ -40,11 +40,13 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 ### Install
 
 ```bash
-python -m pip install "rabitqlib>=0.5.1"
+python -m pip install "rabitqlib>=0.5.2"
 ```
 
 The clustering examples require 0.5.0 or newer; the IVF update example requires
-0.5.1 or newer. For unreleased changes,
+0.5.1 or newer. HNSW `add()`/`resize()`/`remove()` require 0.5.2 or newer; see
+the [HNSW update guide](index/hnsw.md#updating-an-index). Python
+`SymqgIndex.search_batch()` also requires 0.5.2 or newer. For unreleased changes,
 [install from a checkout](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes).
 
 Wheels target the platforms above and require no compiler or CMake.
@@ -117,13 +119,50 @@ The `metric` argument accepts `"l2"` and `"ip"` (also spelled
 `"innerproduct"`). To search by cosine similarity, normalize database and
 query vectors first and use `metric="ip"`.
 
+### Add and remove HNSW vectors
+
+With 0.5.2 or newer, reuse `data`, `queries`, and `clustering` from the IVF
+example above to build and update an HNSW index:
+
+```python
+from rabitqlib import HnswIndex
+
+hnsw = HnswIndex(
+    dim=64, max_elements=len(data), M=16, ef_construction=100, nbits=4,
+)
+hnsw.build(data, clustering.centroids, clustering.assignments)
+
+# HNSW needs explicit capacity growth before adding beyond max_elements.
+new_vectors = rng.standard_normal((50, 64)).astype(np.float32)
+hnsw.resize(hnsw.max_elements + len(new_vectors))
+new_ids = hnsw.add(new_vectors)  # automatic nearest-centroid routing
+removed = hnsw.remove(new_ids[:10])  # returns 10
+ids, distances = hnsw.search(queries, k=10, ef=100)
+```
+
+Removed points remain in the graph and count toward capacity, but never appear
+in results. Additions and removals survive save/load; files containing HNSW
+removals require 0.5.2 or newer. Do not update an index while it is being searched.
+See the [HNSW update guide](index/hnsw.md#updating-an-index) for recall and capacity
+considerations.
+
 See the [Python examples](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/python)
 for IVF, HNSW, and SymphonyQG. For clustering, choose
 [RaBitQKMeans](clustering.md#rabitqkmeans) for flat assignment, recommended for small cluster
 counts, or [QGKMeans](clustering.md#qgkmeans) for graph assignment.
 
-<details>
-<summary>Build the Python bindings from source</summary>
+### Threading and file paths
+
+For all three indexes, `build` and `search` interpret `num_threads=0` as the
+detected hardware thread count. Larger requests are capped at that count;
+smaller positive requests are respected. Operations may use fewer workers when
+there are fewer work items. If hardware detection is unavailable, one thread is
+used. Python index methods default to one thread when `num_threads` is omitted.
+
+Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
+in C++; Python paths are Unicode strings on all platforms.
+
+### Build the Python bindings from source
 
 Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.20 or
 newer, and OpenMP. To install the current development version on Ubuntu or
@@ -148,8 +187,6 @@ On Windows, install the build tools listed above, then run `python -m pip instal
 from the repository root. For a portable source build on any supported platform,
 also pass `-Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`.
 
-</details>
-
 ## C++
 
 On Linux, clone the repository and build the library and examples:
@@ -168,6 +205,8 @@ For portable binaries within a supported OS and architecture, configure with
 See the [platform-specific build commands](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/README.md#quick-start)
 for Linux ARM64, Windows, and Apple Silicon.
 
+### C++ examples
+
 Example executables are written to `bin/`. Their source demonstrates complete
 indexing and querying workflows:
 
@@ -175,6 +214,71 @@ indexing and querying workflows:
 - [HNSW + RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp)
 - [SymphonyQG](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/symqg_indexing.cpp)
 - [Low-level quantization](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/quantizer.cpp)
+
+The low-level quantization example is provided as source and is not currently a
+CMake target. For the GIST benchmark workflow, see
+[`example.sh`](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/example.sh).
+
+### Use in another C++ project
+
+The C++ API and ABI are still evolving. For reproducible builds, pin a release
+or commit and include RaBitQ-Library as a Git submodule:
+
+```bash
+git submodule add https://github.com/VectorDB-NTU/RaBitQ-Library.git third_party/rabitqlib
+git submodule update --init --recursive
+git -C third_party/rabitqlib checkout <release-or-commit>
+git add third_party/rabitqlib
+```
+
+Add the library and link its namespaced target in your `CMakeLists.txt`:
+
+```cmake
+set(RABITQ_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/rabitqlib)
+target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
+```
+
+Update the pinned revision deliberately when adopting upstream changes:
+
+```bash
+git -C third_party/rabitqlib fetch
+git -C third_party/rabitqlib checkout <release-or-commit>
+git add third_party/rabitqlib
+```
+
+### Install the C++ library
+
+Installation is useful for package managers, container images, and shared server
+environments. Disable native optimization for use on other CPUs:
+
+```bash
+cmake -S . -B build \
+  -DRABITQ_BUILD_SAMPLES=OFF \
+  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake --build build --parallel
+cmake --install build
+```
+
+Consume the installed package with:
+
+```cmake
+find_package(rabitqlib CONFIG REQUIRED)
+target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
+```
+
+For a non-system prefix, point CMake to the installation:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/.local"
+cmake --build build --parallel
+```
+
+Both submodule and installed-package integration require OpenMP on the consuming
+system. The [downstream consumer test](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/consumer)
+provides a complete installed-package example.
 
 ### Run the C++ tests on Linux
 

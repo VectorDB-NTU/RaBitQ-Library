@@ -17,6 +17,11 @@ These data formats map raw floating-point vectors into `uint8` or `uint32`
 codes. For the packed extended-code layouts, see
 `rabitqlib/quantization/pack_excode.hpp`.
 
+The examples below focus on layouts and omit rotation. In an index, rotate data,
+centroids, and queries with the same rotator first and use its padded dimension.
+Query snippets use `rabitqlib/index/estimator.hpp`; the full-vector example also
+needs `<iostream>` and `<numeric>`.
+
 RaBitQ quantizer is included in `rabitq_impl.hpp` and `rabitq.hpp`.
 ```css
 .
@@ -211,7 +216,8 @@ In practical implementation of our SymphonyQG index, the data is compactly store
 #include <random>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq_impl.hpp"
+#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/index/estimator.hpp"
 
 int main() {
     size_t dim = 768;
@@ -231,21 +237,9 @@ int main() {
         centroid[i] = dist(gen);
     }
 
-    // std::vector<uint32_t> code(dim);  // code
-    std::vector<uint8_t> packed_code(batch_size * dim / 8);
-    std::vector<float> f_add(batch_size);      // factors for estimating similarity
-    std::vector<float> f_rescale(batch_size);  // factors for estimating similarity
-    std::vector<float> f_error(batch_size);    // factors for computing error bounds
-
-    rabitqlib::quant::rabitq_impl::one_bit::one_bit_batch_code(
-        vector.data(),
-        centroid.data(),
-        batch_size,
-        dim,
-        packed_code.data(),
-        f_add.data(),
-        f_rescale.data(),
-        f_error.data(),
+    std::vector<char> batch_data(rabitqlib::QGBatchDataMap<float>::data_bytes(dim));
+    rabitqlib::quant::quantize_qg_batch(
+        vector.data(), centroid.data(), batch_size, dim, batch_data.data(),
         rabitqlib::METRIC_L2
     );
 
@@ -255,14 +249,12 @@ int main() {
 
 #### Querying
 During querying, a query is pre-processed as follows. Then FastScan can be called to estimate distance batch by batch. The detailed implementation is in `rabitqlib/index/estimator.hpp`. 
-Here, we assume the data are compactly stored in the layout of `QGBatchDataMap` in `rabitqlib/quantization/data_layout.hpp`.
+Insert the following before `return 0` in the indexing example, reusing its
+initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
 ```cpp
 
-    size_t dim = 768;  // the dimensionality
-    std::vector<float> query(dim);
-    std::vector<float> centroid(dim);
-    std::vector<char> batch_data(rabitqlib::QGBatchDataMap<float>::data_bytes(dim));
+    std::vector<float> query(dim, 1.0F);
 
     rabitqlib::BatchQuery<float> processed_query(query.data(), dim);
 
@@ -272,8 +264,6 @@ Here, we assume the data are compactly stored in the layout of `QGBatchDataMap` 
     processed_query.set_g_add(
         rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim)
     );
-
-    size_t batch_size = 32;
 
     std::vector<float> est_distance(batch_size);  // store the estimated distances
 
@@ -318,18 +308,9 @@ int main() {
     }
 
     size_t bits = 5;  // num of bits for total code
-    // `bin_data` includes compact binary codes (dim / 8 bytes) and three factors - f_add,
-    // f_rescale and f_error (12 bytes) f_error can be dropped if the error bound is not
-    // used in your index (e.g., QG).
-    // You can also use rabitqlib::BinDataMap<float>::data_bytes(dim) to get the bin data
-    // bytes
-    std::vector<char> bin_data((dim / 8) + 12);
-
-    // `ex_data` includes compact binary codes (dim / 8 bytes) and two factors - f_add_ex,
-    // f_rescale_ex (8 bytes). Here, we drop f_error_ex since it is not used in this index.
-    // You can also use rabitqlib::ExDataMap<float>::data_bytes(dim, bits-1) to get the ex
-    // data bytes
-    std::vector<char> ex_data((dim * (bits - 1) / 8) + 8);
+    // Binary codes and three factors; extended codes and two factors.
+    std::vector<char> bin_data(rabitqlib::BinDataMap<float>::data_bytes(dim));
+    std::vector<char> ex_data(rabitqlib::ExDataMap<float>::data_bytes(dim, bits - 1));
 
     rabitqlib::quant::quantize_split_single(
         vector.data(),
@@ -366,8 +347,10 @@ int main() {
     size_t bits = 5;   // the bit-width of DATA vectors
     std::vector<float> query(dim);
 
-    // the config of fast quantizer is necessary for preprocessing queries
-    rabitqlib::quant::RabitqConfig config = rabitqlib::quant::faster_config(dim, bits);
+    // Queries use four bits, independently of the data code width.
+    rabitqlib::quant::RabitqConfig config = rabitqlib::quant::faster_config(
+        dim, rabitqlib::SplitSingleQuery<float>::kNumBits
+    );
 
     rabitqlib::SplitSingleQuery<float> processed_query(
         query.data(), dim, bits - 1, config, rabitqlib::METRIC_L2
@@ -448,16 +431,11 @@ int main() {
     }
 
     size_t bits = 5;  // num of bits for full codes
-    // `batch_data` includes packed binary codes (dim / 8 bytes) and three factors - f_add,
-    // f_rescale and f_error (12 bytes)
-    // f_error can be dropped if the error bound is not used in your index (e.g., QG)
-    std::vector<char> batch_data((dim / 8 + 12) * batch_size);
-
-    // `ex_data` includes compact binary codes (dim / 8 bytes) and two factors - f_add_ex,
-    // f_rescale_ex (8 bytes). Here, we drop f_error_ex since it is not used in this index.
-    // You can also use rabitqlib::ExDataMap<float>::data_bytes(dim, bits-1) to get the ex
-    // data bytes
-    std::vector<char> ex_data((dim * (bits - 1) / 8 + 8) * batch_size);
+    // BatchDataMap includes physical storage for all 32 vectors, even in a tail batch.
+    std::vector<char> batch_data(rabitqlib::BatchDataMap<float>::data_bytes(dim));
+    std::vector<char> ex_data(
+        rabitqlib::ExDataMap<float>::data_bytes(dim, bits - 1) * batch_size
+    );
 
     rabitqlib::quant::quantize_split_batch(
         vector.data(),
@@ -498,9 +476,9 @@ int main() {
     // The flag use_hacc controls the precision of FastScan.
     // `use_hacc = false` - each number in LUTs is quantized into 8 bits.
     // `use_hacc = true` - each number in LUTs is quantized into 16 bits.
-    // By default, `use_hacc = true` as it works for all settings of `bits`,
-    // i.e., the bit-width of queries is significantly larger than that for data.
-    // When the bit-width of data <= 2, `use_hacc = false` does not harm accuracy.
+    // SplitBatchQuery defaults to HACC; this example selects it explicitly.
+    // IVF instead selects HACC for 4-9 total bits and standard FastScan for
+    // 1-3 total bits or raw-vector storage, unless the caller overrides it.
 
     rabitqlib::SplitBatchQuery<float> processed_query(
         query.data(), dim, bits - 1, rabitqlib::METRIC_L2, true

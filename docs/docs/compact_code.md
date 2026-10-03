@@ -1,12 +1,18 @@
 # Compact Storage of Codes
 
-This section describes the compact storage of codes. RaBitQLib supports to quantize codes with different bit widths, i.e., 1, 2, 3, 4, 5, 6, 7 and 8. These bit widths except 8 are unaligned with byte alignment. Thus, we need to design a specialized compact storage format for the code vector for each bit width. We pad the dimensionality to a multiple of 64 for the ease of alignment. The implementation can be found in `rabitqlib/quantization/pack_excode.hpp`.
+This section describes packing **extended codes** with 1–8 bits per dimension.
+IVF and HNSW store a separate sign bit, giving total quantized widths of 1–9 bits;
+one-bit quantization has no extended code. Dimensions are padded to a multiple
+of 64 for these layouts. The implementation is in
+`rabitqlib/quantization/pack_excode.hpp`.
 
 Example 
 ```cpp
 #include <rabitqlib/quantization/pack_excode.hpp>
-#include <stdint.h>
-#include <random>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <vector>
 
 int main(){
     size_t dim = 768;
