@@ -96,7 +96,9 @@ def classify(paths):
             selected.add("cpp_tidy")
         elif path.startswith("scripts/") and path.endswith(".sh"):
             selected.add("shell")
-            if path == "scripts/check-python.sh":
+            if path == "scripts/build-macos-openmp.sh":
+                selected.add("wheels")
+            elif path == "scripts/check-python.sh":
                 selected.add("python_quality")
             elif path == "scripts/check-tidy.sh":
                 selected.add("cpp_tidy")

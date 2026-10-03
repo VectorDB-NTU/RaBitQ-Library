@@ -2,6 +2,7 @@
 
 import os
 import platform
+import re
 import subprocess
 from pathlib import Path
 
@@ -37,3 +38,10 @@ def test_native_arm64_wheel_bundles_openmp():
         subprocess.check_output(["lipo", "-archs", str(runtime)], text=True).strip()
         == "arm64"
     )
+    for binary in (path, runtime):
+        load_commands = subprocess.check_output(["otool", "-l", str(binary)], text=True)
+        minimum_versions = re.findall(r"\bminos (\d+)\.(\d+)", load_commands)
+        assert minimum_versions, load_commands
+        assert all(
+            (int(major), int(minor)) <= (14, 0) for major, minor in minimum_versions
+        ), f"{binary} requires macOS newer than 14.0: {minimum_versions}"

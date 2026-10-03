@@ -87,6 +87,10 @@ For Python source builds, pass `-Ccmake.define.OpenMP_ROOT=<libomp-prefix>` as w
 as the native-optimization setting below. Release CI uses native `macos-15` runners,
 builds CPython 3.11–3.14 ARM64 wheels, bundles OpenMP with delocate, then installs and
 runs the full Python suite for each wheel. The minimum wheel OS target is macOS 14.
+The wheel build compiles Homebrew's OpenMP source with that deployment target via
+`scripts/build-macos-openmp.sh`; the runner's prebuilt OpenMP bottle may require a
+newer macOS. The installed-wheel check verifies both the extension and bundled
+runtime support macOS 14.
 Set `RABITQ_TEST_WHEEL=1` when testing a repaired wheel locally to also check its
 ARM64 extension and bundled OpenMP loader path.
 

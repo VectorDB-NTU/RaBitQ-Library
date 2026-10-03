@@ -63,6 +63,7 @@ class ChangeSelectionTest(unittest.TestCase):
             },
             ".github/scripts/prepare_release.py": {"python_quality"},
             "scripts/check-python.sh": {"shell", "python_quality"},
+            "scripts/build-macos-openmp.sh": {"shell", "wheels"},
             "scripts/check-tidy.sh": {"shell", "cpp_tidy"},
             "scripts/check-format.sh": {"shell", "cpp_format"},
             "scripts/check-includes.sh": {"shell"},
