@@ -1476,6 +1476,10 @@ compared against is rebuilt from its stored RaBitQ code, sign bit and extra bits
 together, and the other side is scored straight from its codes. This is the same
 approach quantized SymphonyQG construction takes.</p>
 <p>Graph quality therefore depends on how a point arrived.</p>
+<p>Save/load preserves the existing graph and rotation, but not the random generator
+state used to choose levels for future insertions. Adding the same vectors to an
+original index and a loaded copy can therefore produce different graphs and
+search results.</p>
 <h3 id="recall-after-add">Recall after <code>add</code><a class="headerlink" href="#recall-after-add" title="Permanent link">&para;</a></h3>
 <p>The centroids and the rotation are fixed when the index is constructed, so <code>add</code>
 never retrains them. If the added vectors come from a different distribution, or
