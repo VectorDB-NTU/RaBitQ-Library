@@ -179,6 +179,11 @@ approach quantized SymphonyQG construction takes.
 
 Graph quality therefore depends on how a point arrived.
 
+Save/load preserves the existing graph and rotation, but not the random generator
+state used to choose levels for future insertions. Adding the same vectors to an
+original index and a loaded copy can therefore produce different graphs and
+search results.
+
 ### Recall after `add`
 
 The centroids and the rotation are fixed when the index is constructed, so `add`

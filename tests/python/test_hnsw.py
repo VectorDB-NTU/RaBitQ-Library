@@ -394,17 +394,27 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     check(loaded)
     assert loaded.remove(removed) == 0
 
-    # New points link through removed ones, which stay hidden. add can leave a
-    # point unreachable with or without removals, so compare with a copy saved
-    # before the removal instead of expecting every point.
+    # New points link through removed ones, which stay hidden. Compare the two
+    # loaded copies: save/load preserves the graph but not the random generator
+    # state used for future insertion levels. The original can grow a different
+    # graph, with a different set of reachable points.
     plain = HnswIndex.load(str(plain_path))
     for index in (idx, loaded, plain):
         index.resize(count + len(new))
         index.add(new)
+        assert index.num_points == count + len(new)
+
+    # The original still supports add after remove, and its resulting graph must
+    # round-trip exactly without any further insertions.
+    original_ids, original_dists = _everything(idx, queries)
+    assert not np.isin(original_ids, removed).any()
+    grown_path = tmp_path / "grown.index"
+    idx.save(str(grown_path))
+    reloaded_ids, reloaded_dists = _everything(HnswIndex.load(str(grown_path)), queries)
+    np.testing.assert_array_equal(reloaded_ids, original_ids)
+    np.testing.assert_array_equal(reloaded_dists, original_dists)
+
     ids, dists = _everything(loaded, queries)
-    expected_ids, expected_dists = _everything(idx, queries)
-    np.testing.assert_array_equal(ids, expected_ids)
-    np.testing.assert_array_equal(dists, expected_dists)
     plain_ids, plain_dists = _everything(plain, queries)
     for q in range(len(queries)):
         keep = ~np.isin(plain_ids[q], removed) & (plain_ids[q] != _NO_ID)
@@ -413,6 +423,7 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
         np.testing.assert_array_equal(ids[q, :found], plain_ids[q][keep])
         np.testing.assert_array_equal(dists[q, :found], plain_dists[q][keep])
         assert np.all(ids[q, found:] == _NO_ID)
+        assert np.all(np.isinf(dists[q, found:]))
 
 
 def test_remove_rejects_invalid_ids_without_removing_anything():

@@ -1009,17 +1009,20 @@ TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
         loaded.resize(kTotal);
         EXPECT_EQ(search_everything(loaded, fixture, 4), expected);
 
-        // New points can be linked through removed ones. All three copies grow the
-        // same graph, and the removed points stay hidden in the two that have them.
+        // New points can be linked through removed ones. Only the two loaded
+        // copies share insertion RNG state; save/load does not preserve it.
         const float* extra = fixture.data.data() + (kBuilt * AddFixture::kDim);
         plain->resize(kTotal);
         for (HierarchicalNSW* copy : {index.get(), &loaded, plain.get()}) {
             copy->add(extra, kAdded, fixture.cluster_ids.data());
         }
         const Results grown = search_everything(*index, fixture, kTotal);
-        EXPECT_EQ(search_everything(loaded, fixture, kTotal), grown);
+        EXPECT_EQ(grown, without_removed(grown, removed));
+        const auto reloaded = copy_of(*index, "rabitq_hnsw_remove_grown.index");
+        EXPECT_EQ(search_everything(*reloaded, fixture, kTotal), grown);
         EXPECT_EQ(
-            grown, without_removed(search_everything(*plain, fixture, kTotal), removed)
+            search_everything(loaded, fixture, kTotal),
+            without_removed(search_everything(*plain, fixture, kTotal), removed)
         );
     }
     std::remove(path.c_str());
