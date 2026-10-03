@@ -53,10 +53,14 @@ test-environment = { RABITQ_TEST_WHEEL = "1", OMP_NUM_THREADS = "2" }
 
 [tool.cibuildwheel.macos]
 archs = ["arm64"]
-before-all = "brew install libomp"
-environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF -DOpenMP_ROOT=$(brew --prefix libomp)", MACOSX_DEPLOYMENT_TARGET = "14.0" }
+before-all = 'bash "{project}/scripts/build-macos-openmp.sh" "$RABITQ_OPENMP_PREFIX"'
 repair-wheel-command = "delocate-wheel --require-archs arm64 -w {dest_dir} -v {wheel}"
 test-environment = { RABITQ_TEST_WHEEL = "1", OMP_NUM_THREADS = "2" }
+
+[tool.cibuildwheel.macos.environment]
+MACOSX_DEPLOYMENT_TARGET = "14.0"
+RABITQ_OPENMP_PREFIX = "$(pwd)/build/wheel-openmp"
+CMAKE_ARGS = '-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF -DOpenMP_ROOT="$RABITQ_OPENMP_PREFIX" -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET'
 
 [tool.cibuildwheel.windows]
 before-build = "python -m pip install delvewheel"
