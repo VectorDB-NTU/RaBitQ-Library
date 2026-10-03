@@ -1158,7 +1158,7 @@ initialization remains available and uses three iterations by default.</p>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search_batch</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </code></pre></div>
 <p><code>init</code> defaults to <code>"pipnn"</code>; use <code>"random"</code> for random initialization.
 Supported metrics are <code>"l2"</code> and <code>"ip"</code>. <code>max_degree</code> must be a multiple of 32
@@ -1227,6 +1227,27 @@ and distances:</p>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">distances</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
 <a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">qg</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">query</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">distances</span><span class="p">.</span><span class="n">data</span><span class="p">());</span>
 </code></pre></div>
+<p>For contiguous row-major batches, <code>search_batch()</code> reuses scratch storage within
+each worker and preserves the results of independent <code>search()</code> calls:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1">// queries contains num_queries * qg.dimension() floats in the original dimension.</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">PID</span><span class="o">&gt;</span><span class="w"> </span><span class="n">batch_ids</span><span class="p">(</span><span class="n">num_queries</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">batch_distances</span><span class="p">(</span><span class="n">num_queries</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">qg</span><span class="p">.</span><span class="n">search_batch</span><span class="p">(</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="n">queries</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="n">batch_ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">batch_distances</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="mi">4</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">);</span>
+</code></pre></div>
+<p>The C++ signature is <code>search_batch(queries, num_queries, k, ids, distances,
+num_threads=1)</code>. Set <code>ef &gt;= k</code> with <code>set_ef()</code> before searching. Both output
+buffers are required and contain <code>num_queries * k</code> elements. Empty C++ batches
+do no work and may use null buffers. Inputs and outputs must not overlap.
+Concurrent searches need separate outputs; do not modify the index or call
+<code>set_ef()</code> while searches are running.</p>
+<p>Python provides <code>search_batch(queries, k, ef, num_threads=1)</code>; the existing
+<code>search()</code> accepts the same two-dimensional array and remains an equivalent
+entry point. Both return <code>(ids, distances)</code> arrays of shape <code>(num_queries, k)</code>,
+including empty batches. Both APIs default to one worker; <code>num_threads=0</code>
+selects the available hardware thread count, capped by the number of queries.
+Queries use the original dimension, including when the internal rotation pads it.</p>
 <p>See <code>sample/cpp/symqg_indexing.cpp</code>, <code>sample/cpp/symqg_querying.cpp</code>, and their
 Python counterparts for complete examples.</p>
 
