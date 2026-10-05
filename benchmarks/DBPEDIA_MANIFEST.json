@@ -1,0 +1,21 @@
+{
+  "dataset": "openai-1536-angular",
+  "source": "SuperKMeans benchmark data_openai.bin and data_openai_test.bin",
+  "metric": "inner_product",
+  "normalization": "unit-normalized source values preserved exactly",
+  "dimension": 1536,
+  "base_count": 999000,
+  "query_count": 1000,
+  "groundtruth_k": 100,
+  "files": {
+    "base.fvecs": {
+      "bytes": 6141852000
+    },
+    "queries.fvecs": {
+      "bytes": 6148000
+    },
+    "queries.ivecs": {
+      "bytes": 404000
+    }
+  }
+}
