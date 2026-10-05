@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://vectordb-ntu.github.io/RaBitQ-Library/rabitq/rotator/">
+        <link rel="canonical" href="https://vectordb-ntu.github.io/RaBitQ-Library/benchmarks/bench/">
       
       
-        <link rel="prev" href="../rabitq/">
+        <link rel="prev" href="../../clustering/">
       
       
-        <link rel="next" href="../quantizer/">
+        <link rel="next" href="../ivf/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Rotation - RaBitQ Library</title>
+        <title>Overview - RaBitQ Library</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#random-rotation" class="md-skip">
+        <a href="#benchmark-overview" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Rotation
+              Overview
             
           </span>
         </div>
@@ -315,10 +315,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -343,11 +341,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -368,7 +366,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -386,7 +384,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rabitq/" class="md-nav__link">
+      <a href="../../rabitq/rabitq/" class="md-nav__link">
         
   
   
@@ -411,37 +409,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Rotation
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../rabitq/rotator/" class="md-nav__link">
         
   
   
@@ -457,93 +428,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ffht-kacs-walk" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        FFHT + Kac’s Walk
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="FFHT + Kac’s Walk">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#description" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Description
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#random-orthogonal-transformation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Random Orthogonal Transformation
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Random Orthogonal Transformation">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#description_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Description
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -556,7 +440,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quantizer/" class="md-nav__link">
+      <a href="../../rabitq/quantizer/" class="md-nav__link">
         
   
   
@@ -584,7 +468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../estimator/" class="md-nav__link">
+      <a href="../../rabitq/estimator/" class="md-nav__link">
         
   
   
@@ -612,7 +496,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reranking/" class="md-nav__link">
+      <a href="../../rabitq/reranking/" class="md-nav__link">
         
   
   
@@ -1032,8 +916,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -1054,11 +940,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
@@ -1079,7 +965,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1094,10 +980,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../benchmarks/bench/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1113,6 +1026,114 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#datasets-and-ground-truth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datasets and ground truth
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hardware-and-software" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardware and software
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#construction-and-search-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction and search settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-figures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the figures
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-indexing-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the indexing tables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope-and-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope and limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-and-reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data and reproduction
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1125,7 +1146,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/ivf/" class="md-nav__link">
+      <a href="../ivf/" class="md-nav__link">
         
   
   
@@ -1153,7 +1174,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/graphs/" class="md-nav__link">
+      <a href="../graphs/" class="md-nav__link">
         
   
   
@@ -1181,7 +1202,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../benchmarks/kmeans/" class="md-nav__link">
+      <a href="../kmeans/" class="md-nav__link">
         
   
   
@@ -1236,10 +1257,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#example" class="md-nav__link">
+  <a href="#datasets-and-ground-truth" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Example
+        Datasets and ground truth
       
     </span>
   </a>
@@ -1247,58 +1268,79 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ffht-kacs-walk" class="md-nav__link">
+  <a href="#hardware-and-software" class="md-nav__link">
     <span class="md-ellipsis">
       
-        FFHT + Kac’s Walk
+        Hardware and software
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="FFHT + Kac’s Walk">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#description" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Description
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#random-orthogonal-transformation" class="md-nav__link">
+  <a href="#package-installation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Random Orthogonal Transformation
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Random Orthogonal Transformation">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#description_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Description
+        Package installation
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#construction-and-search-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Construction and search settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-figures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the figures
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-indexing-tables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the indexing tables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope-and-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope and limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-and-reproduction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data and reproduction
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1319,7 +1361,7 @@
 
 
   
-    <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/edit/main/docs/docs/rabitq/rotator.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/edit/main/docs/docs/benchmarks/bench.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1327,94 +1369,236 @@
   
 
 
-<h1 id="random-rotation">Random Rotation<a class="headerlink" href="#random-rotation" title="Permanent link">&para;</a></h1>
-<p>Random rotation (i.e., Johnson Lindenstrauss Transformation) is a crucial step to ensure robust performance and theoretical error bounds of RaBitQ. It is applied to all vectors (including raw data vectors, center vectors and raw query vectors) as a preprocessing step. This section describes the usage of the random rotation.</p>
-<p>RaBitQLib provides two types of random rotation. All implementations sample and store a random rotation at first. Then they apply the sampled random rotation to every input vector and return the rotated vector. </p>
-<p>By default, the library uses the <code>FFHT + Kac’s Walk</code> method. </p>
-<p>The default rotator accepts input dimensions from 64 through 65,536 inclusive,
-including 16,384. It pads to a multiple of 64 and uses AVX or NEON kernels
-for power-of-two blocks through <code>2^16</code>. Allocate the
-output using <code>rotator-&gt;size()</code>, which can exceed the input dimension.</p>
-<p>The implementation can be found in <code>rotator.hpp</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="o">.</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="err">├──</span><span class="w"> </span><span class="nt">rabitqlib</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="o">...</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="nt">utils</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="o">...</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="err">│</span><span class="w">       </span><span class="err">└──</span><span class="w"> </span><span class="nt">rotator</span><span class="p">.</span><span class="nc">hpp</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="err">└──</span><span class="w"> </span><span class="o">...</span>
-</code></pre></div>
-<h3 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;memory&gt;</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">"rabitqlib/utils/rotator.hpp"</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="kt">int</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">769</span><span class="p">;</span><span class="w">  </span><span class="c1">// deliberately not a multiple of 64</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">Rotator</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">rotator</span><span class="p">(</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">        </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">choose_rotator</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">RotatorType</span><span class="o">::</span><span class="n">FhtKacRotator</span><span class="p">)</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="p">);</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">x</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="mf">1.0F</span><span class="p">);</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">x_prime</span><span class="p">(</span><span class="n">rotator</span><span class="o">-&gt;</span><span class="n">size</span><span class="p">());</span><span class="w">  </span><span class="c1">// 832 elements</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="n">rotator</span><span class="o">-&gt;</span><span class="n">rotate</span><span class="p">(</span><span class="n">x</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">x_prime</span><span class="p">.</span><span class="n">data</span><span class="p">());</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">}</span>
-</code></pre></div>
-<p><code>choose_rotator</code> returns an owning pointer; wrap it in <code>std::unique_ptr</code>.
-Use the same rotator for data, centroids, and queries. Pass <code>rotator-&gt;size()</code>
-to quantization and estimation routines that operate on rotated vectors.</p>
-<p>For a random orthogonal transformation, select <code>RotatorType::MatrixRotator</code>.
-It keeps the input dimension by default; pass a padded dimension explicitly if
-subsequent packed-code operations require a multiple of 64. Its storage and
-computation cost are quadratic in the dimension.</p>
-<h2 id="ffht-kacs-walk">FFHT + Kac’s Walk<a class="headerlink" href="#ffht-kacs-walk" title="Permanent link">&para;</a></h2>
-<h3 id="description">Description<a class="headerlink" href="#description" title="Permanent link">&para;</a></h3>
-<p>On x86-64, transforms use the shared AVX intrinsics in <code>src/simd/fht_kernels.hpp</code>
-within the AVX2 or AVX-512 backend selected at runtime. GCC, Clang, and MSVC
-use the same implementation without inline assembly or MASM. ARM64 uses
-NEON kernels in <code>src/simd/rotator_neon.cpp</code>; a portable scalar implementation
-is also available. The backends preserve the FFHT butterfly order,
-normalization, four sign-flip passes, and saved rotation state.</p>
-<p>This method is a combination of the well-known Fast Johnson-Lindenstrauss Transformation algorithms based on <a href="https://www.cs.princeton.edu/~chazelle/pubs/FJLT-sicomp09.pdf">Fast Hadamard Transform</a> and ideas in <a href="https://projecteuclid.org/journals/annals-of-applied-probability/volume-27/issue-1/Kacs-walk-on-n-sphere-mixes-in-nlog-n-steps/10.1214/16-AAP1214.full">Kac’s Walk</a>. 
-It first samples 4 sequences of random signs (i.e., Rademacher random variables). Then for each vector, it repeats the following procedures 4 times.</p>
-<ol>
-<li>Flip its coordinates with the <span class="arithmatex"><span class="MathJax_Preview">i</span><script type="math/tex">i</script></span>-th sequence of sampled random signs. </li>
-<li>Apply FFHT on the first/last <span class="arithmatex"><span class="MathJax_Preview">2^k</span><script type="math/tex">2^k</script></span> coordinates (alternately), where <span class="arithmatex"><span class="MathJax_Preview">2^k</span><script type="math/tex">2^k</script></span> is the maximum power of 2 that is less than or equal to the dimensionality of the vector.</li>
-<li>Apply Givens rotation with a fixed angle <span class="arithmatex"><span class="MathJax_Preview">\theta = \frac{\pi}{4}</span><script type="math/tex">\theta = \frac{\pi}{4}</script></span> to the 1st and the 2nd halves of coordinates.</li>
-</ol>
-<p>The following table summarizes the space and time complexity of this method.</p>
+<h1 id="benchmark-overview">Benchmark overview<a class="headerlink" href="#benchmark-overview" title="Permanent link">&para;</a></h1>
+<p>Compare RaBitQ-Library, Faiss, and SuperKMeans on one Intel Xeon Gold 6418H:
+<a href="../ivf/">IVF indexes</a>, <a href="../graphs/">graph indexes</a>, and <a href="../kmeans/">k-means</a>.</p>
+<h2 id="datasets-and-ground-truth">Datasets and ground truth<a class="headerlink" href="#datasets-and-ground-truth" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Space Consumption</th>
-<th>Time Complexity</th>
+<th>Dataset</th>
+<th style="text-align: right;">Base vectors</th>
+<th style="text-align: right;">Dimensions</th>
+<th>ANN metric</th>
+<th style="text-align: right;">Queries</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">4D</span><script type="math/tex">4D</script></span> binary values (<span class="arithmatex"><span class="MathJax_Preview">4D</span><script type="math/tex">4D</script></span> bits)</td>
-<td><span class="arithmatex"><span class="MathJax_Preview">O(D\log D)</span><script type="math/tex">O(D\log D)</script></span></td>
+<td>GIST1M</td>
+<td style="text-align: right;">1,000,000</td>
+<td style="text-align: right;">960</td>
+<td>L2</td>
+<td style="text-align: right;">1,000</td>
+</tr>
+<tr>
+<td>DBpedia / OpenAI-1536</td>
+<td style="text-align: right;">999,000</td>
+<td style="text-align: right;">1,536</td>
+<td>Inner product</td>
+<td style="text-align: right;">1,000</td>
 </tr>
 </tbody>
 </table>
-<p>This implementation is based on the <a href="https://github.com/FALCONN-LIB/FFHT">FFHT library</a> developed by Alexandr Andoni, Piotr Indyk, Thijs Laarhoven, Ilya Razenshteyn and Ludwig Schmidt. </p>
-<h2 id="random-orthogonal-transformation">Random Orthogonal Transformation<a class="headerlink" href="#random-orthogonal-transformation" title="Permanent link">&para;</a></h2>
-<h3 id="description_1">Description<a class="headerlink" href="#description_1" title="Permanent link">&para;</a></h3>
-<p>This method is the classical Johnson-Lindenstrauss Transformation. It first samples a random gaussian matrix and orthogonalizes it with QR decomposition. Then it multiplies the matrix to every vector.</p>
-<p>The following table summarizes the space and time complexity of this method.</p>
+<p>GIST1M uses the standard TexMex split and supplied L2 ground truth. OpenAI-1536
+uses <a href="https://github.com/cwida/SuperKMeans/blob/main/BENCHMARKING.md">SuperKMeans' dataset</a>,
+preserving its split, row order, and normalized float32 values. ANN ground truth
+for OpenAI is computed by exhaustive inner-product search.</p>
+<p>All methods share one fixed query set per dataset. Queries are used only for
+evaluation. <a href="../kmeans/">K-means</a> uses L2 for both datasets and computes separate
+L2 ground truth for OpenAI.</p>
+<h2 id="hardware-and-software">Hardware and software<a class="headerlink" href="#hardware-and-software" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Space Consumption</th>
-<th>Time Complexity</th>
+<th>Setting</th>
+<th>Value</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">D^2</span><script type="math/tex">D^2</script></span> floating-point numbers</td>
-<td><span class="arithmatex"><span class="MathJax_Preview">O(D^2)</span><script type="math/tex">O(D^2)</script></span></td>
+<td>CPU</td>
+<td>One Intel Xeon Gold 6418H, 24 cores, 48 hardware threads</td>
+</tr>
+<tr>
+<td>Construction / clustering</td>
+<td>48 threads</td>
+</tr>
+<tr>
+<td>Query throughput</td>
+<td>1 process, 1 search thread, 1 query per call</td>
+</tr>
+<tr>
+<td>Platform</td>
+<td>Ubuntu 22.04.5 LTS, Linux 6.8.0-84-generic, x86-64</td>
+</tr>
+<tr>
+<td>Python / NumPy</td>
+<td>3.13.15 / 2.5.2</td>
+</tr>
+<tr>
+<td>Construction and clustering compiler / CMake</td>
+<td>GCC 13.1.0 / 3.28.3, Release</td>
+</tr>
+<tr>
+<td>RaBitQ-Library</td>
+<td>0.5.2</td>
+</tr>
+<tr>
+<td>Baselines</td>
+<td>Faiss 1.15.0, SuperKMeans 0.2.0; Intel MKL 2020.4, GNU OpenMP</td>
 </tr>
 </tbody>
 </table>
+<h2 id="package-installation">Package installation<a class="headerlink" href="#package-installation" title="Permanent link">&para;</a></h2>
+<p>Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
+source providing <code>g++-13</code> and the <code>multiverse</code> component for MKL.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>build-essential<span class="w"> </span>g++-13<span class="w"> </span>git<span class="w"> </span>numactl<span class="w"> </span>curl<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>libmkl-dev<span class="w"> </span>libmkl-rt<span class="w"> </span>libmkl-gnu-thread
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>benchmarks/install_baselines.py<span class="w"> </span>--jobs<span class="w"> </span><span class="m">12</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nb">source</span><span class="w"> </span>benchmarks/env.sh
+</code></pre></div>
+<p>The installer builds RaBitQ from the checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
+in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
+and verification records are saved in <code>build/benchmark-baselines/</code>.
+Use <code>--dry-run</code> to preview installation commands.</p>
+<h2 id="construction-and-search-settings">Construction and search settings<a class="headerlink" href="#construction-and-search-settings" title="Permanent link">&para;</a></h2>
+<p>IVF uses 4,096 clusters. HNSW uses <code>M=16</code> and <code>efConstruction=200</code>;
+SymphonyQG uses degree 32. Family pages list all method settings.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Search grid</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IVF</td>
+<td><code>nprobe=1,2,4,8,16,32,64,128,256,512</code></td>
+</tr>
+<tr>
+<td>Faiss IVF with RFlat</td>
+<td>Above × <code>k_factor=1,2,5,10,20</code></td>
+</tr>
+<tr>
+<td>Graph</td>
+<td><code>ef=16,32,64,128,256,512,1024</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each setting searches all 1,000 queries at <code>k=10</code>, after warm-up. QPS is queries
+divided by elapsed search time, including Python call overhead and excluding
+index loading. Each setting has one timing pass.</p>
+<h2 id="reading-the-figures">Reading the figures<a class="headerlink" href="#reading-the-figures" title="Permanent link">&para;</a></h2>
+<p>Recall@10 is the mean fraction of exact top-10 neighbors returned. Faint markers
+show all measured settings; lines connect each method's Pareto frontier. QPS uses
+a logarithmic axis. The CSV contains every measured point.</p>
+<h2 id="reading-the-indexing-tables">Reading the indexing tables<a class="headerlink" href="#reading-the-indexing-tables" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Train</td>
+<td>Training or centroid clustering time</td>
+</tr>
+<tr>
+<td>Construct</td>
+<td>Encoding and index construction after training</td>
+</tr>
+<tr>
+<td>Total</td>
+<td>Construction including setup and training, excluding saving</td>
+</tr>
+<tr>
+<td>Save</td>
+<td>Serialization time</td>
+</tr>
+<tr>
+<td>Index GiB</td>
+<td>Serialized files, including sidecars and retained raw vectors</td>
+</tr>
+</tbody>
+</table>
+<p>Times are seconds. Data preparation, ground-truth generation, and correctness
+checks are outside construction timing.</p>
+<h2 id="scope-and-limitations">Scope and limitations<a class="headerlink" href="#scope-and-limitations" title="Permanent link">&para;</a></h2>
+<p>Each method has one build or fit per dataset; results do not measure run-to-run
+variation.</p>
+<h2 id="data-and-reproduction">Data and reproduction<a class="headerlink" href="#data-and-reproduction" title="Permanent link">&para;</a></h2>
+<p>Run from the repository root after installation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Prepare data, run all benchmarks, and export results</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>benchmarks/reproduce.py
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Prepare data only</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>benchmarks/download_datasets.py
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Selected results</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>ivf<span class="w"> </span>--datasets<span class="w"> </span>gist1m
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--datasets<span class="w"> </span>dbpedia<span class="w"> </span>--methods<span class="w"> </span>qgkmeans
+</code></pre></div>
+<p>Downloads preserve the published splits and check file sizes and vector shapes. GIST and
+OpenAI need about 26 GB for downloads and prepared data; indexes and temporary
+workspace require additional space.</p>
+<table>
+<thead>
+<tr>
+<th>Content</th>
+<th>Default location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Download cache</td>
+<td><code>data/benchmark-downloads/</code></td>
+</tr>
+<tr>
+<td>GIST vectors and ground truth</td>
+<td><code>data/gist/</code></td>
+</tr>
+<tr>
+<td>OpenAI vectors and ANN ground truth</td>
+<td><code>data/dbpedia/</code></td>
+</tr>
+<tr>
+<td>ANN build records / query records</td>
+<td><code>results/benchmarks/ann/&lt;dataset&gt;/</code> / <code>results/benchmarks/ann/sweeps/&lt;dataset&gt;/</code></td>
+</tr>
+<tr>
+<td>Saved indexes</td>
+<td><code>results/benchmarks/ann/indexes/</code></td>
+</tr>
+<tr>
+<td>K-means records, centroids, assignments</td>
+<td><code>results/benchmarks/kmeans/&lt;dataset&gt;/</code></td>
+</tr>
+<tr>
+<td>Logs</td>
+<td><code>results/benchmarks/ann/logs/</code>, <code>results/benchmarks/kmeans/logs/</code></td>
+</tr>
+<tr>
+<td>Tables / CSVs and SVGs / website</td>
+<td><code>docs/docs/benchmarks/</code> / <code>docs/docs/benchmarks/figures/</code> / <code>docs/site/</code></td>
+</tr>
+</tbody>
+</table>
+<p>Existing results are skipped. Use a fresh <code>--output-dir</code> to repeat measurements;
+this changes raw result and log paths, while documentation exports retain the
+paths above. Partial exports preserve unselected results.</p>
+<p>Use <code>--stage build</code>, <code>--stage query</code>, or <code>--stage export</code> for one stage. Querying
+reuses saved indexes; export runs no experiments. <code>--dry-run</code> previews commands;
+<code>--help</code> lists methods. Both datasets are selected by default.</p>
+<p><code>data/</code> and <code>results/</code> are ignored by Git. The downloader accepts <code>--datasets</code>,
+<code>--data-dir</code>, and <code>--cache-dir</code>; runners expect the default data paths.</p>
+<p><a href="../figures/qps-recall-points.csv">Query CSV</a> · <a href="../figures/indexing.csv">Indexing CSV</a> ·
+<a href="../figures/kmeans.csv">K-means CSV</a></p>
 
 
 
@@ -1450,7 +1634,7 @@ It first samples 4 sequences of random signs (i.e., Rademacher random variables)
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../rabitq/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Overview">
+          <a href="../../clustering/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Clustering">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1460,20 +1644,20 @@ It first samples 4 sequences of random signs (i.e., Rademacher random variables)
                 Previous
               </span>
               <div class="md-ellipsis">
-                Overview
+                Clustering
               </div>
             </div>
           </a>
         
         
           
-          <a href="../quantizer/" class="md-footer__link md-footer__link--next" aria-label="Next: Quantization">
+          <a href="../ivf/" class="md-footer__link md-footer__link--next" aria-label="Next: IVF Indexes">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Quantization
+                IVF Indexes
               </div>
             </div>
             <div class="md-footer__button md-icon">
