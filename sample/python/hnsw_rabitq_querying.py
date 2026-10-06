@@ -59,7 +59,7 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RaBitQ HNSW Querying")
+    parser = argparse.ArgumentParser(description="HNSW RaBitQ Querying")
 
     parser.add_argument("index_file", type=str, help="Path to the HNSW index file")
     parser.add_argument("query_file", type=str, help="Path to the query file")

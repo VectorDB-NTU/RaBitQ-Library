@@ -13,9 +13,9 @@ factory training defaults. Training is included in construction time.
 
 | Method | Construction specification | Search parameters |
 | --- | --- | --- |
-| RaBitQ IVF raw | `IvfIndex(nbits=32)`; one-bit filter with original float32 vectors | `nprobe` |
-| RaBitQ IVF 1+4 | `IvfIndex(nbits=5)` | `nprobe` |
-| RaBitQ IVF 1+8 | `IvfIndex(nbits=9)` | `nprobe` |
+| IVF RaBitQ raw | `IvfIndex(nbits=32)`; one-bit filter with original float32 vectors | `nprobe` |
+| IVF RaBitQ 1+4 | `IvfIndex(nbits=5)` | `nprobe` |
+| IVF RaBitQ 1+8 | `IvfIndex(nbits=9)` | `nprobe` |
 | Faiss IVF RaBitQfs raw + RFlat | `HRd,IVF4096,RaBitQfs1,RFlat` | `nprobe`, `k_factor` |
 | Faiss IVF RaBitQfs 1+4 | `HRd,IVF4096,RaBitQfs5` | `nprobe` |
 | Faiss IVF RaBitQfs 1+8 | `HRd,IVF4096,RaBitQfs9` | `nprobe` |
@@ -27,7 +27,7 @@ factory training defaults. Training is included in construction time.
 for Faiss reranking. Index size and QPS include retained vectors and reranking.
 
 The search grid is `nprobe=1,2,4,8,16,32,64,128,256,512`, crossed with
-`k_factor=1,2,5,10,20` for the `RFlat` methods. RaBitQ quantized IVF uses its
+`k_factor=1,2,5,10,20` for the `RFlat` methods. Quantized IVF RaBitQ uses its
 default HACC search mode for total bit widths 5 and 9.
 
 ## Reading the results
@@ -46,9 +46,9 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:gist1m:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| RaBitQ IVF raw | 14.70 | 0.66 | 15.37 | 1.55 | 3.73 |
-| RaBitQ IVF 1+4 | 14.84 | 1.71 | 16.56 | 0.25 | 0.60 |
-| RaBitQ IVF 1+8 | 14.54 | 7.03 | 21.57 | 0.45 | 1.05 |
+| IVF RaBitQ raw | 14.70 | 0.66 | 15.37 | 1.55 | 3.73 |
+| IVF RaBitQ 1+4 | 14.84 | 1.71 | 16.56 | 0.25 | 0.60 |
+| IVF RaBitQ 1+8 | 14.54 | 7.03 | 21.57 | 0.45 | 1.05 |
 | Faiss IVF RaBitQfs raw + RFlat | 41.61 | 6.76 | 48.37 | 1.58 | 3.73 |
 | Faiss IVF RaBitQfs 1+4 | 41.24 | 13.16 | 54.40 | 0.29 | 0.68 |
 | Faiss IVF RaBitQfs 1+8 | 41.38 | 39.82 | 81.20 | 0.52 | 1.19 |
@@ -65,9 +65,9 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:dbpedia:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| RaBitQ IVF raw | 24.29 | 1.89 | 26.18 | 2.58 | 5.95 |
-| RaBitQ IVF 1+4 | 24.33 | 2.89 | 27.22 | 0.40 | 0.95 |
-| RaBitQ IVF 1+8 | 24.36 | 12.42 | 36.77 | 0.70 | 1.67 |
+| IVF RaBitQ raw | 24.29 | 1.89 | 26.18 | 2.58 | 5.95 |
+| IVF RaBitQ 1+4 | 24.33 | 2.89 | 27.22 | 0.40 | 0.95 |
+| IVF RaBitQ 1+8 | 24.36 | 12.42 | 36.77 | 0.70 | 1.67 |
 | Faiss IVF RaBitQfs raw + RFlat | 85.29 | 12.97 | 98.26 | 2.71 | 6.02 |
 | Faiss IVF RaBitQfs 1+4 | 86.94 | 28.05 | 114.99 | 0.60 | 1.33 |
 | Faiss IVF RaBitQfs 1+8 | 119.86 | 91.11 | 210.97 | 1.00 | 2.34 |

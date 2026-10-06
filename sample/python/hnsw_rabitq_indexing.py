@@ -57,7 +57,7 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RaBitQ HNSW Manager")
+    parser = argparse.ArgumentParser(description="HNSW RaBitQ Manager")
 
     parser.add_argument("data_file", type=str, help="Path to the data file")
     parser.add_argument("index_file", type=str, help="Path to save the index")

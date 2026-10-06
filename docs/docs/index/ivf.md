@@ -1,4 +1,4 @@
-# IVF + RaBitQ
+# IVF RaBitQ
 
 [IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical
 clustering-based ANN method. This implementation stores RaBitQ codes and

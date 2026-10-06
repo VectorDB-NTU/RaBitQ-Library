@@ -806,7 +806,7 @@ z
     </g>
    </g>
    <g id="text_17">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="538.915781" transform="rotate(-0 321.598828 538.915781)">RaBitQ SymphonyQG raw</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="538.915781" transform="rotate(-0 321.598828 538.915781)">SymphonyQG raw</text>
    </g>
    <g id="line2d_49">
     <path d="M 296.398828 549.266484
@@ -826,7 +826,7 @@ z
     </g>
    </g>
    <g id="text_18">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="552.416484" transform="rotate(-0 321.598828 552.416484)">RaBitQ SymphonyQG 4-bit</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="552.416484" transform="rotate(-0 321.598828 552.416484)">SymphonyQG 4-bit</text>
    </g>
    <g id="line2d_50">
     <path d="M 296.398828 562.767187
@@ -845,7 +845,7 @@ z
     </g>
    </g>
    <g id="text_19">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="565.917187" transform="rotate(-0 321.598828 565.917187)">RaBitQ SymphonyQG 8-bit</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="565.917187" transform="rotate(-0 321.598828 565.917187)">SymphonyQG 8-bit</text>
    </g>
    <g id="line2d_51">
     <path d="M 296.398828 576.267891
@@ -865,7 +865,7 @@ z
     </g>
    </g>
    <g id="text_20">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="579.417891" transform="rotate(-0 321.598828 579.417891)">RaBitQ HNSW 1+4</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="321.598828" y="579.417891" transform="rotate(-0 321.598828 579.417891)">HNSW RaBitQ 1+4</text>
    </g>
    <g id="line2d_52">
     <path d="M 458.713828 535.765781
@@ -884,7 +884,7 @@ z
     </g>
    </g>
    <g id="text_21">
-    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="483.913828" y="538.915781" transform="rotate(-0 483.913828 538.915781)">RaBitQ HNSW 1+8</text>
+    <text style="font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="483.913828" y="538.915781" transform="rotate(-0 483.913828 538.915781)">HNSW RaBitQ 1+8</text>
    </g>
    <g id="line2d_53">
     <path d="M 458.713828 549.266484

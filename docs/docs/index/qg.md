@@ -1,4 +1,4 @@
-# QG + RaBitQ (SymphonyQG)
+# SymphonyQG
 
 [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) combines the graph search
 of [QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0),
@@ -6,7 +6,7 @@ from [NGT](https://github.com/yahoojapan/NGT), with batched RaBitQ distance esti
 FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.
 
-Set `quantization_bits=0` for raw vectors (default), or `4`/`8` for QG-quant.
+Set `quantization_bits=0` for raw vectors (default), or `4`/`8` for quantized SymphonyQG.
 Quantized vectors share a rotated global centroid. Refinement temporarily
 reconstructs source vectors and estimates distances to stored target codes;
 reverse edges are rescored because these estimates are directional. Raw refinement

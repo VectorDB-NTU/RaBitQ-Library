@@ -15,7 +15,7 @@ for exact reranking. [IVF raw mode](../index/ivf.md#index-construction)
 (`nbits=32`) instead owns the original vectors and reranks them in memory.
 
 ## Algorithm Description
-Let $K$ be the number of nearest neighbors we target. After receiving the candidates and their estimated distances from an index, e.g., HNSW + RaBitQ, we perform the following strategy of reranking to minimize the number of retrieved raw vectors from disks.
+Let $K$ be the number of nearest neighbors we target. After receiving the candidates and their estimated distances from an index, e.g., HNSW RaBitQ, we perform the following strategy of reranking to minimize the number of retrieved raw vectors from disks.
 
 1. Sort the candidates with respect to their estimated distances.
 2. Initialize a max-heap (sorted by **upper bounds of distances**) `KNNs` with the top-$K$ candidates which have the smallest estimated distances.

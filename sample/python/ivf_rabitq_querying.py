@@ -67,7 +67,7 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RaBitQ IVF Querying")
+    parser = argparse.ArgumentParser(description="IVF RaBitQ Querying")
 
     parser.add_argument("index_file", type=str, help="Path to the IVF index file")
     parser.add_argument("query_file", type=str, help="Path to the query file")

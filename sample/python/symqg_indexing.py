@@ -11,7 +11,7 @@ from utils import read_fvecs
 MAX_DEGREE = 32  # degree bound for SymphonyQG
 EF_CONSTRUCTION = 200  # ef for indexing
 METRIC = "l2"  # "l2" or "ip"
-QUANTIZATION_BITS = 0  # 0 for vanilla QG, or 4/8 for QG-quant
+QUANTIZATION_BITS = 0  # 0 for raw SymphonyQG, or 4/8 for quantized SymphonyQG
 NUM_THREADS = 16  # number of threads for build
 INIT = "pipnn"  # "pipnn" or "random" initialization of SymphonyQG
 # ──────────────────────────────────────────────
@@ -51,7 +51,7 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RaBitQ SymphonyQG Manager")
+    parser = argparse.ArgumentParser(description="SymphonyQG Manager")
     parser.add_argument("data_file", type=str, help="Path to the data file")
     parser.add_argument("index_file", type=str, help="Path to save the index")
     parser.add_argument(
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         type=int,
         choices=[0, 4, 8],
         default=QUANTIZATION_BITS,
-        help="Vector quantization bits: 0 for vanilla QG, or 4/8 for QG-quant",
+        help="Vector quantization bits: 0 for raw SymphonyQG, or 4/8 for quantized SymphonyQG",
     )
     parser.add_argument(
         "--init",

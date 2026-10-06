@@ -60,7 +60,7 @@ def main(args=None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RaBitQ SymphonyQG Querying Manager")
+    parser = argparse.ArgumentParser(description="SymphonyQG Querying Manager")
     parser.add_argument(
         "index_file", type=str, help="Path to the SymphonyQG index file"
     )

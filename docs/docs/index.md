@@ -94,8 +94,8 @@ Starting with 0.5.2, HNSW supports [adding and removing vectors and resizing cap
 
 | Index | Best fit | Typical relative memory | Main search control |
 | --- | --- | --- | --- |
-| [IVF + RaBitQ](index/ivf.md) | Large datasets and predictable memory use | Lowest | Number of probed clusters |
-| [HNSW + RaBitQ](index/hnsw.md) | General-purpose graph search | Moderate | Search candidate list size |
+| [IVF RaBitQ](index/ivf.md) | Large datasets and predictable memory use | Lowest | Number of probed clusters |
+| [HNSW RaBitQ](index/hnsw.md) | General-purpose graph search | Moderate | Search candidate list size |
 | [SymphonyQG](index/qg.md) | Latency-focused graph search | Highest | Search window size |
 
 IVF stores quantized vectors by default, or retains original float32 vectors

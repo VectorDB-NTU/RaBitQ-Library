@@ -1,7 +1,7 @@
-# HNSW + RaBitQ
+# HNSW RaBitQ
 [HNSW](https://arxiv.org/abs/1603.09320) is a popular graph-based index. Under
-comparable quantization settings, HNSW + RaBitQ typically uses more memory
-than IVF + RaBitQ because it stores graph structures in addition to quantized
+comparable quantization settings, HNSW RaBitQ typically uses more memory
+than IVF RaBitQ because it stores graph structures in addition to quantized
 vectors. The actual comparison depends on vector dimension, bit width, graph
 degree, and index parameters.
 This document describes how the library integrates HNSW with RaBitQ to support efficient vector search.

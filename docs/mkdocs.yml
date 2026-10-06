@@ -19,8 +19,8 @@ nav:
           - Compact Code Storage: compact_code.md
           - Inner Product: kernel_ip.md
   - Vector Search:
-      - IVF + RaBitQ: index/ivf.md
-      - HNSW + RaBitQ: index/hnsw.md
+      - IVF RaBitQ: index/ivf.md
+      - HNSW RaBitQ: index/hnsw.md
       - SymphonyQG: index/qg.md
   - Integrations:
       - Zvec: integrations/zvec.md
