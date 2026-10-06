@@ -458,6 +458,9 @@ inline HierarchicalNSW::HierarchicalNSW(
     , element_levels_(max_elements)
     , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>) {
     validate_metric_type(metric_type);
+    if (M < 2) {
+        throw std::invalid_argument("HNSW M must be at least 2");
+    }
     max_elements_ = max_elements;
     dim_ = dim;
     rotator_.reset(choose_rotator<float>(
@@ -652,7 +655,7 @@ inline void HierarchicalNSW::load(const char* filename) {
         loaded.padded_dim_ != round_up_to_multiple(loaded.dim_, 64) ||
         loaded.ex_bits_ > 8 ||
         (loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
-        loaded.M_ == 0 || loaded.M_ > 10000 || loaded.maxM_ != loaded.M_ ||
+        loaded.M_ < 2 || loaded.M_ > 10000 || loaded.maxM_ != loaded.M_ ||
         loaded.maxM0_ != 2 * loaded.M_ || loaded.ef_construction_ < loaded.M_ ||
         (element_count == 0 &&
          (loaded.maxlevel_ != -1 || loaded.enterpoint_node_ != kPidMax)) ||
@@ -676,8 +679,7 @@ inline void HierarchicalNSW::load(const char* filename) {
         loaded.offsetExData_ != expected_ex_offset ||
         loaded.size_data_per_element_ != expected_stride ||
         loaded.size_links_per_element_ != (loaded.maxM_ + 1) * sizeof(PID) ||
-        (loaded.M_ > 1 && (!std::isfinite(loaded.mult_) || loaded.mult_ <= 0.0)) ||
-        (loaded.M_ == 1 && !std::isinf(loaded.mult_))) {
+        !std::isfinite(loaded.mult_) || loaded.mult_ <= 0.0) {
         invalid_file();
     }
 
@@ -898,6 +900,9 @@ inline void HierarchicalNSW::construct(
     size_t num_threads = 0,
     bool faster = false
 ) {
+    if (num_cluster_ != 0 || cur_element_count_ != 0) {
+        throw std::logic_error("HNSW index is already constructed or loaded");
+    }
     if (cluster_num == 0 || cluster_num > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("HNSW cluster count is out of range");
     }
@@ -917,32 +922,55 @@ inline void HierarchicalNSW::construct(
         }
     }
 
-    num_cluster_ = cluster_num;
-    const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
-    centroids_memory_ = memory::huge_page_allocate<char>(centroids_bytes);
-    if (centroids_memory_ == nullptr) {
-        throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids");
-    }
+    try {
+        num_cluster_ = cluster_num;
+        const size_t centroids_bytes = num_cluster_ * padded_dim_ * sizeof(float);
+        centroids_memory_ = memory::huge_page_allocate<char>(centroids_bytes);
+        if (centroids_memory_ == nullptr) {
+            throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids"
+            );
+        }
 
-    for (size_t i = 0; i < cluster_num; ++i) {
-        this->rotator_->rotate(
-            centroids + (i * dim_),
-            reinterpret_cast<float*>(centroids_memory_) + (i * padded_dim_)
+        for (size_t i = 0; i < cluster_num; ++i) {
+            this->rotator_->rotate(
+                centroids + (i * dim_),
+                reinterpret_cast<float*>(centroids_memory_) + (i * padded_dim_)
+            );
+        }
+
+        quant::RabitqConfig config;
+        if (faster) {
+            config = quant::faster_config(padded_dim_, ex_bits_ + 1);
+        }
+
+        rawDataPtr_ = data;
+        rabitqlib::ivf::parallel_for(
+            0,
+            data_num,
+            num_threads,
+            [&](size_t idx, size_t /*threadId*/) {
+                add_point(idx, cluster_ids[idx], config);
+            }
         );
+    } catch (...) {
+        // parallel_for joins every worker before propagating an exception.
+        // Discard the partial graph, retaining capacity and rotation for a retry.
+        for (size_t i = 0; i < cur_element_count_; ++i) {
+            std::free(linkLists_[i]);
+            linkLists_[i] = nullptr;
+            element_levels_[i] = 0;
+        }
+        cur_element_count_ = 0;
+        label_lookup_.clear();
+        enterpoint_node_ = kPidMax;
+        maxlevel_ = -1;
+        memory::aligned_deallocate(centroids_memory_);
+        centroids_memory_ = nullptr;
+        num_cluster_ = 0;
+        rawDataPtr_ = nullptr;
+        throw;
     }
-
-    quant::RabitqConfig config;
-    if (faster) {
-        config = quant::faster_config(padded_dim_, ex_bits_ + 1);
-    }
-
-    rawDataPtr_ = data;
-    rabitqlib::ivf::parallel_for(
-        0,
-        data_num,
-        num_threads,
-        [&](size_t idx, size_t /*threadId*/) { add_point(idx, cluster_ids[idx], config); }
-    );
+    rawDataPtr_ = nullptr;
 }
 
 inline void HierarchicalNSW::add_point(
@@ -967,6 +995,7 @@ inline void HierarchicalNSW::add_point(
         }
 
         cur_c = cur_element_count_;
+        linkLists_[cur_c] = nullptr;
         cur_element_count_++;
         label_lookup_[label] = cur_c;
         curlevel = get_random_level(mult_);
@@ -980,10 +1009,10 @@ inline void HierarchicalNSW::add_point(
     element_levels_[cur_c] = curlevel;
     std::unique_lock<std::mutex> templock(global_);
     int maxlevelcopy = maxlevel_;
+    PID curr_obj = enterpoint_node_;
     if (curlevel <= maxlevelcopy) {
         templock.unlock();
     }
-    PID curr_obj = enterpoint_node_;
 
     // initialize the current memory.
     memset(
@@ -1070,7 +1099,7 @@ inline void HierarchicalNSW::add_point(
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
     PID ep_id, PID cur_c, int layer
 ) {
-    VisitedSet* vl = visited_list_pool_->get_free_vislist();
+    std::unique_ptr<VisitedSet> vl(visited_list_pool_->get_free_vislist());
 
     maxheap<std::pair<float, PID>> top_candidates;
     minheap<std::pair<float, PID>> candidate_set;
@@ -1143,7 +1172,8 @@ inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
             }
         }
     }
-    visited_list_pool_->release_vis_list(vl);
+    visited_list_pool_->release_vis_list(vl.get());
+    vl.release();
     return top_candidates;
 }
 
