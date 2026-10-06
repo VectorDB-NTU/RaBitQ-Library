@@ -717,7 +717,7 @@
   <span class="md-ellipsis">
     
   
-    IVF + RaBitQ
+    IVF RaBitQ
   
 
     
@@ -745,7 +745,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW + RaBitQ
+    HNSW RaBitQ
   
 
     
@@ -1390,17 +1390,17 @@ factory training defaults. Training is included in construction time.</p>
 </thead>
 <tbody>
 <tr>
-<td>RaBitQ IVF raw</td>
+<td>IVF RaBitQ raw</td>
 <td><code>IvfIndex(nbits=32)</code>; one-bit filter with original float32 vectors</td>
 <td><code>nprobe</code></td>
 </tr>
 <tr>
-<td>RaBitQ IVF 1+4</td>
+<td>IVF RaBitQ 1+4</td>
 <td><code>IvfIndex(nbits=5)</code></td>
 <td><code>nprobe</code></td>
 </tr>
 <tr>
-<td>RaBitQ IVF 1+8</td>
+<td>IVF RaBitQ 1+8</td>
 <td><code>IvfIndex(nbits=9)</code></td>
 <td><code>nprobe</code></td>
 </tr>
@@ -1435,7 +1435,7 @@ factory training defaults. Training is included in construction time.</p>
 <code>nbits=32</code> retains raw float32 vectors in RaBitQ-Library; <code>RFlat</code> retains them
 for Faiss reranking. Index size and QPS include retained vectors and reranking.</p>
 <p>The search grid is <code>nprobe=1,2,4,8,16,32,64,128,256,512</code>, crossed with
-<code>k_factor=1,2,5,10,20</code> for the <code>RFlat</code> methods. RaBitQ quantized IVF uses its
+<code>k_factor=1,2,5,10,20</code> for the <code>RFlat</code> methods. Quantized IVF RaBitQ uses its
 default HACC search mode for total bit widths 5 and 9.</p>
 <h2 id="reading-the-results">Reading the results<a class="headerlink" href="#reading-the-results" title="Permanent link">&para;</a></h2>
 <p>Curves use one search thread and one query per call over all 1,000 queries.
@@ -1459,7 +1459,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 </thead>
 <tbody>
 <tr>
-<td>RaBitQ IVF raw</td>
+<td>IVF RaBitQ raw</td>
 <td style="text-align: right;">14.70</td>
 <td style="text-align: right;">0.66</td>
 <td style="text-align: right;">15.37</td>
@@ -1467,7 +1467,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">3.73</td>
 </tr>
 <tr>
-<td>RaBitQ IVF 1+4</td>
+<td>IVF RaBitQ 1+4</td>
 <td style="text-align: right;">14.84</td>
 <td style="text-align: right;">1.71</td>
 <td style="text-align: right;">16.56</td>
@@ -1475,7 +1475,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">0.60</td>
 </tr>
 <tr>
-<td>RaBitQ IVF 1+8</td>
+<td>IVF RaBitQ 1+8</td>
 <td style="text-align: right;">14.54</td>
 <td style="text-align: right;">7.03</td>
 <td style="text-align: right;">21.57</td>
@@ -1543,7 +1543,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 </thead>
 <tbody>
 <tr>
-<td>RaBitQ IVF raw</td>
+<td>IVF RaBitQ raw</td>
 <td style="text-align: right;">24.29</td>
 <td style="text-align: right;">1.89</td>
 <td style="text-align: right;">26.18</td>
@@ -1551,7 +1551,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">5.95</td>
 </tr>
 <tr>
-<td>RaBitQ IVF 1+4</td>
+<td>IVF RaBitQ 1+4</td>
 <td style="text-align: right;">24.33</td>
 <td style="text-align: right;">2.89</td>
 <td style="text-align: right;">27.22</td>
@@ -1559,7 +1559,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">0.95</td>
 </tr>
 <tr>
-<td>RaBitQ IVF 1+8</td>
+<td>IVF RaBitQ 1+8</td>
 <td style="text-align: right;">24.36</td>
 <td style="text-align: right;">12.42</td>
 <td style="text-align: right;">36.77</td>

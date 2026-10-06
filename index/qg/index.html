@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#qg-rabitq-symphonyqg" class="md-skip">
+        <a href="#symphonyqg" class="md-skip">
           Skip to content
         </a>
       
@@ -719,7 +719,7 @@
   <span class="md-ellipsis">
     
   
-    IVF + RaBitQ
+    IVF RaBitQ
   
 
     
@@ -747,7 +747,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW + RaBitQ
+    HNSW RaBitQ
   
 
     
@@ -1315,13 +1315,13 @@
   
 
 
-<h1 id="qg-rabitq-symphonyqg">QG + RaBitQ (SymphonyQG)<a class="headerlink" href="#qg-rabitq-symphonyqg" title="Permanent link">&para;</a></h1>
+<h1 id="symphonyqg">SymphonyQG<a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h1>
 <p><a href="https://dl.acm.org/doi/abs/10.1145/3709730">SymphonyQG</a> combines the graph search
 of <a href="https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0">QG</a>,
 from <a href="https://github.com/yahoojapan/NGT">NGT</a>, with batched RaBitQ distance estimation.
 FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.</p>
-<p>Set <code>quantization_bits=0</code> for raw vectors (default), or <code>4</code>/<code>8</code> for QG-quant.
+<p>Set <code>quantization_bits=0</code> for raw vectors (default), or <code>4</code>/<code>8</code> for quantized SymphonyQG.
 Quantized vectors share a rotated global centroid. Refinement temporarily
 reconstructs source vectors and estimates distances to stored target codes;
 reverse edges are rescored because these estimates are directional. Raw refinement
@@ -1469,7 +1469,7 @@ Python counterparts for complete examples.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../hnsw/" class="md-footer__link md-footer__link--prev" aria-label="Previous: HNSW + RaBitQ">
+          <a href="../hnsw/" class="md-footer__link md-footer__link--prev" aria-label="Previous: HNSW RaBitQ">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1479,7 +1479,7 @@ Python counterparts for complete examples.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                HNSW + RaBitQ
+                HNSW RaBitQ
               </div>
             </div>
           </a>

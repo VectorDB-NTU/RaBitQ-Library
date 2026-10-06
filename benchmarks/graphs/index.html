@@ -717,7 +717,7 @@
   <span class="md-ellipsis">
     
   
-    IVF + RaBitQ
+    IVF RaBitQ
   
 
     
@@ -745,7 +745,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW + RaBitQ
+    HNSW RaBitQ
   
 
     
@@ -1388,27 +1388,27 @@ refinement iteration. Both HNSW implementations use <code>M=16</code> and
 </thead>
 <tbody>
 <tr>
-<td>RaBitQ SymphonyQG raw</td>
+<td>SymphonyQG raw</td>
 <td><code>quantization_bits=0</code>, raw vectors</td>
 <td>Degree 32, PIPNN initialization</td>
 </tr>
 <tr>
-<td>RaBitQ SymphonyQG 4-bit</td>
+<td>SymphonyQG 4-bit</td>
 <td><code>quantization_bits=4</code></td>
 <td>Degree 32, PIPNN initialization</td>
 </tr>
 <tr>
-<td>RaBitQ SymphonyQG 8-bit</td>
+<td>SymphonyQG 8-bit</td>
 <td><code>quantization_bits=8</code></td>
 <td>Degree 32, PIPNN initialization</td>
 </tr>
 <tr>
-<td>RaBitQ HNSW 1+4</td>
+<td>HNSW RaBitQ 1+4</td>
 <td><code>nbits=5</code></td>
 <td><code>M=16</code>, seed 42, 16 residual centroids</td>
 </tr>
 <tr>
-<td>RaBitQ HNSW 1+8</td>
+<td>HNSW RaBitQ 1+8</td>
 <td><code>nbits=9</code></td>
 <td><code>M=16</code>, seed 42, 16 residual centroids</td>
 </tr>
@@ -1429,7 +1429,7 @@ refinement iteration. Both HNSW implementations use <code>M=16</code> and
 </tr>
 </tbody>
 </table>
-<p>RaBitQ HNSW trains 16 centroids with RaBitQKMeans (up to 10 iterations, seed 42,
+<p>HNSW RaBitQ trains 16 centroids with RaBitQKMeans (up to 10 iterations, seed 42,
 exact final assignment, spherical training for DBpedia's inner-product metric).
 Training is included in construction time. SymphonyQG 4/8-bit and HNSW
 1+4/1+8 use different encodings; serialized sizes include their full storage costs.</p>
@@ -1457,7 +1457,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 </thead>
 <tbody>
 <tr>
-<td>RaBitQ SymphonyQG raw</td>
+<td>SymphonyQG raw</td>
 <td style="text-align: right;">0.00</td>
 <td style="text-align: right;">38.74</td>
 <td style="text-align: right;">38.74</td>
@@ -1465,7 +1465,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">7.51</td>
 </tr>
 <tr>
-<td>RaBitQ SymphonyQG 4-bit</td>
+<td>SymphonyQG 4-bit</td>
 <td style="text-align: right;">0.00</td>
 <td style="text-align: right;">38.41</td>
 <td style="text-align: right;">38.41</td>
@@ -1473,7 +1473,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">4.39</td>
 </tr>
 <tr>
-<td>RaBitQ SymphonyQG 8-bit</td>
+<td>SymphonyQG 8-bit</td>
 <td style="text-align: right;">0.00</td>
 <td style="text-align: right;">38.42</td>
 <td style="text-align: right;">38.42</td>
@@ -1481,7 +1481,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">4.84</td>
 </tr>
 <tr>
-<td>RaBitQ HNSW 1+4</td>
+<td>HNSW RaBitQ 1+4</td>
 <td style="text-align: right;">1.24</td>
 <td style="text-align: right;">70.57</td>
 <td style="text-align: right;">71.81</td>
@@ -1489,7 +1489,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">0.72</td>
 </tr>
 <tr>
-<td>RaBitQ HNSW 1+8</td>
+<td>HNSW RaBitQ 1+8</td>
 <td style="text-align: right;">1.39</td>
 <td style="text-align: right;">76.69</td>
 <td style="text-align: right;">78.09</td>
@@ -1541,7 +1541,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 </thead>
 <tbody>
 <tr>
-<td>RaBitQ SymphonyQG raw</td>
+<td>SymphonyQG raw</td>
 <td style="text-align: right;">0.00</td>
 <td style="text-align: right;">59.40</td>
 <td style="text-align: right;">59.40</td>
@@ -1549,7 +1549,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">11.79</td>
 </tr>
 <tr>
-<td>RaBitQ SymphonyQG 4-bit</td>
+<td>SymphonyQG 4-bit</td>
 <td style="text-align: right;">0.00</td>
 <td style="text-align: right;">57.92</td>
 <td style="text-align: right;">57.92</td>
@@ -1557,7 +1557,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">6.80</td>
 </tr>
 <tr>
-<td>RaBitQ SymphonyQG 8-bit</td>
+<td>SymphonyQG 8-bit</td>
 <td style="text-align: right;">0.00</td>
 <td style="text-align: right;">57.17</td>
 <td style="text-align: right;">57.17</td>
@@ -1565,7 +1565,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">7.51</td>
 </tr>
 <tr>
-<td>RaBitQ HNSW 1+4</td>
+<td>HNSW RaBitQ 1+4</td>
 <td style="text-align: right;">1.59</td>
 <td style="text-align: right;">111.02</td>
 <td style="text-align: right;">112.61</td>
@@ -1573,7 +1573,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <td style="text-align: right;">1.05</td>
 </tr>
 <tr>
-<td>RaBitQ HNSW 1+8</td>
+<td>HNSW RaBitQ 1+8</td>
 <td style="text-align: right;">1.53</td>
 <td style="text-align: right;">122.57</td>
 <td style="text-align: right;">124.10</td>
