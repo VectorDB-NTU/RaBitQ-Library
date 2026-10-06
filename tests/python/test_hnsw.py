@@ -29,6 +29,33 @@ def test_is_built(built_hnsw):
     assert built_hnsw.is_built
 
 
+@pytest.mark.parametrize("m", [0, 1])
+def test_rejects_too_small_m(m):
+    with pytest.raises(ValueError, match="^HNSW M must be at least 2$"):
+        HnswIndex(DIM, N_VECTORS, M=m)
+
+
+@pytest.mark.parametrize("reload", [False, True])
+def test_rejected_rebuild_preserves_index(base_data, clusters, tmp_path, reload):
+    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    centroids, cluster_ids = clusters
+    idx.build(base_data, centroids, cluster_ids)
+    if reload:
+        path = str(tmp_path / "hnsw.index")
+        idx.save(path)
+        idx = HnswIndex.load(path)
+    before = idx.search(base_data[:10], k=3, ef=_EF)
+    with pytest.raises(
+        RuntimeError, match="^HNSW index is already constructed or loaded$"
+    ):
+        idx.build(base_data, centroids[:1], np.zeros(N_VECTORS, dtype=np.uint32))
+    assert idx.is_built
+    assert idx.num_clusters == N_CLUSTERS
+    after = idx.search(base_data[:10], k=3, ef=_EF)
+    for actual, expected in zip(after, before, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
 def test_properties(built_hnsw):
     assert built_hnsw.dim == DIM
     assert built_hnsw.nbits == 4

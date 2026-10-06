@@ -84,8 +84,6 @@ class HnswIndex {
                 throw std::invalid_argument("cluster_ids contains an out-of-range value");
             }
         }
-        num_clusters_ = num_clusters;
-
         // Ensure cluster_ids are writable for the C++ API by making a copy
         std::vector<rabitqlib::PID> cluster_ids_vec(
             static_cast<size_t>(cluster_ids_array.shape(0))
@@ -105,6 +103,7 @@ class HnswIndex {
             num_threads,
             fast_quantization
         );
+        num_clusters_ = num_clusters;
         built_ = true;
     }
 

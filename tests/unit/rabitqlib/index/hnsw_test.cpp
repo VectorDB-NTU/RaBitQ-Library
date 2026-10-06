@@ -645,6 +645,19 @@ TEST(HnswAddTest, AddIntoAnEmptyIndexBuildsFromScratch) {
     EXPECT_EQ(exact, kCount);
 }
 
+TEST(HnswConstructionTest, RejectsTooSmallM) {
+    for (const size_t M : {0U, 1U}) {
+        SCOPED_TRACE(M);
+        try {
+            HierarchicalNSW index(8, 64, 4, M, 10);
+            FAIL() << "M below 2 must be rejected";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(error.what(), "HNSW M must be at least 2");
+        }
+    }
+    EXPECT_NO_THROW(HierarchicalNSW(8, 64, 4, 2, 10));
+}
+
 TEST(HnswConstructionTest, RejectsInvalidInputsBeforeChangingIndex) {
     constexpr size_t kDim = 64;
     std::vector<float> data(kDim, 1.0F);
@@ -702,6 +715,40 @@ TEST_F(HnswSaveTest, RejectsUnopenableDestination) {
         FAIL() << "Saving to a missing directory must fail";
     } catch (const std::runtime_error& error) {
         EXPECT_STREQ(error.what(), "HNSW: cannot open index file for writing");
+    }
+}
+
+TEST_F(HnswSaveTest, RejectedRebuildPreservesConstructedAndLoadedIndexes) {
+    // Multiple original centroids expose a rejected rebuild replacing the
+    // centroid buffer with a smaller one while retaining the old cluster IDs.
+    std::vector<float> centroids(2 * kDim, 0.0F);
+    centroids[kDim] = 1.0F;
+    for (size_t i = 0; i < kCount; ++i) {
+        cluster_ids_[i] = i % 2;
+    }
+    HierarchicalNSW original(kCount, kDim, 4, 4, 10);
+    original.construct(2, centroids.data(), kCount, data_.data(), cluster_ids_.data(), 1);
+    original.save(path_.c_str());
+    HierarchicalNSW loaded;
+    loaded.load(path_.c_str());
+    std::vector<PID> new_clusters(kCount, 0);
+    for (auto* index : {&original, &loaded}) {
+        const auto before = index->search(data_.data(), kCount, 2, kCount, 1);
+        try {
+            index->construct(
+                1, centroid_.data(), kCount, data_.data(), new_clusters.data(), 1
+            );
+            FAIL() << "A second construction must be rejected";
+        } catch (const std::logic_error& error) {
+            EXPECT_STREQ(error.what(), "HNSW index is already constructed or loaded");
+        }
+        EXPECT_EQ(index->num_points(), kCount);
+        EXPECT_EQ(index->num_clusters(), 2U);
+        EXPECT_EQ(index->search(data_.data(), kCount, 2, kCount, 1), before);
+        index->save(path_.c_str());
+        HierarchicalNSW roundtrip;
+        roundtrip.load(path_.c_str());
+        EXPECT_EQ(roundtrip.search(data_.data(), kCount, 2, kCount, 1), before);
     }
 }
 

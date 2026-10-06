@@ -86,6 +86,63 @@ struct Fixture {
     }
 };
 
+TEST(HnswConstructionAllocationTest, EveryAllocationFailureLeavesEmptyReusableIndex) {
+    Fixture fixture;
+    for (const size_t threads : {1U, 4U}) {
+        SCOPED_TRACE(threads);
+        size_t failures = 0;
+        bool succeeded = false;
+        for (size_t allocation = 0; allocation < 512; ++allocation) {
+            SCOPED_TRACE(allocation);
+            HierarchicalNSW index(kCapacity, kDim, 4, 2, 10, 1);
+            auto clusters = fixture.clusters;
+            bool failed = false;
+            {
+                AllocationFailure failure(allocation);
+                try {
+                    index.construct(
+                        1,
+                        fixture.centroid.data(),
+                        kAdded,
+                        fixture.data.data(),
+                        clusters.data(),
+                        threads,
+                        false
+                    );
+                } catch (const std::bad_alloc&) { failed = true; }
+            }
+            if (!failed) {
+                succeeded = true;
+                break;
+            }
+            ++failures;
+            EXPECT_EQ(index.num_points(), 0U);
+            EXPECT_EQ(index.num_clusters(), 0U);
+            const auto empty = index.search(fixture.data.data(), 1, 1, kCapacity, 1);
+            ASSERT_EQ(empty.size(), 1U);
+            EXPECT_TRUE(empty[0].empty());
+            ASSERT_NO_THROW(index.construct(
+                1,
+                fixture.centroid.data(),
+                kAdded,
+                fixture.data.data(),
+                clusters.data(),
+                threads,
+                false
+            ));
+            EXPECT_EQ(index.num_points(), kAdded);
+            EXPECT_EQ(index.num_clusters(), 1U);
+            const auto results = index.search(fixture.data.data(), kAdded, 1, kCapacity, 1);
+            for (size_t i = 0; i < kAdded; ++i) {
+                ASSERT_EQ(results[i].size(), 1U);
+                EXPECT_EQ(results[i][0].second, i);
+            }
+        }
+        EXPECT_GT(failures, 0U);
+        EXPECT_TRUE(succeeded);
+    }
+}
+
 TEST(HnswAddAllocationTest, AllocatesReturnedIdsBeforeMutation) {
     Fixture fixture;
     HierarchicalNSW index(kCapacity, kDim, 4, 2, 10, 1);

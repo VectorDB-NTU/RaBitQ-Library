@@ -1,5 +1,5 @@
 // Insertion into a built index: the construct path with get_quant_dist in place
-// of get_data_dist, because rawDataPtr_ dangles once construct returns.
+// of get_data_dist, because raw input is borrowed only during construct.
 //
 // add routes, draws every level, allocates every link list and quantizes every
 // point before reserving one block of slots and linking in parallel. Levels come
@@ -356,10 +356,10 @@ inline void HierarchicalNSW::add_point_quant(
 
     std::unique_lock<std::mutex> templock(global_);
     int maxlevelcopy = maxlevel_;
+    PID curr_obj = enterpoint_node_;
     if (curlevel <= maxlevelcopy) {
         templock.unlock();
     }
-    PID curr_obj = enterpoint_node_;
     const PID previous_entry_point = curr_obj;
 
     linkLists_[cur_c] = link_list.release();
