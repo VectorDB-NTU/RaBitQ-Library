@@ -73,10 +73,18 @@ TEST(ThreadCount, BoundParallelForUsesRuntimePlacementAndPropagatesErrors) {
     }
     const size_t available = rabitqlib::total_threads();
     ASSERT_GT(available, 0U);
+    // A binding policy can be set even when the runtime exposes no CPU places
+    // (for example, LLVM libomp on macOS).
+    const int places = omp_get_num_places();
     const size_t threads = std::min<size_t>(available, 4);
     rabitqlib::ivf::parallel_for(0, 257, threads, [&](size_t, size_t worker) {
         EXPECT_LT(worker, threads);
-        EXPECT_GE(omp_get_place_num(), 0);
+        if (places > 0) {
+            EXPECT_GE(omp_get_place_num(), 0);
+            EXPECT_LT(omp_get_place_num(), places);
+        } else {
+            EXPECT_EQ(omp_get_place_num(), -1);
+        }
         if (threads > 1) {
             EXPECT_GT(omp_get_level(), 0);
         }
