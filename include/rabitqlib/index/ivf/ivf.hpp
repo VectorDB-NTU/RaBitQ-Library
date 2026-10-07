@@ -67,6 +67,8 @@ class IVF {
 
     static constexpr uint64_t kRawFormatMagic = 0x3157415251464252ULL;
     static constexpr uint32_t kRawFormatVersion = 1;
+    static constexpr uint64_t kFormatMagic = 0x3158444951424152ULL;  // "RABQIDX1"
+    static constexpr uint32_t kFormatVersion = 1;
 
     void
     quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, float*, const quant::RabitqConfig&);
@@ -297,7 +299,7 @@ inline IVF::IVF(
     if (dim == 0 || dim > (std::numeric_limits<size_t>::max() / 32) - 64) {
         throw std::invalid_argument("IVF dimension is invalid or too large");
     }
-    padded_dim_ = round_up_to_multiple(dim_, 64);
+    padded_dim_ = round_up_to_multiple(dim_, 32);
     const size_t max_size = std::numeric_limits<size_t>::max();
     if (exceeds_storage(n) || cluster_num > max_size / sizeof(float) / padded_dim_ ||
         (type == RotatorType::MatrixRotator && dim > max_size / sizeof(float) / padded_dim_
@@ -306,7 +308,7 @@ inline IVF::IVF(
     }
     rotator_.reset(choose_rotator<float>(dim, type, padded_dim_));
     /* check size */
-    assert(padded_dim_ % 64 == 0);
+    assert(padded_dim_ % 32 == 0);
     assert(padded_dim_ >= dim_);
 }
 
@@ -780,14 +782,14 @@ inline void IVF::save(const char* filename) const {
 
     std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     output.exceptions(std::ios::failbit | std::ios::badbit);
-    if (raw_reranking_) {
-        output.write(
-            reinterpret_cast<const char*>(&kRawFormatMagic), sizeof(kRawFormatMagic)
-        );
-        output.write(
-            reinterpret_cast<const char*>(&kRawFormatVersion), sizeof(kRawFormatVersion)
-        );
-    }
+    const uint32_t flags = raw_reranking_ ? 1 : 0;
+    const uint64_t stored_padded_dim = padded_dim_;
+    output.write(reinterpret_cast<const char*>(&kFormatMagic), sizeof(kFormatMagic));
+    output.write(reinterpret_cast<const char*>(&kFormatVersion), sizeof(kFormatVersion));
+    output.write(reinterpret_cast<const char*>(&flags), sizeof(flags));
+    output.write(
+        reinterpret_cast<const char*>(&stored_padded_dim), sizeof(stored_padded_dim)
+    );
 
     /* Save meta data */
     output.write(reinterpret_cast<const char*>(&num_), sizeof(size_t));
@@ -842,8 +844,23 @@ inline void IVF::load(const char* filename) {
     input.seekg(0);
     uint64_t magic = 0;
     input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    loaded.raw_reranking_ = magic == kRawFormatMagic;
-    if (loaded.raw_reranking_) {
+    const bool explicit_padding = magic == kFormatMagic;
+    if (explicit_padding) {
+        uint32_t version = 0, flags = 0;
+        uint64_t stored_padded_dim = 0;
+        input.read(reinterpret_cast<char*>(&version), sizeof(version));
+        input.read(reinterpret_cast<char*>(&flags), sizeof(flags));
+        input.read(reinterpret_cast<char*>(&stored_padded_dim), sizeof(stored_padded_dim));
+        if (version != kFormatVersion) {
+            throw std::runtime_error("Unsupported IVF index version");
+        }
+        if (flags > 1 || stored_padded_dim > std::numeric_limits<size_t>::max()) {
+            throw std::runtime_error("Invalid IVF index metadata");
+        }
+        loaded.raw_reranking_ = flags == 1;
+        loaded.padded_dim_ = static_cast<size_t>(stored_padded_dim);
+    } else if (magic == kRawFormatMagic) {
+        loaded.raw_reranking_ = true;
         uint32_t version = 0;
         input.read(reinterpret_cast<char*>(&version), sizeof(version));
         if (version != kRawFormatVersion) {
@@ -868,7 +885,14 @@ inline void IVF::load(const char* filename) {
         loaded.dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
         throw std::runtime_error("Invalid IVF index metadata");
     }
-    loaded.padded_dim_ = round_up_to_multiple(loaded.dim_, 64);
+    if (!explicit_padding) {
+        // Both historical formats omit padded_dim and always used 64-coordinate blocks.
+        loaded.padded_dim_ = round_up_to_multiple(loaded.dim_, 64);
+    }
+    if (loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
+        loaded.padded_dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
+        throw std::runtime_error("Invalid padded dimension in IVF index file");
+    }
     // Bound every payload by the actual file before allocating or multiplying sizes.
     size_t remaining = file_bytes - static_cast<size_t>(input.tellg());
     const auto consume = [&remaining](size_t count, size_t bytes) {

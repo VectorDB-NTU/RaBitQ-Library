@@ -87,14 +87,24 @@ Construction reuses a rotation buffer of at most 32 vectors per worker. This
 temporary storage uses at most `workers * 32 * padded_dim * sizeof(float)` bytes,
 independently of cluster sizes.
 
+New indexes pad the rotated dimension to a multiple of 32 for every supported
+bit width, including raw mode (32). This applies to both rotator types.
+Extra-bit layouts retain full 64-coordinate blocks and store any final
+32-coordinate tail compactly.
+
 After construction, you can directly save the index file to disk:
 ```c++
 ivf.save(output_index_file);
 ```
-Raw-mode files use a magic/version header and include both the original vectors
-and the rotation state. Loading restores the mode automatically, so querying
-does not require an external dataset. Existing quantized files retain their
-format and remain compatible; versions before 0.3.3 cannot load raw-mode files.
+New files use the `RABQIDX1` magic, version 1, storage flags, and an explicit
+padded dimension before the index metadata. Loading restores the storage mode,
+rotation state, and padded dimension; raw files also contain the original vectors,
+so querying does not require an external dataset.
+
+Legacy unversioned quantized files and raw v1 files remain readable and retain
+their original 64-dimension padding. Saving a loaded legacy index writes the new
+header without changing its padded dimension or encoded data. Older library
+versions cannot read the new format.
 
 ### Data Layout
 The main data layout for our IVF is organized as follows:

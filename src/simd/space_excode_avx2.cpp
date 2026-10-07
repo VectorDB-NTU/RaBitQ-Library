@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "packed_tail_avx2.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
 
 namespace rabitqlib::simd::excode_ipimpl {
@@ -94,7 +95,7 @@ float ip64_fxu2_avx2(
     float result = 0;
     const __m128i mask = _mm_set1_epi8(0b00000011);
 
-    for (size_t i = 0; i < dim; i += 64) {
+    for (size_t i = 0; i < dim - dim % 64; i += 64) {
         __m128i compact = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
 
         __m128i vec_00_to_15 = _mm_and_si128(compact, mask);
@@ -109,6 +110,9 @@ float ip64_fxu2_avx2(
         compact_code += 16;
     }
 
+    simd::detail::accumulate_excode_tail_avx2<2>(
+        query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
+    );
     result = mm256_reduce_add_ps(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
@@ -125,7 +129,7 @@ float ip64_fxu3_avx2(
     const __m128i mask = _mm_set1_epi8(0b11);
     const __m128i top_mask = _mm_set1_epi8(0b100);
 
-    for (size_t i = 0; i < dim; i += 64) {
+    for (size_t i = 0; i < dim - dim % 64; i += 64) {
         __m128i compact2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         compact_code += 16;
 
@@ -156,6 +160,9 @@ float ip64_fxu3_avx2(
         contribute_ip(vec_48_to_63, &query[i + 48], sum2, sum3);
     }
 
+    simd::detail::accumulate_excode_tail_avx2<3>(
+        query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
+    );
     result = mm256_reduce_add_ps(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
@@ -196,7 +203,7 @@ float ip64_fxu5_avx2(
     const __m128i mask = _mm_set1_epi8(0b1111);
     const __m128i top_mask = _mm_set1_epi8(0b10000);
 
-    for (size_t i = 0; i < dim; i += 64) {
+    for (size_t i = 0; i < dim - dim % 64; i += 64) {
         __m128i compact4_1 =
             _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         __m128i compact4_2 =
@@ -230,6 +237,9 @@ float ip64_fxu5_avx2(
         contribute_ip(vec_32_to_47, &query[i + 32], sum0, sum1);
         contribute_ip(vec_48_to_63, &query[i + 48], sum2, sum3);
     }
+    simd::detail::accumulate_excode_tail_avx2<5>(
+        query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
+    );
     result = mm256_reduce_add_ps(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
@@ -246,7 +256,7 @@ float ip64_fxu6_avx2(
     const __m128i mask6 = _mm_set1_epi8(0b00111111);
     const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
 
-    for (size_t i = 0; i < dim; i += 64) {
+    for (size_t i = 0; i < dim - dim % 64; i += 64) {
         __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
         __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
@@ -269,6 +279,9 @@ float ip64_fxu6_avx2(
         contribute_ip(vec_32_to_47, &query[i + 32], sum0, sum1);
         contribute_ip(vec_48_to_63, &query[i + 48], sum2, sum3);
     }
+    simd::detail::accumulate_excode_tail_avx2<6>(
+        query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
+    );
     result = mm256_reduce_add_ps(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
@@ -286,7 +299,7 @@ float ip64_fxu7_avx2(
     const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
     const __m128i top_mask = _mm_set1_epi8(0b1000000);
 
-    for (size_t i = 0; i < dim; i += 64) {
+    for (size_t i = 0; i < dim - dim % 64; i += 64) {
         __m128i cpt1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         __m128i cpt2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
         __m128i cpt3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 32));
@@ -326,6 +339,9 @@ float ip64_fxu7_avx2(
         contribute_ip(vec_48_to_63, &query[i + 48], sum2, sum3);
     }
 
+    simd::detail::accumulate_excode_tail_avx2<7>(
+        query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
+    );
     result = mm256_reduce_add_ps(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );

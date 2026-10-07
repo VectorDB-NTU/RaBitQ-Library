@@ -161,7 +161,8 @@ class SplitSingleQuery {
         size_t metric_type = METRIC_L2,
         size_t base_bits = 1
     )
-        : rotated_query_(rotated_query), QueryBin_(padded_dim * kNumBits / 64, 0) {
+        : rotated_query_(rotated_query)
+        , QueryBin_(div_round_up(padded_dim, 64) * kNumBits, 0) {
         if (base_bits < 1 || base_bits > 8 || ex_bits > 8 || base_bits + ex_bits > 9) {
             throw std::invalid_argument(
                 "SplitSingleQuery requires base_bits in [1, 8], ex_bits in [0, 8], "

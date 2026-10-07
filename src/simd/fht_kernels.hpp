@@ -39,8 +39,8 @@ inline void fht_butterfly(__m256& a, __m256& b) {
 
 // Fuse three stages so eight registers are loaded and stored only once.
 // Stride is eight for the 64-point leaf, or N/8 for a larger transform.
-template <bool leaf>
-inline void fht_eight_registers(float* data, size_t stride) {
+template <bool leaf, bool normalize = false>
+inline void fht_eight_registers(float* data, size_t stride, float factor = 1.0F) {
     __m256 a = _mm256_loadu_ps(data);
     __m256 b = _mm256_loadu_ps(data + stride);
     __m256 c = _mm256_loadu_ps(data + 2 * stride);
@@ -89,6 +89,17 @@ inline void fht_eight_registers(float* data, size_t stride) {
     fht_butterfly(b, f);
     fht_butterfly(c, g);
     fht_butterfly(d, h);
+    if constexpr (normalize) {
+        const __m256 multiplier = _mm256_set1_ps(factor);
+        a = _mm256_mul_ps(a, multiplier);
+        b = _mm256_mul_ps(b, multiplier);
+        c = _mm256_mul_ps(c, multiplier);
+        d = _mm256_mul_ps(d, multiplier);
+        e = _mm256_mul_ps(e, multiplier);
+        f = _mm256_mul_ps(f, multiplier);
+        g = _mm256_mul_ps(g, multiplier);
+        h = _mm256_mul_ps(h, multiplier);
+    }
     _mm256_storeu_ps(data, a);
     _mm256_storeu_ps(data + stride, b);
     _mm256_storeu_ps(data + 2 * stride, c);
@@ -99,12 +110,13 @@ inline void fht_eight_registers(float* data, size_t stride) {
     _mm256_storeu_ps(data + 7 * stride, h);
 }
 
-template <size_t log_dim>
-void fht_intrinsics(float* data) {
+// Only the outermost merge applies the rotation scale, after every butterfly.
+template <size_t log_dim, bool normalize = false>
+void fht_intrinsics(float* data, float factor = 1.0F) {
     static_assert(log_dim >= 6 && log_dim <= 16);
     constexpr size_t kDim = size_t{1} << log_dim;
     if constexpr (log_dim == 6) {
-        fht_eight_registers<true>(data, 8);
+        fht_eight_registers<true, normalize>(data, 8, factor);
     } else if constexpr (log_dim < 9) {
         fht_intrinsics<log_dim - 1>(data);
         fht_intrinsics<log_dim - 1>(data + kDim / 2);
@@ -112,6 +124,11 @@ void fht_intrinsics(float* data) {
             __m256 a = _mm256_loadu_ps(data + i);
             __m256 b = _mm256_loadu_ps(data + kDim / 2 + i);
             fht_butterfly(a, b);
+            if constexpr (normalize) {
+                const __m256 multiplier = _mm256_set1_ps(factor);
+                a = _mm256_mul_ps(a, multiplier);
+                b = _mm256_mul_ps(b, multiplier);
+            }
             _mm256_storeu_ps(data + i, a);
             _mm256_storeu_ps(data + kDim / 2 + i, b);
         }
@@ -123,7 +140,7 @@ void fht_intrinsics(float* data) {
             fht_intrinsics<log_dim - 3>(data + block);
         }
         for (size_t i = 0; i < kStride; i += 8) {
-            fht_eight_registers<false>(data + i, kStride);
+            fht_eight_registers<false, normalize>(data + i, kStride, factor);
         }
     }
 }

@@ -52,10 +52,10 @@ inline size_t padding_requirement(size_t dim, RotatorType type) {
         return dim;
     }
     if (type == RotatorType::FhtKacRotator) {
-        if (dim > std::numeric_limits<size_t>::max() - 63) {
+        if (dim > std::numeric_limits<size_t>::max() - 31) {
             throw std::invalid_argument("Rotator dimension is too large to pad");
         }
-        return round_up_to_multiple(dim, 64);
+        return round_up_to_multiple(dim, 32);
     }
     throw std::invalid_argument("Invalid rotator type in padding_requirement()");
 }
@@ -147,7 +147,7 @@ class FhtKacRotator : public Rotator<float> {
         size_t dim, size_t padded_dim, uint32_t seed = std::random_device{}()
     )
         : Rotator<float>(dim, padded_dim) {
-        if (dim < 64 || padded_dim < dim || padded_dim % 64 != 0 || padded_dim > kMaxDim) {
+        if (dim < 64 || padded_dim < dim || padded_dim % 32 != 0 || padded_dim > kMaxDim) {
             throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
         }
         flip_.resize((padded_dim / kByteLen) * 4);

@@ -69,7 +69,7 @@ void scalar_quantize_uint16_neon(
 void new_transpose_bin_neon(
     const uint16_t* query, uint64_t* transposed, size_t dim, size_t bits
 ) {
-    for (size_t block = 0; block < dim; block += 64) {
+    for (size_t block = 0; block < dim - dim % 64; block += 64) {
         uint16x8_t values[8];
         for (size_t c = 0; c < 8; ++c) {
             values[c] = vld1q_u16(query + block + c * 8);
@@ -83,12 +83,19 @@ void new_transpose_bin_neon(
             *transposed++ = word;
         }
     }
+    if (dim % 64 != 0) {
+        new_transpose_bin_generic(query + dim - dim % 64, transposed, dim % 64, bits);
+    }
 }
 
 void new_transpose_bin_512_neon(
     const uint8_t* query, uint64_t* transposed, size_t dim, size_t bits
 ) {
     for (size_t block = 0; block < dim; block += 512) {
+        if ((dim - block) < 512 && dim % 64 != 0) {
+            new_transpose_bin_512_generic(query + block, transposed, dim - block, bits);
+            break;
+        }
         const size_t chunks = std::min(size_t{512}, dim - block) / 64;
         for (size_t c = 0; c < chunks; ++c) {
             const uint8_t* row = query + block + c * 64;

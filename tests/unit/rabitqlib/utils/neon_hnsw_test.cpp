@@ -21,21 +21,25 @@ TEST(NeonHnsw, WarmupHandlesUnalignedCodesTailsAndWideCounts) {
         GTEST_SKIP();
     }
     std::mt19937 random(764);
-    for (size_t dim : {0U, 64U, 128U, 448U, 512U, 576U, 960U, 1024U, 1088U, 65536U}) {
+    for (size_t dim :
+         {0U, 64U, 96U, 128U, 448U, 512U, 544U, 576U, 960U, 1024U, 1088U, 65536U}) {
         for (size_t bits = 0; bits <= 8; ++bits) {
             for (bool all_ones : {false, true}) {
                 SCOPED_TRACE(dim);
                 SCOPED_TRACE(bits);
                 SCOPED_TRACE(all_ones);
                 std::vector<uint8_t> query(dim), storage(dim / 8 + 1);
-                std::vector<uint64_t> words(dim / 64), transposed(dim / 64 * bits);
+                std::vector<uint64_t> words((dim + 63) / 64),
+                    transposed((dim + 63) / 64 * bits);
                 uint64_t ip = 0, count = 0;
                 for (size_t i = 0; i < dim; ++i) {
                     query[i] = static_cast<uint8_t>(
                         (all_ones ? 255 : random()) & ((1U << bits) - 1)
                     );
                     if (all_ones || random() % 2 != 0) {
-                        words[i / 64] |= uint64_t{1} << (63 - i % 64);
+                        words[i / 64] |=
+                            uint64_t{1}
+                            << (std::min(size_t{64}, dim - i / 64 * 64) - 1 - i % 64);
                         ip += query[i];
                         ++count;
                     }

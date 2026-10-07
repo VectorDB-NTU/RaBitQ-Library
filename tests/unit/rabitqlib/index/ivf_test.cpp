@@ -42,6 +42,7 @@ TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 32U}) {
             IVF index(kNum, kDim, kClusters, bits, metric);
+            EXPECT_EQ(index.padded_dim(), 96U);
             index.construct(data.data(), centroids.data(), labels.data(), false, 1);
             std::array<PID, kQueries * k> expected{}, actual{}, ids_only{};
             std::array<float, kQueries * k> expected_distances{}, actual_distances{};
@@ -392,12 +393,13 @@ TEST(IvfPersistenceTest, ReloadsRawAndQuantizedStorage) {
     const std::string path = ::testing::TempDir() + "rabitq_ivf_storage.index";
     IVF loaded;
     for (auto rotator : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
-        for (size_t bits : {32UL, 4UL, 32UL, 1UL}) {
+        for (size_t bits : {32UL, 1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL}) {
             IVF index(kNum, kDim, 1, bits, METRIC_L2, rotator);
             index.construct(data.data(), centroid.data(), clusters.data(), false, 1);
             index.save(path.c_str());
             loaded.load(path.c_str());
             EXPECT_EQ(loaded.nbits(), bits);
+            EXPECT_EQ(loaded.padded_dim(), index.padded_dim());
             EXPECT_EQ(loaded.rotator_type(), rotator);
             std::vector<PID> ids(kNum);
             std::vector<PID> loaded_ids(kNum);
@@ -505,7 +507,7 @@ TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
 
 // ── add / remove ────────────────────────────────────────────────────────────────────────
 
-constexpr size_t kDynDim = 65;  // pads to 128, so padded and original dimensions differ
+constexpr size_t kDynDim = 65;  // Exercise padding and partially occupied FastScan batches.
 constexpr size_t kDynClusters = 4;
 
 std::vector<float> random_rows(size_t rows, uint32_t seed) {

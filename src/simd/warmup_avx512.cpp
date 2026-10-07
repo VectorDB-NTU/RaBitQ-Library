@@ -1,10 +1,9 @@
-#include <immintrin.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
 #include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "warmup_kernels.hpp"
 
 namespace rabitqlib::simd {
 
@@ -19,62 +18,22 @@ float warmup_ip_x0_q_512_avx512(
     size_t ip_scalar = 0;
     size_t ppc_scalar = 0;
 
-    __m512i acc_ip = _mm512_setzero_si512();
-    __m512i acc_ppc = _mm512_setzero_si512();
-
-    size_t i = 0;
-    size_t dim_end_512 = (padded_dim / 512) * 512;
-
     constexpr size_t kMaxQueryBits = 8;
     if (b_query > kMaxQueryBits) {
         throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
     }
-    __m512i acc_bits[kMaxQueryBits];
-    for (size_t j = 0; j < b_query; ++j) {
-        acc_bits[j] = _mm512_setzero_si512();
+    // For at most four words, scalar POPCNT avoids vector setup and reduction.
+    if (padded_dim <= 256) {
+        detail::accumulate_warmup_tail(
+            data, query, padded_dim, b_query, ip_scalar, ppc_scalar
+        );
+        return (delta * static_cast<float>(ip_scalar)) +
+               (vl * static_cast<float>(ppc_scalar));
     }
 
-    for (; i < dim_end_512; i += 512) {
-        __m512i data_vec = _mm512_loadu_si512(data);
-        data += 64;
-
-        acc_ppc = _mm512_add_epi64(acc_ppc, _mm512_popcnt_epi64(data_vec));
-
-        for (size_t j = 0; j < b_query; ++j) {
-            __m512i query_vec = _mm512_loadu_si512(query);
-            query += 8;
-
-            __m512i pop = _mm512_popcnt_epi64(_mm512_and_si512(data_vec, query_vec));
-            acc_bits[j] = _mm512_add_epi64(acc_bits[j], pop);
-        }
-    }
-
-    size_t remaining_dim = padded_dim - i;
-    if (remaining_dim > 0) {
-        size_t num_chunks = remaining_dim / 64;
-        auto valid_mask = static_cast<__mmask8>((1u << num_chunks) - 1u);
-
-        __m512i data_vec = _mm512_maskz_loadu_epi64(valid_mask, data);
-        acc_ppc = _mm512_add_epi64(acc_ppc, _mm512_popcnt_epi64(data_vec));
-
-        for (size_t j = 0; j < b_query; ++j) {
-            __m512i query_vec = _mm512_maskz_loadu_epi64(valid_mask, query);
-            query += num_chunks;
-
-            __m512i pop = _mm512_popcnt_epi64(_mm512_and_si512(data_vec, query_vec));
-            acc_bits[j] = _mm512_add_epi64(acc_bits[j], pop);
-        }
-    }
-
-    for (size_t j = 0; j < b_query; ++j) {
-        __m128i shift = _mm_cvtsi32_si128(static_cast<int>(j));
-        acc_ip = _mm512_add_epi64(acc_ip, _mm512_sll_epi64(acc_bits[j], shift));
-    }
-
-    ip_scalar += static_cast<size_t>(_mm512_reduce_add_epi64(acc_ip));
-    ppc_scalar += static_cast<size_t>(_mm512_reduce_add_epi64(acc_ppc));
-
-    return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
+    return detail::warmup_blocks_avx512<kMaxQueryBits>(
+        data, query, delta, vl, padded_dim, b_query
+    );
 }
 
 float warmup_ip_x0_q_512_avx512(

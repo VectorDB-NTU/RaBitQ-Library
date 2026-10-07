@@ -13,7 +13,7 @@
 
 namespace rabitqlib::simd {
 namespace {
-// Coordinate-to-bit mapping of the existing x86 packed format. Odd widths
+// Coordinate-to-bit mapping of the historical full-block layout. Odd widths
 // store the high bit in eight bytes, with coordinate i at byte i%8, bit i/8.
 template <size_t Bits>
 size_t packed_bit(size_t i, size_t bit) {
@@ -42,13 +42,38 @@ size_t packed_bit(size_t i, size_t bit) {
     }
 }
 
+// Read one code from the compact little-endian tail, without overreading its end.
+template <size_t Bits>
+unsigned tail_code(const uint8_t* compact, size_t i) {
+    const size_t offset = i * Bits;
+    unsigned code = compact[offset / 8] >> (offset % 8);
+    if (offset % 8 + Bits > 8) {
+        code |= unsigned{compact[offset / 8 + 1]} << (8 - offset % 8);
+    }
+    return code & ((1U << Bits) - 1);
+}
+
 template <size_t Bits>
 void pack(const uint8_t* raw, uint8_t* compact, size_t dim) {
-    std::fill_n(compact, dim * Bits / 8, uint8_t{0});
-    for (size_t i = 0; i < dim; ++i) {
-        for (size_t b = 0; b < Bits; ++b) {
+    const size_t full = (Bits == 1 || Bits == 4 || Bits == 8) ? dim : dim - dim % 64;
+    std::fill_n(compact, full * Bits / 8, uint8_t{0});
+    for (size_t i = 0; i < full; ++i) {
+        for (size_t b = 0; b < Bits; b += 2) {
             const size_t pos = packed_bit<Bits>(i, b);
-            compact[pos / 8] |= ((raw[i] >> b) & 1U) << (pos % 8);
+            const unsigned mask = b + 1 < Bits ? 3U : 1U;
+            compact[pos / 8] |= ((raw[i] >> b) & mask) << (pos % 8);
+        }
+    }
+    // Every legal tail occupies whole bytes; at most one byte is emitted per code.
+    unsigned pending = 0, count = 0;
+    size_t output = full * Bits / 8;
+    for (size_t i = full; i < dim; ++i) {
+        pending |= (unsigned{raw[i]} & ((1U << Bits) - 1)) << count;
+        count += Bits;
+        if (count >= 8) {
+            compact[output++] = static_cast<uint8_t>(pending);
+            pending >>= 8;
+            count -= 8;
         }
     }
 }
@@ -56,26 +81,39 @@ void pack(const uint8_t* raw, uint8_t* compact, size_t dim) {
 // Inverse of pack, over the same mapping. Not a search path, so scalar only.
 template <size_t Bits>
 void unpack(const uint8_t* compact, uint8_t* raw, size_t dim) {
-    for (size_t i = 0; i < dim; ++i) {
+    const size_t full = (Bits == 1 || Bits == 4 || Bits == 8) ? dim : dim - dim % 64;
+    for (size_t i = 0; i < full; ++i) {
         unsigned code = 0;
-        for (size_t b = 0; b < Bits; ++b) {
+        // Every pair occupies adjacent bits, even in the split 6/7-bit layout.
+        // Odd widths leave the separate high bit for the final iteration.
+        for (size_t b = 0; b < Bits; b += 2) {
             const size_t pos = packed_bit<Bits>(i, b);
-            code |= ((compact[pos / 8] >> (pos % 8)) & 1U) << b;
+            unsigned pair = compact[pos / 8] >> (pos % 8);
+            const unsigned mask = b + 1 < Bits ? 3U : 1U;
+            code |= (pair & mask) << b;
         }
         raw[i] = static_cast<uint8_t>(code);
+    }
+    for (size_t i = full; i < dim; ++i) {
+        raw[i] = static_cast<uint8_t>(tail_code<Bits>(compact + full * Bits / 8, i - full));
     }
 }
 
 template <size_t Bits>
 float excode_ip(const float* query, const uint8_t* compact, size_t dim) {
     double sum = 0;
-    for (size_t i = 0; i < dim; ++i) {
+    const size_t full = (Bits == 1 || Bits == 4 || Bits == 8) ? dim : dim - dim % 64;
+    for (size_t i = 0; i < full; ++i) {
         unsigned code = 0;
         for (size_t b = 0; b < Bits; ++b) {
             const size_t pos = packed_bit<Bits>(i, b);
             code |= ((compact[pos / 8] >> (pos % 8)) & 1U) << b;
         }
         sum += static_cast<double>(query[i]) * code;
+    }
+    for (size_t i = full; i < dim; ++i) {
+        sum += static_cast<double>(query[i]) *
+               tail_code<Bits>(compact + full * Bits / 8, i - full);
     }
     return static_cast<float>(sum);
 }
@@ -181,10 +219,11 @@ void new_transpose_bin_generic(
     const uint16_t* query, uint64_t* transposed, size_t dim, size_t bits
 ) {
     for (size_t block = 0; block < dim; block += 64) {
+        const size_t width = std::min(size_t{64}, dim - block);
         for (size_t b = 0; b < bits; ++b) {
             uint64_t word = 0;
-            for (size_t i = 0; i < 64; ++i) {
-                word |= uint64_t{(query[block + i] >> b) & 1U} << (63 - i);
+            for (size_t i = 0; i < width; ++i) {
+                word |= uint64_t{(query[block + i] >> b) & 1U} << (width - 1 - i);
             }
             *transposed++ = word;
         }
@@ -195,12 +234,14 @@ void new_transpose_bin_512_generic(
     const uint8_t* query, uint64_t* transposed, size_t dim, size_t bits
 ) {
     for (size_t block = 0; block < dim; block += 512) {
-        const size_t chunks = std::min(size_t{512}, dim - block) / 64;
+        const size_t chunks = (std::min(size_t{512}, dim - block) + 63) / 64;
         for (size_t b = 0; b < bits; ++b) {
             for (size_t chunk = 0; chunk < chunks; ++chunk) {
+                const size_t width = std::min(size_t{64}, dim - block - chunk * 64);
                 uint64_t word = 0;
-                for (size_t i = 0; i < 64; ++i) {
-                    word |= uint64_t{(query[block + chunk * 64 + i] >> b) & 1U} << (63 - i);
+                for (size_t i = 0; i < width; ++i) {
+                    word |= uint64_t{(query[block + chunk * 64 + i] >> b) & 1U}
+                            << (width - 1 - i);
                 }
                 *transposed++ = word;
             }
@@ -211,10 +252,10 @@ void new_transpose_bin_512_generic(
 float mask_ip_x0_q_generic(const float* query, const uint8_t* data, size_t dim) {
     double sum = 0;
     for (size_t block = 0; block < dim; block += 64) {
-        uint64_t word;
-        std::memcpy(&word, data + block / 8, sizeof(word));
-        for (size_t i = 0; i < 64; ++i) {
-            if ((word >> (63 - i)) & 1U)
+        const size_t width = std::min(size_t{64}, dim - block);
+        const uint64_t word = bitops::load_word(data + block / 8, width / 8);
+        for (size_t i = 0; i < width; ++i) {
+            if ((word >> (width - 1 - i)) & 1U)
                 sum += query[block + i];
         }
     }
@@ -236,10 +277,11 @@ float warmup_ip_x0_q_512_generic(
         throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
     uint64_t ip = 0, count = 0;
     for (size_t block = 0; block < dim; block += 512) {
-        const size_t chunks = std::min(size_t{512}, dim - block) / 64;
+        const size_t chunks = (std::min(size_t{512}, dim - block) + 63) / 64;
         for (size_t chunk = 0; chunk < chunks; ++chunk) {
-            uint64_t word;
-            std::memcpy(&word, data + block / 8 + chunk * 8, sizeof(word));
+            const size_t width = std::min(size_t{64}, dim - block - chunk * 64);
+            const uint64_t word =
+                bitops::load_word(data + block / 8 + chunk * 8, width / 8);
             count += bitops::popcount64(word);
             for (size_t b = 0; b < bits; ++b) {
                 ip += uint64_t{bitops::popcount64(word & query[b * chunks + chunk])} << b;

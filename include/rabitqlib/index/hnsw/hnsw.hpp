@@ -464,11 +464,11 @@ inline HierarchicalNSW::HierarchicalNSW(
     max_elements_ = max_elements;
     dim_ = dim;
     rotator_.reset(choose_rotator<float>(
-        dim, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 64)
+        dim, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 32)
     ));
     padded_dim_ = rotator_->size();
     /* check size */
-    assert(padded_dim_ % 64 == 0);
+    assert(padded_dim_ % 32 == 0);
     assert(padded_dim_ >= dim_);
     ex_bits_ = total_bits - 1;
 
@@ -476,7 +476,7 @@ inline HierarchicalNSW::HierarchicalNSW(
         throw std::invalid_argument("HNSW quantization bits must be in [1, 9]");
     };
 
-    assert(padded_dim_ % 64 == 0);
+    assert(padded_dim_ % 32 == 0);
 
     ip_func_ = select_excode_ipfunc(ex_bits_);
 
@@ -500,9 +500,7 @@ inline HierarchicalNSW::HierarchicalNSW(
                      sizeof(PID);  // (# of edges + edges) + (cluster_id) + (external label)
     offsetExData_ = offsetBinData_ + size_bin_data_;  // (# of edges + edges) + (cluster_id)
                                                       // + (external label) + (BinData)
-    size_data_per_element_ =
-        offsetExData_ + size_ex_data_;  // (# of edges + edges) + (cluster_id) + (external
-                                        // label) + (BinData) + (ExData)
+    size_data_per_element_ = offsetExData_ + size_ex_data_;
     data_level0_memory_ =
         memory::huge_page_allocate<char>(max_elements_ * size_data_per_element_);
     if (data_level0_memory_ == nullptr) {
@@ -652,8 +650,8 @@ inline void HierarchicalNSW::load(const char* filename) {
         loaded.num_cluster_ > buffer::kSearchBufferMaxPointCount ||
         (element_count != 0 && loaded.num_cluster_ == 0) || loaded.dim_ < 64 ||
         loaded.dim_ > rotator_impl::FhtKacRotator::kMaxDim ||
-        loaded.padded_dim_ != round_up_to_multiple(loaded.dim_, 64) ||
-        loaded.ex_bits_ > 8 ||
+        loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
+        loaded.padded_dim_ > rotator_impl::FhtKacRotator::kMaxDim || loaded.ex_bits_ > 8 ||
         (loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
         loaded.M_ < 2 || loaded.M_ > 10000 || loaded.maxM_ != loaded.M_ ||
         loaded.maxM0_ != 2 * loaded.M_ || loaded.ef_construction_ < loaded.M_ ||

@@ -60,11 +60,11 @@ inline void HierarchicalNSW::reconstruct_rotated(PID id, float* out) const {
     const uint8_t* sign_code = bin.bin_code();
     for (size_t word = 0; word * 64 < padded_dim_; ++word) {
         uint64_t bits = 0;
-        std::memcpy(&bits, sign_code + (word * sizeof(uint64_t)), sizeof(bits));
         const size_t base = word * 64;
         const size_t span = std::min<size_t>(64, padded_dim_ - base);
+        std::memcpy(&bits, sign_code + (word * sizeof(uint64_t)), span / 8);
         for (size_t j = 0; j < span; ++j) {
-            combined[base + j] = static_cast<uint16_t>((bits >> (63 - j)) & 1ULL);
+            combined[base + j] = static_cast<uint16_t>((bits >> (span - 1 - j)) & 1ULL);
         }
     }
 

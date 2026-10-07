@@ -147,7 +147,8 @@ Recommended:
   pack/unpack, and estimation coverage. Test both `METRIC_L2` and `METRIC_IP` where supported.
 - IVF/HNSW quantized total bits are one sign bit plus `ex_bits`, with totals 1 through 9.
   IVF also accepts `bits == 32`: one-bit filtering plus owned original float32 vectors
-  in place of extra-bit codes; its raw-mode persistence has a magic/version header.
+  in place of extra-bit codes. New IVF files have a magic/version header and an explicit
+  padded dimension; legacy quantized files and raw v1 files infer 64-dimension padding.
   IVF search defaults to HACC for 4–9 bits and standard FastScan for 1–3 bits or raw storage.
   SymphonyQG supports
   raw storage (`quantization_bits == 0`) and quantized storage at 4 or 8 bits.
@@ -170,13 +171,20 @@ do not use it where callers expect in-place mutation or pointer identity.
 
 ### Rotation and padded dimensions
 
-Indexes quantize and search in the rotated, padded domain. FHT/Kac rotation pads to a multiple of
-64; callers provide vectors in the original `dim`, while internal code and quantization buffers
+Indexes quantize and search in the rotated, padded domain. FHT/Kac, RaBitQKMeans, QGKMeans,
+SymphonyQG, IVF (all bit widths), and HNSW pad to multiples of 32. Packed extra-bit
+and sign codes retain the historical full 64-coordinate blocks and compact final
+32-coordinate tails. Binary query planes round their scratch storage up to
+whole uint64_t words; 32-coordinate padding keeps HNSW record strides PID-aligned. Callers
+provide vectors in the original `dim`, while internal code and quantization buffers
 generally use `padded_dim`. A buffer allocated for `dim` must never receive `padded_dim` values.
 Centroids, data, and queries compared by the same estimator must be in the same domain.
 
 Rotator state is part of persisted index state. Loading an index must restore the exact rotation
 used at construction; generating a new random rotator produces silently incorrect distances.
+Honor stored padded dimensions instead of recomputing them from current defaults. Old IVF formats
+omit this field and must retain their historical 64-dimension padding when loaded.
+Unreleased pad16 files whose stored dimension is not divisible by 32 are rejected.
 
 ### Distance conventions
 

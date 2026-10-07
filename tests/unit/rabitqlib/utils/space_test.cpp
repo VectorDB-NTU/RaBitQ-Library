@@ -12,10 +12,49 @@
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"
 
 using namespace rabitqlib;
+
+TEST(BitOps, Popcount64MatchesBitReference) {
+    const auto check = [](uint64_t value) {
+        unsigned expected = 0;
+        for (size_t bit = 0; bit < 64; ++bit) {
+            expected += static_cast<unsigned>((value >> bit) & 1U);
+        }
+        EXPECT_EQ(bitops::popcount64(value), expected) << value;
+    };
+    check(0);
+    check(std::numeric_limits<uint64_t>::max());
+    for (size_t bit = 0; bit < 64; ++bit) {
+        check(uint64_t{1} << bit);
+        check(~(uint64_t{1} << bit));
+    }
+    uint64_t value = 17;
+    for (size_t i = 0; i < 1024; ++i) {
+        value = value * 6364136223846793005ULL + 1442695040888963407ULL;
+        check(value);
+    }
+}
+
+TEST(BitOps, CompactWordLoadsZeroExtendWithoutReadingPastInput) {
+    for (size_t bytes = 1; bytes <= 8; ++bytes) {
+        for (size_t offset : {0U, 1U}) {
+            SCOPED_TRACE(bytes);
+            SCOPED_TRACE(offset);
+            std::vector<uint8_t> storage(bytes + offset);
+            uint64_t expected = 0;
+            for (size_t i = 0; i < bytes; ++i) {
+                const auto value = static_cast<uint8_t>(0x80U + i * 17U);
+                storage[offset + i] = value;
+                expected |= uint64_t{value} << (8 * i);
+            }
+            EXPECT_EQ(bitops::load_word(storage.data() + offset, bytes), expected);
+        }
+    }
+}
 
 TEST(PackBinary, SupportsUnalignedOutput) {
     constexpr size_t dim = 128;
@@ -38,6 +77,40 @@ TEST(PackBinary, SupportsUnalignedOutput) {
         const auto bit = static_cast<int>((packed[word] >> (63 - (i % 64))) & 1U);
         EXPECT_EQ(bit, binary_code[i]) << "bit " << i;
     }
+}
+
+TEST(PackBinary, AllWordSizesPreserveFullAndPartialWordLayout) {
+    const auto check = [](auto word_type) {
+        using Word = decltype(word_type);
+        constexpr size_t kWordBits = sizeof(Word) * 8;
+        for (size_t dim : {8U, 16U, 24U, 32U, 48U, 64U, 80U, 96U, 112U, 128U}) {
+            SCOPED_TRACE(kWordBits);
+            SCOPED_TRACE(dim);
+            std::vector<int> signs(dim);
+            // All zeros, all ones, and each isolated bit catch order and tail errors.
+            for (size_t pattern = 0; pattern < dim + 2; ++pattern) {
+                for (size_t i = 0; i < dim; ++i) {
+                    signs[i] = pattern == dim + 1 || i == pattern;
+                }
+                std::vector<uint8_t> output(dim / 8 + 2, 0xA5);
+                pack_binary_to_bytes<Word>(signs.data(), output.data() + 1, dim);
+                EXPECT_EQ(output.front(), 0xA5);
+                EXPECT_EQ(output.back(), 0xA5);
+                for (size_t start = 0; start < dim; start += kWordBits) {
+                    const size_t width = std::min(kWordBits, dim - start);
+                    Word actual = 0;
+                    std::memcpy(&actual, output.data() + 1 + start / 8, width / 8);
+                    for (size_t bit = 0; bit < width; ++bit) {
+                        EXPECT_EQ((actual >> (width - 1 - bit)) & 1U, signs[start + bit]);
+                    }
+                }
+            }
+        }
+    };
+    check(uint8_t{});
+    check(uint16_t{});
+    check(uint32_t{});
+    check(uint64_t{});
 }
 
 TEST(MaskIpX0Q, SupportsUnalignedCodes) {
@@ -72,7 +145,20 @@ TEST(MaskIpX0Q, SupportsUnalignedCodes) {
 TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
     constexpr float delta = 0.5F;
     constexpr float vl = -0.25F;
-    for (size_t dim : {64UL, 128UL, 192UL, 448UL, 512UL, 576UL}) {
+    for (size_t dim :
+         {0UL,
+          64UL,
+          96UL,
+          128UL,
+          160UL,
+          192UL,
+          224UL,
+          256UL,
+          288UL,
+          448UL,
+          512UL,
+          544UL,
+          576UL}) {
         SCOPED_TRACE(dim);
         std::vector<int> data_bits(dim);
         size_t data_popcount = 0;
@@ -86,7 +172,7 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
         ASSERT_NE(reinterpret_cast<uintptr_t>(codes) % alignof(uint64_t), 0U);
         pack_binary_to_bytes<uint64_t>(data_bits.data(), codes, dim);
 
-        for (size_t b_query : {1UL, 4UL, 8UL}) {
+        for (size_t b_query = 0; b_query <= 8; ++b_query) {
             SCOPED_TRACE(b_query);
             std::vector<uint8_t> query_values(dim);
             size_t weighted_intersection = 0;
@@ -98,18 +184,19 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
                 }
             }
 
-            std::vector<uint64_t> query((dim / 64) * b_query, 0);
+            std::vector<uint64_t> query(((dim + 63) / 64) * b_query, 0);
             size_t query_offset = 0;
             for (size_t block = 0; block < dim; block += 512) {
                 const size_t block_dim = (dim - block < 512) ? dim - block : 512;
-                const size_t chunks = block_dim / 64;
+                const size_t chunks = (block_dim + 63) / 64;
                 for (size_t bit = 0; bit < b_query; ++bit) {
                     for (size_t chunk = 0; chunk < chunks; ++chunk) {
                         uint64_t packed = 0;
-                        for (size_t k = 0; k < 64; ++k) {
+                        const size_t width = std::min(size_t{64}, block_dim - chunk * 64);
+                        for (size_t k = 0; k < width; ++k) {
                             const size_t i = block + chunk * 64 + k;
                             packed |= static_cast<uint64_t>((query_values[i] >> bit) & 1U)
-                                      << (63 - k);
+                                      << (width - 1 - k);
                         }
                         query[query_offset + bit * chunks + chunk] = packed;
                     }
@@ -463,4 +550,30 @@ TEST(ip_fxu8_avx, ip_works) {
         );
     }
 #endif
+}
+
+TEST(PackBinary, CompactTailWordsMatchBinaryArithmetic) {
+    for (size_t dim : {64U, 96U, 128U, 160U}) {
+        std::vector<int> signs(dim);
+        std::vector<uint16_t> values(dim);
+        std::vector<uint8_t> code(dim / 8 + 1, 0xA5);
+        std::vector<uint64_t> transposed((dim + 63) / 64 * 4);
+        unsigned expected_count = 0, expected_ip = 0;
+        for (size_t i = 0; i < dim; ++i) {
+            signs[i] = i % 3 != 0;
+            values[i] = (i * 7) % 16;
+            expected_count += signs[i];
+            expected_ip += signs[i] * values[i];
+        }
+        pack_binary_to_bytes<uint64_t>(signs.data(), code.data(), dim);
+        EXPECT_EQ(code.back(), 0xA5);
+        const auto* words = reinterpret_cast<const uint64_t*>(code.data());
+        EXPECT_EQ(popcount(words, dim), expected_count);
+        EXPECT_EQ(ip_bin_bin(words, words, dim), expected_count);
+        new_transpose_bin(values.data(), transposed.data(), dim, 4);
+        EXPECT_EQ(ip_x0_q(words, transposed.data(), 1, 0, dim, 4), expected_ip);
+        EXPECT_EQ(
+            rabitqlib::warmup_ip_x0_q<4>(words, transposed.data(), 1, 0, dim), expected_ip
+        );
+    }
 }

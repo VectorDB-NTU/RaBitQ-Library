@@ -539,3 +539,45 @@ TEST(RabitqSignConventionTest, ZeroResidualDoesNotInflateReconstructionNorm) {
 
 }  // namespace
 }  // namespace rabitqlib::quant
+
+TEST(RabitqCompactCodes, WordTailsUseCompactRowStrides) {
+    using namespace rabitqlib;
+    for (size_t dim : {96U, 160U}) {
+        constexpr size_t count = 3;
+        std::vector<float> data(count * dim), centroid(dim, 0);
+        for (size_t i = 0; i < data.size(); ++i)
+            data[i] = static_cast<int>(i % 17) - 8;
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            std::vector<uint8_t> expected(count * dim / 8 + 1, 0xA5), actual = expected;
+            std::vector<float> add(count), rescale(count), error(count);
+            std::vector<float> batch_add(count), batch_rescale(count), batch_error(count);
+            for (size_t i = 0; i < count; ++i) {
+                quant::rabitq_impl::one_bit::one_bit_compact_code_to_bytes<float, uint64_t>(
+                    data.data() + i * dim,
+                    centroid.data(),
+                    dim,
+                    expected.data() + i * dim / 8,
+                    add[i],
+                    rescale[i],
+                    error[i],
+                    metric
+                );
+            }
+            quant::rabitq_impl::one_bit::one_bit_compact_codes<float, uint64_t>(
+                data.data(),
+                centroid.data(),
+                count,
+                dim,
+                reinterpret_cast<uint64_t*>(actual.data()),
+                batch_add.data(),
+                batch_rescale.data(),
+                batch_error.data(),
+                metric
+            );
+            EXPECT_EQ(actual, expected);
+            EXPECT_EQ(batch_add, add);
+            EXPECT_EQ(batch_rescale, rescale);
+            EXPECT_EQ(batch_error, error);
+        }
+    }
+}

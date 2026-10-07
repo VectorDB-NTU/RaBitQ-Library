@@ -61,13 +61,9 @@ TEST(ExcodeIp, BackendsMatchScalarAcrossWidthsAndBlockBoundaries) {
 
     for (size_t bits = 1; bits <= 8; ++bits) {
         SCOPED_TRACE(bits);
-        const size_t block_dim = (bits == 1 || bits == 4 || bits == 8) ? 16 : 64;
         const auto max_code = static_cast<uint8_t>((1U << bits) - 1);
-        for (size_t dim : std::array<size_t, 15>{
-                 0, 16, 32, 48, 64, 80, 96, 112, 128, 192, 256, 576, 960, 1024, 4096}) {
-            if (dim % block_dim != 0) {
-                continue;
-            }
+        for (size_t dim : std::array<size_t, 12>{
+                 0, 64, 96, 128, 160, 192, 256, 544, 576, 960, 1024, 4096}) {
             SCOPED_TRACE(dim);
             for (size_t pattern = 0; pattern < 4; ++pattern) {
                 SCOPED_TRACE(pattern);

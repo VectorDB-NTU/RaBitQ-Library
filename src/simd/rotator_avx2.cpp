@@ -40,7 +40,7 @@ void flip_sign_avx2(const uint8_t* flip, float* data, size_t dim) {
 }
 
 void kacs_walk_avx2(float* data, size_t len) {
-    // ! len % 16 == 0;
+    // ! len % 32 == 0;
     for (size_t i = 0; i < len / 2; i += 8) {
         __m256 x = _mm256_loadu_ps(&data[i]);
         __m256 y = _mm256_loadu_ps(&data[i + (len / 2)]);

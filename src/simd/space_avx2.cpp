@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "packed_tail_avx2.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "space_float_kernels.hpp"
@@ -91,92 +92,123 @@ void scalar_quantize_uint16_avx2(
 void new_transpose_bin_avx2(
     const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 ) {
-    for (size_t i = 0; i < padded_dim; i += 64) {
-        __m256i vec_00_to_15 = _mm256_loadu_si256((__m256i const*)(q));
-        __m256i vec_16_to_31 = _mm256_loadu_si256((__m256i const*)(q + 16));
-        __m256i vec_32_to_47 = _mm256_loadu_si256((__m256i const*)(q + 32));
-        __m256i vec_48_to_63 = _mm256_loadu_si256((__m256i const*)(q + 48));
+    // Reverse coordinates once; movemask then produces the stored bit order.
+    const __m256i order = _mm256_broadcastsi128_si256(
+        _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1)
+    );
+    for (size_t i = 0; i < padded_dim - padded_dim % 64; i += 64) {
+        const __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q));
+        const __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 16));
+        const __m256i c = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 32));
+        const __m256i d = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 48));
+        // Arrange eight-coordinate groups so packs produces the final bit order.
+        __m256i hi_odd = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x20), order);
+        __m256i hi_even = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x31), order);
+        __m256i lo_odd = _mm256_shuffle_epi8(_mm256_permute2x128_si256(d, c, 0x20), order);
+        __m256i lo_even = _mm256_shuffle_epi8(_mm256_permute2x128_si256(d, c, 0x31), order);
 
         // the first (16 - b_query) bits are empty
         const int shift = static_cast<int>(16 - b_query);
-        vec_00_to_15 = _mm256_slli_epi32(vec_00_to_15, shift);
-        vec_16_to_31 = _mm256_slli_epi32(vec_16_to_31, shift);
-        vec_32_to_47 = _mm256_slli_epi32(vec_32_to_47, shift);
-        vec_48_to_63 = _mm256_slli_epi32(vec_48_to_63, shift);
+        hi_odd = _mm256_slli_epi32(hi_odd, shift);
+        hi_even = _mm256_slli_epi32(hi_even, shift);
+        lo_odd = _mm256_slli_epi32(lo_odd, shift);
+        lo_even = _mm256_slli_epi32(lo_even, shift);
 
         for (size_t j = 0; j < b_query; ++j) {
             // pack two 16-bit vectors to 8-bit interleaved vectors
-            __m256i p0 = _mm256_packs_epi16(vec_00_to_15, vec_16_to_31);
-            __m256i p1 = _mm256_packs_epi16(vec_32_to_47, vec_48_to_63);
+            __m256i p0 = _mm256_packs_epi16(lo_even, lo_odd);
+            __m256i p1 = _mm256_packs_epi16(hi_even, hi_odd);
 
-            uint32_t m0 = _mm256_movemask_epi8(p0);
-            uint32_t m1 = _mm256_movemask_epi8(p1);
+            const uint32_t m0 = _mm256_movemask_epi8(p0);
+            const uint32_t m1 = _mm256_movemask_epi8(p1);
 
-            // Fix AVX2 Lane Ordering of the interleaved mask
-            auto fix_avx2_mask = [](uint32_t m) {
-                return (m & 0xFF0000FF) | ((m & 0x00FF0000) >> 8) | ((m & 0x0000FF00) << 8);
-            };
-
-            m0 = fix_avx2_mask(m0);
-            m1 = fix_avx2_mask(m1);
-
-            m0 = reverse_bits(m0);
-            m1 = reverse_bits(m1);
-
-            uint64_t v = (static_cast<uint64_t>(m0) << 32) | m1;
+            const uint64_t v = uint64_t{m0} | (uint64_t{m1} << 32);
 
             tq[b_query - j - 1] = v;
 
-            vec_00_to_15 = _mm256_slli_epi16(vec_00_to_15, 1);
-            vec_16_to_31 = _mm256_slli_epi16(vec_16_to_31, 1);
-            vec_32_to_47 = _mm256_slli_epi16(vec_32_to_47, 1);
-            vec_48_to_63 = _mm256_slli_epi16(vec_48_to_63, 1);
+            hi_odd = _mm256_slli_epi16(hi_odd, 1);
+            hi_even = _mm256_slli_epi16(hi_even, 1);
+            lo_odd = _mm256_slli_epi16(lo_odd, 1);
+            lo_even = _mm256_slli_epi16(lo_even, 1);
         }
         tq += b_query;
         q += 64;
+    }
+    const size_t tail_dim = padded_dim % 64;
+    // The partial word contains exactly 32 coordinates.
+    if (tail_dim != 0) {
+        const __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q));
+        const __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 16));
+        __m256i odd = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x20), order);
+        __m256i even = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x31), order);
+        odd = _mm256_slli_epi16(odd, static_cast<int>(16 - b_query));
+        even = _mm256_slli_epi16(even, static_cast<int>(16 - b_query));
+        for (size_t bit = 0; bit < b_query; ++bit) {
+            const __m256i bytes = _mm256_packs_epi16(even, odd);
+            tq[b_query - bit - 1] = static_cast<uint32_t>(_mm256_movemask_epi8(bytes));
+            odd = _mm256_slli_epi16(odd, 1);
+            even = _mm256_slli_epi16(even, 1);
+        }
     }
 }
 
 void new_transpose_bin_512_avx2(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 ) {
+    const __m128i reverse_bytes =
+        _mm_setr_epi8(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+    const auto load_reversed = [&](const uint8_t* values) {
+        const __m256i loaded = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(values));
+        return _mm256_permute4x64_epi64(
+            _mm256_shuffle_epi8(loaded, _mm256_broadcastsi128_si256(reverse_bytes)), 0x4E
+        );
+    };
+    // Shift each plane to byte sign bits. Across at most eight planes, carries
+    // from the neighboring byte never reach those sign bits.
     for (size_t i = 0; i < padded_dim;) {
         size_t block_size = 512;
         if (i + 512 > padded_dim) {
             block_size = padded_dim - i;
         }
         // Each chunk represents 64 bytes (512 bits) of dimensions
-        size_t num_chunks = block_size / 64;
+        const size_t full_chunks = block_size / 64;
+        const size_t tail_dim = block_size % 64;
+        const size_t num_chunks = full_chunks + (tail_dim != 0);
 
-        for (size_t k = 0; k < num_chunks; ++k) {
+        for (size_t k = 0; k < full_chunks; ++k) {
             // Load 64 bytes using two sequential 32-byte AVX2 registers
             const uint8_t* current_q_lo = q + i + k * 64;
             const uint8_t* current_q_hi = q + i + k * 64 + 32;
 
-            __m256i vec_lo =
-                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_lo));
-            __m256i vec_hi =
-                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(current_q_hi));
+            __m256i vec_lo = _mm256_slli_epi16(
+                load_reversed(current_q_lo), static_cast<int>(8 - b_query)
+            );
+            __m256i vec_hi = _mm256_slli_epi16(
+                load_reversed(current_q_hi), static_cast<int>(8 - b_query)
+            );
 
             for (size_t j = 0; j < b_query; ++j) {
-                int bit_idx = static_cast<int>(b_query - 1 - j);
-                __m256i mask_vec = _mm256_set1_epi8(static_cast<char>(1 << bit_idx));
-
-                // Process lower 32 bytes
-                __m256i res_lo = _mm256_and_si256(vec_lo, mask_vec);
-                __m256i eq_lo = _mm256_cmpeq_epi8(res_lo, _mm256_setzero_si256());
-                uint32_t m_lo = ~static_cast<uint32_t>(_mm256_movemask_epi8(eq_lo));
-
-                // Process upper 32 bytes
-                __m256i res_hi = _mm256_and_si256(vec_hi, mask_vec);
-                __m256i eq_hi = _mm256_cmpeq_epi8(res_hi, _mm256_setzero_si256());
-                uint32_t m_hi = ~static_cast<uint32_t>(_mm256_movemask_epi8(eq_hi));
+                const auto m_lo = static_cast<uint32_t>(_mm256_movemask_epi8(vec_lo));
+                const auto m_hi = static_cast<uint32_t>(_mm256_movemask_epi8(vec_hi));
 
                 // Combine both 32-bit masks into a single 64-bit mask
-                uint64_t m = (static_cast<uint64_t>(m_hi) << 32) | m_lo;
+                uint64_t m = (static_cast<uint64_t>(m_lo) << 32) | m_hi;
 
                 // Write into the 64-bit structured macro-layout
-                tq[(b_query - j - 1) * num_chunks + k] = reverse_bits_u64(m);
+                tq[(b_query - j - 1) * num_chunks + k] = m;
+                vec_lo = _mm256_slli_epi16(vec_lo, 1);
+                vec_hi = _mm256_slli_epi16(vec_hi, 1);
+            }
+        }
+
+        if (tail_dim != 0) {
+            __m256i values = _mm256_slli_epi16(
+                load_reversed(q + i + full_chunks * 64), static_cast<int>(8 - b_query)
+            );
+            for (size_t bit = 0; bit < b_query; ++bit) {
+                tq[(b_query - bit - 1) * num_chunks + full_chunks] =
+                    static_cast<uint32_t>(_mm256_movemask_epi8(values));
+                values = _mm256_slli_epi16(values, 1);
             }
         }
 
@@ -186,46 +218,7 @@ void new_transpose_bin_512_avx2(
 }
 
 float mask_ip_x0_q_avx2(const float* query, const uint8_t* data, size_t padded_dim) {
-    const size_t num_blk = padded_dim / 64;
-    const auto* it_data = data;
-    const float* it_query = query;
-    const __m256i shifts0 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-    const __m256i shifts1 = _mm256_setr_epi32(8, 9, 10, 11, 12, 13, 14, 15);
-    const __m256i shifts2 = _mm256_setr_epi32(16, 17, 18, 19, 20, 21, 22, 23);
-    const __m256i shifts3 = _mm256_setr_epi32(24, 25, 26, 27, 28, 29, 30, 31);
-    __m256 sum0 = _mm256_setzero_ps();
-    __m256 sum1 = _mm256_setzero_ps();
-    __m256 sum2 = _mm256_setzero_ps();
-    __m256 sum3 = _mm256_setzero_ps();
-
-    for (size_t i = 0; i < num_blk; ++i) {
-        // Stored coordinates run from bit 63 to bit 0: high word first,
-        // with each selected bit shifted into a maskload lane's sign bit.
-        for (size_t half = 0; half < 2; ++half) {
-            int32_t word;
-            std::memcpy(&word, it_data + (1 - half) * sizeof(word), sizeof(word));
-            const __m256i bits = _mm256_set1_epi32(word);
-            sum0 = _mm256_add_ps(
-                sum0, _mm256_maskload_ps(it_query, _mm256_sllv_epi32(bits, shifts0))
-            );
-            sum1 = _mm256_add_ps(
-                sum1, _mm256_maskload_ps(it_query + 8, _mm256_sllv_epi32(bits, shifts1))
-            );
-            sum2 = _mm256_add_ps(
-                sum2, _mm256_maskload_ps(it_query + 16, _mm256_sllv_epi32(bits, shifts2))
-            );
-            sum3 = _mm256_add_ps(
-                sum3, _mm256_maskload_ps(it_query + 24, _mm256_sllv_epi32(bits, shifts3))
-            );
-            it_query += 32;
-        }
-        it_data += sizeof(uint64_t);
-    }
-
-    const __m256 sum = _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3));
-    __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(sum), _mm256_extractf128_ps(sum, 1));
-    lanes = _mm_add_ps(lanes, _mm_movehl_ps(lanes, lanes));
-    return _mm_cvtss_f32(_mm_add_ss(lanes, _mm_movehdup_ps(lanes)));
+    return detail::mask_ip_avx2(query, data, padded_dim);
 }
 
 float mask_ip_x0_q_avx2(const float* query, const uint64_t* data, size_t padded_dim) {

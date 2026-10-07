@@ -6,9 +6,19 @@ RaBitQLib provides two types of random rotation. All implementations sample and 
 By default, the library uses the `FFHT + Kac’s Walk` method. 
 
 The default rotator accepts input dimensions from 64 through 65,536 inclusive,
-including 16,384. It pads to a multiple of 64 and uses AVX or NEON kernels
+including 16,384. It pads to a multiple of 32 and uses AVX or NEON kernels
 for power-of-two blocks through `2^16`. Allocate the
 output using `rotator->size()`, which can exceed the input dimension.
+
+RaBitQKMeans, QGKMeans, SymphonyQG, IVF, and HNSW also use multiples of 32
+for all their supported bit widths.
+Index loading preserves the padded domain used when the index was built.
+Reducing the padded dimension changes the sampled rotation and quantization even
+with the same seed. Newly built indexes can therefore have different recall and
+latency; smaller padding does not guarantee faster search or unchanged accuracy.
+When restoring a standalone rotator saved with earlier 64-dimension padding,
+pass that original padded dimension to `choose_rotator` before loading its state.
+The saved sign bytes do not contain dimension metadata.
 
 The implementation can be found in `rotator.hpp`.
 
@@ -30,12 +40,12 @@ The implementation can be found in `rotator.hpp`.
 #include "rabitqlib/utils/rotator.hpp"
 
 int main() {
-    const size_t dim = 769;  // deliberately not a multiple of 64
+    const size_t dim = 769;  // deliberately not a multiple of 32
     std::unique_ptr<rabitqlib::Rotator<float>> rotator(
         rabitqlib::choose_rotator<float>(dim, rabitqlib::RotatorType::FhtKacRotator)
     );
     std::vector<float> x(dim, 1.0F);
-    std::vector<float> x_prime(rotator->size());  // 832 elements
+    std::vector<float> x_prime(rotator->size());  // 800 elements
     rotator->rotate(x.data(), x_prime.data());
 }
 ```
@@ -46,7 +56,7 @@ to quantization and estimation routines that operate on rotated vectors.
 
 For a random orthogonal transformation, select `RotatorType::MatrixRotator`.
 It keeps the input dimension by default; pass a padded dimension explicitly if
-subsequent packed-code operations require a multiple of 64. Its storage and
+subsequent packed-code operations require a multiple of 32. Its storage and
 computation cost are quadratic in the dimension.
 
 ## FFHT + Kac’s Walk

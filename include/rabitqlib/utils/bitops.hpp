@@ -1,12 +1,31 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
 
 namespace rabitqlib::bitops {
+
+// Load 1..8 bytes of a compact word, zero-extending a final partial word.
+inline uint64_t load_word(const void* data, size_t bytes) {
+    if (bytes == 8) {
+        uint64_t word;
+        std::memcpy(&word, data, sizeof(word));
+        return word;
+    }
+    if (bytes == 4) {
+        uint32_t word;
+        std::memcpy(&word, data, sizeof(word));
+        return word;
+    }
+    uint64_t word = 0;
+    std::memcpy(&word, data, bytes);
+    return word;
+}
 
 inline unsigned popcount32(uint32_t value) {
 #if defined(_MSC_VER)
@@ -19,7 +38,10 @@ inline unsigned popcount32(uint32_t value) {
 }
 
 inline unsigned popcount64(uint64_t value) {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) || \
+    ((defined(__x86_64__) || defined(__i386__)) && !defined(__POPCNT__))
+    // Inline the software fallback on generic x86 instead of calling libgcc
+    // once per word. ISA-specific builds still use their native instruction.
     value -= (value >> 1) & 0x5555555555555555ULL;
     value = (value & 0x3333333333333333ULL) + ((value >> 2) & 0x3333333333333333ULL);
     return static_cast<unsigned>(

@@ -305,8 +305,10 @@ def test_code_only_build_preserves_v1_format(bits, metric, tmp_path):
     payload = path.read_bytes()
     assert struct.unpack_from("<QI", payload) == (0x5147524142495451, 1)
     # Existing v1 header, centroid, ExDataMap row, neighbor batches/IDs, FHT state.
-    row_bytes = 128 * bits // 8 + 8 + 128 * 4 + 256 + 128
-    assert len(payload) == 58 + 128 * 4 + 65 * row_bytes + 128 // 2
+    padded = 96
+    assert struct.unpack_from("<Q", payload, 36)[0] == padded
+    row_bytes = padded * bits // 8 + 8 + padded * 4 + 256 + 128
+    assert len(payload) == 58 + padded * 4 + 65 * row_bytes + padded // 2
     ids, distances = index.search(queries, 10, 64)
     assert np.isfinite(distances).all()
     assert all(len(set(row)) == 10 for row in ids)

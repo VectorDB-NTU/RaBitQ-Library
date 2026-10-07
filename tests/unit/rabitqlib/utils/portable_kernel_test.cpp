@@ -11,6 +11,7 @@
 #include "rabitqlib/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/simd/space_dispatch.hpp"
 #include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"
 
@@ -34,7 +35,7 @@ TEST(PortableKernels, PackingMatchesDispatchedBytesAndDotProducts) {
         simd::excode_ipimpl::ip64_fxu7_generic,
         simd::excode_ipimpl::ip16_fxu8_generic};
     for (size_t bits = 1; bits <= 8; ++bits) {
-        for (size_t dim : {64U, 128U, 192U, 576U}) {
+        for (size_t dim : {64U, 96U, 128U, 192U, 544U, 576U}) {
             SCOPED_TRACE(bits);
             SCOPED_TRACE(dim);
             std::vector<uint8_t> raw(dim), dispatched(dim * bits / 8),
@@ -70,18 +71,20 @@ TEST(PortableKernels, PackingMatchesDispatchedBytesAndDotProducts) {
 }
 
 TEST(PortableKernels, QueryTransposeAndWarmupMatchIntegerReference) {
-    for (size_t dim : {64U, 128U, 448U, 512U, 576U, 960U, 1024U, 1088U}) {
+    for (size_t dim : {64U, 96U, 128U, 448U, 512U, 544U, 576U, 960U, 1024U, 1088U}) {
         for (size_t bits = 0; bits <= 8; ++bits) {
             SCOPED_TRACE(dim);
             SCOPED_TRACE(bits);
             std::vector<uint8_t> query(dim);
-            std::vector<uint64_t> data(dim / 64), transposed(dim / 64 * bits),
+            std::vector<uint64_t> data((dim + 63) / 64), transposed((dim + 63) / 64 * bits),
                 scalar(transposed.size());
             uint64_t expected_ip = 0, expected_count = 0;
             for (size_t i = 0; i < dim; ++i) {
                 query[i] = static_cast<uint8_t>((i * 19 + 7) & ((1U << bits) - 1));
                 if (i % 3 == 0 || i % 63 == 0) {
-                    data[i / 64] |= uint64_t{1} << (63 - i % 64);
+                    data[i / 64] |=
+                        uint64_t{1}
+                        << (std::min(size_t{64}, dim - i / 64 * 64) - 1 - i % 64);
                     expected_ip += query[i];
                     ++expected_count;
                 }
@@ -91,12 +94,14 @@ TEST(PortableKernels, QueryTransposeAndWarmupMatchIntegerReference) {
             EXPECT_EQ(scalar, transposed);
             size_t offset = 0;
             for (size_t block = 0; block < dim; block += 512) {
-                const size_t chunks = std::min(size_t{512}, dim - block) / 64;
+                const size_t chunks = (std::min(size_t{512}, dim - block) + 63) / 64;
                 for (size_t b = 0; b < bits; ++b) {
                     for (size_t c = 0; c < chunks; ++c) {
-                        for (size_t i = 0; i < 64; ++i) {
+                        const size_t width = std::min(size_t{64}, dim - block - c * 64);
+                        for (size_t i = 0; i < width; ++i) {
                             EXPECT_EQ(
-                                (transposed[offset + b * chunks + c] >> (63 - i)) & 1U,
+                                (transposed[offset + b * chunks + c] >> (width - 1 - i)) &
+                                    1U,
                                 (query[block + c * 64 + i] >> b) & 1U
                             );
                         }
@@ -145,3 +150,92 @@ TEST(PortableKernels, Uint16TransposePreservesAllBitPlanes) {
     }
 }
 }  // namespace rabitqlib
+
+TEST(PortableKernels, ExtraBitTailsPreserveFullBlockBytesAndUseCompactBitStream) {
+    using namespace rabitqlib;
+    for (size_t bits : {2U, 3U, 5U, 6U, 7U}) {
+        constexpr size_t tail = 32;
+        const size_t dim = 128 + tail;
+        std::vector<uint8_t> raw(dim), packed(dim * bits / 8 + 2, 0xA5);
+        std::vector<uint8_t> full(128 * bits / 8);
+        for (size_t i = 0; i < dim; ++i)
+            raw[i] = (i * 37 + 3) & ((1U << bits) - 1);
+        quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
+            raw.data(), full.data(), 128, bits
+        );
+        quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
+            raw.data(), packed.data() + 1, dim, bits
+        );
+        EXPECT_EQ(packed.front(), 0xA5);
+        EXPECT_EQ(packed.back(), 0xA5);
+        EXPECT_TRUE(std::equal(full.begin(), full.end(), packed.begin() + 1));
+        // Independent byte-by-byte definition: bit j holds bit j % bits
+        // of coordinate j / bits, with no gaps or rounded word storage.
+        for (size_t byte = 0; byte < tail * bits / 8; ++byte) {
+            uint8_t expected = 0;
+            for (size_t b = 0; b < 8; ++b) {
+                const size_t pos = byte * 8 + b;
+                expected |= ((raw[128 + pos / bits] >> (pos % bits)) & 1U) << b;
+            }
+            EXPECT_EQ(packed[1 + full.size() + byte], expected);
+        }
+    }
+}
+
+TEST(PortableKernels, PackingMatchesReferenceForMaximumAndIsolatedCodes) {
+    using namespace rabitqlib;
+    using Pack = void (*)(const uint8_t*, uint8_t*, size_t);
+    const std::array<Pack, 6> generic{
+        simd::packing_2bit_excode_generic,
+        simd::packing_3bit_excode_generic,
+        simd::packing_4bit_excode_generic,
+        simd::packing_5bit_excode_generic,
+        simd::packing_6bit_excode_generic,
+        simd::packing_7bit_excode_generic};
+    std::vector<std::array<Pack, 6>> backends{generic};
+#if defined(__x86_64__) || defined(_M_X64)
+    if (cpu::has_avx2()) {
+        backends.push_back({
+            simd::packing_2bit_excode_avx2,
+            simd::packing_3bit_excode_avx2,
+            simd::packing_4bit_excode_avx2,
+            simd::packing_5bit_excode_avx2,
+            simd::packing_6bit_excode_avx2,
+            simd::packing_7bit_excode_avx2,
+        });
+    }
+    if (cpu::has_avx512_core()) {
+        backends.push_back({
+            simd::packing_2bit_excode_avx512,
+            simd::packing_3bit_excode_avx512,
+            simd::packing_4bit_excode_avx512,
+            simd::packing_5bit_excode_avx512,
+            simd::packing_6bit_excode_avx512,
+            simd::packing_7bit_excode_avx512,
+        });
+    }
+#endif
+    const std::array<size_t, 6> widths{2, 3, 4, 5, 6, 7};
+    for (size_t b = 0; b < widths.size(); ++b) {
+        const size_t bits = widths[b];
+        const auto max_code = static_cast<uint8_t>((1U << bits) - 1);
+        for (size_t dim : {64U, 96U, 128U, 256U}) {
+            for (size_t pattern = 0; pattern <= dim; ++pattern) {
+                SCOPED_TRACE(bits);
+                SCOPED_TRACE(dim);
+                SCOPED_TRACE(pattern);
+                std::vector<uint8_t> raw(dim + 1);
+                for (size_t i = 0; i < dim; ++i) {
+                    raw[i + 1] = pattern == dim || i == pattern ? max_code : 0;
+                }
+                std::vector<uint8_t> expected(dim * bits / 8 + 2, 0xA5);
+                generic[b](raw.data() + 1, expected.data() + 1, dim);
+                for (const auto& backend : backends) {
+                    std::vector<uint8_t> actual(expected.size(), 0xA5);
+                    backend[b](raw.data() + 1, actual.data() + 1, dim);
+                    EXPECT_EQ(actual, expected);
+                }
+            }
+        }
+    }
+}
