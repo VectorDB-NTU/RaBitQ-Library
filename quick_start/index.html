@@ -1670,11 +1670,11 @@ for IVF, HNSW, and SymphonyQG. For clustering, choose
 <a href="../clustering/#rabitqkmeans">RaBitQKMeans</a> for flat assignment, recommended for small cluster
 counts, or <a href="../clustering/#qgkmeans">QGKMeans</a> for graph assignment.</p>
 <h3 id="threading-and-file-paths">Threading and file paths<a class="headerlink" href="#threading-and-file-paths" title="Permanent link">&para;</a></h3>
-<p>For all three indexes, <code>build</code> and <code>search</code> interpret <code>num_threads=0</code> as the
-detected hardware thread count. Larger requests are capped at that count;
-smaller positive requests are respected. Operations may use fewer workers when
-there are fewer work items. If hardware detection is unavailable, one thread is
-used. Python index methods default to one thread when <code>num_threads</code> is omitted.</p>
+<p><code>num_threads=0</code> selects the detected available logical CPU count. Positive values
+set an upper limit, capped at that count; small workloads may use fewer workers.
+Python index methods default to one thread; clustering defaults to <code>0</code>.
+On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
+before starting the program.</p>
 <p>Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
 in C++; Python paths are Unicode strings on all platforms.</p>
 <h3 id="build-the-python-bindings-from-source">Build the Python bindings from source<a class="headerlink" href="#build-the-python-bindings-from-source" title="Permanent link">&para;</a></h3>

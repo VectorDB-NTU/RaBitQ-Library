@@ -1499,7 +1499,7 @@ Append <code>ip</code> for spherical clustering of normalized input; the default
 <tr>
 <td><code>num_threads</code></td>
 <td><code>0</code></td>
-<td>Use detected hardware threads; positive requests are capped at that count.</td>
+<td>Use detected available logical CPUs; positive requests are capped at that count. See <a href="../quick_start/#threading-and-file-paths">threading</a>.</td>
 </tr>
 <tr>
 <td><code>spherical</code></td>
@@ -1528,6 +1528,10 @@ Append <code>ip</code> for spherical clustering of normalized input; the default
 </tr>
 </tbody>
 </table>
+<p><code>num_threads</code> sets an upper limit, not a fixed worker count for every stage.
+QGKMeans may use fewer workers to build small centroid graphs. That additional
+limit does not apply to training-vector assignment, which uses the thread budget
+after capping it to the available CPUs.</p>
 <p>Training requires <code>64 &lt;= d &lt;= 65536</code>, finite coordinates, and
 <code>abs(x) &lt;= sqrt(sqrt(FLT_MAX) / (64 * d))</code>; scale larger inputs before training.
 Cluster-count requirements are listed above. Training does not normalize or

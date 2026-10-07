@@ -1430,7 +1430,7 @@ Concurrent searches need separate outputs; do not modify the index or call
 The existing <code>search()</code> accepts the same two-dimensional array and remains an equivalent
 entry point. Both return <code>(ids, distances)</code> arrays of shape <code>(num_queries, k)</code>,
 including empty batches. Both APIs default to one worker; <code>num_threads=0</code>
-selects the available hardware thread count, capped by the number of queries.
+selects the available logical CPU count, capped by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.</p>
 <p>See <code>sample/cpp/symqg_indexing.cpp</code>, <code>sample/cpp/symqg_querying.cpp</code>, and their
 Python counterparts for complete examples.</p>
