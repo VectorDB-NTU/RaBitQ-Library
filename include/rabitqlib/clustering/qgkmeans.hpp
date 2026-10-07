@@ -149,11 +149,17 @@ class QGAssigner {
         if (builder_) {
             builder_->reset(centroids);
         } else {
+            // Centroid graphs have much less work than the training-vector batch.
+            // Amortize their short phases without reducing assignment parallelism.
+            constexpr size_t kMinVerticesPerBuildThread = 128;
+            const size_t build_threads = std::min<size_t>(
+                num_threads_, std::max<size_t>(1, k_ / kMinVerticesPerBuildThread)
+            );
             builder_ = std::make_unique<symqg::QGBuilder>(
                 *graph_,
                 ef_construction_,
                 centroids,
-                num_threads_,
+                build_threads,
                 symqg::QGInitialization::PiPNN,
                 seed_,
                 true

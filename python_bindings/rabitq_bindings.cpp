@@ -3,6 +3,7 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace py = pybind11;
 
@@ -14,6 +15,8 @@ void register_kmeans(py::module_& m);
 
 PYBIND11_MODULE(_rabitqlib, m) {
     m.doc() = "RabitQ Python bindings combined module";
+
+    m.def("_available_cpu_count", &rabitqlib::total_threads);
 
     // Register shared enums once
     py::enum_<rabitqlib::MetricType>(m, "MetricType")

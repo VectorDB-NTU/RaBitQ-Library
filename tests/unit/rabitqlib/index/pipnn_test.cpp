@@ -130,5 +130,29 @@ TEST(PipnnTest, RejectsInvalidConfiguration) {
     EXPECT_THROW(build_initial_graph(data.data(), 33, 7, 16), std::invalid_argument);
     EXPECT_THROW(build_initial_graph(data.data(), 32, 7, 32), std::invalid_argument);
 }
+
+TEST(PipnnTest, RootTileTailAndRecursiveBucketsCoverDuplicateInputs) {
+    constexpr size_t kCount = 4097, kDim = 7;
+    std::vector<float> data(kCount * kDim, 0.5F);
+    for (size_t threads : {1U, 2U}) {
+        pipnn_impl::ScratchPool scratch(kCount, kDim, threads);
+        auto leaves =
+            pipnn_impl::cluster(data.data(), kCount, kDim, METRIC_L2, threads, scratch);
+        std::vector<size_t> memberships(kCount, 0);
+        for (auto& leaf : leaves) {
+            EXPECT_LE(leaf.size(), pipnn_impl::kLeafSize);
+            std::sort(leaf.begin(), leaf.end());
+            EXPECT_EQ(std::unique(leaf.begin(), leaf.end()), leaf.end());
+            for (PID id : leaf) {
+                ASSERT_LT(id, kCount);
+                ++memberships[id];
+            }
+        }
+        for (size_t membership : memberships) {
+            EXPECT_GE(membership, 1U);
+            EXPECT_LE(membership, 30U);
+        }
+    }
+}
 }  // namespace
 }  // namespace rabitqlib::symqg::detail

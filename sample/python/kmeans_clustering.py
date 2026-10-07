@@ -1,11 +1,11 @@
 """Train RaBitQKMeans or QGKMeans and save clusters for the index examples."""
 
 import argparse
-import os
 from time import time
 
 import numpy as np
 from rabitqlib import FinalAssignmentMode, QGKMeans, RaBitQKMeans
+from rabitqlib._rabitqlib import _available_cpu_count
 
 from utils import read_fvecs
 
@@ -26,9 +26,9 @@ def cluster_data(
     if method not in ("rabitq", "qg"):
         raise ValueError("method must be rabitq or qg")
     clustering_type = RaBitQKMeans if method == "rabitq" else QGKMeans
-    hardware_threads = os.cpu_count() or 1
+    available_threads = _available_cpu_count()
     threads = (
-        hardware_threads if num_threads == 0 else min(num_threads, hardware_threads)
+        available_threads if num_threads == 0 else min(num_threads, available_threads)
     )
     print(f"Clustering metric: {metric.upper()}, threads: {threads}")
     kmeans = clustering_type(
@@ -76,6 +76,6 @@ if __name__ == "__main__":
         "--num-threads",
         type=int,
         default=0,
-        help="Threads for clustering (0: hardware count; larger requests are capped)",
+        help="Threads for clustering (0: available CPUs; larger requests are capped)",
     )
     main(parser.parse_args())

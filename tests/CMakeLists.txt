@@ -40,6 +40,12 @@ target_link_libraries(rabitq_tests
 include(GoogleTest)
 gtest_discover_tests(rabitq_tests DISCOVERY_MODE PRE_TEST)
 
+# Binding is initialized before main; test it in its own process.
+add_test(NAME OpenMPBinding COMMAND rabitq_tests
+    --gtest_filter=ThreadCount.BoundParallelForUsesRuntimePlacementAndPropagatesErrors)
+set_tests_properties(OpenMPBinding PROPERTIES
+    ENVIRONMENT "OMP_PROC_BIND=spread;OMP_PLACES=threads;OMP_NUM_THREADS=4")
+
 # Substitute CPU predicates only in this executable to exercise real cached dispatch
 # on a CPU without SIMD. The static library's detector object is not linked here.
 add_executable(fastscan_no_simd_test dispatch/fastscan_no_simd_test.cpp)

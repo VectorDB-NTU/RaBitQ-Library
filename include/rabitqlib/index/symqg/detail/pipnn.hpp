@@ -208,15 +208,11 @@ inline std::vector<Bucket> cluster(
     while (!active.empty()) {
         std::vector<std::vector<BucketJob>> next(active.size());
         std::vector<std::vector<Bucket>> finished(active.size());
-#pragma omp parallel for num_threads(active.front().depth == 0 ? 1 : threads) \
-    schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(active.size());
-             ++index) {
-            const size_t i = static_cast<size_t>(index);
+        const auto process_bucket = [&](size_t i) {
             auto& job = active[i];
             if (job.ids.size() <= kLeafSize) {
                 finished[i].push_back(std::move(job.ids));
-                continue;
+                return;
             }
             auto children = partition(data, dim, job, metric, threads, scratch);
             std::sort(children.begin(), children.end(), [](const auto& a, const auto& b) {
@@ -265,6 +261,17 @@ inline std::vector<Bucket> cluster(
                 finished[i].push_back(std::move(small));
             }
             Bucket().swap(job.ids);
+        };
+        if (active.front().depth == 0) {
+            // A serialized outer OpenMP region would make the root's tile team
+            // nested, forcing the runtime to create workers again on every reset.
+            process_bucket(0);
+        } else {
+#pragma omp parallel for num_threads(threads) schedule(dynamic)
+            for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(active.size());
+                 ++i) {
+                process_bucket(static_cast<size_t>(i));
+            }
         }
         std::vector<BucketJob> new_active;
         for (size_t i = 0; i < active.size(); ++i) {
