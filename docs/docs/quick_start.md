@@ -153,11 +153,11 @@ counts, or [QGKMeans](clustering.md#qgkmeans) for graph assignment.
 
 ### Threading and file paths
 
-For all three indexes, `build` and `search` interpret `num_threads=0` as the
-detected hardware thread count. Larger requests are capped at that count;
-smaller positive requests are respected. Operations may use fewer workers when
-there are fewer work items. If hardware detection is unavailable, one thread is
-used. Python index methods default to one thread when `num_threads` is omitted.
+`num_threads=0` selects the detected available logical CPU count. Positive values
+set an upper limit, capped at that count; small workloads may use fewer workers.
+Python index methods default to one thread; clustering defaults to `0`.
+On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
+before starting the program.
 
 Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
 in C++; Python paths are Unicode strings on all platforms.

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <omp.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -35,6 +37,28 @@ inline void parallel_for(size_t start, size_t end, size_t numThreads, Function f
             fn(id, 0);
         }
     } else {
+#if defined(_OPENMP) && _OPENMP >= 201307
+        if (omp_get_proc_bind() != omp_proc_bind_false) {
+            // Native threads inherit only the caller's place. Let OpenMP honor
+            // the configured placement of the whole team when binding is enabled.
+            std::vector<std::exception_ptr> errors(numThreads);
+#pragma omp parallel for num_threads(numThreads) schedule(dynamic)
+            for (size_t id = start; id < end; ++id) {
+                const size_t worker = static_cast<size_t>(omp_get_thread_num());
+                if (!errors[worker]) {
+                    try {
+                        fn(id, worker);
+                    } catch (...) { errors[worker] = std::current_exception(); }
+                }
+            }
+            for (const auto& error : errors) {
+                if (error) {
+                    std::rethrow_exception(error);
+                }
+            }
+            return;
+        }
+#endif
         std::vector<std::thread> threads;
         std::atomic<size_t> current(start);
 

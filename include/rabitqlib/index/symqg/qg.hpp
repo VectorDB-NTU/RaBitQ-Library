@@ -243,7 +243,7 @@ class QuantizedGraph<float> {
      * queries contains num_queries * dimension() floats; results and dists
      * each hold num_queries * knn elements. Empty batches do no work.
      * Scratch is reused within each worker. num_threads defaults to one;
-     * zero selects the available hardware thread count, capped by the batch.
+     * zero selects the available logical CPU count, capped by the batch.
      * Input and output buffers must not overlap. Concurrent searches require
      * separate outputs and no index mutation, including set_ef().
      */

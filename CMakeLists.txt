@@ -58,6 +58,7 @@ set(RABITQ_COMMON_SOURCES
     src/index/ivf_search.cpp
     src/index/qg.cpp
     src/utils/cpu_features.cpp
+    src/utils/thread_count.cpp
     src/simd/dispatch.cpp
     src/simd/space_generic.cpp
     src/simd/fastscan_generic.cpp

@@ -8,6 +8,17 @@ from rabitqlib import FinalAssignmentMode, QGKMeans, QGKMeansParameters, RaBitQK
 K = 33
 
 
+@pytest.mark.parametrize("model_type", [QGKMeans, RaBitQKMeans])
+@pytest.mark.parametrize("spherical", [False, True])
+def test_refilled_duplicate_centroids_have_zero_shift(model_type, spherical):
+    data = np.full((65, 64), 0.125, dtype=np.float32)
+    model = model_type(64, 33, niter=1, spherical=spherical, num_threads=2)
+    model.train(data)
+    assert model.iteration_stats[0].nsplit == 32
+    assert model.iteration_stats[0].shift == 0.0
+    np.testing.assert_array_equal(model.centroids, data[:33])
+
+
 def qgkmeans(**kwargs):
     parameters = {
         "niter": 2,

@@ -81,14 +81,14 @@ constexpr T round_up_to_multiple_of(size_t x, size_t multiple_of) {
     return multiple_of * (div_round_up(x, multiple_of));
 }
 
-// get number of threads of current sys
-inline size_t total_threads() {
-    const auto threads = std::thread::hardware_concurrency();
-    return threads == 0 ? 1 : threads;
-}
+// Available logical CPUs in the calling context, with a hardware-count fallback.
+size_t total_threads();
 
-// Zero selects all hardware threads; explicit requests cannot exceed that count.
+// Zero selects all available CPUs; explicit requests cannot exceed that count.
 inline size_t resolve_num_threads(size_t requested) {
+    if (requested == 1) {
+        return 1;
+    }
     const size_t available = total_threads();
     return requested == 0 ? available : std::min(requested, available);
 }

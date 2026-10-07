@@ -77,12 +77,17 @@ Set Python keyword arguments or fields of the corresponding C++ parameter type:
 | --- | --- | --- |
 | `niter` | `25` | Maximum clustering iterations. |
 | `early_stop_threshold` | `0.0` | Stop from iteration 2 when the absolute relative objective change is at most this value; range `[0, 1]`. Zero stops only on an unchanged objective. |
-| `num_threads` | `0` | Use detected hardware threads; positive requests are capped at that count. |
+| `num_threads` | `0` | Use detected available logical CPUs; positive requests are capped at that count. See [threading](quick_start.md#threading-and-file-paths). |
 | `spherical` | `false` | Normalize centroids and assign by inner product; input must already be normalized. |
 | `seed` | `42` | Seed for centroid selection and rotation. |
 | `min_points_per_centroid` | `39` | Warn below this training-points-per-centroid ratio when verbose. |
 | `verbose` | `false` | Print training progress and warnings. |
 | `final_assignment` | `Approximate` | Use the selected method for final labels, or `Exact` for nearest-centroid labels. |
+
+`num_threads` sets an upper limit, not a fixed worker count for every stage.
+QGKMeans may use fewer workers to build small centroid graphs. That additional
+limit does not apply to training-vector assignment, which uses the thread budget
+after capping it to the available CPUs.
 
 Training requires `64 <= d <= 65536`, finite coordinates, and
 `abs(x) <= sqrt(sqrt(FLT_MAX) / (64 * d))`; scale larger inputs before training.
