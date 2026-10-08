@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <vector>
 
 #include "rabitqlib/simd/space_dispatch.hpp"
@@ -61,7 +62,8 @@ template <typename T>
 void check_transpose(
     void (*transpose)(const T*, uint64_t*, size_t, size_t), bool blocked512
 ) {
-    for (size_t dim : {0U, 64U, 96U, 128U, 448U, 512U, 544U, 576U, 960U, 1024U, 1088U}) {
+    for (size_t dim : {0U,   32U,  64U,  96U,  128U, 160U,  256U,  288U,  448U,  480U, 512U,
+                       544U, 576U, 768U, 960U, 992U, 1024U, 1056U, 1088U, 4096U, 4128U}) {
         std::vector<T> input(dim + 1);
         for (size_t i = 0; i < dim; ++i) {
             input[i + 1] =
@@ -91,6 +93,18 @@ void check_transpose(
             }
             transpose(input.data() + 1, actual.data() + 1, dim, bits);
             EXPECT_EQ(actual, expected);
+
+            // Keep both buffers exact at the end for sanitizer overread/overwrite
+            // coverage, while offsetting SIMD accesses by one natural element.
+            auto exact_input = std::make_unique<T[]>(dim + 1);
+            std::copy(input.begin(), input.end(), exact_input.get());
+            auto exact_output = std::make_unique<uint64_t[]>(actual.size() - 1);
+            exact_output[0] = UINT64_MAX;
+            transpose(exact_input.get() + 1, exact_output.get() + 1, dim, bits);
+            EXPECT_EQ(exact_output[0], UINT64_MAX);
+            EXPECT_TRUE(
+                std::equal(expected.begin() + 1, expected.end() - 1, exact_output.get() + 1)
+            );
         }
     }
 }
