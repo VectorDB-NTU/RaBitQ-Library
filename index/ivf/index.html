@@ -1442,13 +1442,21 @@ the original data can be released after construction.</p>
 <p>Construction reuses a rotation buffer of at most 32 vectors per worker. This
 temporary storage uses at most <code>workers * 32 * padded_dim * sizeof(float)</code> bytes,
 independently of cluster sizes.</p>
+<p>New indexes pad the rotated dimension to a multiple of 32 for every supported
+bit width, including raw mode (32). This applies to both rotator types.
+Extra-bit layouts retain full 64-coordinate blocks and store any final
+32-coordinate tail compactly.</p>
 <p>After construction, you can directly save the index file to disk:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">ivf</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="n">output_index_file</span><span class="p">);</span>
 </code></pre></div>
-Raw-mode files use a magic/version header and include both the original vectors
-and the rotation state. Loading restores the mode automatically, so querying
-does not require an external dataset. Existing quantized files retain their
-format and remain compatible; versions before 0.3.3 cannot load raw-mode files.</p>
+New files use the <code>RABQIDX1</code> magic, version 1, storage flags, and an explicit
+padded dimension before the index metadata. Loading restores the storage mode,
+rotation state, and padded dimension; raw files also contain the original vectors,
+so querying does not require an external dataset.</p>
+<p>Legacy unversioned quantized files and raw v1 files remain readable and retain
+their original 64-dimension padding. Saving a loaded legacy index writes the new
+header without changing its padded dimension or encoded data. Older library
+versions cannot read the new format.</p>
 <h3 id="data-layout">Data Layout<a class="headerlink" href="#data-layout" title="Permanent link">&para;</a></h3>
 <p>The main data layout for our IVF is organized as follows:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">[</span><span class="n">batch</span><span class="w"> </span><span class="n">data</span><span class="p">]</span><span class="w">    </span><span class="c1">// 1-bit code and factors</span>
