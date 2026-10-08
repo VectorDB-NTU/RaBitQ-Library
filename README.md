@@ -2,11 +2,11 @@
 
 <h1>RaBitQ Library</h1>
 
-<h3>Compact vectors. Accurate distances. Fast ANN search.</h3>
+<h3>Compact vectors. Accurate distances. Fast search.</h3>
 
 <p>
-  A research-backed C++17 library with Python bindings for 1-bit and multi-bit<br>
-  vector quantization, IVF, HNSW, SymphonyQG, and clustering.
+  A research-backed C++17 library with Python bindings for RaBitQ<br>
+  vector quantization, clustering, and indexes including IVF, HNSW and SymphonyQG.
 </p>
 
 <p>
