@@ -413,7 +413,7 @@ def test_raw_index_rejects_invalid_files(tmp_path, damage):
     idx.save(str(path))
     payload = bytearray(path.read_bytes())
     if damage == "version":
-        payload[8:12] = (2).to_bytes(4, "little")
+        payload[8:12] = (99).to_bytes(4, "little")
     elif damage == "flags":
         payload[12:16] = (2).to_bytes(4, "little")
     elif damage.startswith("padding_"):
@@ -424,13 +424,13 @@ def test_raw_index_rejects_invalid_files(tmp_path, damage):
         }[damage]
         payload[16:24] = padded.to_bytes(8, "little")
     elif damage == "ex_bits":
-        payload[48:56] = (1).to_bytes(8, "little")
+        payload[52:60] = (1).to_bytes(8, "little")
     elif damage == "dimension":
-        payload[32:40] = (2**64 - 1).to_bytes(8, "little")
+        payload[36:44] = (2**64 - 1).to_bytes(8, "little")
     elif damage == "count":
-        payload[24:32] = (2**64 - 1).to_bytes(8, "little")
+        payload[28:36] = (2**64 - 1).to_bytes(8, "little")
     elif damage == "clusters":
-        payload[40:48] = (2**64 - 1).to_bytes(8, "little")
+        payload[44:52] = (2**64 - 1).to_bytes(8, "little")
     elif damage == "truncated_header":
         payload = payload[:9]
     else:
@@ -467,14 +467,45 @@ def test_automatic_high_accuracy(nbits, tmp_path):
             np.testing.assert_array_equal(actual[1], expected[1])
 
 
+@pytest.mark.parametrize("failure", ["open", "write"])
+def test_hnsw_sidecar_save_failures(tmp_path, failure):
+    if failure == "write" and not Path("/dev/full").exists():
+        pytest.skip("requires a device that rejects writes")
+    data = np.zeros((2, 64), dtype=np.float32)
+    data[1, 0] = 1
+    idx = IvfIndex(64, 2, 2, nbits=32, initializer="hnsw")
+    idx.build(data, data, np.arange(2, dtype=np.uint32))
+    expected = idx.search(data, 1, 1)
+    path = tmp_path / "sidecar_failure.index"
+    sidecar = Path(str(path) + ".hnsw")
+    if failure == "open":
+        sidecar.mkdir()
+        message = "Cannot open HNSW index file for writing"
+    else:
+        sidecar.symlink_to("/dev/full")
+        message = None  # The stream failure message depends on the standard library.
+    with pytest.raises(RuntimeError, match=message):
+        idx.save(str(path))
+    if failure == "open":
+        sidecar.rmdir()
+    else:
+        sidecar.unlink()
+    # Failure does not invalidate the in-memory index, and saving can be retried.
+    idx.save(str(path))
+    for obj in (idx, IvfIndex.load(str(path))):
+        actual = obj.search(data, 1, 1)
+        np.testing.assert_array_equal(actual[0], expected[0])
+        np.testing.assert_array_equal(actual[1], expected[1])
+
+
 def test_hnsw_centroid_routing_roundtrip(tmp_path):
-    # 20,000 clusters selects HNSW centroid routing rather than the flat router.
+    # Explicit routing keeps HNSW coverage independent of the auto thresholds.
     # One vector per centroid makes nearest-centroid IDs and distances exact.
     rng = np.random.default_rng(314)
     count, dim = 20000, 64
     centroids = rng.standard_normal((count, dim)).astype(np.float32)
     labels = np.arange(count, dtype=np.uint32)
-    idx = IvfIndex(dim, count, count, nbits=1)
+    idx = IvfIndex(dim, count, count, nbits=1, initializer="hnsw")
     idx.build(centroids, centroids, labels, num_threads=4)
     selected = np.array([0, 17, 1023, count - 1])
     queries = centroids[selected]
@@ -498,7 +529,7 @@ def test_hnsw_inner_product_routing_roundtrip(tmp_path):
     data = centroids[:1].copy()
     query = np.zeros((4, dim), dtype=np.float32)
     query[:, 0] = 1.0
-    idx = IvfIndex(dim, 1, count, nbits=32, metric="ip")
+    idx = IvfIndex(dim, 1, count, nbits=32, metric="ip", initializer="hnsw")
     idx.build(data, centroids, np.array([0], dtype=np.uint32), num_threads=4)
 
     path = str(tmp_path / "large_ip_centroid.index")

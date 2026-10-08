@@ -342,7 +342,9 @@ TEST(IvfSearchTest, RoutesInnerProductQueriesWithHNSWCentroids) {
     query[0] = 1.0F;
     const PID cluster = 0;
 
-    IVF index(1, kDim, kCount, 32, METRIC_IP);
+    IVF index(
+        1, kDim, kCount, 32, METRIC_IP, RotatorType::FhtKacRotator, InitializerType::HNSW
+    );
     index.construct(data.data(), centroids.data(), &cluster, false, 4);
     PID result = kPidMax;
     float distance = std::numeric_limits<float>::infinity();
@@ -803,7 +805,9 @@ TEST(IvfAddTest, RoutesNewPointsWithHNSWCentroids) {
     std::array<float, kDim> first{};
     first[0] = 1.0F;
     const PID cluster = 0;
-    IVF index(1, kDim, kCount, 32, METRIC_IP);
+    IVF index(
+        1, kDim, kCount, 32, METRIC_IP, RotatorType::FhtKacRotator, InitializerType::HNSW
+    );
     index.construct(first.data(), centroids.data(), &cluster, false, 4);
 
     std::array<float, kDim> second{};

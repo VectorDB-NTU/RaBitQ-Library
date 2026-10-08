@@ -55,6 +55,7 @@ function(rabitq_enable_warnings target)
 endfunction()
 
 set(RABITQ_COMMON_SOURCES
+    src/index/ivf_initializer.cpp
     src/index/ivf_search.cpp
     src/index/qg.cpp
     src/utils/cpu_features.cpp

@@ -147,8 +147,13 @@ Recommended:
   pack/unpack, and estimation coverage. Test both `METRIC_L2` and `METRIC_IP` where supported.
 - IVF/HNSW quantized total bits are one sign bit plus `ex_bits`, with totals 1 through 9.
   IVF also accepts `bits == 32`: one-bit filtering plus owned original float32 vectors
-  in place of extra-bit codes. New IVF files have a magic/version header and an explicit
-  padded dimension; legacy quantized files and raw v1 files infer 64-dimension padding.
+  in place of extra-bit codes. New IVF files have a magic/version header, an explicit
+  padded dimension, and a resolved initializer type (v2); v1 files infer the historical
+  Flat/HNSW choice at 20,000 clusters, independently of current auto selection.
+  New IVF auto routing uses Flat below 5,000 clusters, Flat RaBitQ below 60,000,
+  and HNSW otherwise. Flat RaBitQ persists its mean and codes in the main file;
+  HNSW retains its sidecar. Legacy quantized files and raw v1 files infer
+  64-dimension padding.
   IVF search defaults to HACC for 4–9 bits and standard FastScan for 1–3 bits or raw storage.
   SymphonyQG supports
   raw storage (`quantization_bits == 0`) and quantized storage at 4 or 8 bits.
