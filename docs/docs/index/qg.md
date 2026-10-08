@@ -149,7 +149,7 @@ Python provides `search_batch(queries, k, ef, num_threads=1)` starting with 0.5.
 The existing `search()` accepts the same two-dimensional array and remains an equivalent
 entry point. Both return `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. Both APIs default to one worker; `num_threads=0`
-selects the available hardware thread count, capped by the number of queries.
+selects the available logical CPU count, capped by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.
 
 See `sample/cpp/symqg_indexing.cpp`, `sample/cpp/symqg_querying.cpp`, and their

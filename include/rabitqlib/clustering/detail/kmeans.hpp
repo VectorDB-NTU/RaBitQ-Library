@@ -17,6 +17,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/defines.hpp"
@@ -327,8 +328,8 @@ class LloydKMeans : public Parameters {
             update_centroids(
                 x, n, sums, cluster_sizes, update_point_bins, update_worker_for_cluster
             );
-            const size_t nsplit = consolidate_centroids(x, n, sums, cluster_sizes);
-            const double shift = centroid_shift(previous_centroids);
+            const auto [nsplit, shift] =
+                consolidate_centroids(x, n, sums, cluster_sizes, previous_centroids);
             iteration_stats.push_back(KMeansIterationStats{
                 iteration + 1, obj, shift, nsplit});
 
@@ -457,15 +458,29 @@ class LloydKMeans : public Parameters {
         }
     }
 
-    size_t consolidate_centroids(
+    std::pair<size_t, double> consolidate_centroids(
         const float* x,
         size_t n,
         const std::vector<double>& sums,
-        std::vector<size_t>& cluster_sizes
+        std::vector<size_t>& cluster_sizes,
+        const std::vector<float>& previous_centroids
     ) {
         const uint32_t threads = effective_num_threads();
         static_cast<void>(threads);
-#pragma omp parallel for num_threads(threads)
+        // Means, normalization, and displacement share one worker team. Preserve
+        // the per-centroid arithmetic; empty rows are measured after refilling.
+        const auto cluster_shift = [&](size_t cluster) {
+            double result = 0;
+            for (size_t dim = 0; dim < d; ++dim) {
+                const size_t i = cluster * d + dim;
+                const double difference =
+                    static_cast<double>(centroids[i]) - previous_centroids[i];
+                result += difference * difference;
+            }
+            return result;
+        };
+        double shift = 0;
+#pragma omp parallel for num_threads(threads) reduction(+ : shift)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(k);
              ++loop_index) {
             const size_t cluster = static_cast<size_t>(loop_index);
@@ -476,16 +491,20 @@ class LloydKMeans : public Parameters {
                 centroids[cluster * d + dim] =
                     static_cast<float>(sums[cluster * d + dim] * scale);
             }
-        }
-        if (spherical) {
-            normalize_centroids();
+            if (spherical) {
+                normalize_centroid(centroids.data() + cluster * d);
+            }
+            // Empty centroids contribute only after their replacement is known.
+            if (cluster_sizes[cluster] != 0) {
+                shift += cluster_shift(cluster);
+            }
         }
 
         const size_t nsplit = static_cast<size_t>(
             std::count(cluster_sizes.begin(), cluster_sizes.end(), size_t{0})
         );
         if (nsplit == 0) {
-            return 0;
+            return {0, shift};
         }
 
         // Reuse the distance buffer after recording the pre-update objective.
@@ -537,7 +556,8 @@ class LloydKMeans : public Parameters {
             }
             --cluster_sizes[assignments[point]];
             cluster_sizes[cluster] = 1;
-            return 1;
+            shift += cluster_shift(cluster);
+            return {1, shift};
         }
 
 #pragma omp parallel for num_threads(threads) schedule(static)
@@ -566,8 +586,9 @@ class LloydKMeans : public Parameters {
             }
             --cluster_sizes[assignments[point]];
             cluster_sizes[cluster] = 1;
+            shift += cluster_shift(cluster);
         }
-        return nsplit;
+        return {nsplit, shift};
     }
 
     void normalize_centroid(float* centroid) const {
@@ -593,23 +614,6 @@ class LloydKMeans : public Parameters {
             const size_t cluster = static_cast<size_t>(loop_index);
             normalize_centroid(centroids.data() + cluster * d);
         }
-    }
-
-    [[nodiscard]] double centroid_shift(const std::vector<float>& previous_centroids
-    ) const {
-        const uint32_t threads = effective_num_threads();
-        static_cast<void>(threads);
-        double shift = 0;
-#pragma omp parallel for num_threads(threads) reduction(+ : shift)
-        for (std::ptrdiff_t loop_index = 0;
-             loop_index < static_cast<std::ptrdiff_t>(centroids.size());
-             ++loop_index) {
-            const size_t index = static_cast<size_t>(loop_index);
-            const double difference =
-                static_cast<double>(centroids[index]) - previous_centroids[index];
-            shift += difference * difference;
-        }
-        return shift;
     }
 
     [[nodiscard]] uint32_t effective_num_threads() const {

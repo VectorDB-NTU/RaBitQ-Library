@@ -2,8 +2,9 @@
 
 Run these commands from the repository root in your project Python environment
 with `rabitqlib>=0.5.2` and NumPy installed. Clustering and indexing both use RaBitQ
-Library; FAISS is needed only for `compare_with_faiss.py`. For unreleased changes,
-[install from a checkout](../../CONTRIBUTING.md#python-changes).
+Library; FAISS is needed only for `compare_with_faiss.py`. When running these
+examples from a checkout, [install the library from that same checkout](../../CONTRIBUTING.md#python-changes)
+so the examples and native extension use matching APIs.
 
 ## IVF: cluster, then index
 
@@ -34,7 +35,9 @@ behavior.
 
 For inner product, pass `--metric ip` to both stages and provide normalized
 training vectors. Use queries and ground truth prepared for the same metric.
-`--num-threads 0` uses the hardware thread count; each stage accepts its own limit.
+`--num-threads 0` uses the library's available logical CPU count; each stage accepts
+its own limit. See [threading](../../docs/docs/quick_start.md#threading-and-file-paths)
+for affinity and OpenMP placement behavior.
 
 ## HNSW
 

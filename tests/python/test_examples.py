@@ -13,6 +13,63 @@ from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "sample" / "python"
 
+
+@pytest.mark.parametrize("binding", ["none", "threads", "cores", "overlap"])
+def test_native_cpu_count_respects_launch_affinity_and_openmp_places(binding):
+    if not hasattr(os, "sched_getaffinity"):
+        pytest.skip("Linux affinity is required")
+    cpus = sorted(os.sched_getaffinity(0))[:4]
+    expected = min(len(cpus), 2) if binding == "overlap" else len(cpus)
+    env = os.environ.copy()
+    for name in ("OMP_PROC_BIND", "OMP_PLACES", "GOMP_CPU_AFFINITY"):
+        env.pop(name, None)
+    if binding != "none":
+        env["OMP_PROC_BIND"] = "spread"
+        if binding == "overlap":
+            places = [cpus[0], cpus[0], cpus[-1]]
+            env["OMP_PLACES"] = ",".join(f"{{{cpu}}}" for cpu in places)
+        else:
+            env["OMP_PLACES"] = binding
+    code = """
+import os
+import sys
+cpus = {int(cpu) for cpu in sys.argv[1].split(',')}
+os.sched_setaffinity(0, cpus)
+from rabitqlib._rabitqlib import _available_cpu_count
+assert _available_cpu_count() == int(sys.argv[2]), _available_cpu_count()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, ",".join(map(str, cpus)), str(expected)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("requested, expected", [(0, 2), (1, 1), (96, 2)])
+def test_clustering_example_uses_native_cpu_budget(monkeypatch, requested, expected):
+    monkeypatch.syspath_prepend(str(EXAMPLES))
+    spec = importlib.util.spec_from_file_location(
+        "kmeans_clustering", EXAMPLES / "kmeans_clustering.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "_available_cpu_count", lambda: 2)
+    calls = []
+
+    def clustering(*args, **kwargs):
+        calls.append(kwargs["num_threads"])
+        return SimpleNamespace(
+            train=lambda data: None, centroids=None, assignments=None
+        )
+
+    monkeypatch.setattr(module, "RaBitQKMeans", clustering)
+    module.cluster_data(np.zeros((3, 64)), 2, "l2", requested, "rabitq")
+    assert calls == [expected]
+
+
 # Fail on an accidental import, even when a runtime combination happens to coexist.
 BOOTSTRAP = """
 import runpy
