@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iterator>
 #include <memory>
 #include <random>
@@ -1206,12 +1207,11 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
                 );
                 // Insertion reconstructs stored sign/extra-bit tails before linking.
                 index.add(data.data() + (count - 4) * dim, 4, clusters.data(), true, 1);
-                index.search(query.data(), 1, 5, count, 1);
                 const auto reference =
-                    hnsw::detail::search_knn_generic(index, query.data(), 5);
+                    hnsw::detail::search_knn_generic(index, query.data(), 5, count);
                 for (auto search : backends) {
                     auto expected = reference;
-                    auto actual = search(index, query.data(), 5);
+                    auto actual = search(index, query.data(), 5, count);
                     ASSERT_EQ(actual.size(), expected.size());
                     while (!expected.empty()) {
                         EXPECT_EQ(actual.top().second, expected.top().second);
@@ -1225,6 +1225,46 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
                     }
                 }
             }
+        }
+    }
+}
+
+TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
+    using namespace rabitqlib;
+    constexpr size_t kCount = 129, kDim = 65, kQueries = 13, k = 5;
+    std::mt19937 random(314);
+    std::normal_distribution<float> value;
+    std::vector<float> data(kCount * kDim), queries(kQueries * kDim), centroid(kDim, 0);
+    for (auto& x : data)
+        x = value(random);
+    for (auto& x : queries)
+        x = value(random);
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {1U, 4U, 9U}) {
+            SCOPED_TRACE(metric);
+            SCOPED_TRACE(bits);
+            std::vector<PID> clusters(kCount, 0);
+            hnsw::HierarchicalNSW index(kCount, kDim, bits, 8, 64, 42, metric);
+            index.construct(
+                1, centroid.data(), kCount, data.data(), clusters.data(), 1, true
+            );
+            const auto narrow = index.search(queries.data(), kQueries, k, k, 1);
+            const auto wide = index.search(queries.data(), kQueries, k, 96, 1);
+            std::promise<void> start;
+            const auto ready = start.get_future().share();
+            const auto run = [&](size_t ef, size_t threads, const auto& expected) {
+                ready.wait();
+                for (size_t i = 0; i < 16; ++i) {
+                    if (index.search(queries.data(), kQueries, k, ef, threads) != expected)
+                        return false;
+                }
+                return true;
+            };
+            auto first = std::async(std::launch::async, [&] { return run(k, 1, narrow); });
+            auto second = std::async(std::launch::async, [&] { return run(96, 2, wide); });
+            start.set_value();
+            EXPECT_TRUE(first.get());
+            EXPECT_TRUE(second.get());
         }
     }
 }

@@ -152,5 +152,24 @@ including empty batches. Both APIs default to one worker; `num_threads=0`
 selects the available logical CPU count, capped by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.
 
+Python search releases the GIL and uses the `ef` passed to each call without
+changing a shared default. Concurrent searches may use different windows.
+A concurrent `build()` on the same index raises `RuntimeError` immediately;
+see the [Python concurrency contract](../quick_start.md#threading-and-file-paths).
+
+The current source checkout also provides C++
+`search_batch_with_ef(queries, num_queries, k, ids, distances, ef, num_threads=1)`
+for concurrent calls with independent windows:
+
+```cpp
+qg.search_batch_with_ef(
+    queries.data(), num_queries, 10, batch_ids.data(), batch_distances.data(), 100, 4
+);
+```
+
+This method does not read or change the default set by `set_ef()`. The existing
+`search()`, `search_batch()`, and `search_with_scratch()` retain that default.
+All concurrent searches require separate outputs and an unchanged index.
+
 See `sample/cpp/symqg_indexing.cpp`, `sample/cpp/symqg_querying.cpp`, and their
 Python counterparts for complete examples.

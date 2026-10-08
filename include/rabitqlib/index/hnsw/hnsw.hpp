@@ -182,19 +182,19 @@ class HierarchicalNSW {
    private:
     friend struct HnswPruningTestAccess;
     friend maxheap<std::pair<float, PID>> detail::search_knn_neon(
-        HierarchicalNSW&, const float*, size_t
+        HierarchicalNSW&, const float*, size_t, size_t
     );
     friend maxheap<std::pair<float, PID>> detail::search_knn_generic(
-        HierarchicalNSW&, const float*, size_t
+        HierarchicalNSW&, const float*, size_t, size_t
     );
     friend maxheap<std::pair<float, PID>> detail::search_knn_avx2(
-        HierarchicalNSW&, const float*, size_t
+        HierarchicalNSW&, const float*, size_t, size_t
     );
     friend maxheap<std::pair<float, PID>> detail::search_knn_avx512_core(
-        HierarchicalNSW&, const float*, size_t
+        HierarchicalNSW&, const float*, size_t, size_t
     );
     friend maxheap<std::pair<float, PID>> detail::search_knn_avx512_popcnt(
-        HierarchicalNSW&, const float*, size_t
+        HierarchicalNSW&, const float*, size_t, size_t
     );
 
     static constexpr PID kMaxLabelOperationLock = 65536;
@@ -400,10 +400,10 @@ class HierarchicalNSW {
     get_full_est_direct(std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&)
         const;
 
-    maxheap<std::pair<float, PID>> search_knn(const float*, size_t);
+    maxheap<std::pair<float, PID>> search_knn(const float*, size_t, size_t);
 
     template <class Kernel>
-    maxheap<std::pair<float, PID>> search_knn_direct(const float*, size_t);
+    maxheap<std::pair<float, PID>> search_knn_direct(const float*, size_t, size_t);
 
     template <class Kernel>
     void searchBaseLayerST_AdaptiveRerankOptDirect(
@@ -1405,7 +1405,6 @@ inline void HierarchicalNSW::get_full_est_direct(
 inline std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     const float* queries, size_t query_num, size_t TOPK, size_t efSearch, size_t thread_num
 ) {
-    set_ef(efSearch);
     std::vector<std::vector<std::pair<float, PID>>> results(query_num);
     rabitqlib::ivf::parallel_for(
         0,
@@ -1414,7 +1413,8 @@ inline std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
         [&](size_t idx, size_t /*threadId*/) {
             std::vector<float> rotated_query(padded_dim_);
             this->rotator_->rotate(queries + (idx * dim_), rotated_query.data());
-            maxheap<std::pair<float, PID>> knn = search_knn(rotated_query.data(), TOPK);
+            maxheap<std::pair<float, PID>> knn =
+                search_knn(rotated_query.data(), TOPK, std::max(efSearch, TOPK));
             while (knn.size()) {
                 results[idx].emplace_back(knn.top());
                 knn.pop();
@@ -1463,14 +1463,14 @@ inline size_t HierarchicalNSW::remove(const PID* labels, size_t n) {
 }
 
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn(
-    const float* rotated_query, size_t TOPK
+    const float* rotated_query, size_t TOPK, size_t ef
 ) {
-    return detail::search_knn(*this, rotated_query, TOPK);
+    return detail::search_knn(*this, rotated_query, TOPK, ef);
 }
 
 template <class Kernel>
 inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn_direct(
-    const float* rotated_query, size_t TOPK
+    const float* rotated_query, size_t TOPK, size_t ef
 ) {
     maxheap<std::pair<float, PID>> result;
     if (cur_element_count_ == 0) {
@@ -1545,7 +1545,7 @@ inline maxheap<std::pair<float, PID>> HierarchicalNSW::search_knn_direct(
     BoundedKNN boundedKnn(TOPK);
     searchBaseLayerST_AdaptiveRerankOptDirect<Kernel>(
         curr_obj,
-        std::max(ef_, TOPK),
+        std::max(ef, TOPK),
         TOPK,
         query_wrapper,
         q_to_centroids,

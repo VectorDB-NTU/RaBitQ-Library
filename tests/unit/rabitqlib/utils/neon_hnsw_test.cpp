@@ -104,11 +104,10 @@ TEST(NeonHnsw, SearchMatchesGenericOnSameGraphForBothMetricsAndAllWidths) {
                         value = distribution(random);
                     }
                     for (size_t ef : {10U, 64U}) {
-                        // Configure ef through the public search API.
-                        index.search(query.data(), 1, 5, ef, 1);
                         auto expected =
-                            hnsw::detail::search_knn_generic(index, query.data(), 5);
-                        auto actual = hnsw::detail::search_knn_neon(index, query.data(), 5);
+                            hnsw::detail::search_knn_generic(index, query.data(), 5, ef);
+                        auto actual =
+                            hnsw::detail::search_knn_neon(index, query.data(), 5, ef);
                         ASSERT_EQ(expected.size(), actual.size());
                         while (!expected.empty()) {
                             EXPECT_EQ(actual.top().second, expected.top().second);

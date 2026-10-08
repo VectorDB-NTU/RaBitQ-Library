@@ -659,8 +659,9 @@ float warmup_ip_x0_q_512(
 
 namespace rabitqlib::hnsw::detail {
 namespace {
-using SearchKnnFn =
-    std::priority_queue<std::pair<float, PID>> (*)(HierarchicalNSW&, const float*, size_t);
+using SearchKnnFn = std::priority_queue<std::pair<float, PID>> (*)(
+    HierarchicalNSW&, const float*, size_t, size_t
+);
 // The core variant uses AVX2 warmup; the popcount variant has its own stricter tier.
 #if defined(__x86_64__) || defined(_M_X64)
 const SearchKnnFn kSearchKnnFn = cpu::has_avx512_popcnt()
@@ -677,8 +678,8 @@ const SearchKnnFn kSearchKnnFn =
 #endif
 }  // namespace
 std::priority_queue<std::pair<float, PID>> search_knn(
-    HierarchicalNSW& index, const float* query, size_t topk
+    HierarchicalNSW& index, const float* query, size_t topk, size_t ef
 ) {
-    return kSearchKnnFn(index, query, topk);
+    return kSearchKnnFn(index, query, topk, ef);
 }
 }  // namespace rabitqlib::hnsw::detail

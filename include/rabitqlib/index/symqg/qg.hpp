@@ -124,7 +124,13 @@ class QuantizedGraph<float> {
         return get_row_data(data_id);
     }
 
-    void validate_search(const float*, uint32_t, const uint32_t*, const float*) const;
+    void validate_search(const float*, uint32_t, const uint32_t*, const float*, size_t)
+        const;
+
+    void search_impl(const float*, uint32_t, uint32_t*, float*, size_t);
+
+    void
+    search_with_scratch_impl(const float*, uint32_t, uint32_t*, float*, float*, float*, float*, BatchQuery<float>&, buffer::SearchBuffer<float>&, buffer::SearchBuffer<float>&, VisitedSet&, PID, const float*);
 
     const float* prepare_build_query(
         PID,
@@ -253,6 +259,18 @@ class QuantizedGraph<float> {
         uint32_t knn,
         uint32_t* results,
         float* dists,
+        size_t num_threads = 1
+    );
+
+    // Like search_batch, but ef belongs to this call and never reads or changes
+    // the default set by set_ef(). Concurrent calls may use different windows.
+    void search_batch_with_ef(
+        const float* queries,
+        size_t num_queries,
+        uint32_t knn,
+        uint32_t* results,
+        float* dists,
+        size_t ef,
         size_t num_threads = 1
     );
 

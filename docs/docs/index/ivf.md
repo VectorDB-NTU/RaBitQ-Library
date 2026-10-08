@@ -244,6 +244,11 @@ need separate output buffers, and must not overlap index updates.
 Python's existing `index.search(queries, k, nprobe, num_threads=4)` uses this
 batch path with the same output and precision rules.
 
+Python search releases the GIL. Concurrent searches may use independent
+`nprobe`, `high_accuracy`, and `num_threads` values. Conflicting updates raise
+`RuntimeError` immediately; see the
+[Python concurrency contract](../quick_start.md#threading-and-file-paths).
+
 ## Updating an Index
 
 Starting with 0.5.1, C++ `IVF` and Python `IvfIndex` support `add()` and `remove()`
@@ -292,8 +297,9 @@ IDs and returns the number newly removed. Duplicate IDs count once. Python
 
 The stored point count (`max_elements()` in C++, `index.max_elements` in Python)
 increases after `add()` and includes removed points. Rebuilding with C++
-`construct` or Python `build` expects that many rows. Calls to `add()` or `remove()`
-must not overlap with searches or other updates on the same index.
+`construct` or Python `build` expects that many rows. In C++, callers must prevent
+`add()` or `remove()` from overlapping with searches or other updates on the same
+index. Python detects these conflicts and raises `RuntimeError` immediately.
 
 ### Cost of `add`
 

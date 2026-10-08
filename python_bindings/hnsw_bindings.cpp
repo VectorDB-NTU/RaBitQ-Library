@@ -1,5 +1,6 @@
 #include <pybind11/cast.h>
 #include <pybind11/detail/common.h>
+#include <pybind11/gil.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
@@ -51,6 +52,7 @@ class HnswIndex {
         size_t num_threads = 1,
         bool fast_quantization = false
     ) {
+        const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
         auto cluster_ids_array =
@@ -94,15 +96,21 @@ class HnswIndex {
             cluster_ids_vec.size() * sizeof(rabitqlib::PID)
         );
 
-        index_->construct(
-            num_clusters,
-            centroids_array.data(),
-            static_cast<size_t>(data_array.shape(0)),
-            data_array.data(),
-            cluster_ids_vec.data(),
-            num_threads,
-            fast_quantization
-        );
+        const auto* data_ptr = data_array.data();
+        const auto* centroids_ptr = centroids_array.data();
+        const auto rows = static_cast<size_t>(data_array.shape(0));
+        {
+            py::gil_scoped_release release;
+            index_->construct(
+                num_clusters,
+                centroids_ptr,
+                rows,
+                data_ptr,
+                cluster_ids_vec.data(),
+                num_threads,
+                fast_quantization
+            );
+        }
         num_clusters_ = num_clusters;
         built_ = true;
     }
@@ -113,6 +121,7 @@ class HnswIndex {
         size_t num_threads = 1,
         bool fast_quantization = false
     ) {
+        const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before add");
@@ -144,26 +153,33 @@ class HnswIndex {
 
         // Allocated before the index is touched.
         auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
-        const auto labels = index_->add(
-            data_array.data(),
-            rows,
-            assigned.empty() ? nullptr : assigned.data(),
-            fast_quantization,
-            num_threads
-        );
+        const auto* data_ptr = data_array.data();
+        const auto labels = [&] {
+            py::gil_scoped_release release;
+            return index_->add(
+                data_ptr,
+                rows,
+                assigned.empty() ? nullptr : assigned.data(),
+                fast_quantization,
+                num_threads
+            );
+        }();
         std::copy(labels.begin(), labels.end(), ids.mutable_data());
         return ids;
     }
 
     void resize(size_t new_max_elements) {
+        const auto operation = access_.write();
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before resize");
         }
+        py::gil_scoped_release release;
         index_->resize(new_max_elements);
         max_elements_ = index_->max_elements();
     }
 
     size_t remove(py::handle ids) {
+        const auto operation = access_.write();
         auto ids_array = ensure_1d_integer_array(ids, "ids");
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before remove");
@@ -179,12 +195,17 @@ class HnswIndex {
             }
             to_remove.push_back(static_cast<rabitqlib::PID>(id));
         }
+        py::gil_scoped_release release;
         return index_->remove(to_remove.data(), to_remove.size());
     }
 
-    [[nodiscard]] size_t num_points() const { return built_ ? index_->num_points() : 0; }
+    [[nodiscard]] size_t num_points() const {
+        const auto operation = access_.read();
+        return built_ ? index_->num_points() : 0;
+    }
 
     py::tuple search(py::handle queries, size_t k, size_t ef = 0, size_t num_threads = 1) {
+        const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before search");
@@ -212,13 +233,13 @@ class HnswIndex {
         auto ids_buf = ids.mutable_unchecked<2>();
         auto dists_buf = dists.mutable_unchecked<2>();
 
-        std::vector<std::vector<std::pair<float, rabitqlib::PID>>> results = index_->search(
-            query_array.data(),
-            static_cast<size_t>(query_array.shape(0)),
-            k,
-            ef,
-            num_threads
-        );
+        const auto* queries_data = query_array.data();
+        const auto nq = static_cast<size_t>(query_array.shape(0));
+        std::vector<std::vector<std::pair<float, rabitqlib::PID>>> results;
+        {
+            py::gil_scoped_release release;
+            results = index_->search(queries_data, nq, k, ef, num_threads);
+        }
 
         for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(results.size()); ++i) {
             for (py::ssize_t j = 0; j < static_cast<py::ssize_t>(std::min<size_t>(
@@ -235,16 +256,21 @@ class HnswIndex {
     }
 
     void save(const std::string& path) const {
+        const auto operation = access_.read();
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before save");
         }
+        py::gil_scoped_release release;
         index_->save(path.c_str());
     }
 
     static HnswIndex load(const std::string& path) {
         HnswIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::hnsw::HierarchicalNSW>();
-        wrapper.index_->load(path.c_str());
+        {
+            py::gil_scoped_release release;
+            wrapper.index_->load(path.c_str());
+        }
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_elements_ = wrapper.index_->max_elements();
         wrapper.M_ = wrapper.index_->M();
@@ -256,12 +282,30 @@ class HnswIndex {
         return wrapper;
     }
 
-    [[nodiscard]] size_t dim() const { return dim_; }
-    [[nodiscard]] size_t max_elements() const { return max_elements_; }
-    [[nodiscard]] size_t nbits() const { return nbits_; }
-    [[nodiscard]] bool is_built() const { return built_; }
-    [[nodiscard]] size_t num_clusters() const { return num_clusters_; }
-    [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
+    [[nodiscard]] size_t dim() const {
+        const auto operation = access_.read();
+        return dim_;
+    }
+    [[nodiscard]] size_t max_elements() const {
+        const auto operation = access_.read();
+        return max_elements_;
+    }
+    [[nodiscard]] size_t nbits() const {
+        const auto operation = access_.read();
+        return nbits_;
+    }
+    [[nodiscard]] bool is_built() const {
+        const auto operation = access_.read();
+        return built_;
+    }
+    [[nodiscard]] size_t num_clusters() const {
+        const auto operation = access_.read();
+        return num_clusters_;
+    }
+    [[nodiscard]] std::string metric() const {
+        const auto operation = access_.read();
+        return metric_to_string(metric_);
+    }
 
    private:
     HnswIndex() = default;
@@ -275,6 +319,7 @@ class HnswIndex {
     size_t random_seed_ = 100;
     size_t num_clusters_ = 0;
     bool built_ = false;
+    mutable IndexAccess access_;
     std::unique_ptr<rabitqlib::hnsw::HierarchicalNSW> index_;
 };
 

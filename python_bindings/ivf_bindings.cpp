@@ -1,5 +1,6 @@
 #include <pybind11/cast.h>
 #include <pybind11/detail/common.h>
+#include <pybind11/gil.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
@@ -87,6 +88,7 @@ class IvfIndex {
         size_t num_threads = 1,
         bool fast_quantization = false
     ) {
+        const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
         auto cluster_ids_array =
@@ -114,13 +116,15 @@ class IvfIndex {
             );
         }
 
-        index_->construct(
-            data_array.data(),
-            centroids_array.data(),
-            cluster_ids_array.data(),
-            fast_quantization,
-            num_threads
-        );
+        const auto* data_ptr = data_array.data();
+        const auto* centroids_ptr = centroids_array.data();
+        const auto* cluster_ids_ptr = cluster_ids_array.data();
+        {
+            py::gil_scoped_release release;
+            index_->construct(
+                data_ptr, centroids_ptr, cluster_ids_ptr, fast_quantization, num_threads
+            );
+        }
         built_ = true;
     }
 
@@ -130,6 +134,7 @@ class IvfIndex {
         size_t num_threads = 1,
         bool fast_quantization = false
     ) {
+        const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before add");
@@ -167,18 +172,23 @@ class IvfIndex {
             ids_data[i] = static_cast<rabitqlib::PID>(first + i);
         }
 
-        index_->add(
-            data_array.data(),
-            rows,
-            assigned.empty() ? nullptr : assigned.data(),
-            fast_quantization,
-            num_threads
-        );
+        const auto* data_ptr = data_array.data();
+        {
+            py::gil_scoped_release release;
+            index_->add(
+                data_ptr,
+                rows,
+                assigned.empty() ? nullptr : assigned.data(),
+                fast_quantization,
+                num_threads
+            );
+        }
         max_elements_ = index_->max_elements();
         return ids;
     }
 
     size_t remove(py::handle ids) {
+        const auto operation = access_.write();
         auto ids_array = ensure_1d_integer_array(ids, "ids");
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before remove");
@@ -192,6 +202,7 @@ class IvfIndex {
             }
             to_remove.push_back(static_cast<rabitqlib::PID>(id));
         }
+        py::gil_scoped_release release;
         return index_->remove(to_remove.data(), to_remove.size());
     }
 
@@ -202,6 +213,7 @@ class IvfIndex {
         std::optional<bool> high_accuracy = std::nullopt,
         size_t num_threads = 1
     ) {
+        const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before search");
@@ -228,31 +240,40 @@ class IvfIndex {
             dists_data, dists_data + dists.size(), std::numeric_limits<float>::infinity()
         );
 
-        index_->search_batch(
-            query_array.data(),
-            nq,
-            k,
-            nprobe,
-            ids_data,
-            dists_data,
-            high_accuracy,
-            num_threads
-        );
+        const auto* queries_data = query_array.data();
+        {
+            py::gil_scoped_release release;
+            index_->search_batch(
+                queries_data,
+                nq,
+                k,
+                nprobe,
+                ids_data,
+                dists_data,
+                high_accuracy,
+                num_threads
+            );
+        }
 
         return py::make_tuple(ids, dists);
     }
 
     void save(const std::string& path) const {
+        const auto operation = access_.read();
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before save");
         }
+        py::gil_scoped_release release;
         index_->save(path.c_str());
     }
 
     static IvfIndex load(const std::string& path) {
         IvfIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::ivf::IVF>();
-        wrapper.index_->load(path.c_str());
+        {
+            py::gil_scoped_release release;
+            wrapper.index_->load(path.c_str());
+        }
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_elements_ = wrapper.index_->max_elements();
         wrapper.num_clusters_ = wrapper.index_->num_clusters();
@@ -262,15 +283,34 @@ class IvfIndex {
         return wrapper;
     }
 
-    [[nodiscard]] size_t dim() const { return dim_; }
-    [[nodiscard]] size_t max_elements() const { return max_elements_; }
-    [[nodiscard]] size_t num_clusters() const { return num_clusters_; }
-    [[nodiscard]] size_t nbits() const { return nbits_; }
-    [[nodiscard]] bool is_built() const { return built_; }
+    [[nodiscard]] size_t dim() const {
+        const auto operation = access_.read();
+        return dim_;
+    }
+    [[nodiscard]] size_t max_elements() const {
+        const auto operation = access_.read();
+        return max_elements_;
+    }
+    [[nodiscard]] size_t num_clusters() const {
+        const auto operation = access_.read();
+        return num_clusters_;
+    }
+    [[nodiscard]] size_t nbits() const {
+        const auto operation = access_.read();
+        return nbits_;
+    }
+    [[nodiscard]] bool is_built() const {
+        const auto operation = access_.read();
+        return built_;
+    }
     [[nodiscard]] std::string initializer() const {
+        const auto operation = access_.read();
         return initializer_to_string(index_->initializer_type());
     }
-    [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
+    [[nodiscard]] std::string metric() const {
+        const auto operation = access_.read();
+        return metric_to_string(metric_);
+    }
 
    private:
     IvfIndex() = default;
@@ -281,6 +321,7 @@ class IvfIndex {
     size_t nbits_ = 0;
     rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
     bool built_ = false;
+    mutable IndexAccess access_;
     std::unique_ptr<rabitqlib::ivf::IVF> index_;
 };
 
