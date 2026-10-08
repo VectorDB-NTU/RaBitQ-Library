@@ -3,6 +3,7 @@
 #include <immintrin.h>
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -12,6 +13,7 @@ namespace rabitqlib::simd::detail {
 template <size_t Bits>
 inline void pack_excode_tail_intrinsics(const uint8_t* raw, uint8_t* compact, size_t dim) {
     static_assert(Bits == 2 || Bits == 3 || Bits == 5 || Bits == 6 || Bits == 7);
+    assert(dim == 0 || dim == 32);
     if (dim == 0)
         return;
     // A partial block is always 32 coordinates.
@@ -22,10 +24,13 @@ inline void pack_excode_tail_intrinsics(const uint8_t* raw, uint8_t* compact, si
     alignas(16) static constexpr auto kPositions = [] {
         std::array<uint8_t, 16> positions{};
         for (size_t i = 0; i < 16; ++i) {
-            positions[i] = static_cast<uint8_t>(
-                Bits % 2 == 0 ? (i < 2 * Bits ? (i / (Bits / 2)) * 4 + i % (Bits / 2) : 128)
-                              : (i < Bits ? i : (i < 2 * Bits ? 8 + i - Bits : 128))
-            );
+            if (i >= 2 * Bits) {
+                positions[i] = 128;  // Zero this byte in the shuffle.
+            } else if constexpr (Bits % 2 == 0) {
+                positions[i] = static_cast<uint8_t>((i / (Bits / 2)) * 4 + i % (Bits / 2));
+            } else {
+                positions[i] = static_cast<uint8_t>(i < Bits ? i : 8 + i - Bits);
+            }
         }
         return positions;
     }();

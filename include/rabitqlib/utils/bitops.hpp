@@ -37,7 +37,7 @@ inline unsigned popcount32(uint32_t value) {
 #endif
 }
 
-inline unsigned popcount64(uint64_t value) {
+static inline unsigned popcount64(uint64_t value) {
 #if defined(_MSC_VER) || \
     ((defined(__x86_64__) || defined(__i386__)) && !defined(__POPCNT__))
     // Inline the software fallback on generic x86 instead of calling libgcc

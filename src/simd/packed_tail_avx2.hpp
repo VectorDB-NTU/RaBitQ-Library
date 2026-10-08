@@ -2,6 +2,7 @@
 
 #include <immintrin.h>
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -36,6 +37,7 @@ template <size_t Bits>
 inline void accumulate_excode_tail_avx2(
     const float* query, const uint8_t* compact, size_t dim, __m256& sum, __m256& sum_hi
 ) {
+    assert(dim == 0 || dim == 32);
     if (dim == 0)
         return;
     // The fixed 32-coordinate tail contains two 16-code groups.

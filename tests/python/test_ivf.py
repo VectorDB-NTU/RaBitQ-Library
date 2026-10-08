@@ -347,14 +347,20 @@ def test_raw_reranking(dim, metric, high_accuracy, fast_quantization, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "filename,dim,bits,padded",
+    "filename,dim,bits,padded,nonzero_distances",
     [
-        ("ivf_legacy_4bit.index", 64, 4, 64),
-        ("ivf_legacy_padding65_1bit.index", 65, 1, 128),
-        ("ivf_raw_v1_padding65.index", 65, 32, 128),
+        ("ivf_legacy_4bit.index", 64, 4, 64, [27.25, 32.31400681, 50.34958267]),
+        (
+            "ivf_legacy_padding65_1bit.index",
+            65,
+            1,
+            128,
+            [27.81249809, 36.12752914, 47.54097748],
+        ),
+        ("ivf_raw_v1_padding65.index", 65, 32, 128, [27.8125, 33.8125, 49.8125]),
     ],
 )
-def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded):
+def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded, nonzero_distances):
     path = Path(__file__).parent / "fixtures" / filename
     idx = IvfIndex.load(str(path))
     assert (idx.dim, idx.max_elements, idx.num_clusters, idx.nbits, idx.metric) == (
@@ -364,10 +370,15 @@ def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded):
         bits,
         "l2",
     )
-    queries = np.zeros((1, dim), np.float32)
+    queries = np.zeros((2, dim), np.float32)
+    # Expected nonzero-query results were recorded with the pad64 implementation
+    # at a065785, before the padding changes.
+    queries[1] = (np.arange(dim) % 9 - 4) / 4
     ids, distances = idx.search(queries, 3, 1)
-    np.testing.assert_array_equal(np.sort(ids), [[0, 1, 2]])
-    np.testing.assert_allclose(distances, [[0, 14, 14]], atol=2e-5)
+    np.testing.assert_array_equal(np.sort(ids[0]), [0, 1, 2])
+    np.testing.assert_allclose(distances[0], [0, 14, 14], atol=2e-5)
+    np.testing.assert_array_equal(ids[1], [0, 2, 1])
+    np.testing.assert_allclose(distances[1], nonzero_distances, rtol=2e-6)
     saved = tmp_path / "legacy.index"
     idx.save(str(saved))
     payload = saved.read_bytes()
