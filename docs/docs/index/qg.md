@@ -7,6 +7,10 @@ FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.
 
 Set `quantization_bits=0` for raw vectors (default), or `4`/`8` for quantized SymphonyQG.
+All three modes pad the rotated domain to a multiple of 32. Loading an older
+index preserves its saved padded dimension, including historical multiples of 64.
+Older library versions that enforce 64-dimension padding cannot load new files
+whose padded dimension is not a multiple of 64.
 Quantized vectors share a rotated global centroid. Refinement temporarily
 reconstructs source vectors and estimates distances to stored target codes;
 reverse edges are rescored because these estimates are directional. Raw refinement

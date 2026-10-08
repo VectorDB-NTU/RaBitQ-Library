@@ -69,7 +69,7 @@ void scalar_quantize_uint16_neon(
 void new_transpose_bin_neon(
     const uint16_t* query, uint64_t* transposed, size_t dim, size_t bits
 ) {
-    for (size_t block = 0; block < dim; block += 64) {
+    for (size_t block = 0; block < dim - dim % 64; block += 64) {
         uint16x8_t values[8];
         for (size_t c = 0; c < 8; ++c) {
             values[c] = vld1q_u16(query + block + c * 8);
@@ -83,14 +83,19 @@ void new_transpose_bin_neon(
             *transposed++ = word;
         }
     }
+    if (dim % 64 != 0) {
+        new_transpose_bin_generic(query + dim - dim % 64, transposed, dim % 64, bits);
+    }
 }
 
 void new_transpose_bin_512_neon(
     const uint8_t* query, uint64_t* transposed, size_t dim, size_t bits
 ) {
     for (size_t block = 0; block < dim; block += 512) {
-        const size_t chunks = std::min(size_t{512}, dim - block) / 64;
-        for (size_t c = 0; c < chunks; ++c) {
+        const size_t block_dim = std::min(size_t{512}, dim - block);
+        const size_t full_chunks = block_dim / 64;
+        const size_t chunks = (block_dim + 63) / 64;
+        for (size_t c = 0; c < full_chunks; ++c) {
             const uint8_t* row = query + block + c * 64;
             const uint8x16_t a = vld1q_u8(row), b = vld1q_u8(row + 16),
                              d = vld1q_u8(row + 32), e = vld1q_u8(row + 48);
@@ -101,6 +106,17 @@ void new_transpose_bin_512_neon(
                     (uint64_t{byte_mask(vtstq_u8(b, bit))} << 32) |
                     (uint64_t{byte_mask(vtstq_u8(d, bit))} << 16) |
                     byte_mask(vtstq_u8(e, bit));
+            }
+        }
+        const size_t tail_dim = block_dim % 64;
+        if (tail_dim != 0) {
+            const uint8_t* tail = query + block + full_chunks * 64;
+            for (size_t plane = 0; plane < bits; ++plane) {
+                uint64_t word = 0;
+                for (size_t i = 0; i < tail_dim; ++i) {
+                    word |= uint64_t{(tail[i] >> plane) & 1U} << (tail_dim - 1 - i);
+                }
+                transposed[plane * chunks + full_chunks] = word;
             }
         }
         transposed += chunks * bits;

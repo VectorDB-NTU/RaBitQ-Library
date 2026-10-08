@@ -8,12 +8,14 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "rabitqlib/simd/space_dispatch.hpp"
+
 namespace rabitqlib::simd::detail {
 
 inline float mask_ip_neon(const float* query, const uint8_t* data, size_t dim) {
     float32x4_t sum0 = vdupq_n_f32(0), sum1 = sum0, sum2 = sum0, sum3 = sum0;
     const int32x4_t shifts = {-31, -30, -29, -28};
-    for (size_t block = 0; block < dim; block += 64) {
+    for (size_t block = 0; block < dim - dim % 64; block += 64) {
         uint64_t word;
         std::memcpy(&word, data + block / 8, sizeof(word));
         // Sign-code coordinates run from bit 63 to bit 0 in each stored word.
@@ -40,7 +42,12 @@ inline float mask_ip_neon(const float* query, const uint8_t* data, size_t dim) {
             word <<= 32;
         }
     }
-    return vaddvq_f32(vaddq_f32(vaddq_f32(sum0, sum1), vaddq_f32(sum2, sum3)));
+    const float result =
+        vaddvq_f32(vaddq_f32(vaddq_f32(sum0, sum1), vaddq_f32(sum2, sum3)));
+    return dim % 64 == 0
+               ? result
+               : result +
+                     mask_ip_x0_q_generic(query, data + (dim - dim % 64) / 8, dim % 64);
 }
 
 inline float warmup_ip_neon(
@@ -56,10 +63,17 @@ inline float warmup_ip_neon(
     }
     uint64_t ip = 0, count = 0;
     for (size_t block = 0; block < dim; block += 512) {
-        const size_t chunks = std::min(size_t{512}, dim - block) / 64;
+        const size_t width = std::min(size_t{512}, dim - block);
+        const size_t chunks = (width + 63) / 64;
+        const uint8_t* block_data = data + block / 8;
+        alignas(16) uint8_t tail[64]{};
+        if (width % 64 != 0) {
+            std::memcpy(tail, block_data, width / 8);
+            block_data = tail;
+        }
         size_t chunk = 0;
         for (; chunk + 2 <= chunks; chunk += 2) {
-            const uint8x16_t code = vld1q_u8(data + block / 8 + chunk * 8);
+            const uint8x16_t code = vld1q_u8(block_data + chunk * 8);
             count += vaddlvq_u8(vcntq_u8(code));
             for (size_t b = 0; b < bits; ++b) {
                 const uint8x16_t plane =
@@ -68,7 +82,7 @@ inline float warmup_ip_neon(
             }
         }
         if (chunk < chunks) {
-            const uint8x8_t code = vld1_u8(data + block / 8 + chunk * 8);
+            const uint8x8_t code = vld1_u8(block_data + chunk * 8);
             count += vaddlv_u8(vcnt_u8(code));
             for (size_t b = 0; b < bits; ++b) {
                 const uint8x8_t plane =

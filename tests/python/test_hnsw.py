@@ -509,3 +509,28 @@ def test_remove_accepts_any_integer_dtype_and_empty_input():
     assert idx.remove([1, 2]) == 2
     assert idx.remove(np.array([3, 4], dtype=np.uint8)) == 2
     assert idx.remove(np.array([5], dtype=np.int16)) == 1
+
+
+def test_legacy_padding_round_trip_and_add(tmp_path):
+    fixture = Path(__file__).parent / "fixtures" / "hnsw_legacy_padding65_4bit.index"
+    index = HnswIndex.load(str(fixture))
+    query = np.zeros((1, 65), dtype=np.float32)
+    ids, distances = index.search(query, k=3, ef=8)
+    np.testing.assert_array_equal(ids, [[0, 1, 2]])
+    np.testing.assert_allclose(distances, [[0, 14, 14]], atol=1e-5)
+    # Expected distances were recorded with the old 64-padding implementation.
+    nonzero_query = ((np.arange(65) % 9 - 4) / 4).astype(np.float32)[None, :]
+    nonzero_ids, nonzero_distances = index.search(nonzero_query, k=3, ef=8)
+    np.testing.assert_array_equal(nonzero_ids, [[0, 2, 1]])
+    np.testing.assert_allclose(
+        nonzero_distances, [[27.81249809, 33.36483002, 50.26016998]], rtol=2e-6
+    )
+    path = tmp_path / "migrated.index"
+    index.save(str(path))
+    assert int.from_bytes(path.read_bytes()[24:32], "little") == 128
+    loaded = HnswIndex.load(str(path))
+    actual = loaded.search(query, k=3, ef=8)
+    np.testing.assert_array_equal(actual[0], ids)
+    np.testing.assert_array_equal(actual[1], distances)
+    loaded.add(np.ones((1, 65), dtype=np.float32))
+    assert loaded.num_points == 4

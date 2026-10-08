@@ -84,10 +84,18 @@ void scalar_quantize_uint16_avx512(
 void new_transpose_bin_avx512(
     const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 ) {
+    // Reverse coordinates once; mask extraction then produces the stored bit order.
+    const auto reverse_words = [](__m512i values) {
+        const __m512i order = _mm512_broadcast_i32x4(
+            _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1)
+        );
+        values = _mm512_shuffle_epi8(values, order);
+        return _mm512_shuffle_i64x2(values, values, 0x1B);
+    };
     // 512 / 16 = 32
-    for (size_t i = 0; i < padded_dim; i += 64) {
-        __m512i vec_00_to_31 = _mm512_loadu_si512(q);
-        __m512i vec_32_to_63 = _mm512_loadu_si512(q + 32);
+    for (size_t i = 0; i < padded_dim - padded_dim % 64; i += 64) {
+        __m512i vec_00_to_31 = reverse_words(_mm512_loadu_si512(q));
+        __m512i vec_32_to_63 = reverse_words(_mm512_loadu_si512(q + 32));
 
         // the first (16 - b_query) bits are empty
         vec_00_to_31 = _mm512_slli_epi32(vec_00_to_31, (16 - b_query));
@@ -96,10 +104,7 @@ void new_transpose_bin_avx512(
         for (size_t j = 0; j < b_query; ++j) {
             uint32_t v0 = _mm512_movepi16_mask(vec_00_to_31);  // get most significant bit
             uint32_t v1 = _mm512_movepi16_mask(vec_32_to_63);  // get most significant bit
-            // [TODO: remove all reverse_bits]
-            v0 = reverse_bits(v0);
-            v1 = reverse_bits(v1);
-            uint64_t v = (static_cast<uint64_t>(v0) << 32) + v1;
+            const uint64_t v = uint64_t{v1} | (uint64_t{v0} << 32);
 
             tq[b_query - j - 1] = v;
 
@@ -109,11 +114,26 @@ void new_transpose_bin_avx512(
         tq += b_query;
         q += 64;
     }
+    if (padded_dim % 64 != 0) {
+        __m512i values = reverse_words(_mm512_loadu_si512(q));
+        values = _mm512_slli_epi16(values, static_cast<int>(16 - b_query));
+        for (size_t bit = 0; bit < b_query; ++bit) {
+            tq[b_query - bit - 1] = _mm512_movepi16_mask(values);
+            values = _mm512_slli_epi16(values, 1);
+        }
+    }
 }
 
 void new_transpose_bin_512_avx512(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 ) {
+    const auto reverse_bytes = [](__m512i values) {
+        const __m512i order = _mm512_broadcast_i32x4(
+            _mm_setr_epi8(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+        );
+        values = _mm512_shuffle_epi8(values, order);
+        return _mm512_shuffle_i64x2(values, values, 0x1B);
+    };
     // Keep full 512-dim blocks as 8 chunks, but store the tail as compact
     // [b_query x num_chunks] so runtime can use maskz loads without query padding.
     for (size_t i = 0; i < padded_dim;) {
@@ -121,11 +141,13 @@ void new_transpose_bin_512_avx512(
         if (i + 512 > padded_dim) {
             block_size = padded_dim - i;
         }
-        size_t num_chunks = block_size / 64;
+        const size_t full_chunks = block_size / 64;
+        const size_t tail_dim = block_size % 64;
+        const size_t num_chunks = full_chunks + (tail_dim != 0);
 
-        for (size_t k = 0; k < num_chunks; ++k) {
+        for (size_t k = 0; k < full_chunks; ++k) {
             const uint8_t* current_q = q + i + k * 64;
-            __m512i vec = _mm512_loadu_si512(current_q);
+            const __m512i vec = reverse_bytes(_mm512_loadu_si512(current_q));
 
             for (size_t j = 0; j < b_query; ++j) {
                 int bit_idx = static_cast<int>(b_query - 1 - j);
@@ -134,8 +156,18 @@ void new_transpose_bin_512_avx512(
                     1U << bit_idx
                 );  // NOLINT(bugprone-narrowing-conversions)
                 __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(bit_mask));
-                tq[(b_query - j - 1) * num_chunks + k] =
-                    reverse_bits_u64(static_cast<uint64_t>(m));
+                tq[(b_query - j - 1) * num_chunks + k] = static_cast<uint64_t>(m);
+            }
+        }
+
+        if (tail_dim != 0) {
+            constexpr __mmask64 valid = 0xFFFFFFFFULL;
+            const __m512i values =
+                reverse_bytes(_mm512_maskz_loadu_epi8(valid, q + i + full_chunks * 64));
+            for (size_t bit = 0; bit < b_query; ++bit) {
+                const __m512i mask = _mm512_set1_epi8(static_cast<char>(1U << bit));
+                const uint64_t selected = _mm512_test_epi8_mask(values, mask);
+                tq[bit * num_chunks + full_chunks] = selected >> 32;
             }
         }
 
@@ -145,42 +177,9 @@ void new_transpose_bin_512_avx512(
 }
 
 float mask_ip_x0_q_avx512(const float* query, const uint8_t* data, size_t padded_dim) {
-    const size_t num_blk = padded_dim / 64;
-    const uint8_t* it_data = data;
-    const float* it_query = query;
-
-    //    __m512 sum0 = _mm512_setzero_ps();
-    //    __m512 sum1 = _mm512_setzero_ps();
-    //    __m512 sum2 = _mm512_setzero_ps();
-    //    __m512 sum3 = _mm512_setzero_ps();
-
-    __m512 sum = _mm512_setzero_ps();
-    for (size_t i = 0; i < num_blk; ++i) {
-        uint64_t bits = reverse_bits_u64(load_unaligned_u64(it_data));
-
-        auto mask0 = static_cast<__mmask16>(bits);
-        auto mask1 = static_cast<__mmask16>(bits >> 16);
-        auto mask2 = static_cast<__mmask16>(bits >> 32);
-        auto mask3 = static_cast<__mmask16>(bits >> 48);
-
-        __m512 masked0 = _mm512_maskz_loadu_ps(mask0, it_query);
-        __m512 masked1 = _mm512_maskz_loadu_ps(mask1, it_query + 16);
-        __m512 masked2 = _mm512_maskz_loadu_ps(mask2, it_query + 32);
-        __m512 masked3 = _mm512_maskz_loadu_ps(mask3, it_query + 48);
-
-        sum = _mm512_add_ps(sum, masked0);
-        sum = _mm512_add_ps(sum, masked1);
-        sum = _mm512_add_ps(sum, masked2);
-        sum = _mm512_add_ps(sum, masked3);
-
-        //         _mm_prefetch(reinterpret_cast<const char*>(it_query + 128), _MM_HINT_T1);
-
-        it_data += sizeof(uint64_t);
-        it_query += 64;
-    }
-
-    //    __m512 sum = _mm512_add_ps(_mm512_add_ps(sum0, sum1), _mm512_add_ps(sum2, sum3));
-    return _mm512_reduce_add_ps(sum);
+    // Reuse the AVX2 implementation: independent accumulators avoid the long
+    // reduction dependency of the wider masked-load loop.
+    return mask_ip_x0_q_avx2(query, data, padded_dim);
 }
 
 float mask_ip_x0_q_avx512(const float* query, const uint64_t* data, size_t padded_dim) {

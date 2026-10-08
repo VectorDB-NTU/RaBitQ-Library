@@ -242,3 +242,8 @@ A file that has removals cannot be read by earlier releases. Releases 0.3.7
 through 0.5.1 check every cluster ID on `load` and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.
+
+New HNSW indexes pad dimensions to multiples of 32 for all supported bit widths.
+Loading preserves the saved padded dimension and rotation, so older indexes
+using multiples of 64 remain readable. Older library versions cannot load new
+files whose padded dimension is not a multiple of 64.

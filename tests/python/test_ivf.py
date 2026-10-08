@@ -343,25 +343,50 @@ def test_raw_reranking(dim, metric, high_accuracy, fast_quantization, tmp_path):
     one_bit.build(original, np.zeros((3, dim), dtype=np.float32), cluster_ids)
     one_bit_path = tmp_path / "one-bit.index"
     one_bit.save(str(one_bit_path))
-    assert len(payload) - one_bit_path.stat().st_size == raw_bytes + 12
+    assert len(payload) - one_bit_path.stat().st_size == raw_bytes
 
 
-def test_legacy_ivf_fixture(tmp_path):
-    path = Path(__file__).parent / "fixtures" / "ivf_legacy_4bit.index"
+@pytest.mark.parametrize(
+    "filename,dim,bits,padded,nonzero_distances",
+    [
+        ("ivf_legacy_4bit.index", 64, 4, 64, [27.25, 32.31400681, 50.34958267]),
+        (
+            "ivf_legacy_padding65_1bit.index",
+            65,
+            1,
+            128,
+            [27.81249809, 36.12752914, 47.54097748],
+        ),
+        ("ivf_raw_v1_padding65.index", 65, 32, 128, [27.8125, 33.8125, 49.8125]),
+    ],
+)
+def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded, nonzero_distances):
+    path = Path(__file__).parent / "fixtures" / filename
     idx = IvfIndex.load(str(path))
     assert (idx.dim, idx.max_elements, idx.num_clusters, idx.nbits, idx.metric) == (
-        64,
+        dim,
         3,
         1,
-        4,
+        bits,
         "l2",
     )
-    ids, distances = idx.search(np.zeros((1, 64), np.float32), 3, 1)
-    np.testing.assert_array_equal(np.sort(ids), [[0, 1, 2]])
-    np.testing.assert_allclose(distances, [[0, 14, 14]], atol=2e-5)
+    queries = np.zeros((2, dim), np.float32)
+    # Expected nonzero-query results were recorded with the pad64 implementation
+    # at a065785, before the padding changes.
+    queries[1] = (np.arange(dim) % 9 - 4) / 4
+    ids, distances = idx.search(queries, 3, 1)
+    np.testing.assert_array_equal(np.sort(ids[0]), [0, 1, 2])
+    np.testing.assert_allclose(distances[0], [0, 14, 14], atol=2e-5)
+    np.testing.assert_array_equal(ids[1], [0, 2, 1])
+    np.testing.assert_allclose(distances[1], nonzero_distances, rtol=2e-6)
     saved = tmp_path / "legacy.index"
     idx.save(str(saved))
-    assert saved.read_bytes() == path.read_bytes()
+    payload = saved.read_bytes()
+    assert payload[:8] == b"RABQIDX1"
+    assert int.from_bytes(payload[16:24], "little") == padded
+    loaded_ids, loaded_distances = IvfIndex.load(str(saved)).search(queries, 3, 1)
+    np.testing.assert_array_equal(loaded_ids, ids)
+    np.testing.assert_array_equal(loaded_distances, distances)
 
 
 @pytest.mark.parametrize(
@@ -369,6 +394,10 @@ def test_legacy_ivf_fixture(tmp_path):
     [
         "version",
         "ex_bits",
+        "flags",
+        "padding_too_small",
+        "padding_unaligned",
+        "padding_overflow",
         "dimension",
         "count",
         "clusters",
@@ -385,14 +414,23 @@ def test_raw_index_rejects_invalid_files(tmp_path, damage):
     payload = bytearray(path.read_bytes())
     if damage == "version":
         payload[8:12] = (2).to_bytes(4, "little")
+    elif damage == "flags":
+        payload[12:16] = (2).to_bytes(4, "little")
+    elif damage.startswith("padding_"):
+        padded = {
+            "padding_too_small": 64,
+            "padding_unaligned": 81,
+            "padding_overflow": 2**64 - 16,
+        }[damage]
+        payload[16:24] = padded.to_bytes(8, "little")
     elif damage == "ex_bits":
-        payload[36:44] = (1).to_bytes(8, "little")
+        payload[48:56] = (1).to_bytes(8, "little")
     elif damage == "dimension":
-        payload[20:28] = (2**64 - 1).to_bytes(8, "little")
+        payload[32:40] = (2**64 - 1).to_bytes(8, "little")
     elif damage == "count":
-        payload[12:20] = (2**64 - 1).to_bytes(8, "little")
+        payload[24:32] = (2**64 - 1).to_bytes(8, "little")
     elif damage == "clusters":
-        payload[28:36] = (2**64 - 1).to_bytes(8, "little")
+        payload[40:48] = (2**64 - 1).to_bytes(8, "little")
     elif damage == "truncated_header":
         payload = payload[:9]
     else:

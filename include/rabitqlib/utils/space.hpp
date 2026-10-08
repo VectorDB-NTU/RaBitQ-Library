@@ -146,7 +146,9 @@ inline T normalize_vec(
 }
 
 // Pack 0/1 data into words without requiring the destination byte storage to
-// contain aligned, lifetime-started T objects.
+// contain aligned, lifetime-started T objects. Length is a multiple of 8; the
+// final partial word stores only its used bytes, with the first coordinate at
+// its highest used bit. Full words retain their original layout.
 template <typename T>
 inline void pack_binary_to_bytes(
     const int* __restrict__ binary_code, uint8_t* __restrict__ compact_code, size_t length
@@ -154,12 +156,17 @@ inline void pack_binary_to_bytes(
     constexpr size_t kTypeBits = sizeof(T) * 8;
 
     for (size_t i = 0; i < length; i += kTypeBits) {
+        const size_t width = std::min(kTypeBits, length - i);
         T cur = 0;
-        for (size_t j = 0; j < kTypeBits; ++j) {
-            cur |= (static_cast<T>(binary_code[i + j]) << (kTypeBits - 1 - j));
+        for (size_t j = 0; j < width; j += 8) {
+            uint8_t byte = 0;
+            for (size_t bit = 0; bit < 8; ++bit) {
+                byte |= static_cast<uint8_t>(binary_code[i + j + bit] << (7 - bit));
+            }
+            cur = static_cast<T>((cur << 8) | byte);
         }
-        std::memcpy(compact_code, &cur, sizeof(cur));
-        compact_code += sizeof(cur);
+        std::memcpy(compact_code, &cur, width / 8);
+        compact_code += width / 8;
     }
 }
 
@@ -332,6 +339,8 @@ static inline uint64_t reverse_bits_u64(uint64_t n) {
     return n;
 }
 
+// padded_dim is a multiple of 32. Transposed queries need ceil(padded_dim / 64) * b_query
+// uint64_t words, including a zero-extended final partial word in each bit plane.
 void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query);
 
 void new_transpose_bin_512(
@@ -354,14 +363,14 @@ inline float ip_x0_q(
     size_t b_query
 ) {
     auto num_blk = padded_dim / 64;
-    const auto* it_data = data;
+    const auto* it_data = reinterpret_cast<const uint8_t*>(data);
     const auto* it_query = query;
 
     size_t ip = 0;
     size_t ppc = 0;
 
     for (size_t i = 0; i < num_blk; ++i) {
-        uint64_t x = *static_cast<const uint64_t*>(it_data);
+        const uint64_t x = rabitqlib::bitops::load_word(it_data, sizeof(uint64_t));
         ppc += bitops::popcount64(x);
 
         for (size_t j = 0; j < b_query; ++j) {
@@ -369,7 +378,16 @@ inline float ip_x0_q(
             ip += (bitops::popcount64(x & y) << j);
             it_query++;
         }
-        it_data++;
+        it_data += sizeof(uint64_t);
+    }
+
+    if (padded_dim % 64 != 0) {
+        const uint64_t x = rabitqlib::bitops::load_word(it_data, (padded_dim % 64) / 8);
+        ppc += bitops::popcount64(x);
+        for (size_t j = 0; j < b_query; ++j) {
+            ip += (bitops::popcount64(x & *it_query) << j);
+            ++it_query;
+        }
     }
 
     return (delta * static_cast<float>(ip)) + (vl * static_cast<float>(ppc));
@@ -377,11 +395,20 @@ inline float ip_x0_q(
 
 static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d, size_t padded_dim) {
     uint64_t ret = 0;
-    size_t iter = padded_dim / 64;
-    for (size_t i = 0; i < iter; ++i) {
-        ret += bitops::popcount64((*d) & (*q));
-        q++;
-        d++;
+    const size_t words = padded_dim / 64;
+    const auto* query = reinterpret_cast<const uint8_t*>(q);
+    const auto* data = reinterpret_cast<const uint8_t*>(d);
+    for (size_t i = 0; i < words; ++i) {
+        ret += bitops::popcount64(
+            bitops::load_word(data + i * 8, 8) & bitops::load_word(query + i * 8, 8)
+        );
+    }
+    if (padded_dim % 64 != 0) {
+        const size_t bytes = (padded_dim % 64) / 8;
+        ret += bitops::popcount64(
+            bitops::load_word(data + words * 8, bytes) &
+            bitops::load_word(query + words * 8, bytes)
+        );
     }
     return ret;
 }
@@ -390,7 +417,7 @@ inline uint32_t ip_byte_bin(
     const uint64_t* q, const uint64_t* d, size_t padded_dim, size_t b_query
 ) {
     uint32_t ret = 0;
-    size_t offset = (padded_dim / 64);
+    size_t offset = (padded_dim + 63) / 64;
     for (size_t i = 0; i < b_query; i++) {
         ret += (ip_bin_bin(q, d, padded_dim) << i);
         q += offset;
@@ -400,9 +427,13 @@ inline uint32_t ip_byte_bin(
 
 inline size_t popcount(const uint64_t* __restrict__ d, size_t length) {
     size_t ret = 0;
-    for (size_t i = 0; i < length / 64; ++i) {
-        ret += bitops::popcount64((*d));
-        ++d;
+    const size_t words = length / 64;
+    const auto* data = reinterpret_cast<const uint8_t*>(d);
+    for (size_t i = 0; i < words; ++i) {
+        ret += bitops::popcount64(bitops::load_word(data + i * 8, 8));
+    }
+    if (length % 64 != 0) {
+        ret += bitops::popcount64(bitops::load_word(data + words * 8, (length % 64) / 8));
     }
     return ret;
 }

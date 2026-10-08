@@ -6,7 +6,7 @@ from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("dim", [64, 65])
+@pytest.mark.parametrize("dim", [64, 65, 81, 97])
 @pytest.mark.parametrize(
     "kind,bits",
     [(kind, bits) for kind in ("ivf", "hnsw") for bits in range(1, 10)]
@@ -58,6 +58,19 @@ def test_portable_index_round_trip(tmp_path, metric, dim, kind, bits):
         np.testing.assert_allclose(distances, expected, atol=2e-5)
     path = tmp_path / "portable.index"
     index.save(str(path))
+    payload = path.read_bytes()
+    if kind == "ivf":
+        assert payload[:8] == b"RABQIDX1"
+        multiple = 32
+        stored_padded = int.from_bytes(payload[16:24], "little")
+    elif kind == "qg":
+        multiple = 32
+        offset = (12 if bits else 0) + 3 * np.dtype(np.uintp).itemsize
+        stored_padded = int.from_bytes(payload[offset : offset + 8], "little")
+    else:
+        multiple = 32
+        stored_padded = int.from_bytes(payload[24:32], "little")
+    assert stored_padded == (dim + multiple - 1) // multiple * multiple
     loaded = type(index).load(str(path))
     actual_ids, actual_distances = loaded.search(queries, k=5, **search_args)
     np.testing.assert_array_equal(actual_ids, ids)
@@ -88,3 +101,22 @@ def test_query_preparation_block_boundaries(tmp_path, metric, dim, kind, bits):
     # Exercise both sides of the 512-coordinate transpose block, standard/HACC
     # LUT quantization, and persistence with original dimensions requiring padding.
     test_portable_index_round_trip(tmp_path, metric, dim, kind, bits)
+
+
+@pytest.mark.parametrize("kind,bits", [("ivf", 4), ("hnsw", 4), ("qg", 4)])
+def test_rejects_development_only_padding(tmp_path, kind, bits):
+    test_portable_index_round_trip(tmp_path, "l2", 65, kind, bits)
+    path = tmp_path / "portable.index"
+    payload = bytearray(path.read_bytes())
+    offset = {"ivf": 16, "hnsw": 24, "qg": 12 + 3 * np.dtype(np.uintp).itemsize}[kind]
+    # 80 is a valid pad16 dimension but unsupported by the pad32 kernels.
+    payload[offset : offset + 8] = (80).to_bytes(8, "little")
+    path.write_bytes(payload)
+    cls = {"ivf": IvfIndex, "hnsw": HnswIndex, "qg": SymqgIndex}[kind]
+    message = {
+        "ivf": "Invalid padded dimension in IVF index file",
+        "hnsw": "HNSW: invalid or truncated index file",
+        "qg": "Invalid padded dimension in quantized graph file",
+    }[kind]
+    with pytest.raises(RuntimeError, match=f"^{message}$"):
+        cls.load(str(path))

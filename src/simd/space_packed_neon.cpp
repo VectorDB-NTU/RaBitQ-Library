@@ -67,7 +67,7 @@ float packed_ip(const float* query, const uint8_t* compact, size_t dim) {
             compact += 2 * Bits;
         }
     } else {
-        for (size_t i = 0; i < dim; i += 64) {
+        for (size_t i = 0; i < dim - dim % 64; i += 64) {
             uint8x16_t c0, c1, c2, c3;
             if constexpr (Bits <= 3) {
                 const uint8x16_t packed = vld1q_u8(compact), mask = vdupq_n_u8(3);
@@ -105,6 +105,22 @@ float packed_ip(const float* query, const uint8_t* compact, size_t dim) {
             sum.add(c2, query + i + 32);
             sum.add(c3, query + i + 48);
             compact += 8 * Bits;
+        }
+    }
+    if constexpr (Bits != 1 && Bits != 4 && Bits != 8) {
+        if (dim % 64 != 0) {
+            // The final 32 codes form a contiguous little-endian bit stream.
+            double tail = 0;
+            for (size_t i = 0; i < 32; ++i) {
+                const size_t offset = i * Bits;
+                unsigned code = compact[offset / 8] >> (offset % 8);
+                if (offset % 8 + Bits > 8) {
+                    code |= unsigned{compact[offset / 8 + 1]} << (8 - offset % 8);
+                }
+                tail +=
+                    static_cast<double>(query[dim - 32 + i]) * (code & ((1U << Bits) - 1));
+            }
+            return sum.result() + static_cast<float>(tail);
         }
     }
     return sum.result();

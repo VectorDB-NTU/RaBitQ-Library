@@ -42,6 +42,10 @@
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
+    static void use_legacy_padding(QuantizedGraph<float>& graph) {
+        graph.padded_dim_ = round_up_to_multiple(graph.dim_, 64);
+        graph.initialize();
+    }
     static float build_distance(QGBuilder& builder, PID source_id, PID target_id) {
         std::vector<float> reconstructed;
         std::optional<QuantizedQuery> prepared;
@@ -1336,6 +1340,59 @@ TEST(QuantizedGraphPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget
     EXPECT_EQ(target.num_vertices(), 65U);
     EXPECT_EQ(target.metric_type(), METRIC_IP);
 
+    std::remove(path.c_str());
+}
+
+TEST(QuantizedGraphPersistenceTest, PreservesNewAndLegacyPaddedDomains) {
+    constexpr size_t kNum = 33, kDim = 65, kDegree = 32;
+    std::vector<float> data(kNum * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.13F);
+    }
+    const std::string path = ::testing::TempDir() + "rabitq_qg_padding.index";
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (auto rotator : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
+            for (size_t bits : {0U, 4U, 8U}) {
+                for (bool legacy : {false, true}) {
+                    SCOPED_TRACE(::testing::Message() << bits << '/' << legacy);
+                    QuantizedGraph<float> source(
+                        kNum, kDim, kDegree, metric, rotator, bits
+                    );
+                    EXPECT_EQ(source.padded_dim(), 96U);
+                    if (legacy) {
+                        // The raw and version-1 quantized file layouts are unchanged.
+                        // Recreate their original 64-padded rotation, codes, and rows.
+                        QGConstructionTestAccess::use_legacy_padding(source);
+                    }
+                    QGBuilder builder(source, kDegree, data.data(), 1);
+                    builder.build(2);
+                    source.set_ef(kNum);
+                    std::array<PID, 5> expected_ids{}, actual_ids{};
+                    std::array<float, 5> expected_distances{}, actual_distances{};
+                    source.search(
+                        data.data(), 5, expected_ids.data(), expected_distances.data()
+                    );
+                    source.save(path.c_str());
+                    QuantizedGraph<float> loaded;
+                    loaded.load(path.c_str());
+                    EXPECT_EQ(loaded.padded_dim(), legacy ? 128U : 96U);
+                    EXPECT_EQ(
+                        QGConstructionTestAccess::rows(source),
+                        QGConstructionTestAccess::rows(loaded)
+                    );
+                    loaded.set_ef(kNum);
+                    loaded.search(
+                        data.data(), 5, actual_ids.data(), actual_distances.data()
+                    );
+                    EXPECT_EQ(actual_ids, expected_ids);
+                    EXPECT_EQ(actual_distances, expected_distances);
+                    loaded.save(path.c_str());
+                    loaded.load(path.c_str());
+                    EXPECT_EQ(loaded.padded_dim(), source.padded_dim());
+                }
+            }
+        }
+    }
     std::remove(path.c_str());
 }
 

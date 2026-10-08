@@ -70,7 +70,8 @@ size_t QuantizedGraph<float>::checked_multiply(size_t lhs, size_t rhs) {
 }
 
 size_t QuantizedGraph<float>::padded_dimension(size_t dim) {
-    return (checked_add(dim, 63) / 64) * 64;
+    // Use the same rotated domain as the other indexes.
+    return (checked_add(dim, 31) / 32) * 32;
 }
 
 size_t QuantizedGraph<float>::num_vertices() const { return this->num_points_; }
@@ -122,6 +123,7 @@ QuantizedGraph<float>::QuantizedGraph(
     , quantization_bits_(quantization_bits)
     , seed_(seed) {
     validate_configuration();
+    padded_dim_ = padded_dimension(dim_);
     initialize();
 }
 
@@ -336,10 +338,12 @@ void QuantizedGraph<float>::load(const char* filename) {
     loaded.raw_dist_func_ =
         (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
     loaded.validate_configuration();
-    loaded.padded_dim_ = padded_dimension(loaded.dim_);
-    if (stored_padded_dim != loaded.padded_dim_) {
+    if (stored_padded_dim < loaded.dim_ || stored_padded_dim % 32 != 0) {
         throw std::runtime_error("Invalid padded dimension in quantized graph file");
     }
+    // Older files use 64-coordinate padding. Their saved rotation and codes must
+    // retain that dimension, including when initialize() allocates the row storage.
+    loaded.padded_dim_ = stored_padded_dim;
     loaded.initialize_layout();
 
     const size_t centroid_bytes = loaded.quantization_bits_ == 0
@@ -652,10 +656,9 @@ void QuantizedGraph<float>::initialize_layout() {
 }
 
 void QuantizedGraph<float>::initialize() {
-    padded_dim_ = padded_dimension(dim_);
     rotator_.reset(choose_rotator<float>(dim_, rotator_type_, padded_dim_, seed_));
 
-    assert(padded_dim_ % 64 == 0);
+    assert(padded_dim_ % 32 == 0);
     assert(padded_dim_ >= dim_);
 
     initialize_layout();

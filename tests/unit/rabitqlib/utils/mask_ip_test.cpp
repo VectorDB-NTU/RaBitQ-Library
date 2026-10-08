@@ -34,12 +34,12 @@ TEST(MaskIpX0Q, BackendsMatchScalarAcrossBlocksAndAlignments) {
     }
 #endif
 
-    for (size_t dim : {0, 64, 128, 192, 256, 448, 576, 1024, 4096}) {
+    for (size_t dim : {0, 64, 96, 128, 192, 256, 448, 544, 576, 1024, 4096}) {
         SCOPED_TRACE(dim);
         for (size_t pattern = 0; pattern < 5; ++pattern) {
             SCOPED_TRACE(pattern);
             std::vector<float> query(dim + 1);
-            std::vector<uint64_t> words(dim / 64, 0);
+            std::vector<uint64_t> words((dim + 63) / 64, 0);
             double expected = 0;
             double sum_abs = 0;
             for (size_t i = 0; i < dim; ++i) {
@@ -51,18 +51,21 @@ TEST(MaskIpX0Q, BackendsMatchScalarAcrossBlocksAndAlignments) {
                                       (pattern == 2 && i % 3 == 0) ||
                                       (pattern == 3 && (i % 32 == 0 || i % 32 == 31));
                 if (selected) {
-                    words[i / 64] |= uint64_t{1} << (63 - i % 64);
+                    words[i / 64] |=
+                        uint64_t{1}
+                        << (std::min(size_t{64}, dim - i / 64 * 64) - 1 - i % 64);
                     expected += query[i + 1];
                     sum_abs += std::abs(static_cast<double>(query[i + 1]));
                 }
             }
             for (size_t offset : {0, 1, 3, 7}) {
                 SCOPED_TRACE(offset);
-                std::vector<uint8_t> storage(dim / 8 + 8, 0);
+                // Vary alignment while ending the code exactly at the allocation boundary.
+                std::vector<uint8_t> storage(8 + offset + dim / 8, 0);
+                auto* codes = storage.data() + 8 + offset;
                 if (dim != 0) {
-                    std::memcpy(storage.data() + offset, words.data(), dim / 8);
+                    std::memcpy(codes, words.data(), dim / 8);
                 }
-                const auto* codes = storage.data() + offset;
                 for (auto function : functions) {
                     const float result = function(query.data() + 1, codes, dim);
                     EXPECT_NEAR(result, expected, 2e-6 * std::max(1.0, sum_abs));
@@ -84,7 +87,7 @@ TEST(MaskIpX0Q, DispatchPreservesEveryStoredBitPosition) {
     }
     for (size_t bit = 0; bit < dim; ++bit) {
         SCOPED_TRACE(bit);
-        std::vector<uint64_t> words(dim / 64, 0);
+        std::vector<uint64_t> words((dim + 63) / 64, 0);
         words[bit / 64] = uint64_t{1} << (63 - bit % 64);
         EXPECT_EQ(mask_ip_x0_q(query.data(), words.data(), dim), query[bit]);
     }

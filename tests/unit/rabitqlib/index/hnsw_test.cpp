@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "rabitqlib/utils/cpu_features.hpp"
+
 namespace rabitqlib::hnsw {
 
 struct HnswPruningTestAccess {
@@ -1165,3 +1167,64 @@ TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
 
 }  // namespace
 }  // namespace rabitqlib::hnsw
+
+TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
+    using namespace rabitqlib;
+    using namespace rabitqlib::hnsw;
+    constexpr size_t count = 24;
+    using Search = decltype(&hnsw::detail::search_knn_generic);
+    std::vector<Search> backends{hnsw::detail::search_knn};
+#if defined(__x86_64__) || defined(_M_X64)
+    if (cpu::has_avx2())
+        backends.push_back(hnsw::detail::search_knn_avx2);
+    if (cpu::has_avx512_core())
+        backends.push_back(hnsw::detail::search_knn_avx512_core);
+    if (cpu::has_avx512_popcnt())
+        backends.push_back(hnsw::detail::search_knn_avx512_popcnt);
+#endif
+#if defined(__aarch64__) || defined(_M_ARM64)
+    if (cpu::has_neon())
+        backends.push_back(hnsw::detail::search_knn_neon);
+#endif
+    for (size_t dim : {64U, 96U, 128U, 160U, 256U, 544U, 576U}) {
+        std::mt19937 random(642);
+        std::uniform_real_distribution<float> value(-1, 1);
+        std::vector<float> data(count * dim), centroid(dim, 0), query(dim);
+        for (auto& x : data)
+            x = value(random);
+        for (auto& x : query)
+            x = value(random);
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            for (size_t bits = 1; bits <= 9; ++bits) {
+                SCOPED_TRACE(dim);
+                SCOPED_TRACE(bits);
+                SCOPED_TRACE(metric);
+                std::vector<PID> clusters(count, 0);
+                HierarchicalNSW index(count, dim, bits, 8, count, 42, metric);
+                index.construct(
+                    1, centroid.data(), count - 4, data.data(), clusters.data(), 1, true
+                );
+                // Insertion reconstructs stored sign/extra-bit tails before linking.
+                index.add(data.data() + (count - 4) * dim, 4, clusters.data(), true, 1);
+                index.search(query.data(), 1, 5, count, 1);
+                const auto reference =
+                    hnsw::detail::search_knn_generic(index, query.data(), 5);
+                for (auto search : backends) {
+                    auto expected = reference;
+                    auto actual = search(index, query.data(), 5);
+                    ASSERT_EQ(actual.size(), expected.size());
+                    while (!expected.empty()) {
+                        EXPECT_EQ(actual.top().second, expected.top().second);
+                        EXPECT_NEAR(
+                            actual.top().first,
+                            expected.top().first,
+                            2e-5F * std::max(1.0F, std::abs(expected.top().first))
+                        );
+                        actual.pop();
+                        expected.pop();
+                    }
+                }
+            }
+        }
+    }
+}

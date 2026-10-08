@@ -229,7 +229,7 @@ inline void one_bit_compact_code(
     );
 }
 
-// Requires a positive padded_dim divisible by sizeof(TC) * 8.
+// Requires a positive padded_dim divisible by 8.
 template <
     typename T,
     typename TC,
@@ -248,19 +248,17 @@ inline void one_bit_compact_codes(
     FError f_error,
     MetricType metric_type = METRIC_L2
 ) {
-    constexpr size_t kTypeBits = sizeof(TC) * 8;
-
 #pragma omp parallel for if (Parallel)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num); ++index) {
         const size_t i = static_cast<size_t>(index);
         T add;
         T rescale;
         T error;
-        one_bit_compact_code(
+        one_bit_compact_code_to_bytes<T, TC>(
             data + (padded_dim * i),
             centroid,
             padded_dim,
-            compact_code + (padded_dim / kTypeBits * i),
+            reinterpret_cast<uint8_t*>(compact_code) + (padded_dim / 8 * i),
             add,
             rescale,
             error,
@@ -272,8 +270,9 @@ inline void one_bit_compact_codes(
     }
 }
 
-// Encoding requires a positive padded_dim divisible by 8; index pipelines use 64.
-// packed_code needs ceil(num / 32) * 32 * (padded_dim / 8) bytes, including tail padding.
+// Encoding requires a positive padded_dim divisible by 8; index pipelines use multiples
+// of 32. packed_code needs ceil(num / 32) * 32 * (padded_dim / 8) bytes, including tail
+// padding.
 template <
     typename T,
     bool Parallel = false,

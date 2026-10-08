@@ -1,112 +1,20 @@
 #pragma once
 
-#include <immintrin.h>
-
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 
+#include "../simd/packed_tail_avx2.hpp"
+#include "../simd/warmup_kernels.hpp"
 #include "rabitqlib/index/query.hpp"
 
 namespace rabitqlib::hnsw::detail {
 
-// Helper: AVX2 64-bit Popcount; Mula's method
-static inline __m256i hnsw_popcount_avx2(__m256i v) {
-    // Lookup table for population count of 0-15
-    const __m256i lookup = _mm256_setr_epi8(
-        0,
-        1,
-        1,
-        2,
-        1,
-        2,
-        2,
-        3,
-        1,
-        2,
-        2,
-        3,
-        2,
-        3,
-        3,
-        4,
-        0,
-        1,
-        1,
-        2,
-        1,
-        2,
-        2,
-        3,
-        1,
-        2,
-        2,
-        3,
-        2,
-        3,
-        3,
-        4
-    );
-    const __m256i low_mask = _mm256_set1_epi8(0x0f);
-
-    // Count low nibbles
-    __m256i lo = _mm256_and_si256(v, low_mask);
-    __m256i cnt_lo = _mm256_shuffle_epi8(lookup, lo);
-
-    // Count high nibbles
-    __m256i hi = _mm256_and_si256(_mm256_srli_epi16(v, 4), low_mask);
-    __m256i cnt_hi = _mm256_shuffle_epi8(lookup, hi);
-
-    // Add counts (bytes)
-    __m256i cnt_bytes = _mm256_add_epi8(cnt_lo, cnt_hi);
-
-    // Sum bytes horizontally into 64-bit integers (SAD against 0)
-    return _mm256_sad_epu8(cnt_bytes, _mm256_setzero_si256());
-}
-
 static inline float hnsw_mask_ip_x0_q_avx2(
     const float* query, const uint64_t* data, size_t padded_dim
 ) {
-    const size_t num_blk = padded_dim / 64;
-    const auto* it_data = reinterpret_cast<const uint8_t*>(data);
-    const float* it_query = query;
-    const __m256i shifts0 = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-    const __m256i shifts1 = _mm256_setr_epi32(8, 9, 10, 11, 12, 13, 14, 15);
-    const __m256i shifts2 = _mm256_setr_epi32(16, 17, 18, 19, 20, 21, 22, 23);
-    const __m256i shifts3 = _mm256_setr_epi32(24, 25, 26, 27, 28, 29, 30, 31);
-    __m256 sum0 = _mm256_setzero_ps();
-    __m256 sum1 = _mm256_setzero_ps();
-    __m256 sum2 = _mm256_setzero_ps();
-    __m256 sum3 = _mm256_setzero_ps();
-
-    for (size_t i = 0; i < num_blk; ++i) {
-        // Stored coordinates run from bit 63 to bit 0: high word first,
-        // with each selected bit shifted into a maskload lane's sign bit.
-        for (size_t half = 0; half < 2; ++half) {
-            int32_t word;
-            std::memcpy(&word, it_data + (1 - half) * sizeof(word), sizeof(word));
-            const __m256i bits = _mm256_set1_epi32(word);
-            sum0 = _mm256_add_ps(
-                sum0, _mm256_maskload_ps(it_query, _mm256_sllv_epi32(bits, shifts0))
-            );
-            sum1 = _mm256_add_ps(
-                sum1, _mm256_maskload_ps(it_query + 8, _mm256_sllv_epi32(bits, shifts1))
-            );
-            sum2 = _mm256_add_ps(
-                sum2, _mm256_maskload_ps(it_query + 16, _mm256_sllv_epi32(bits, shifts2))
-            );
-            sum3 = _mm256_add_ps(
-                sum3, _mm256_maskload_ps(it_query + 24, _mm256_sllv_epi32(bits, shifts3))
-            );
-            it_query += 32;
-        }
-        it_data += sizeof(uint64_t);
-    }
-
-    const __m256 sum = _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3));
-    __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(sum), _mm256_extractf128_ps(sum, 1));
-    lanes = _mm_add_ps(lanes, _mm_movehl_ps(lanes, lanes));
-    return _mm_cvtss_f32(_mm_add_ss(lanes, _mm_movehdup_ps(lanes)));
+    return simd::detail::mask_ip_avx2(
+        query, reinterpret_cast<const uint8_t*>(data), padded_dim
+    );
 }
 
 static inline float hnsw_warmup_ip_x0_q_512_avx2(
@@ -119,111 +27,22 @@ static inline float hnsw_warmup_ip_x0_q_512_avx2(
 ) {
     size_t ip_scalar = 0;
     size_t ppc_scalar = 0;
-
-    __m256i acc_ip = _mm256_setzero_si256();
-    __m256i acc_ppc = _mm256_setzero_si256();
-
-    size_t i = 0;
-    // Step by 512 bits at a time (64 bytes = 16 elements of 32-bit integers)
-    size_t dim_end_512 = (padded_dim / 512) * 512;
-
-    __m256i acc_bits[SplitSingleQuery<float>::kNumBits];
-    for (size_t j = 0; j < b_query; ++j) {
-        acc_bits[j] = _mm256_setzero_si256();
+    if (padded_dim < 512) {
+        simd::detail::accumulate_warmup_tail(
+            reinterpret_cast<const uint8_t*>(data),
+            query,
+            padded_dim,
+            b_query,
+            ip_scalar,
+            ppc_scalar
+        );
+        return (delta * static_cast<float>(ip_scalar)) +
+               (vl * static_cast<float>(ppc_scalar));
     }
 
-    for (; i < dim_end_512; i += 512) {
-        // Load 64 bytes of data using paired 32-byte loads
-        __m256i data_vec_lo = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
-        __m256i data_vec_hi =
-            _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 4));
-        data += 8;  // Advance 8 x 64-bit ints (64 bytes)
-
-        acc_ppc = _mm256_add_epi64(acc_ppc, hnsw_popcount_avx2(data_vec_lo));
-        acc_ppc = _mm256_add_epi64(acc_ppc, hnsw_popcount_avx2(data_vec_hi));
-
-        for (size_t j = 0; j < b_query; ++j) {
-            // Load 64 bytes of transposed query matching the 512-bit block layout
-            __m256i query_vec_lo =
-                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query));
-            __m256i query_vec_hi =
-                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 4));
-            query += 8;  // Advance 8 x 64-bit ints (64 bytes)
-
-            __m256i pop_lo =
-                hnsw_popcount_avx2(_mm256_and_si256(data_vec_lo, query_vec_lo));
-            __m256i pop_hi =
-                hnsw_popcount_avx2(_mm256_and_si256(data_vec_hi, query_vec_hi));
-
-            acc_bits[j] = _mm256_add_epi64(acc_bits[j], pop_lo);
-            acc_bits[j] = _mm256_add_epi64(acc_bits[j], pop_hi);
-        }
-    }
-
-    // Remainder block: handles leftovers less than 512 bits wide (e.g., last 448 bits)
-    size_t remaining_dim = padded_dim - i;
-    if (remaining_dim > 0) {
-        size_t num_chunks_64 = remaining_dim / 64;
-        size_t num_chunks_32 = remaining_dim / 32;
-
-        size_t chunks_lo = (num_chunks_32 > 8) ? 8 : num_chunks_32;
-        size_t chunks_hi = (num_chunks_32 > 8) ? (num_chunks_32 - 8) : 0;
-
-        // 1. Create a baseline sequence register
-        __m256i sequence = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
-
-        // 2. Generate masks in-register using Greater-Than comparisons
-        // If chunks_lo is 3, limit will be [3,3,3,3,3,3,3,3].
-        // 3 > seq results in [-1, -1, -1, 0, 0, 0, 0, 0], which is the exact mask needed.
-        __m256i limit_lo = _mm256_set1_epi32(static_cast<int>(chunks_lo));
-        __m256i mask_lo = _mm256_cmpgt_epi32(limit_lo, sequence);
-
-        __m256i limit_hi = _mm256_set1_epi32(static_cast<int>(chunks_hi));
-        __m256i mask_hi = _mm256_cmpgt_epi32(limit_hi, sequence);
-
-        // 3. Vectorized execution continues with zero memory latency
-        __m256i data_vec_lo =
-            _mm256_maskload_epi32(reinterpret_cast<const int*>(data), mask_lo);
-        __m256i data_vec_hi =
-            _mm256_maskload_epi32(reinterpret_cast<const int*>(data + 4), mask_hi);
-
-        acc_ppc = _mm256_add_epi64(acc_ppc, hnsw_popcount_avx2(data_vec_lo));
-        acc_ppc = _mm256_add_epi64(acc_ppc, hnsw_popcount_avx2(data_vec_hi));
-
-        for (size_t j = 0; j < b_query; ++j) {
-            __m256i query_vec_lo =
-                _mm256_maskload_epi32(reinterpret_cast<const int*>(query), mask_lo);
-            __m256i query_vec_hi =
-                _mm256_maskload_epi32(reinterpret_cast<const int*>(query + 4), mask_hi);
-            query += num_chunks_64;
-
-            __m256i pop_lo =
-                hnsw_popcount_avx2(_mm256_and_si256(data_vec_lo, query_vec_lo));
-            __m256i pop_hi =
-                hnsw_popcount_avx2(_mm256_and_si256(data_vec_hi, query_vec_hi));
-
-            acc_bits[j] = _mm256_add_epi64(acc_bits[j], pop_lo);
-            acc_bits[j] = _mm256_add_epi64(acc_bits[j], pop_hi);
-        }
-    }
-
-    for (size_t j = 0; j < b_query; ++j) {
-        __m128i shift = _mm_cvtsi32_si128(static_cast<int>(j));
-        acc_ip = _mm256_add_epi64(acc_ip, _mm256_sll_epi64(acc_bits[j], shift));
-    }
-
-    // Standard reduction for a single __m256i
-    auto mm256_reduce_add_epi64 = [](__m256i v) {
-        __m128i low = _mm256_castsi256_si128(v);
-        __m128i high = _mm256_extracti128_si256(v, 1);
-        __m128i sum = _mm_add_epi64(low, high);
-        return _mm_extract_epi64(sum, 0) + _mm_extract_epi64(sum, 1);
-    };
-
-    ip_scalar += mm256_reduce_add_epi64(acc_ip);
-    ppc_scalar += mm256_reduce_add_epi64(acc_ppc);
-
-    return (delta * static_cast<float>(ip_scalar)) + (vl * static_cast<float>(ppc_scalar));
+    return simd::detail::warmup_blocks_avx2<SplitSingleQuery<float>::kNumBits>(
+        reinterpret_cast<const uint8_t*>(data), query, delta, vl, padded_dim, b_query
+    );
 }
 
 }  // namespace rabitqlib::hnsw::detail

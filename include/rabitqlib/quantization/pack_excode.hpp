@@ -58,8 +58,7 @@ inline void packing_8bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t
  *
  * @param o_raw unpacked code, code for each dim is represented by uint8
  * @param o_compact compact format of code
- * @param dim   dimension of code, NOTICE: different num of bits requried different
- *               dimension padding, dim should obey the corresponding requirement
+ * @param dim dimension of code, a multiple of 32 for every supported bit width
  * @param ex_bits number of bits used for code
  */
 inline void packing_rabitqplus_code(

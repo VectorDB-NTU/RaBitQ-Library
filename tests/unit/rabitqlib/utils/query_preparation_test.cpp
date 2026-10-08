@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <vector>
 
 #include "rabitqlib/simd/space_dispatch.hpp"
@@ -61,7 +62,8 @@ template <typename T>
 void check_transpose(
     void (*transpose)(const T*, uint64_t*, size_t, size_t), bool blocked512
 ) {
-    for (size_t dim : {0U, 64U, 128U, 448U, 512U, 576U, 960U, 1024U, 1088U}) {
+    for (size_t dim : {0U,   32U,  64U,  96U,  128U, 160U,  256U,  288U,  448U,  480U, 512U,
+                       544U, 576U, 768U, 960U, 992U, 1024U, 1056U, 1088U, 4096U, 4128U}) {
         std::vector<T> input(dim + 1);
         for (size_t i = 0; i < dim; ++i) {
             input[i + 1] =
@@ -70,19 +72,20 @@ void check_transpose(
         for (size_t bits = 0; bits <= sizeof(T) * 8; ++bits) {
             SCOPED_TRACE(dim);
             SCOPED_TRACE(bits);
-            std::vector<uint64_t> actual(dim / 64 * bits + 2, UINT64_MAX);
+            std::vector<uint64_t> actual((dim + 63) / 64 * bits + 2, UINT64_MAX);
             std::vector<uint64_t> expected(actual.size(), 0);
             expected.front() = expected.back() = UINT64_MAX;
             size_t offset = 1;
             const size_t block_size = blocked512 ? 512 : 64;
             for (size_t block = 0; block < dim; block += block_size) {
-                const size_t chunks = std::min(block_size, dim - block) / 64;
+                const size_t chunks = (std::min(block_size, dim - block) + 63) / 64;
                 for (size_t b = 0; b < bits; ++b) {
                     for (size_t c = 0; c < chunks; ++c) {
-                        for (size_t i = 0; i < 64; ++i) {
+                        const size_t width = std::min(size_t{64}, dim - block - c * 64);
+                        for (size_t i = 0; i < width; ++i) {
                             expected[offset + b * chunks + c] |=
                                 uint64_t{(input[block + c * 64 + i + 1] >> b) & 1U}
-                                << (63 - i);
+                                << (width - 1 - i);
                         }
                     }
                 }
@@ -90,6 +93,18 @@ void check_transpose(
             }
             transpose(input.data() + 1, actual.data() + 1, dim, bits);
             EXPECT_EQ(actual, expected);
+
+            // Keep both buffers exact at the end for sanitizer overread/overwrite
+            // coverage, while offsetting SIMD accesses by one natural element.
+            auto exact_input = std::make_unique<T[]>(dim + 1);
+            std::copy(input.begin(), input.end(), exact_input.get());
+            auto exact_output = std::make_unique<uint64_t[]>(actual.size() - 1);
+            exact_output[0] = UINT64_MAX;
+            transpose(exact_input.get() + 1, exact_output.get() + 1, dim, bits);
+            EXPECT_EQ(exact_output[0], UINT64_MAX);
+            EXPECT_TRUE(
+                std::equal(expected.begin() + 1, expected.end() - 1, exact_output.get() + 1)
+            );
         }
     }
 }
