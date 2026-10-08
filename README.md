@@ -200,6 +200,11 @@ add_subdirectory(third_party/rabitqlib)
 target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
 ```
 
+The target propagates C++17, OpenMP, and required public-header definitions.
+Optimization and native-tuning options apply only to RaBitQ's own targets;
+configure your application's optimization flags separately. Explicit sanitizer
+builds propagate instrumentation and runtime linkage for header compatibility.
+
 The C++ API and ABI are evolving; update the pinned revision deliberately.
 For installed packages, use `find_package(rabitqlib CONFIG REQUIRED)` and the
 same target. Both approaches require OpenMP.

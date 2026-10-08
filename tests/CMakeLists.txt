@@ -27,7 +27,7 @@ add_executable(rabitq_tests
     ${INTEG_TESTS}
 )
 target_include_directories(rabitq_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/common)
-rabitq_enable_warnings(rabitq_tests)
+rabitq_configure_target(rabitq_tests)
 
 # Link google test and rabitqlib headers
 target_link_libraries(rabitq_tests
@@ -50,13 +50,13 @@ set_tests_properties(OpenMPBinding PROPERTIES
 # on a CPU without SIMD. The static library's detector object is not linked here.
 add_executable(fastscan_no_simd_test dispatch/fastscan_no_simd_test.cpp)
 target_link_libraries(fastscan_no_simd_test PRIVATE GTest::gtest_main rabitq_headers)
-rabitq_enable_warnings(fastscan_no_simd_test)
+rabitq_configure_target(fastscan_no_simd_test)
 gtest_discover_tests(fastscan_no_simd_test DISCOVERY_MODE PRE_TEST)
 
 # Keep the global allocation-failure override isolated from the main suite.
 add_executable(hnsw_add_allocation_test failures/hnsw_add_allocation_test.cpp)
 target_link_libraries(hnsw_add_allocation_test PRIVATE GTest::gtest_main rabitq_headers)
-rabitq_enable_warnings(hnsw_add_allocation_test)
+rabitq_configure_target(hnsw_add_allocation_test)
 gtest_discover_tests(hnsw_add_allocation_test DISCOVERY_MODE PRE_TEST)
 
 # Message to verify files are found

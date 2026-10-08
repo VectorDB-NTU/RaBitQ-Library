@@ -1,0 +1,35 @@
+cmake_minimum_required(VERSION 3.20)
+
+include("${OPTIONS_FILE}")
+
+# Only public-header requirements may add compiler options. Sanitizer builds
+# intentionally propagate instrumentation to keep Eigen allocation consistent.
+# Catch optimization, architecture and warnings leaking through any level of
+# the target graph, including installed exports.
+set(required_options ${openmp_options})
+if(expect_sanitizers)
+    list(APPEND required_options -fsanitize=address,undefined -fno-omit-frame-pointer)
+endif()
+foreach(flag IN LISTS consumer_options)
+    if(NOT flag STREQUAL "" AND NOT flag IN_LIST required_options)
+        message(FATAL_ERROR "Unexpected downstream compile option: ${flag}")
+    endif()
+endforeach()
+foreach(flag IN LISTS required_options)
+    if(NOT flag STREQUAL "" AND NOT flag IN_LIST consumer_options)
+        message(FATAL_ERROR "Missing required downstream compile option: ${flag}")
+    endif()
+endforeach()
+if(NOT "cxx_std_17" IN_LIST consumer_features)
+    message(FATAL_ERROR "The package must propagate its C++17 requirement")
+endif()
+if(expect_msvc)
+    foreach(definition IN ITEMS __restrict__=__restrict EIGEN_DONT_VECTORIZE)
+        if(NOT definition IN_LIST consumer_definitions)
+            message(FATAL_ERROR "Missing public-header definition: ${definition}")
+        endif()
+    endforeach()
+endif()
+if(expect_sanitizers AND NOT "-fsanitize=address,undefined" IN_LIST consumer_link_options)
+    message(FATAL_ERROR "The instrumented library must propagate sanitizer runtime linkage")
+endif()
