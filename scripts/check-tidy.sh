@@ -41,7 +41,14 @@ if ((${#system_include_dirs[@]} == 0)); then
     exit 1
 fi
 
-extra_args=("-extra-arg-before=-Wno-unused-command-line-argument")
+# Header filters alone do not exclude analyzer reports whose call path includes
+# first-party code. Mark vendored includes (and their nested headers) as system
+# headers for analysis without changing production compilation or check coverage
+# for our own headers under the same include root.
+extra_args=(
+    "-extra-arg-before=-Wno-unused-command-line-argument"
+    "-extra-arg=--system-header-prefix=rabitqlib/third/"
+)
 if [[ -n "${CLANG_RESOURCE_DIR:-}" ]]; then
     if [[ ! -d "$CLANG_RESOURCE_DIR" ]]; then
         echo "error: CLANG_RESOURCE_DIR is not a directory: $CLANG_RESOURCE_DIR" >&2
