@@ -685,6 +685,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
     void saveIndex(const std::string &location) {
         std::ofstream output(rabitqlib::io_impl::filesystem_path(location), std::ios::binary);
+        if (!output.is_open())
+            throw std::runtime_error("Cannot open HNSW index file for writing");
+        output.exceptions(std::ios::failbit | std::ios::badbit);
         std::streampos position;
 
         writeBinaryPOD(output, offsetLevel0_);

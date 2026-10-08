@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <fstream>
@@ -21,10 +22,28 @@
 
 #include "rabitqlib/defines.hpp"
 #include "rabitqlib/third/hnswlib/hnswlib.h"
+#include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
+enum class InitializerType : uint32_t { Auto = 0, Flat = 1, FlatRaBitQ = 2, HNSW = 3 };
+
+inline InitializerType resolve_initializer_type(InitializerType type, size_t clusters) {
+    switch (type) {
+        case InitializerType::Auto:
+            if (clusters < 5000) {
+                return InitializerType::Flat;
+            }
+            return clusters < 60000 ? InitializerType::FlatRaBitQ : InitializerType::HNSW;
+        case InitializerType::Flat:
+        case InitializerType::FlatRaBitQ:
+        case InitializerType::HNSW:
+            return type;
+    }
+    throw std::invalid_argument("Invalid IVF initializer type");
+}
+
 template <class Function>
 inline void parallel_for(size_t start, size_t end, size_t numThreads, Function fn) {
     if (start >= end) {
@@ -195,6 +214,26 @@ class FlatInitializer : public Initializer {
             static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
         );
     }
+};
+
+// Inputs are already in IVF's rotated, padded domain. Persist the codes instead
+// of regenerating them on load, so routing keeps the same quantization state.
+class FlatRaBitQInitializer : public Initializer {
+   private:
+    std::vector<float> centroids_;
+    std::vector<float> global_centroid_;
+    std::vector<std::byte, memory::AlignedAllocator<std::byte, 64, true>> batch_data_;
+    MetricType metric_type_;
+
+   public:
+    explicit FlatRaBitQInitializer(size_t d, size_t k, MetricType metric = METRIC_L2);
+    [[nodiscard]] const float* centroid(PID id) const override;
+    void add_vectors(const float* centroids, size_t num_threads) override;
+    void centroids_distances(
+        const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
+    ) const override;
+    void save(std::ofstream& output, const char*) const override;
+    void load(std::ifstream& input, const char*) override;
 };
 
 // Keep centroid routing on the same runtime-selected distance kernels as flat IVF.

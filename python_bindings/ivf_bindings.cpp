@@ -25,6 +25,36 @@ namespace py = pybind11;
 
 namespace rabitqlib::python_bindings {
 
+namespace {
+ivf::InitializerType initializer_from_string(const std::string& value) {
+    if (value == "auto")
+        return ivf::InitializerType::Auto;
+    if (value == "flat")
+        return ivf::InitializerType::Flat;
+    if (value == "flat_rabitq")
+        return ivf::InitializerType::FlatRaBitQ;
+    if (value == "hnsw")
+        return ivf::InitializerType::HNSW;
+    throw std::invalid_argument(
+        "initializer must be 'auto', 'flat', 'flat_rabitq', or 'hnsw'"
+    );
+}
+
+std::string initializer_to_string(ivf::InitializerType type) {
+    switch (type) {
+        case ivf::InitializerType::Auto:
+            return "auto";
+        case ivf::InitializerType::Flat:
+            return "flat";
+        case ivf::InitializerType::FlatRaBitQ:
+            return "flat_rabitq";
+        case ivf::InitializerType::HNSW:
+            return "hnsw";
+    }
+    throw std::logic_error("Invalid IVF initializer type");
+}
+}  // namespace
+
 class IvfIndex {
    public:
     IvfIndex(
@@ -32,7 +62,8 @@ class IvfIndex {
         size_t max_elements,
         size_t num_clusters,
         size_t nbits,
-        const std::string& metric = "l2"
+        const std::string& metric = "l2",
+        const std::string& initializer = "auto"
     )
         : dim_(dim)
         , max_elements_(max_elements)
@@ -45,7 +76,8 @@ class IvfIndex {
               num_clusters,
               nbits,
               metric_,
-              rabitqlib::RotatorType::FhtKacRotator
+              rabitqlib::RotatorType::FhtKacRotator,
+              initializer_from_string(initializer)
           )) {}
 
     void build(
@@ -235,6 +267,9 @@ class IvfIndex {
     [[nodiscard]] size_t num_clusters() const { return num_clusters_; }
     [[nodiscard]] size_t nbits() const { return nbits_; }
     [[nodiscard]] bool is_built() const { return built_; }
+    [[nodiscard]] std::string initializer() const {
+        return initializer_to_string(index_->initializer_type());
+    }
     [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
 
    private:
@@ -257,14 +292,22 @@ void register_ivf(py::module_& m) {
 
     py::class_<IvfIndex>(m, "IvfIndex")
         .def(
-            py::init<size_t, size_t, size_t, size_t, const std::string&>(),
+            py::init<
+                size_t,
+                size_t,
+                size_t,
+                size_t,
+                const std::string&,
+                const std::string&>(),
             py::arg("dim"),
             py::arg("max_elements"),
             py::arg("num_clusters"),
             py::arg("nbits"),
             py::arg("metric") = "l2",
+            py::arg("initializer") = "auto",
             "Create IVF with 1-9 quantization bits, or nbits=32 for owned raw-vector "
-            "reranking."
+            "reranking. initializer selects auto, flat, flat_rabitq, or hnsw centroid "
+            "routing."
         )
         .def(
             "build",
@@ -310,5 +353,6 @@ void register_ivf(py::module_& m) {
         .def_property_readonly("num_clusters", &IvfIndex::num_clusters)
         .def_property_readonly("nbits", &IvfIndex::nbits)
         .def_property_readonly("is_built", &IvfIndex::is_built)
-        .def_property_readonly("metric", &IvfIndex::metric);
+        .def_property_readonly("metric", &IvfIndex::metric)
+        .def_property_readonly("initializer", &IvfIndex::initializer);
 }

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -37,6 +38,49 @@ TEST(HNSWInitializerTest, PersistsUtf8SidecarPaths) {
     EXPECT_FLOAT_EQ(candidates[0].distance, 0.0F);
     std::filesystem::remove(std::filesystem::u8path(path + ".hnsw"));
     std::filesystem::remove(directory);
+}
+
+TEST(HNSWInitializerTest, ReportsSidecarOpenFailureAndCanRetry) {
+    const std::string path = ::testing::TempDir() + "rabitq_hnsw_save_failure";
+    const std::filesystem::path sidecar(path + ".hnsw");
+    std::filesystem::create_directory(sidecar);
+    const std::array<float, 4> centroids{0.0F, 0.0F, 3.0F, 4.0F};
+    HNSWInitializer initializer(2, 2);
+    initializer.add_vectors(centroids.data(), 1);
+    std::ofstream ignored_output;
+    try {
+        initializer.save(ignored_output, path.c_str());
+        FAIL() << "Saving the HNSW sidecar to a directory must fail";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "Cannot open HNSW index file for writing");
+    }
+    std::filesystem::remove(sidecar);
+
+    initializer.save(ignored_output, path.c_str());
+    HNSWInitializer loaded(2, 2);
+    std::ifstream ignored_input;
+    loaded.load(ignored_input, path.c_str());
+    std::vector<AnnCandidate<float>> candidates(1);
+    loaded.centroids_distances(centroids.data() + 2, 1, candidates);
+    EXPECT_EQ(candidates[0].id, 1U);
+    EXPECT_FLOAT_EQ(candidates[0].distance, 0.0F);
+    std::filesystem::remove(sidecar);
+}
+
+TEST(HNSWInitializerTest, ReportsBufferedWriteFailure) {
+    if (!std::filesystem::exists("/dev/full")) {
+        GTEST_SKIP() << "Requires a device that rejects writes";
+    }
+    CentroidL2Space space(2);
+    hnswlib::HierarchicalNSW<float> graph(&space, 2);
+    const std::array<float, 2> point{3.0F, 4.0F};
+    graph.addPoint(point.data(), 0);
+    // This small index fits in the stream buffer; failure can occur at close().
+    EXPECT_THROW(graph.saveIndex("/dev/full"), std::ios_base::failure);
+    const auto result = graph.searchKnn(point.data(), 1);
+    ASSERT_EQ(result.size(), 1U);
+    EXPECT_EQ(result.top().second, 0U);
+    EXPECT_FLOAT_EQ(result.top().first, 0.0F);
 }
 
 TEST(CentroidL2SpaceTest, MatchesDispatchedDistanceForUnalignedInputsAndTails) {

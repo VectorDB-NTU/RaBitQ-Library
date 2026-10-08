@@ -47,6 +47,7 @@ class IVF {
     using FloatStorage = std::vector<float, memory::AlignedAllocator<float, 64, true>>;
     using IdStorage = std::vector<PID, memory::AlignedAllocator<PID, 64, true>>;
 
+    InitializerType initializer_type_ = InitializerType::Auto;
     std::unique_ptr<Initializer> initer_;            // initializer for candidate clusters
     ByteStorage batch_storage_;                      // 1-bit code and factors
     ByteStorage ex_storage_;                         // extra-bit codes and packed factors
@@ -68,7 +69,7 @@ class IVF {
     static constexpr uint64_t kRawFormatMagic = 0x3157415251464252ULL;
     static constexpr uint32_t kRawFormatVersion = 1;
     static constexpr uint64_t kFormatMagic = 0x3158444951424152ULL;  // "RABQIDX1"
-    static constexpr uint32_t kFormatVersion = 1;
+    static constexpr uint32_t kFormatVersion = 2;
 
     void
     quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, float*, const quant::RabitqConfig&);
@@ -142,6 +143,7 @@ class IVF {
 
     void swap(IVF& other) noexcept {
         using std::swap;
+        swap(initializer_type_, other.initializer_type_);
         swap(initer_, other.initer_);
         swap(batch_storage_, other.batch_storage_);
         swap(ex_storage_, other.ex_storage_);
@@ -179,7 +181,8 @@ class IVF {
         size_t,
         size_t,
         MetricType metric_type = rabitqlib::METRIC_L2,
-        RotatorType type = RotatorType::FhtKacRotator
+        RotatorType type = RotatorType::FhtKacRotator,
+        InitializerType initializer = InitializerType::Auto
     );
 
     ~IVF();
@@ -190,6 +193,7 @@ class IVF {
     [[nodiscard]] size_t nbits() const { return raw_reranking_ ? 32 : ex_bits_ + 1; }
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
     [[nodiscard]] RotatorType rotator_type() const { return type_; }
+    [[nodiscard]] InitializerType initializer_type() const { return initializer_type_; }
 
     void construct(const float*, const float*, const PID*, bool, size_t);
 
@@ -276,9 +280,11 @@ inline IVF::IVF(
     size_t cluster_num,
     size_t bits,
     MetricType metric_type,
-    RotatorType type
+    RotatorType type,
+    InitializerType initializer
 )
-    : num_(n)
+    : initializer_type_(resolve_initializer_type(initializer, cluster_num))
+    , num_(n)
     , dim_(dim)
     , padded_dim_(dim)
     , num_cluster_(cluster_num)
@@ -397,9 +403,13 @@ inline void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
     free_memory();
     cluster_lst_.clear();
 
-    if (num_cluster_ < 20000UL) {
+    if (initializer_type_ == InitializerType::Flat) {
         this->initer_ =
             std::make_unique<FlatInitializer>(padded_dim_, num_cluster_, metric_type_);
+    } else if (initializer_type_ == InitializerType::FlatRaBitQ) {
+        this->initer_ = std::make_unique<FlatRaBitQInitializer>(
+            padded_dim_, num_cluster_, metric_type_
+        );
     } else {
         this->initer_ =
             std::make_unique<HNSWInitializer>(padded_dim_, num_cluster_, metric_type_);
@@ -791,6 +801,11 @@ inline void IVF::save(const char* filename) const {
         reinterpret_cast<const char*>(&stored_padded_dim), sizeof(stored_padded_dim)
     );
 
+    const auto stored_initializer = static_cast<uint32_t>(initializer_type_);
+    output.write(
+        reinterpret_cast<const char*>(&stored_initializer), sizeof(stored_initializer)
+    );
+
     /* Save meta data */
     output.write(reinterpret_cast<const char*>(&num_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&dim_), sizeof(size_t));
@@ -851,7 +866,7 @@ inline void IVF::load(const char* filename) {
         input.read(reinterpret_cast<char*>(&version), sizeof(version));
         input.read(reinterpret_cast<char*>(&flags), sizeof(flags));
         input.read(reinterpret_cast<char*>(&stored_padded_dim), sizeof(stored_padded_dim));
-        if (version != kFormatVersion) {
+        if (version != 1 && version != kFormatVersion) {
             throw std::runtime_error("Unsupported IVF index version");
         }
         if (flags > 1 || stored_padded_dim > std::numeric_limits<size_t>::max()) {
@@ -859,6 +874,15 @@ inline void IVF::load(const char* filename) {
         }
         loaded.raw_reranking_ = flags == 1;
         loaded.padded_dim_ = static_cast<size_t>(stored_padded_dim);
+        if (version >= 2) {
+            uint32_t initializer = 0;
+            input.read(reinterpret_cast<char*>(&initializer), sizeof(initializer));
+            if (initializer < static_cast<uint32_t>(InitializerType::Flat) ||
+                initializer > static_cast<uint32_t>(InitializerType::HNSW)) {
+                throw std::runtime_error("Invalid IVF initializer type in index file");
+            }
+            loaded.initializer_type_ = static_cast<InitializerType>(initializer);
+        }
     } else if (magic == kRawFormatMagic) {
         loaded.raw_reranking_ = true;
         uint32_t version = 0;
@@ -878,6 +902,12 @@ inline void IVF::load(const char* filename) {
     input.read(reinterpret_cast<char*>(&loaded.type_), sizeof(loaded.type_));
     input.read(reinterpret_cast<char*>(&loaded.metric_type_), sizeof(loaded.metric_type_));
     validate_metric_type(loaded.metric_type_);
+    // Missing routing metadata means a historical file. Its payload layout must
+    // follow the original threshold, independently of the current Auto policy.
+    if (loaded.initializer_type_ == InitializerType::Auto) {
+        loaded.initializer_type_ =
+            loaded.num_cluster_ < 20000 ? InitializerType::Flat : InitializerType::HNSW;
+    }
     if (loaded.num_ == 0 || loaded.num_ > buffer::kSearchBufferMaxPointCount ||
         loaded.dim_ == 0 || loaded.num_cluster_ == 0 ||
         loaded.num_cluster_ > buffer::kSearchBufferMaxPointCount || loaded.ex_bits_ > 8 ||
@@ -911,8 +941,15 @@ inline void IVF::load(const char* filename) {
     } else {
         throw std::runtime_error("Invalid IVF rotator type");
     }
-    if (loaded.num_cluster_ < 20000UL) {
+    if (loaded.initializer_type_ != InitializerType::HNSW) {
         consume(loaded.num_cluster_, sizeof(float) * loaded.padded_dim_);
+    }
+    if (loaded.initializer_type_ == InitializerType::FlatRaBitQ) {
+        consume(loaded.padded_dim_, sizeof(float));
+        consume(
+            div_round_up(loaded.num_cluster_, fastscan::kBatchSize),
+            BatchDataMap<float>::data_bytes(loaded.padded_dim_)
+        );
     }
 
     /* Load number of vectors of each cluster */

@@ -93,7 +93,19 @@ int main() {
         return 1;
     }
 
-    rabitqlib::ivf::IVF index(kPoints, kDimension, flat.k, 4);
+    rabitqlib::ivf::IVF index(
+        kPoints,
+        kDimension,
+        flat.k,
+        4,
+        rabitqlib::METRIC_L2,
+        rabitqlib::RotatorType::FhtKacRotator,
+        rabitqlib::ivf::InitializerType::FlatRaBitQ
+    );
+    if (index.initializer_type() != rabitqlib::ivf::InitializerType::FlatRaBitQ) {
+        std::cerr << "Installed IVF did not preserve explicit centroid routing\n";
+        return 1;
+    }
     index.construct(data.data(), flat.centroids.data(), flat.assignments.data(), false, 2);
     std::vector<rabitqlib::PID> ids(kPoints);
     std::vector<float> distances(kPoints);

@@ -55,6 +55,56 @@ size_t k = centroids.rows();
 index_type ivf(num_points, dim, k, total_bits);
 ```
 
+### Centroid routing
+
+The optional final C++ constructor argument selects `InitializerType::Auto`,
+`Flat`, `FlatRaBitQ`, or `HNSW` from the `rabitqlib::ivf` namespace. Python accepts
+`initializer="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:
+
+```python
+index = IvfIndex(dim, num_points, num_clusters, nbits=4,
+                 initializer="flat_rabitq")
+print(index.initializer)  # resolved routing type
+```
+
+```c++
+index_type ivf(num_points, dim, k, total_bits, rabitqlib::METRIC_L2,
+               rabitqlib::RotatorType::FhtKacRotator,
+               rabitqlib::ivf::InitializerType::FlatRaBitQ);
+auto routing = ivf.initializer_type();
+```
+
+- `auto` selects `flat` below 5,000 clusters, `flat_rabitq` from 5,000 through
+  59,999 clusters, and `hnsw` from 60,000 clusters onward. These defaults are
+  practical thresholds; explicitly select a different initializer when it better
+  suits your workload.
+- `flat` computes exact distances to every centroid.
+- `flat_rabitq` scans one-bit centroid codes with FastScan, prunes candidates
+  using twice the standard RaBitQ error margin, and recomputes exact distances
+  for the retained candidates. Returned distances are exact for those centroids, but
+  routing is approximate: pruning can miss a true nearest centroid.
+- `hnsw` searches a graph of float32 centroids approximately.
+
+All choices support L2 and inner product. Flat RaBitQ uses the IVF rotation and
+padded domain, retains float32 centroids for refinement, and stores its mean and
+codes in the main index file. Its code precision is independent of the index's
+`nbits`. It trades additional code storage and an O(cluster count) query work
+buffer for fewer full-vector distance evaluations. Performance depends on
+cluster count, dimension, `nprobe`, and data distribution. Measure recall and
+latency on your workload, and use an explicit initializer to override `auto`.
+
+Existing constructor calls remain source-compatible. C++ consumers must rebuild
+against matching headers and the core library because the IVF object layout has
+changed. Newly built indexes with 5,000–59,999 clusters now use Flat RaBitQ routing. In particular, the 5,000–19,999 range changes
+from exact to approximate centroid selection. To reproduce the previous selection
+policy when rebuilding, explicitly choose `flat` below 20,000 clusters and `hnsw`
+otherwise. Loading an old index preserves its historical routing instead.
+
+Routing is fixed for an index and is also used by `add` when cluster IDs are
+omitted. `initializer_type()` (Python `initializer`) reports the resolved type,
+including after loading; loading never re-runs the current `auto` policy for a
+new-format file.
+
 Finally, call the construct API:
 ```c++
 void IVF::construct(
@@ -96,14 +146,18 @@ After construction, you can directly save the index file to disk:
 ```c++
 ivf.save(output_index_file);
 ```
-New files use the `RABQIDX1` magic, version 1, storage flags, and an explicit
-padded dimension before the index metadata. Loading restores the storage mode,
-rotation state, and padded dimension; raw files also contain the original vectors,
-so querying does not require an external dataset.
+New files use the `RABQIDX1` magic, version 2, storage flags, an explicit
+padded dimension, and a uint32 initializer type (1 = Flat, 2 = Flat RaBitQ,
+3 = HNSW) before the index metadata. `Auto` is resolved before saving. Loading
+restores the routing type, storage mode, rotation state, and padded dimension.
+Raw files also contain the original vectors, so querying does not require an external dataset.
 
-Legacy unversioned quantized files and raw v1 files remain readable and retain
-their original 64-dimension padding. Saving a loaded legacy index writes the new
-header without changing its padded dimension or encoded data. Older library
+Version-1 `RABQIDX1` files remain readable with their stored padding. Legacy
+unversioned quantized files and raw v1 files retain their original 64-dimension
+padding. All three historical formats infer routing with the original 20,000
+cluster threshold. HNSW routing still requires the accompanying `.hnsw` file.
+Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded
+legacy index writes the new header without changing its padded dimension or encoded data. Older library
 versions cannot read the new format.
 
 ### Data Layout
@@ -213,8 +267,8 @@ size_t IVF::remove(const PID* ids_to_remove, size_t n);
   receives the PID `max_elements() + i`, using the count before the call. Existing
   IDs stay unchanged, and removed IDs are never reused.
 - **cluster_ids**: The cluster of each new vector, in `[0, cluster_num)`. When
-  it is `nullptr`, vectors use the same centroid routing as queries. Routing is
-  exhaustive below 20,000 clusters and uses approximate HNSW search otherwise.
+  it is `nullptr`, vectors use the same centroid routing as queries. Routing uses
+  the initializer selected at construction or restored from the index file.
 - **faster**, **num_threads**: Same as in `construct`.
 - **ids_to_remove**: PIDs to remove. Every PID must be below `max_elements()`; nothing is
   removed if one is not. `remove` returns how many were newly removed and can be
