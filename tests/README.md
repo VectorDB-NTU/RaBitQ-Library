@@ -3,6 +3,11 @@
 This directory contains the C++ unit and integration tests and the Python
 binding tests for RaBitQ Library.
 
+Persistence tests include [frozen release-produced indexes](fixtures/persistence/README.md)
+and search results, in addition to current round trips. C++ and installed-wheel
+tests load the same fixtures, compare search results, and verify save/load migration
+and rejection of truncated or unsupported formats.
+
 ## Prerequisites
 
 - CMake 3.20 or newer for the `ctest --test-dir` commands below (4.2 or newer

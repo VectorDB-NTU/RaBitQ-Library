@@ -170,6 +170,9 @@ validated sizes before allocation, checked reads, and a compatibility fixture or
 path. Review each affected index format; preserve SymphonyQG's versioned quantized format and legacy
 raw fallback unless a breaking change is authorized.
 
+Frozen release-produced indexes and reference searches live in `tests/fixtures/persistence/`;
+keep their provenance and hashes, and do not regenerate them with the current writer.
+
 Use `python_bindings/bindings_common.hpp` for shared conversions. Validate array rank, dimensions,
 index state, and parameter ranges before entering the core. `py::array::forcecast` permits copies;
 do not use it where callers expect in-place mutation or pointer identity.
