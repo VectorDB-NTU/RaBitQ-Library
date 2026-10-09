@@ -22,5 +22,5 @@ foreach(RABITQ_SAMPLE_TARGET
     hnsw_rabitq_querying
 )
     target_link_libraries(${RABITQ_SAMPLE_TARGET} PRIVATE rabitq_headers)
-    rabitq_enable_warnings(${RABITQ_SAMPLE_TARGET})
+    rabitq_configure_target(${RABITQ_SAMPLE_TARGET})
 endforeach()
