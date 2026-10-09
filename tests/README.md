@@ -167,6 +167,28 @@ ctest --test-dir build-consumer -C Release --output-on-failure
 
 On Windows, add `-G "Visual Studio 18 2026" -A x64` to the consumer configure command.
 
+The consumer also checks evaluated compile options for unwanted transitive build
+policy. Only OpenMP compiler options, the C++17 requirement, and required MSVC
+header definitions are propagated; optimization, native tuning, and warnings
+stay private to first-party targets. Sanitized builds additionally propagate
+instrumentation and runtime link options: Eigen's public inline allocation code
+depends on the sanitizer mode and must stay consistent with the core. Pass
+`-DRABITQ_EXPECT_SANITIZERS=ON` when testing such an installation with GCC/Clang.
+
+Test source-tree consumption through `add_subdirectory` with the same consumer:
+
+```text
+cmake -S tests/consumer -B build-source-consumer -DCMAKE_BUILD_TYPE=Release -DRABITQ_SOURCE_DIR="<absolute-repository-path>" -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=ON
+cmake --build build-source-consumer --config Release
+ctest --test-dir build-source-consumer -C Release --output-on-failure
+```
+
+CI checks both source-tree and installed native builds, portable installations,
+and an installed sanitizer build. Native tuning retains its existing default
+(`ON`) for first-party targets; disabling propagation does not make an already
+native-compiled library portable. Consumers choose their own optimization
+flags, including for inline code in the public headers.
+
 ## Test structure
 
 - `unit/`: C++ index, quantization, FastScan, and utility tests

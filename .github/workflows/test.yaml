@@ -118,6 +118,21 @@ jobs:
         env:
           RABITQ_REQUIRE_CPP_EXAMPLES: "1"
         run: python -m pytest tests/python/test_cpp_clustering_examples.py --tb=short -q
+      - name: Test native installed package isolation
+        run: |
+          cmake --install build --prefix "$PWD/rabitqlib-native-install"
+          cmake -S tests/consumer -B build-native-consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$PWD/rabitqlib-native-install"
+          cmake --build build-native-consumer
+          ctest --test-dir build-native-consumer --output-on-failure
+      - name: Test add_subdirectory isolation
+        run: |
+          cmake -S tests/consumer -B build-source-consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DRABITQ_SOURCE_DIR="$PWD" \
+            -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=ON
+          cmake --build build-source-consumer
+          ctest --test-dir build-source-consumer --output-on-failure
 
   windows:
     needs: changes
@@ -136,6 +151,13 @@ jobs:
         run: cmake --build build-windows --config Release --parallel 2
       - name: Test
         run: ctest --test-dir build-windows -C Release --output-on-failure
+      - name: Test installed CMake package and header requirements
+        run: |
+          cmake --install build-windows --config Release --prefix "$PWD/rabitqlib-install"
+          cmake -S tests/consumer -B build-consumer -G "Visual Studio 18 2026" -A x64 `
+            "-DCMAKE_PREFIX_PATH=$PWD/rabitqlib-install"
+          cmake --build build-consumer --config Release --parallel 2
+          ctest --test-dir build-consumer -C Release --output-on-failure
 
   sanitizers:
     needs: changes
@@ -164,6 +186,17 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build-sanitizers --output-on-failure
+      - name: Test installed sanitizer usage requirements
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake --install build-sanitizers --prefix "$PWD/rabitqlib-sanitized-install"
+          cmake -S tests/consumer -B build-sanitized-consumer -G Ninja \
+            -DCMAKE_PREFIX_PATH="$PWD/rabitqlib-sanitized-install" \
+            -DRABITQ_EXPECT_SANITIZERS=ON
+          cmake --build build-sanitized-consumer
+          ctest --test-dir build-sanitized-consumer --output-on-failure
 
   downstream-consumer:
     needs: changes

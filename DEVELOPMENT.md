@@ -81,8 +81,11 @@ selects the compiler explicitly; `CXX=c++` on the check command must match it.
 
 The wrapper supplies clang-tidy with that compiler's standard-library include
 paths and reports diagnostics only for first-party files. Vendored Eigen and
-hnswlib are excluded. New checks should be added incrementally after their
-existing first-party findings are fixed.
+hnswlib are excluded: `rabitqlib/third/` includes are marked as system headers
+for analysis, including nested headers. The header filter alone is insufficient
+for analyzer reports whose call path includes first-party code. This does not
+change production compiler flags. New checks should be added incrementally after
+their existing first-party findings are fixed.
 
 Focused clang-tidy checks on affected code are sufficient during iteration.
 For core library or binding changes, run the full check above before merging.

@@ -26,10 +26,6 @@ find_package(OpenMP REQUIRED)
 
 add_library(rabitq_compile_options INTERFACE)
 target_compile_features(rabitq_compile_options INTERFACE cxx_std_17)
-target_compile_options(rabitq_compile_options INTERFACE
-    $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-O3>
-    $<$<AND:$<BOOL:${RABITQ_ENABLE_NATIVE_OPTIMIZATION}>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-march=native>
-)
 target_link_libraries(rabitq_compile_options INTERFACE OpenMP::OpenMP_CXX)
 if(MSVC)
     # MSVC spells the GNU restrict extension differently. Public headers use
@@ -40,16 +36,21 @@ if(MSVC)
     target_compile_definitions(rabitq_compile_options INTERFACE EIGEN_DONT_VECTORIZE)
 endif()
 if(RABITQ_ENABLE_SANITIZERS)
+    # Keep sanitizer instrumentation consistent across public inline code and
+    # the core (Eigen's allocation policy depends on __SANITIZE_ADDRESS__).
     target_compile_options(rabitq_compile_options INTERFACE
-        $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-fsanitize=address,undefined;-fno-omit-frame-pointer>
+        "$<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-fsanitize=address,undefined;-fno-omit-frame-pointer>"
     )
     target_link_options(rabitq_compile_options INTERFACE
         $<$<CXX_COMPILER_ID:Clang,GNU>:-fsanitize=address,undefined>
     )
 endif()
 
-function(rabitq_enable_warnings target)
+function(rabitq_configure_target target)
+    # Apply project build policy only to first-party targets, never consumers.
     target_compile_options(${target} PRIVATE
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-O3>
+        $<$<AND:$<BOOL:${RABITQ_ENABLE_NATIVE_OPTIMIZATION}>,$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>>:-march=native>
         "$<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wall;-Wextra>"
     )
 endfunction()
@@ -151,7 +152,7 @@ set_target_properties(rabitq_core PROPERTIES
     EXPORT_NAME core
     POSITION_INDEPENDENT_CODE ON
 )
-rabitq_enable_warnings(rabitq_core)
+rabitq_configure_target(rabitq_core)
 
 if(MSVC)
     set_source_files_properties(

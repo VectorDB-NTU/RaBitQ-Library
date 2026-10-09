@@ -26,7 +26,7 @@ pybind11_add_module(_rabitqlib
 target_include_directories(_rabitqlib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
-rabitq_enable_warnings(_rabitqlib)
+rabitq_configure_target(_rabitqlib)
 
 # 4. Imported targets provide the matching Python, NumPy, and OpenMP settings.
 target_link_libraries(_rabitqlib PRIVATE
