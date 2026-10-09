@@ -414,12 +414,18 @@ void QuantizedGraph<float>::search(
     uint32_t* __restrict__ results,
     float* __restrict__ dists
 ) {
-    validate_search(query, k, results, dists);
+    search_impl(query, k, results, dists, ef_);
+}
+
+void QuantizedGraph<float>::search_impl(
+    const float* query, uint32_t k, uint32_t* results, float* dists, size_t ef
+) {
+    validate_search(query, k, results, dists, ef);
     std::vector<float> rotated_query(padded_dim_);
     std::vector<float> est_dist(degree_bound_);
     std::vector<float> lut_float(padded_dim_ * 4);
     BatchQuery<float> batch_query;
-    buffer::SearchBuffer<float> search_pool(ef_);
+    buffer::SearchBuffer<float> search_pool(ef);
     buffer::SearchBuffer<float> result_pool(k);
     thread_local VisitedSet visited;
     thread_local size_t visited_size = 0;
@@ -427,7 +433,7 @@ void QuantizedGraph<float>::search(
         visited.initialize(num_points_, num_points_ / 10);
         visited_size = num_points_;
     }
-    search_with_scratch(
+    search_with_scratch_impl(
         query,
         k,
         results,
@@ -438,7 +444,9 @@ void QuantizedGraph<float>::search(
         batch_query,
         search_pool,
         result_pool,
-        visited
+        visited,
+        kPidMax,
+        nullptr
     );
 }
 
@@ -450,16 +458,28 @@ void QuantizedGraph<float>::search_batch(
     float* dists,
     size_t num_threads
 ) {
+    search_batch_with_ef(queries, num_queries, knn, results, dists, ef_, num_threads);
+}
+
+void QuantizedGraph<float>::search_batch_with_ef(
+    const float* queries,
+    size_t num_queries,
+    uint32_t knn,
+    uint32_t* results,
+    float* dists,
+    size_t ef,
+    size_t num_threads
+) {
     if (num_queries == 0) {
         return;
     }
-    validate_search(queries, knn, results, dists);
+    validate_search(queries, knn, results, dists, ef);
     const size_t max_values = std::numeric_limits<size_t>::max() / sizeof(float);
     if (num_queries > max_values / dim_ || num_queries > max_values / knn) {
         throw std::length_error("QuantizedGraph query batch is too large");
     }
     if (num_queries == 1) {
-        search(queries, knn, results, dists);
+        search_impl(queries, knn, results, dists, ef);
         return;
     }
 
@@ -502,7 +522,7 @@ void QuantizedGraph<float>::search_batch(
         // Allocate and release scratch on its worker, retaining it across queries.
         std::optional<SearchScratch> scratch;
         try {
-            scratch.emplace(padded_dim_, degree_bound_, ef_, knn, num_points_);
+            scratch.emplace(padded_dim_, degree_bound_, ef, knn, num_points_);
         } catch (...) { capture_error(); }
 #pragma omp for schedule(dynamic)
         for (std::ptrdiff_t query_index = 0;
@@ -514,7 +534,7 @@ void QuantizedGraph<float>::search_batch(
             const size_t i = static_cast<size_t>(query_index);
             try {
                 auto& local = *scratch;
-                search_with_scratch(
+                search_with_scratch_impl(
                     queries + i * dim_,
                     knn,
                     results + i * knn,
@@ -525,7 +545,9 @@ void QuantizedGraph<float>::search_batch(
                     local.batch_query,
                     local.search_pool,
                     local.result_pool,
-                    local.visited
+                    local.visited,
+                    kPidMax,
+                    nullptr
                 );
             } catch (...) { capture_error(); }
         }
@@ -536,7 +558,7 @@ void QuantizedGraph<float>::search_batch(
 }
 
 void QuantizedGraph<float>::validate_search(
-    const float* query, uint32_t k, const uint32_t* results, const float* dists
+    const float* query, uint32_t k, const uint32_t* results, const float* dists, size_t ef
 ) const {
     if (!ready_ || rotator_ == nullptr) {
         throw std::logic_error("QuantizedGraph must be built or loaded before search");
@@ -547,7 +569,7 @@ void QuantizedGraph<float>::validate_search(
     if (k == 0 || k > num_points_) {
         throw std::invalid_argument("QuantizedGraph k must be between 1 and num_points");
     }
-    if (ef_ < k) {
+    if (ef < k) {
         throw std::invalid_argument("QuantizedGraph ef must be at least k");
     }
 }
@@ -881,7 +903,39 @@ void QuantizedGraph<float>::search_with_scratch(
     PID hint,
     const float* k1xsumq
 ) {
-    validate_search(query, knn, results, dists);
+    validate_search(query, knn, results, dists, ef_);
+    search_with_scratch_impl(
+        query,
+        knn,
+        results,
+        dists,
+        rotated_query_scratch,
+        est_dist_scratch,
+        lut_float_scratch,
+        batch_query,
+        search_pool,
+        result_pool,
+        visited,
+        hint,
+        k1xsumq
+    );
+}
+
+void QuantizedGraph<float>::search_with_scratch_impl(
+    const float* __restrict__ query,
+    uint32_t knn,
+    uint32_t* __restrict__ results,
+    float* __restrict__ dists,
+    float* __restrict__ rotated_query_scratch,
+    float* __restrict__ est_dist_scratch,
+    float* __restrict__ lut_float_scratch,
+    BatchQuery<float>& batch_query,
+    buffer::SearchBuffer<float>& search_pool,
+    buffer::SearchBuffer<float>& result_pool,
+    VisitedSet& visited,
+    PID hint,
+    const float* k1xsumq
+) {
     if (rotated_query_scratch == nullptr || est_dist_scratch == nullptr ||
         lut_float_scratch == nullptr) {
         throw std::invalid_argument("QuantizedGraph search buffers must not be null");

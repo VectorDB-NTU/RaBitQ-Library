@@ -153,6 +153,31 @@ counts, or [QGKMeans](clustering.md#qgkmeans) for graph assignment.
 
 ### Threading and file paths
 
+The current source checkout releases the Python GIL during native index search,
+construction, updates, and file I/O. The following contract applies to
+`IvfIndex`, `HnswIndex`, and `SymqgIndex`:
+
+| Operation on the same index | Concurrent access |
+| --- | --- |
+| `search`, `search_batch`, `save`, and property reads | May run together |
+| `build`, `add`, `remove`, and `resize`, where available | Require exclusive access |
+
+A conflicting call immediately raises
+`RuntimeError("Index is busy: conflicting operation in progress")`.
+It does not wait or queue an update. Access protection includes Python input
+conversion and is released when the operation returns or raises an exception.
+Different index objects can operate independently. Concurrent saves must use
+different output paths, including any sidecar files.
+
+Search parameters such as `ef`, `nprobe`, precision, and `num_threads` belong to
+each call. When using a Python thread pool, consider `num_threads=1` to avoid
+starting multiple native worker pools. Keep input arrays and any shared backing
+storage unchanged for the entire call; do not resize or modify them from another
+thread. Returned result arrays own their storage.
+
+These access checks belong to the Python wrappers. C++ callers must synchronize
+index updates themselves and use separate search output buffers.
+
 `num_threads=0` selects the detected available logical CPU count. Positive values
 set an upper limit, capped at that count; small workloads may use fewer workers.
 Python index methods default to one thread; clustering defaults to `0`.

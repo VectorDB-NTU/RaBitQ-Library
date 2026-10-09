@@ -28,9 +28,11 @@ struct HnswAvx512PopcntKernel {
 };
 
 maxheap<std::pair<float, PID>> search_knn_avx512_popcnt(
-    HierarchicalNSW& index, const float* rotated_query, size_t topk
+    HierarchicalNSW& index, const float* rotated_query, size_t topk, size_t ef
 ) {
-    return index.search_knn_direct<HnswAvx512PopcntKernel>(rotated_query, topk);
+    return index.search_knn_direct<HnswAvx512PopcntKernel>(
+        rotated_query, topk, ef == 0 ? index.ef_ : ef
+    );
 }
 
 }  // namespace rabitqlib::hnsw::detail

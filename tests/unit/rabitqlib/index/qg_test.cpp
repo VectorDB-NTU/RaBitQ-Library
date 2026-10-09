@@ -1888,3 +1888,94 @@ TEST(QuantizedGraphSearchTest, ScratchSearchRejectsIncompleteResults) {
     }));
 }
 }  // namespace rabitqlib::symqg
+
+namespace rabitqlib::symqg {
+TEST(QGSearchTest, ExplicitWindowsAreIndependentOfDefaultAndConcurrentCalls) {
+    constexpr size_t kCount = 129, kDim = 65, kQueries = 13, k = 5;
+    std::mt19937 random(314);
+    std::normal_distribution<float> value;
+    std::vector<float> data(kCount * kDim), queries(kQueries * kDim);
+    for (auto& x : data)
+        x = value(random);
+    for (auto& x : queries)
+        x = value(random);
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {0U, 4U, 8U}) {
+            SCOPED_TRACE(metric);
+            SCOPED_TRACE(bits);
+            QuantizedGraph<float> graph(
+                kCount, kDim, 32, metric, RotatorType::FhtKacRotator, bits, 42
+            );
+            QGBuilder builder(graph, 64, data.data(), 1);
+            builder.build();
+            std::vector<PID> narrow(kQueries * k), wide(narrow.size());
+            std::vector<float> narrow_distances(narrow.size()), wide_distances(wide.size());
+            graph.set_ef(k);
+            graph.search_batch(
+                queries.data(), kQueries, k, narrow.data(), narrow_distances.data()
+            );
+            graph.set_ef(96);
+            graph.search_batch(
+                queries.data(), kQueries, k, wide.data(), wide_distances.data()
+            );
+            graph.set_ef(1);
+            std::promise<void> start;
+            const auto ready = start.get_future().share();
+            const auto run = [&](size_t ef,
+                                 size_t threads,
+                                 const auto& expected,
+                                 const auto& expected_distances) {
+                std::vector<PID> actual(kQueries * k);
+                std::vector<float> distances(actual.size());
+                ready.wait();
+                for (size_t i = 0; i < 16; ++i) {
+                    graph.search_batch_with_ef(
+                        queries.data(),
+                        kQueries,
+                        k,
+                        actual.data(),
+                        distances.data(),
+                        ef,
+                        threads
+                    );
+                    if (actual != expected || distances != expected_distances)
+                        return false;
+                    graph.search_batch_with_ef(
+                        queries.data(), 1, k, actual.data(), distances.data(), ef, threads
+                    );
+                    if (!std::equal(actual.begin(), actual.begin() + k, expected.begin()) ||
+                        !std::equal(
+                            distances.begin(),
+                            distances.begin() + k,
+                            expected_distances.begin()
+                        ))
+                        return false;
+                }
+                return true;
+            };
+            auto first = std::async(std::launch::async, [&] {
+                return run(k, 1, narrow, narrow_distances);
+            });
+            auto second = std::async(std::launch::async, [&] {
+                return run(96, 2, wide, wide_distances);
+            });
+            start.set_value();
+            EXPECT_TRUE(first.get());
+            EXPECT_TRUE(second.get());
+            EXPECT_THROW(
+                graph.search_batch(
+                    queries.data(), kQueries, k, narrow.data(), narrow_distances.data()
+                ),
+                std::invalid_argument
+            );
+            EXPECT_THROW(
+                graph.search_batch_with_ef(
+                    queries.data(), kQueries, k, narrow.data(), narrow_distances.data(), 0
+                ),
+                std::invalid_argument
+            );
+            EXPECT_NO_THROW(graph.search_batch_with_ef(nullptr, 0, 0, nullptr, nullptr, 0));
+        }
+    }
+}
+}  // namespace rabitqlib::symqg

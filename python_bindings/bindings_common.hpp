@@ -16,6 +16,48 @@ namespace py = pybind11;
 
 namespace rabitqlib::python_bindings {
 
+// All guard acquisition/destruction happens with the GIL held. Native work may
+// release the GIL inside the guard's lifetime, but must reacquire it first on
+// exit (including exceptions). This makes conflicts fail immediately without
+// blocking the GIL or introducing a lock-order dependency.
+class IndexAccess {
+   private:
+    size_t readers_ = 0;
+    bool writing_ = false;
+
+   public:
+    class Guard {
+       private:
+        IndexAccess& access_;
+        bool writing_;
+
+       public:
+        Guard(IndexAccess& access, bool writing) : access_(access), writing_(writing) {
+            if (access.writing_ || (writing && access.readers_ != 0)) {
+                throw std::runtime_error("Index is busy: conflicting operation in progress"
+                );
+            }
+            if (writing) {
+                access.writing_ = true;
+            } else {
+                ++access.readers_;
+            }
+        }
+        Guard(const Guard&) = delete;
+        Guard& operator=(const Guard&) = delete;
+        ~Guard() {
+            if (writing_) {
+                access_.writing_ = false;
+            } else {
+                --access_.readers_;
+            }
+        }
+    };
+
+    [[nodiscard]] Guard read() { return Guard(*this, false); }
+    [[nodiscard]] Guard write() { return Guard(*this, true); }
+};
+
 inline rabitqlib::MetricType metric_from_string(const std::string& metric) {
     if (metric == "l2") {
         return rabitqlib::METRIC_L2;

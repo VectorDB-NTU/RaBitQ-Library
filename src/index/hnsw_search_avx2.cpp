@@ -28,9 +28,11 @@ struct HnswAvx2Kernel {
 };
 
 maxheap<std::pair<float, PID>> search_knn_avx2(
-    HierarchicalNSW& index, const float* rotated_query, size_t topk
+    HierarchicalNSW& index, const float* rotated_query, size_t topk, size_t ef
 ) {
-    return index.search_knn_direct<HnswAvx2Kernel>(rotated_query, topk);
+    return index.search_knn_direct<HnswAvx2Kernel>(
+        rotated_query, topk, ef == 0 ? index.ef_ : ef
+    );
 }
 
 }  // namespace rabitqlib::hnsw::detail

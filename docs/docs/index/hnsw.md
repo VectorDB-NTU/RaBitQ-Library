@@ -69,6 +69,11 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(const fl
 -  **efSearch**: The size of the candidate set for searching HNSW base layer.
 -  **thread_num**: Number of threads to use. Each query is processed by one thread.
 
+The search window belongs to each call, so concurrent C++ searches can use
+different `efSearch` values and separate outputs while the index is unchanged.
+Python search releases the GIL. Conflicting updates raise `RuntimeError`
+immediately; see the [Python concurrency contract](../quick_start.md#threading-and-file-paths).
+
 We first pre-process the query:
 
 1. Rotate the raw query vector.  
@@ -146,8 +151,9 @@ new_ids = index.add(vectors)                       # route to the nearest centro
 index.resize(index.max_elements + 100_000)
 ```
 
-It is not safe to call `add` or `resize` while another thread searches the same
-index.
+In C++, callers must prevent `add` or `resize` from overlapping with searches
+on the same index. Python detects these conflicts and raises `RuntimeError`
+immediately.
 
 `add` prepares the result IDs, quantized vectors, and link-list allocations before
 changing the graph or point count. A failure during preparation leaves those
@@ -214,8 +220,9 @@ still walks through it and `add` may link new points to it, which keeps the grap
 connected, as in hnswlib. Search never returns it, so a query can get fewer than
 `k` results once points are removed: in Python the missing slots hold `kPidMax`
 (`2**32 - 1`) with an infinite distance. Removed points still count in
-`num_points()` and cannot be restored. It is not safe to call `remove` while
-another thread searches or adds to the same index.
+`num_points()` and cannot be restored. In C++, callers must prevent `remove`
+from overlapping with searches or updates on the same index. Python detects
+these conflicts and raises `RuntimeError` immediately.
 
 #### Choosing `ef` after removals
 

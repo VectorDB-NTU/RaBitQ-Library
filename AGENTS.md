@@ -174,6 +174,12 @@ Use `python_bindings/bindings_common.hpp` for shared conversions. Validate array
 index state, and parameter ranges before entering the core. `py::array::forcecast` permits copies;
 do not use it where callers expect in-place mutation or pointer identity.
 
+Python index wrappers use `IndexAccess` for concurrent reads and fail-fast exclusive updates.
+Acquire and destroy its guards with the GIL held; release the GIL only inside the guard's
+lifetime, after extracting native pointers, and retain Python array owners until it is reacquired.
+Keep search parameters local to each call. C++ callers remain responsible for synchronizing
+index mutations.
+
 ### Rotation and padded dimensions
 
 Indexes quantize and search in the rotated, padded domain. FHT/Kac, RaBitQKMeans, QGKMeans,
