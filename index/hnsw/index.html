@@ -1564,6 +1564,10 @@ supported.</p>
 <li><strong>efSearch</strong>: The size of the candidate set for searching HNSW base layer.</li>
 <li><strong>thread_num</strong>: Number of threads to use. Each query is processed by one thread.</li>
 </ul>
+<p>The search window belongs to each call, so concurrent C++ searches can use
+different <code>efSearch</code> values and separate outputs while the index is unchanged.
+Python search releases the GIL. Conflicting updates raise <code>RuntimeError</code>
+immediately; see the <a href="../../quick_start/#threading-and-file-paths">Python concurrency contract</a>.</p>
 <p>We first pre-process the query:</p>
 <ol>
 <li>Rotate the raw query vector.  </li>
@@ -1632,8 +1636,9 @@ the index file format; files with removals have
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># new_ids = index.add(vectors, cluster_ids=labels)</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">index</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">max_elements</span> <span class="o">+</span> <span class="mi">100_000</span><span class="p">)</span>
 </code></pre></div>
-<p>It is not safe to call <code>add</code> or <code>resize</code> while another thread searches the same
-index.</p>
+<p>In C++, callers must prevent <code>add</code> or <code>resize</code> from overlapping with searches
+on the same index. Python detects these conflicts and raises <code>RuntimeError</code>
+immediately.</p>
 <p><code>add</code> prepares the result IDs, quantized vectors, and link-list allocations before
 changing the graph or point count. A failure during preparation leaves those
 unchanged. A failure during graph linking can leave the batch counted in
@@ -1684,8 +1689,9 @@ still walks through it and <code>add</code> may link new points to it, which kee
 connected, as in hnswlib. Search never returns it, so a query can get fewer than
 <code>k</code> results once points are removed: in Python the missing slots hold <code>kPidMax</code>
 (<code>2**32 - 1</code>) with an infinite distance. Removed points still count in
-<code>num_points()</code> and cannot be restored. It is not safe to call <code>remove</code> while
-another thread searches or adds to the same index.</p>
+<code>num_points()</code> and cannot be restored. In C++, callers must prevent <code>remove</code>
+from overlapping with searches or updates on the same index. Python detects
+these conflicts and raises <code>RuntimeError</code> immediately.</p>
 <h4 id="choosing-ef-after-removals">Choosing <code>ef</code> after removals<a class="headerlink" href="#choosing-ef-after-removals" title="Permanent link">&para;</a></h4>
 <p>Removed points still take slots in the <code>efSearch</code> candidate set, so a search with
 <code>efSearch</code> close to <code>k</code> finds fewer live points as removals accumulate. <code>search</code>

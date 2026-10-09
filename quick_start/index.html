@@ -1670,6 +1670,40 @@ for IVF, HNSW, and SymphonyQG. For clustering, choose
 <a href="../clustering/#rabitqkmeans">RaBitQKMeans</a> for flat assignment, recommended for small cluster
 counts, or <a href="../clustering/#qgkmeans">QGKMeans</a> for graph assignment.</p>
 <h3 id="threading-and-file-paths">Threading and file paths<a class="headerlink" href="#threading-and-file-paths" title="Permanent link">&para;</a></h3>
+<p>The current source checkout releases the Python GIL during native index search,
+construction, updates, and file I/O. The following contract applies to
+<code>IvfIndex</code>, <code>HnswIndex</code>, and <code>SymqgIndex</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Operation on the same index</th>
+<th>Concurrent access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>search</code>, <code>search_batch</code>, <code>save</code>, and property reads</td>
+<td>May run together</td>
+</tr>
+<tr>
+<td><code>build</code>, <code>add</code>, <code>remove</code>, and <code>resize</code>, where available</td>
+<td>Require exclusive access</td>
+</tr>
+</tbody>
+</table>
+<p>A conflicting call immediately raises
+<code>RuntimeError("Index is busy: conflicting operation in progress")</code>.
+It does not wait or queue an update. Access protection includes Python input
+conversion and is released when the operation returns or raises an exception.
+Different index objects can operate independently. Concurrent saves must use
+different output paths, including any sidecar files.</p>
+<p>Search parameters such as <code>ef</code>, <code>nprobe</code>, precision, and <code>num_threads</code> belong to
+each call. When using a Python thread pool, consider <code>num_threads=1</code> to avoid
+starting multiple native worker pools. Keep input arrays and any shared backing
+storage unchanged for the entire call; do not resize or modify them from another
+thread. Returned result arrays own their storage.</p>
+<p>These access checks belong to the Python wrappers. C++ callers must synchronize
+index updates themselves and use separate search output buffers.</p>
 <p><code>num_threads=0</code> selects the detected available logical CPU count. Positive values
 set an upper limit, capped at that count; small workloads may use fewer workers.
 Python index methods default to one thread; clustering defaults to <code>0</code>.

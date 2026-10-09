@@ -1595,6 +1595,10 @@ does no work. Input and output buffers must not overlap. Simultaneous searches
 need separate output buffers, and must not overlap index updates.
 Python's existing <code>index.search(queries, k, nprobe, num_threads=4)</code> uses this
 batch path with the same output and precision rules.</p>
+<p>Python search releases the GIL. Concurrent searches may use independent
+<code>nprobe</code>, <code>high_accuracy</code>, and <code>num_threads</code> values. Conflicting updates raise
+<code>RuntimeError</code> immediately; see the
+<a href="../../quick_start/#threading-and-file-paths">Python concurrency contract</a>.</p>
 <h2 id="updating-an-index">Updating an Index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
 <p>Starting with 0.5.1, C++ <code>IVF</code> and Python <code>IvfIndex</code> support <code>add()</code> and <code>remove()</code>
 on a constructed or loaded index without the original dataset. HNSW provides
@@ -1636,8 +1640,9 @@ IDs and returns the number newly removed. Duplicate IDs count once. Python
 <code>num_threads</code> defaults to 1; <code>fast_quantization</code> defaults to <code>False</code>.</p>
 <p>The stored point count (<code>max_elements()</code> in C++, <code>index.max_elements</code> in Python)
 increases after <code>add()</code> and includes removed points. Rebuilding with C++
-<code>construct</code> or Python <code>build</code> expects that many rows. Calls to <code>add()</code> or <code>remove()</code>
-must not overlap with searches or other updates on the same index.</p>
+<code>construct</code> or Python <code>build</code> expects that many rows. In C++, callers must prevent
+<code>add()</code> or <code>remove()</code> from overlapping with searches or other updates on the same
+index. Python detects these conflicts and raises <code>RuntimeError</code> immediately.</p>
 <h3 id="cost-of-add">Cost of <code>add</code><a class="headerlink" href="#cost-of-add" title="Permanent link">&para;</a></h3>
 <p><code>add</code> builds the grown index next to the old one and swaps it in, so the index is
 unchanged if it throws. Every call copies the whole storage, so:</p>

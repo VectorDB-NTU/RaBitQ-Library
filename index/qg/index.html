@@ -1436,6 +1436,20 @@ entry point. Both return <code>(ids, distances)</code> arrays of shape <code>(nu
 including empty batches. Both APIs default to one worker; <code>num_threads=0</code>
 selects the available logical CPU count, capped by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.</p>
+<p>Python search releases the GIL and uses the <code>ef</code> passed to each call without
+changing a shared default. Concurrent searches may use different windows.
+A concurrent <code>build()</code> on the same index raises <code>RuntimeError</code> immediately;
+see the <a href="../../quick_start/#threading-and-file-paths">Python concurrency contract</a>.</p>
+<p>The current source checkout also provides C++
+<code>search_batch_with_ef(queries, num_queries, k, ids, distances, ef, num_threads=1)</code>
+for concurrent calls with independent windows:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">qg</span><span class="p">.</span><span class="n">search_batch_with_ef</span><span class="p">(</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="n">queries</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="n">batch_ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">batch_distances</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">);</span>
+</code></pre></div>
+<p>This method does not read or change the default set by <code>set_ef()</code>. The existing
+<code>search()</code>, <code>search_batch()</code>, and <code>search_with_scratch()</code> retain that default.
+All concurrent searches require separate outputs and an unchanged index.</p>
 <p>See <code>sample/cpp/symqg_indexing.cpp</code>, <code>sample/cpp/symqg_querying.cpp</code>, and their
 Python counterparts for complete examples.</p>
 
