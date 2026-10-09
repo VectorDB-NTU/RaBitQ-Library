@@ -157,7 +157,7 @@ changing a shared default. Concurrent searches may use different windows.
 A concurrent `build()` on the same index raises `RuntimeError` immediately;
 see the [Python concurrency contract](../quick_start.md#threading-and-file-paths).
 
-The current source checkout also provides C++
+Starting with 0.6.0, C++ also provides
 `search_batch_with_ef(queries, num_queries, k, ids, distances, ef, num_threads=1)`
 for concurrent calls with independent windows:
 

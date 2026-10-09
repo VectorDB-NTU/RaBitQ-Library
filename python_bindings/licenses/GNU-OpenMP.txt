@@ -1,0 +1,19 @@
+GNU OpenMP runtime (libgomp)
+
+Linux release wheels bundle libgomp, the GNU Offloading and Multi Processing
+Library from GCC. Its source carries Free Software Foundation copyright notices
+and is licensed under GNU GPL version 3 or later, with the GCC Runtime Library
+Exception version 3.1.
+
+The accompanying GPL-3.0.txt and GCC-Runtime-Library-Exception.txt are unmodified
+copies of GCC's COPYING3 and COPYING.RUNTIME, retrieved from the releases/gcc-14
+branch:
+https://github.com/gcc-mirror/gcc/blob/releases/gcc-14/COPYING3
+https://github.com/gcc-mirror/gcc/blob/releases/gcc-14/COPYING.RUNTIME
+
+Upstream source and runtime documentation:
+https://gcc.gnu.org/git.html
+https://gcc.gnu.org/onlinedocs/libgomp/
+
+These notices concern the GNU runtime. RaBitQ-Library's own code remains under
+its Apache-2.0 license.

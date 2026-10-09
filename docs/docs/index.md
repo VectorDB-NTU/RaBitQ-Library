@@ -34,26 +34,25 @@ indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
   </div>
 </div>
 
-## New in 0.5.2
+## New in 0.6.0
 
-- **HNSW updates:** [Add vectors, resize capacity, and remove points](index/hnsw.md#updating-an-index)
-  from a built or loaded index without retaining the original dataset.
-- **Batch search:** Native C++ batch APIs for [IVF](index/ivf.md#querying) and
-  [SymphonyQG](index/qg.md), plus Python `SymqgIndex.search_batch()`.
-  Existing Python `search()` calls use the batch paths too.
-- **Internal optimizations:** Clustering, batch-query scratch storage, and index
-  allocation improvements.
+- **Concurrent Python queries:** Native searches release the GIL and use independent
+  parameters; conflicting updates raise an exception.
+- **IVF centroid routing:** Choose Flat, Flat RaBitQ, HNSW, or automatic selection.
+- **32-coordinate padding:** New indexes pad to multiples of 32; loading preserves
+  the saved rotation and padding.
+- **Build integration:** Eigen 5.0.1; CMake optimization flags no longer propagate
+  to downstream targets.
 
-HNSW files containing removed points require 0.5.2 or newer; see
-[removal compatibility](index/hnsw.md#how-removal-is-stored) before sharing indexes
-with older installations.
+Read the [0.6.0 upgrade notes](releases/0.6.0.md) before rebuilding indexes,
+sharing files with older installations, or updating a downstream C++ library.
 
 ## Start with Python
 
-The example requires 0.5.0 or newer; see [installation options](quick_start.md#install).
+See [installation options](quick_start.md#install) for supported platforms and source builds.
 
 ```bash
-python -m pip install "rabitqlib>=0.5.2"
+python -m pip install "rabitqlib>=0.6.0"
 ```
 
 Build an IVF index and search a batch of queries:

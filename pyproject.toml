@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "rabitqlib"
-version = "0.5.2"
+version = "0.6.0"
 description = "RaBitQ Python bindings for indexes and clustering"
 readme = "README.md"
 requires-python = ">=3.11"

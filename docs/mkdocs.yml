@@ -9,6 +9,8 @@ copyright: Copyright &copy; VectorDB Group, Nanyang Technological University
 nav:
   - Home: index.md
   - Quick Start: quick_start.md
+  - Release Notes:
+      - "0.6.0": releases/0.6.0.md
   - RaBitQ:
       - Overview: rabitq/rabitq.md
       - Rotation: rabitq/rotator.md

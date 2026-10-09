@@ -57,6 +57,8 @@ index_type ivf(num_points, dim, k, total_bits);
 
 ### Centroid routing
 
+Configurable centroid routing requires 0.6.0 or newer.
+
 The optional final C++ constructor argument selects `InitializerType::Auto`,
 `Flat`, `FlatRaBitQ`, or `HNSW` from the `rabitqlib::ivf` namespace. Python accepts
 `initializer="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:

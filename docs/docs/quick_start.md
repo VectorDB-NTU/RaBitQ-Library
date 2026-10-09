@@ -40,13 +40,11 @@ backend, or NEON; scalar fallbacks do not remove that requirement.
 ### Install
 
 ```bash
-python -m pip install "rabitqlib>=0.5.2"
+python -m pip install "rabitqlib>=0.6.0"
 ```
 
-The clustering examples require 0.5.0 or newer; the IVF update example requires
-0.5.1 or newer. HNSW `add()`/`resize()`/`remove()` require 0.5.2 or newer; see
-the [HNSW update guide](index/hnsw.md#updating-an-index). Python
-`SymqgIndex.search_batch()` also requires 0.5.2 or newer. For unreleased changes,
+Configurable IVF routing and the concurrency contract below require 0.6.0;
+see the [upgrade notes](releases/0.6.0.md). For unreleased changes,
 [install from a checkout](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes).
 
 Wheels target the platforms above and require no compiler or CMake.
@@ -153,7 +151,7 @@ counts, or [QGKMeans](clustering.md#qgkmeans) for graph assignment.
 
 ### Threading and file paths
 
-The current source checkout releases the Python GIL during native index search,
+Starting with 0.6.0, the library releases the Python GIL during native index search,
 construction, updates, and file I/O. The following contract applies to
 `IvfIndex`, `HnswIndex`, and `SymqgIndex`:
 

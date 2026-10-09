@@ -47,6 +47,16 @@ if(APPLE)
     install(FILES licenses/LLVM-OpenMP.txt DESTINATION rabitqlib/licenses)
 endif()
 
+# Linux release wheels bundle GNU OpenMP during auditwheel repair.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    install(FILES
+        licenses/GNU-OpenMP.txt
+        licenses/GPL-3.0.txt
+        licenses/GCC-Runtime-Library-Exception.txt
+        DESTINATION rabitqlib/licenses
+    )
+endif()
+
 # 5. Map files to a 'rabitqlib' directory
 # inside the target wheel, completely bypassing your local layout.
 install(TARGETS _rabitqlib DESTINATION rabitqlib)

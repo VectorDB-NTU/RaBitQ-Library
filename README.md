@@ -29,6 +29,9 @@
 
 ## News
 
+- **v0.6.0:** Concurrent Python index searches, configurable IVF centroid routing,
+  32-coordinate padding, and Eigen 5.0.1. See the
+  [upgrade notes](docs/docs/releases/0.6.0.md).
 - **October 2026 — v0.5.2:** [HNSW add, resize, and remove](docs/docs/index/hnsw.md#updating-an-index),
   batch search for IVF and SymphonyQG, and clustering and allocation optimizations.
 - **September 2026 — Cross-platform support:** C++ builds and CPython 3.11–3.14
@@ -37,7 +40,7 @@
 ## Install
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.5.2"
+python -m pip install --upgrade "rabitqlib>=0.6.0"
 ```
 
 Wheels cover the platforms above. x86-64 requires AVX2/FMA and optionally uses
