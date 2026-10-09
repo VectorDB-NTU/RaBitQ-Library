@@ -187,6 +187,16 @@ before starting the program.
 Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
 in C++; Python paths are Unicode strings on all platforms.
 
+### Index file compatibility
+
+The compatibility suite loads frozen files written by v0.5.2, compares search
+IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. See the
+[fixture provenance and coverage](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence).
+Compatibility is format-specific; preserving old readers' ability to open new
+files is not guaranteed. Consult each index's format documentation before
+downgrading the library.
+
 ### Build the Python bindings from source
 
 Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.20 or

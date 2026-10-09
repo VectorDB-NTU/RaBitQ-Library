@@ -27,6 +27,9 @@ add_executable(rabitq_tests
     ${INTEG_TESTS}
 )
 target_include_directories(rabitq_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/common)
+set_source_files_properties(unit/rabitqlib/index/historical_persistence_test.cpp
+    PROPERTIES COMPILE_DEFINITIONS
+    "RABITQ_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence/v0.5.2\"")
 rabitq_configure_target(rabitq_tests)
 
 # Link google test and rabitqlib headers

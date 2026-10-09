@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.20)
+project(rabitq_historical_fixtures LANGUAGES CXX)
+
+if(NOT IS_DIRECTORY "${RABITQ_HISTORICAL_SOURCE}")
+    message(FATAL_ERROR "Set RABITQ_HISTORICAL_SOURCE to the pinned historical checkout")
+endif()
+set(RABITQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(RABITQ_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(RABITQ_BUILD_PYTHON_BINDINGS OFF CACHE BOOL "" FORCE)
+set(RABITQ_ENABLE_NATIVE_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+add_subdirectory("${RABITQ_HISTORICAL_SOURCE}" historical)
+add_executable(generate_fixtures generate.cpp)
+target_link_libraries(generate_fixtures PRIVATE rabitqlib::rabitqlib)
