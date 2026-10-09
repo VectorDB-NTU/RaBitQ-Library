@@ -429,6 +429,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#index-file-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Index file compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#build-the-python-bindings-from-source" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1411,6 +1422,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#index-file-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Index file compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#build-the-python-bindings-from-source" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1711,6 +1733,14 @@ On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.</p>
 <p>Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
 in C++; Python paths are Unicode strings on all platforms.</p>
+<h3 id="index-file-compatibility">Index file compatibility<a class="headerlink" href="#index-file-compatibility" title="Permanent link">&para;</a></h3>
+<p>The compatibility suite loads frozen files written by v0.5.2, compares search
+IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. See the
+<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence">fixture provenance and coverage</a>.
+Compatibility is format-specific; preserving old readers' ability to open new
+files is not guaranteed. Consult each index's format documentation before
+downgrading the library.</p>
 <h3 id="build-the-python-bindings-from-source">Build the Python bindings from source<a class="headerlink" href="#build-the-python-bindings-from-source" title="Permanent link">&para;</a></h3>
 <p>Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.20 or
 newer, and OpenMP. To install the current development version on Ubuntu or
