@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://vectordb-ntu.github.io/RaBitQ-Library/benchmarks/bench/">
+        <link rel="canonical" href="https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.6.0/">
       
       
-        <link rel="prev" href="../../clustering/">
+        <link rel="prev" href="../../quick_start/">
       
       
-        <link rel="next" href="../ivf/">
+        <link rel="next" href="../../rabitq/rabitq/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Overview - RaBitQ Library</title>
+        <title>0.6.0 - RaBitQ Library</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#benchmark-overview" class="md-skip">
+        <a href="#rabitq-library-060" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Overview
+              0.6.0
             
           </span>
         </div>
@@ -315,8 +315,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -331,11 +333,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
@@ -356,7 +358,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -371,10 +373,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../releases/0.6.0/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.6.0
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -390,6 +419,98 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#upgrading-from-052" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading from 0.5.2
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Upgrading from 0.5.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python-concurrency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python concurrency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ivf-routing-and-saved-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IVF routing and saved files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#padding-and-historical-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Padding and historical compatibility
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-and-cmake-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C++ and CMake integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#other-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other changes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1007,10 +1128,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1031,11 +1150,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
         
           
           <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
@@ -1056,7 +1175,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1071,37 +1190,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Overview
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../benchmarks/bench/" class="md-nav__link">
         
   
   
@@ -1117,114 +1209,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#datasets-and-ground-truth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Datasets and ground truth
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#hardware-and-software" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Hardware and software
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#package-installation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Package installation
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#construction-and-search-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Construction and search settings
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reading-the-figures" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reading the figures
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reading-the-indexing-tables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reading the indexing tables
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scope-and-limitations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scope and limitations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#data-and-reproduction" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Data and reproduction
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1237,7 +1221,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ivf/" class="md-nav__link">
+      <a href="../../benchmarks/ivf/" class="md-nav__link">
         
   
   
@@ -1265,7 +1249,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../graphs/" class="md-nav__link">
+      <a href="../../benchmarks/graphs/" class="md-nav__link">
         
   
   
@@ -1293,7 +1277,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../kmeans/" class="md-nav__link">
+      <a href="../../benchmarks/kmeans/" class="md-nav__link">
         
   
   
@@ -1348,87 +1332,71 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#datasets-and-ground-truth" class="md-nav__link">
+  <a href="#upgrading-from-052" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Datasets and ground truth
+        Upgrading from 0.5.2
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Upgrading from 0.5.2">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python-concurrency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python concurrency
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#hardware-and-software" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#ivf-routing-and-saved-files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Hardware and software
+        IVF routing and saved files
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#package-installation" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#padding-and-historical-compatibility" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Package installation
+        Padding and historical compatibility
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#construction-and-search-settings" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#c-and-cmake-integration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Construction and search settings
+        C++ and CMake integration
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#reading-the-figures" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Reading the figures
-      
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#reading-the-indexing-tables" class="md-nav__link">
+  <a href="#other-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Reading the indexing tables
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scope-and-limitations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scope and limitations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#data-and-reproduction" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Data and reproduction
+        Other changes
       
     </span>
   </a>
@@ -1452,7 +1420,7 @@
 
 
   
-    <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/edit/main/docs/docs/benchmarks/bench.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/edit/main/docs/docs/releases/0.6.0.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1460,236 +1428,87 @@
   
 
 
-<h1 id="benchmark-overview">Benchmark overview<a class="headerlink" href="#benchmark-overview" title="Permanent link">&para;</a></h1>
-<p>Compare RaBitQ-Library, Faiss, and SuperKMeans on one Intel Xeon Gold 6418H:
-<a href="../ivf/">IVF indexes</a>, <a href="../graphs/">graph indexes</a>, and <a href="../kmeans/">k-means</a>.</p>
-<h2 id="datasets-and-ground-truth">Datasets and ground truth<a class="headerlink" href="#datasets-and-ground-truth" title="Permanent link">&para;</a></h2>
+<h1 id="rabitq-library-060">RaBitQ Library 0.6.0<a class="headerlink" href="#rabitq-library-060" title="Permanent link">&para;</a></h1>
+<p>This release adds concurrent Python index searches, configurable IVF centroid
+routing, and 32-coordinate padding. It upgrades Eigen to 5.0.1 and stops
+propagating optimization flags to CMake consumers.</p>
+<h2 id="upgrading-from-052">Upgrading from 0.5.2<a class="headerlink" href="#upgrading-from-052" title="Permanent link">&para;</a></h2>
+<h3 id="python-concurrency">Python concurrency<a class="headerlink" href="#python-concurrency" title="Permanent link">&para;</a></h3>
+<p><code>IvfIndex</code>, <code>HnswIndex</code>, and <code>SymqgIndex</code> release the GIL during native search,
+construction, updates, and file I/O. Searches, saves, and property reads may run
+together. Updates require exclusive access; conflicts immediately raise
+<code>RuntimeError("Index is busy: conflicting operation in progress")</code>.
+Applications that relied on the GIL to serialize access must coordinate updates.</p>
+<p>Keep input arrays unchanged until each call returns. HNSW's Python <code>ef</code> remains
+optional; SymphonyQG's remains required. With a Python thread pool, consider
+<code>num_threads=1</code> to avoid multiplying native worker pools. Concurrent saves need
+distinct paths, including sidecars. See the
+<a href="../../quick_start/#threading-and-file-paths">threading contract</a>.</p>
+<p>C++ callers must synchronize mutations themselves. SymphonyQG adds
+<code>search_batch_with_ef()</code> for per-call windows; existing search APIs remain available.</p>
+<h3 id="ivf-routing-and-saved-files">IVF routing and saved files<a class="headerlink" href="#ivf-routing-and-saved-files" title="Permanent link">&para;</a></h3>
+<p>Python's <code>initializer</code> accepts <code>"auto"</code>, <code>"flat"</code>, <code>"flat_rabitq"</code>, or <code>"hnsw"</code>;
+C++ provides the corresponding <code>InitializerType</code>. New indexes using <code>auto</code> select:</p>
 <table>
 <thead>
 <tr>
-<th>Dataset</th>
-<th style="text-align: right;">Base vectors</th>
-<th style="text-align: right;">Dimensions</th>
-<th>ANN metric</th>
-<th style="text-align: right;">Queries</th>
+<th>Number of clusters</th>
+<th>Initializer</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>GIST1M</td>
-<td style="text-align: right;">1,000,000</td>
-<td style="text-align: right;">960</td>
-<td>L2</td>
-<td style="text-align: right;">1,000</td>
+<td>Below 5,000</td>
+<td>Flat</td>
 </tr>
 <tr>
-<td>DBpedia / OpenAI-1536</td>
-<td style="text-align: right;">999,000</td>
-<td style="text-align: right;">1,536</td>
-<td>Inner product</td>
-<td style="text-align: right;">1,000</td>
+<td>5,000–59,999</td>
+<td>Flat RaBitQ</td>
+</tr>
+<tr>
+<td>60,000 or more</td>
+<td>HNSW</td>
 </tr>
 </tbody>
 </table>
-<p>GIST1M uses the standard TexMex split and supplied L2 ground truth. OpenAI-1536
-uses <a href="https://github.com/cwida/SuperKMeans/blob/main/BENCHMARKING.md">SuperKMeans' dataset</a>,
-preserving its split, row order, and normalized float32 values. ANN ground truth
-for OpenAI is computed by exhaustive inner-product search.</p>
-<p>All methods share one fixed query set per dataset. Queries are used only for
-evaluation. <a href="../kmeans/">K-means</a> uses L2 for both datasets and computes separate
-L2 ground truth for OpenAI.</p>
-<h2 id="hardware-and-software">Hardware and software<a class="headerlink" href="#hardware-and-software" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Value</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>CPU</td>
-<td>One Intel Xeon Gold 6418H, 24 cores, 48 hardware threads</td>
-</tr>
-<tr>
-<td>Construction / clustering</td>
-<td>48 threads</td>
-</tr>
-<tr>
-<td>Query throughput</td>
-<td>1 process, 1 search thread, 1 query per call</td>
-</tr>
-<tr>
-<td>Platform</td>
-<td>Ubuntu 22.04.5 LTS, Linux 6.8.0-84-generic, x86-64</td>
-</tr>
-<tr>
-<td>Python / NumPy</td>
-<td>3.13.15 / 2.5.2</td>
-</tr>
-<tr>
-<td>Construction and clustering compiler / CMake</td>
-<td>GCC 13.1.0 / 3.28.3, Release</td>
-</tr>
-<tr>
-<td>RaBitQ-Library</td>
-<td>0.5.2</td>
-</tr>
-<tr>
-<td>Baselines</td>
-<td>Faiss 1.15.0, SuperKMeans 0.2.0; Intel MKL 2020.4, GNU OpenMP</td>
-</tr>
-</tbody>
-</table>
-<h2 id="package-installation">Package installation<a class="headerlink" href="#package-installation" title="Permanent link">&para;</a></h2>
-<p>Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
-source providing <code>g++-13</code> and the <code>multiverse</code> component for MKL.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>build-essential<span class="w"> </span>g++-13<span class="w"> </span>git<span class="w"> </span>numactl<span class="w"> </span>curl<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>libmkl-dev<span class="w"> </span>libmkl-rt<span class="w"> </span>libmkl-gnu-thread
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>benchmarks/install_baselines.py<span class="w"> </span>--jobs<span class="w"> </span><span class="m">12</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nb">source</span><span class="w"> </span>benchmarks/env.sh
-</code></pre></div>
-<p>The installer builds RaBitQ from the checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
-in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
-and verification records are saved in <code>build/benchmark-baselines/</code>.
-Use <code>--dry-run</code> to preview installation commands.</p>
-<h2 id="construction-and-search-settings">Construction and search settings<a class="headerlink" href="#construction-and-search-settings" title="Permanent link">&para;</a></h2>
-<p>IVF uses 4,096 clusters. HNSW uses <code>M=16</code> and <code>efConstruction=200</code>;
-SymphonyQG uses degree 32. Family pages list all method settings.</p>
-<table>
-<thead>
-<tr>
-<th>Family</th>
-<th>Search grid</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>IVF</td>
-<td><code>nprobe=1,2,4,8,16,32,64,128,256,512</code></td>
-</tr>
-<tr>
-<td>Faiss IVF with RFlat</td>
-<td>Above × <code>k_factor=1,2,5,10,20</code></td>
-</tr>
-<tr>
-<td>Graph</td>
-<td><code>ef=16,32,64,128,256,512,1024</code></td>
-</tr>
-</tbody>
-</table>
-<p>Each setting searches all 1,000 queries at <code>k=10</code>, after warm-up. QPS is queries
-divided by elapsed search time, including Python call overhead and excluding
-index loading. Each setting has one timing pass.</p>
-<h2 id="reading-the-figures">Reading the figures<a class="headerlink" href="#reading-the-figures" title="Permanent link">&para;</a></h2>
-<p>Recall@10 is the mean fraction of exact top-10 neighbors returned. Faint markers
-show all measured settings; lines connect each method's Pareto frontier. QPS uses
-a logarithmic axis. The CSV contains every measured point.</p>
-<h2 id="reading-the-indexing-tables">Reading the indexing tables<a class="headerlink" href="#reading-the-indexing-tables" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Column</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Train</td>
-<td>Training or centroid clustering time</td>
-</tr>
-<tr>
-<td>Construct</td>
-<td>Encoding and index construction after training</td>
-</tr>
-<tr>
-<td>Total</td>
-<td>Construction including setup and training, excluding saving</td>
-</tr>
-<tr>
-<td>Save</td>
-<td>Serialization time</td>
-</tr>
-<tr>
-<td>Index GiB</td>
-<td>Serialized files, including sidecars and retained raw vectors</td>
-</tr>
-</tbody>
-</table>
-<p>Times are seconds. Data preparation, ground-truth generation, and correctness
-checks are outside construction timing.</p>
-<h2 id="scope-and-limitations">Scope and limitations<a class="headerlink" href="#scope-and-limitations" title="Permanent link">&para;</a></h2>
-<p>Each method has one build or fit per dataset; results do not measure run-to-run
-variation.</p>
-<h2 id="data-and-reproduction">Data and reproduction<a class="headerlink" href="#data-and-reproduction" title="Permanent link">&para;</a></h2>
-<p>Run from the repository root after installation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Prepare data, run all benchmarks, and export results</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>benchmarks/reproduce.py
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Prepare data only</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>benchmarks/download_datasets.py
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Selected results</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>ivf<span class="w"> </span>--datasets<span class="w"> </span>gist1m
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--datasets<span class="w"> </span>dbpedia<span class="w"> </span>--methods<span class="w"> </span>qgkmeans
-</code></pre></div>
-<p>Downloads preserve the published splits and check file sizes and vector shapes. GIST and
-OpenAI need about 26 GB for downloads and prepared data; indexes and temporary
-workspace require additional space.</p>
-<table>
-<thead>
-<tr>
-<th>Content</th>
-<th>Default location</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Download cache</td>
-<td><code>data/benchmark-downloads/</code></td>
-</tr>
-<tr>
-<td>GIST vectors and ground truth</td>
-<td><code>data/gist/</code></td>
-</tr>
-<tr>
-<td>OpenAI vectors and ANN ground truth</td>
-<td><code>data/dbpedia/</code></td>
-</tr>
-<tr>
-<td>ANN build records / query records</td>
-<td><code>results/benchmarks/ann/&lt;dataset&gt;/</code> / <code>results/benchmarks/ann/sweeps/&lt;dataset&gt;/</code></td>
-</tr>
-<tr>
-<td>Saved indexes</td>
-<td><code>results/benchmarks/ann/indexes/</code></td>
-</tr>
-<tr>
-<td>K-means records, centroids, assignments</td>
-<td><code>results/benchmarks/kmeans/&lt;dataset&gt;/</code></td>
-</tr>
-<tr>
-<td>Logs</td>
-<td><code>results/benchmarks/ann/logs/</code>, <code>results/benchmarks/kmeans/logs/</code></td>
-</tr>
-<tr>
-<td>Tables / CSVs and SVGs / website</td>
-<td><code>docs/docs/benchmarks/</code> / <code>docs/docs/benchmarks/figures/</code> / <code>docs/site/</code></td>
-</tr>
-</tbody>
-</table>
-<p>Existing results are skipped. Use a fresh <code>--output-dir</code> to repeat measurements;
-this changes raw result and log paths, while documentation exports retain the
-paths above. Partial exports preserve unselected results.</p>
-<p>Use <code>--stage build</code>, <code>--stage query</code>, or <code>--stage export</code> for one stage. Querying
-reuses saved indexes; export runs no experiments. <code>--dry-run</code> previews commands;
-<code>--help</code> lists methods. Both datasets are selected by default.</p>
-<p><code>data/</code> and <code>results/</code> are ignored by Git. The downloader accepts <code>--datasets</code>,
-<code>--data-dir</code>, and <code>--cache-dir</code>; runners expect the default data paths.</p>
-<p><a href="../figures/qps-recall-points.csv">Query CSV</a> · <a href="../figures/indexing.csv">Indexing CSV</a> ·
-<a href="../figures/kmeans.csv">K-means CSV</a></p>
+<p>Flat RaBitQ and HNSW routing are approximate, so rebuilding with <code>auto</code> can change
+recall and latency. To retain the previous routing policy, select Flat below
+20,000 clusters and HNSW otherwise.</p>
+<p>New IVF saves use <code>RABQIDX1</code> version 2 and record the resolved initializer.
+<strong>Older releases cannot read these files.</strong> Current readers support legacy
+quantized files, raw v1 files, and <code>RABQIDX1</code> v1 files, retaining historical routing
+rules where needed. Keep the <code>.hnsw</code> sidecar with HNSW-routed indexes.
+See the <a href="../../index/ivf/">IVF format guide</a>.</p>
+<h3 id="padding-and-historical-compatibility">Padding and historical compatibility<a class="headerlink" href="#padding-and-historical-compatibility" title="Permanent link">&para;</a></h3>
+<p>New indexes and clustering pad dimensions to multiples of 32. Loading preserves
+the saved padding and rotation, including historical 64-coordinate padding.
+Older HNSW and SymphonyQG readers that require multiples of 64 cannot load
+new files whose stored padding is not divisible by 64.</p>
+<p>Tests cover frozen v0.5.2 IVF, HNSW, and raw/quantized SymphonyQG files under L2
+and inner product, including queries, resave/load migration, and malformed files.
+This coverage does not guarantee compatibility with every historical format.
+Keep original files if you may need to downgrade. See the
+<a href="../../quick_start/#index-file-compatibility">compatibility overview</a>.</p>
+<h3 id="c-and-cmake-integration">C++ and CMake integration<a class="headerlink" href="#c-and-cmake-integration" title="Permanent link">&para;</a></h3>
+<p>Rebuild downstream C++ code with matching headers and libraries; the C++ ABI
+remains under development. Check code that uses exposed Eigen types against Eigen 5.0.1.</p>
+<p><code>rabitqlib::rabitqlib</code> still supplies C++17, OpenMP, and required header definitions,
+but no longer propagates <code>-O3</code> or <code>-march=native</code>. Set your application's optimization
+flags explicitly, including for inline library code. Sanitizer builds still
+propagate instrumentation and runtime linkage.</p>
+<p>Local first-party builds enable native tuning by default. Set
+<code>RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code> for portable builds; release wheels use
+this setting and runtime dispatch.</p>
+<h2 id="other-changes">Other changes<a class="headerlink" href="#other-changes" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Thread-count detection accounts for Linux CPU affinity and supported OpenMP placement settings.
+  Clustering reduces parallelism in short graph-building phases.</li>
+<li>HNSW construction/insertion error handling and allocation-failure tests are improved.</li>
+<li>Linux packages include GNU OpenMP license and exception texts.</li>
+<li>Benchmark results and reproduction protocols are documented with their software versions.</li>
+</ul>
+<p>Saving still writes directly to destination files. Applications manage backups
+and coordinate access to those files.</p>
 
 
 
@@ -1725,7 +1544,7 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../clustering/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Clustering">
+          <a href="../../quick_start/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Quick Start">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1735,20 +1554,20 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
                 Previous
               </span>
               <div class="md-ellipsis">
-                Clustering
+                Quick Start
               </div>
             </div>
           </a>
         
         
           
-          <a href="../ivf/" class="md-footer__link md-footer__link--next" aria-label="Next: IVF Indexes">
+          <a href="../../rabitq/rabitq/" class="md-footer__link md-footer__link--next" aria-label="Next: Overview">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                IVF Indexes
+                Overview
               </div>
             </div>
             <div class="md-footer__button md-icon">
