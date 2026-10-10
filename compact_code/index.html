@@ -734,6 +734,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#how-to-read-the-layouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to read the layouts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#final-32-coordinate-tail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Final 32-coordinate tail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#1-bit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -815,6 +837,17 @@
     <span class="md-ellipsis">
       
         8-bit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#packing-api-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packing API example
       
     </span>
   </a>
@@ -1350,6 +1383,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#how-to-read-the-layouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to read the layouts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#final-32-coordinate-tail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Final 32-coordinate tail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#1-bit" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1437,6 +1492,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#packing-api-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packing API example
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1465,10 +1531,255 @@
 <h1 id="compact-storage-of-codes">Compact Storage of Codes<a class="headerlink" href="#compact-storage-of-codes" title="Permanent link">&para;</a></h1>
 <p>This section describes packing <strong>extended codes</strong> with 1–8 bits per dimension.
 IVF and HNSW store a separate sign bit, giving total quantized widths of 1–9 bits;
-one-bit quantization has no extended code. Dimensions are padded to a multiple
-of 64 for these layouts. The implementation is in
+one-bit quantization has no extended code. These layouts accept dimensions that
+are multiples of 32. Pass the padded dimension and already padded, quantized
+codes: the packing function does not add padding itself. For rotated vectors,
+use the dimension returned by <code>rotator-&gt;size()</code>; see <a href="../rabitq/rotator/">Random Rotation</a>.
+The implementation is in
 <code>rabitqlib/quantization/pack_excode.hpp</code>.</p>
-<p>Example 
+<h2 id="how-to-read-the-layouts">How to read the layouts<a class="headerlink" href="#how-to-read-the-layouts" title="Permanent link">&para;</a></h2>
+<p><strong>The padding requirement is 32 coordinates, not 64.</strong> New indexes round the
+original dimension up to a multiple of 32. The 64-coordinate blocks below
+describe how codes are arranged in memory after padding; they do not impose
+another padding step.</p>
+<p>For 2, 3, 5, 6, and 7 extended bits, packing processes as many complete
+64-coordinate blocks as fit, followed by a compact 32-coordinate tail when
+needed. For example:</p>
+<table>
+<thead>
+<tr>
+<th>Original dimension</th>
+<th>Padded dimension</th>
+<th>Packed layout for 2, 3, 5, 6, or 7 extended bits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>65</td>
+<td>96</td>
+<td>One 64-coordinate block + one 32-coordinate tail</td>
+</tr>
+<tr>
+<td>96</td>
+<td>96</td>
+<td>One 64-coordinate block + one 32-coordinate tail</td>
+</tr>
+<tr>
+<td>97</td>
+<td>128</td>
+<td>Two 64-coordinate blocks</td>
+</tr>
+<tr>
+<td>129</td>
+<td>160</td>
+<td>Two 64-coordinate blocks + one 32-coordinate tail</td>
+</tr>
+</tbody>
+</table>
+<p>At the packing API, a 32-coordinate input uses only the tail layout for these
+widths, with no complete block. Rotators and indexes have their own supported
+input-dimension ranges; this packing rule does not change them.</p>
+<p>For 1, 4, and 8 extended bits, the layout repeats in smaller units and needs no
+special tail encoding. The figures group 64 coordinates only to make comparison
+with the other widths easier. For every width, <code>dim</code> padded coordinates occupy
+exactly <code>dim * bits / 8</code> bytes; no unused half-block is stored.</p>
+<p>Throughout this page, <code>c[i]</code> is the unsigned extended code at coordinate <code>i</code>
+within the current block, in the range <code>0</code> through <code>(1 &lt;&lt; bits) - 1</code>.
+Byte offsets are relative to that block, bit 0 is the least-significant bit,
+and division in offset formulas is integer division. These are extended-code
+layouts, not the separate sign-code layout used by IVF and HNSW.</p>
+<p>Within each byte-layout example, byte addresses increase from top to bottom, and bit positions
+increase <strong>from left to right: bit 0 (LSB) to bit 7 (MSB)</strong>. This is the reverse
+of how a binary number is usually written. A box labeled <code>c[16]</code> means the code
+at coordinate 16, not the literal value 16. Where a code is split, the second
+line identifies which source bits are stored. Colors only help separate fields;
+the labels specify the layout.</p>
+<p>To locate a code, first identify its 64-coordinate block, then apply the
+corresponding byte layout below. If the last block has only 32 coordinates,
+use the tail layout instead. Each complete block occupies <code>8 * bits</code> bytes,
+so the second block starts at byte <code>8 * bits</code>, the third at <code>16 * bits</code>, and so on.</p>
+<h2 id="final-32-coordinate-tail">Final 32-coordinate tail<a class="headerlink" href="#final-32-coordinate-tail" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>1 bit:</strong> Store the 32 binary values sequentially in 4 bytes.</li>
+<li><strong>2, 3, 5, 6, or 7 bits:</strong> After the complete 64-coordinate blocks, append
+  the remaining 32 codes in coordinate order, least-significant bit first,
+  as a contiguous bit stream of <code>32 * bits / 8</code> bytes. The split-plane layouts
+  illustrated below apply only to complete blocks.</li>
+<li><strong>4 bits:</strong> Continue the existing 16-coordinate layout for two groups,
+  using 16 bytes in total; no special tail encoding is needed.</li>
+<li><strong>8 bits:</strong> Append the 32 code bytes directly.</li>
+</ul>
+<p>For example, 96 coordinates at 3 extended bits use a 24-byte full block
+followed by a 12-byte tail, for 36 bytes total. The diagram below uses global
+coordinate and byte offsets to show where the tail begins. Each small box in
+the detail represents one stored bit; a code can cross a byte boundary.</p>
+<p><img alt="A 96-coordinate 3-bit code: a 24-byte full block followed by a 12-byte tail, with individual tail bits shown across bytes 24–26." src="../assets/img/compact/tail-3bit.svg" /></p>
+<p>Use <code>unpacking_rabitqplus_code</code> with the same dimension and extended bit width to
+recover the codes; the packed layout is independent of the selected SIMD backend.</p>
+<h2 id="1-bit">1-bit<a class="headerlink" href="#1-bit" title="Permanent link">&para;</a></h2>
+<p>Each complete block occupies eight bytes. Code <code>c[i]</code> is stored in bit
+<code>i % 8</code> of byte <code>i / 8</code>: byte 0 contains coordinates 0–7, from the least
+to the most significant bit. A 32-coordinate tail follows the same order
+and occupies four bytes.</p>
+<h2 id="2-bit">2-bit<a class="headerlink" href="#2-bit" title="Permanent link">&para;</a></h2>
+<p><img alt="2-bit full-block bytes 0, 1, and 15, with four code fields per byte ordered from bit 0 to bit 7." src="../assets/img/compact/2bit.svg" /></p>
+<p>Each complete block occupies 16 bytes. Each row in the figure represents a
+byte, with the fields shown from least to most significant, left to right.
+For <code>j = 0, ..., 15</code>, byte <code>j</code> contains:</p>
+<table>
+<thead>
+<tr>
+<th>Bits 0–1</th>
+<th>Bits 2–3</th>
+<th>Bits 4–5</th>
+<th>Bits 6–7</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>c[j]</code></td>
+<td><code>c[16 + j]</code></td>
+<td><code>c[32 + j]</code></td>
+<td><code>c[48 + j]</code></td>
+</tr>
+</tbody>
+</table>
+<p>For example, byte 0 is <code>c[0] | (c[16] &lt;&lt; 2) | (c[32] &lt;&lt; 4) | (c[48] &lt;&lt; 6)</code>.
+The final 32-coordinate tail uses the contiguous bit stream described above,
+not a truncated version of this full-block layout.</p>
+<h2 id="3-bit-2-bit-1-bit">3-bit = 2-bit + 1-bit<a class="headerlink" href="#3-bit-2-bit-1-bit" title="Permanent link">&para;</a></h2>
+<p>Each complete block occupies 24 bytes. The first 16 bytes use the 2-bit
+layout above with each code masked by <code>3</code>. The last eight bytes store bit 2
+of each code in a transposed bit plane: coordinate <code>i</code> maps to bit <code>i / 8</code>
+of byte <code>16 + i % 8</code>.</p>
+<p>For example, byte 16 contains the highest bits of coordinates
+0, 8, 16, 24, 32, 40, 48, and 56, in increasing bit order. This differs from
+the standalone 1-bit layout, whose first byte contains coordinates 0–7.
+A final 32-coordinate tail instead stores all three bits of each code
+consecutively, as described above.</p>
+<p><img alt="Comparison of the sequential 1-bit layout with the transposed highest-bit plane used by 3-, 5-, and 7-bit full blocks." src="../assets/img/compact/odd-high-bits.svg" /></p>
+<h2 id="4-bit">4-bit<a class="headerlink" href="#4-bit" title="Permanent link">&para;</a></h2>
+<p>Each complete 64-coordinate block occupies 32 bytes, organized as four
+16-coordinate groups. In each group, the first eight codes occupy the low
+nibbles and the next eight occupy the high nibbles.</p>
+<p><img alt="4-bit byte pairs, including coordinates 0 and 8 in byte 0, compared with the 5-bit low-part pairing of coordinates 0 and 16." src="../assets/img/compact/4bit.svg" /></p>
+<p>For <code>j = 0, ..., 7</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Byte offset</th>
+<th>Low nibble (bits 0–3)</th>
+<th>High nibble (bits 4–7)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>j</code></td>
+<td><code>c[j]</code></td>
+<td><code>c[8 + j]</code></td>
+</tr>
+<tr>
+<td><code>8 + j</code></td>
+<td><code>c[16 + j]</code></td>
+<td><code>c[24 + j]</code></td>
+</tr>
+<tr>
+<td><code>16 + j</code></td>
+<td><code>c[32 + j]</code></td>
+<td><code>c[40 + j]</code></td>
+</tr>
+<tr>
+<td><code>24 + j</code></td>
+<td><code>c[48 + j]</code></td>
+<td><code>c[56 + j]</code></td>
+</tr>
+</tbody>
+</table>
+<p>For example, byte 0 is <code>c[0] | (c[8] &lt;&lt; 4)</code>, and byte 31 is
+<code>c[55] | (c[63] &lt;&lt; 4)</code>. If <code>c[0] = 3</code> and <code>c[8] = 10</code>, byte 0 is
+<code>3 | (10 &lt;&lt; 4) = 0xA3</code>. The diagram places the low nibble <code>3</code> on the left;
+hexadecimal notation writes the high nibble <code>A</code> first.</p>
+<p>This layout supports efficient shifting and masking
+in the library's AVX2, AVX-512, and NEON unpacking kernels.</p>
+<h2 id="5-bit-4-bit-1-bit">5-bit = 4-bit + 1-bit<a class="headerlink" href="#5-bit-4-bit-1-bit" title="Permanent link">&para;</a></h2>
+<p>This decomposition describes the bit widths, not a concatenation of the
+standalone 4-bit and 1-bit encodings. For a complete 64-coordinate block,
+the first 32 bytes store the low four bits with a different coordinate pairing.
+For <code>j = 0, ..., 15</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Byte offset</th>
+<th>Low nibble (bits 0–3)</th>
+<th>High nibble (bits 4–7)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>j</code></td>
+<td><code>c[j] &amp; 15</code></td>
+<td><code>c[16 + j] &amp; 15</code></td>
+</tr>
+<tr>
+<td><code>16 + j</code></td>
+<td><code>c[32 + j] &amp; 15</code></td>
+<td><code>c[48 + j] &amp; 15</code></td>
+</tr>
+</tbody>
+</table>
+<p>The remaining eight bytes store bit 4 of each code: coordinate <code>i</code> maps to
+bit <code>i / 8</code> of byte <code>32 + i % 8</code>. As in the 3-bit layout, this is a
+transposed bit plane, not the standalone 1-bit layout. The block occupies
+40 bytes in total. A final 32-coordinate tail instead uses the contiguous
+bit stream described above.</p>
+<h2 id="6-bit">6-bit<a class="headerlink" href="#6-bit" title="Permanent link">&para;</a></h2>
+<p>Each complete 64-coordinate block occupies 48 bytes. Codes 0–47 occupy
+the low six bits of their respective bytes. Codes 48–63 are split into three
+two-bit pieces, stored in the high two bits of the three 16-byte groups.</p>
+<p><img alt="6-bit layout showing c[48] split across the high two bits of bytes 0, 16, and 32, beside the complete codes c[0], c[16], and c[32]." src="../assets/img/compact/6bit.svg" /></p>
+<p>For <code>j = 0, ..., 15</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Byte offset</th>
+<th>Low six bits (bits 0–5)</th>
+<th>High two bits (bits 6–7)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>j</code></td>
+<td><code>c[j]</code></td>
+<td><code>c[48 + j] &amp; 3</code> (code bits 0–1)</td>
+</tr>
+<tr>
+<td><code>16 + j</code></td>
+<td><code>c[16 + j]</code></td>
+<td><code>(c[48 + j] &gt;&gt; 2) &amp; 3</code> (code bits 2–3)</td>
+</tr>
+<tr>
+<td><code>32 + j</code></td>
+<td><code>c[32 + j]</code></td>
+<td><code>(c[48 + j] &gt;&gt; 4) &amp; 3</code> (code bits 4–5)</td>
+</tr>
+</tbody>
+</table>
+<p>For example, byte 0 is <code>c[0] | ((c[48] &amp; 3) &lt;&lt; 6)</code>, and byte 32 is
+<code>c[32] | (((c[48] &gt;&gt; 4) &amp; 3) &lt;&lt; 6)</code>.</p>
+<p>This layout supports efficient shifting and masking in the library's AVX2, AVX-512, and NEON unpacking kernels.</p>
+<h2 id="7-bit-6-bit-1-bit">7-bit = 6-bit + 1-bit<a class="headerlink" href="#7-bit-6-bit-1-bit" title="Permanent link">&para;</a></h2>
+<p>Each complete block occupies 56 bytes. The first 48 bytes use the 6-bit
+layout above with each code masked by <code>63</code>. The last eight bytes store bit 6
+of each code in the same transposed order used for 3-bit and 5-bit codes:
+coordinate <code>i</code> maps to bit <code>i / 8</code> of byte <code>48 + i % 8</code>.</p>
+<p>For example, byte 48 contains the highest bits of coordinates
+0, 8, 16, 24, 32, 40, 48, and 56, in increasing bit order. It does not use
+the standalone 1-bit layout. A final 32-coordinate tail instead stores all
+seven bits of each code consecutively, as described above.</p>
+<h2 id="8-bit">8-bit<a class="headerlink" href="#8-bit" title="Permanent link">&para;</a></h2>
+<p>Each code is copied directly: byte <code>i</code> is <code>c[i]</code>. A complete block occupies
+64 bytes, and a final 32-coordinate tail occupies 32 bytes.</p>
+<h2 id="packing-api-example">Packing API example<a class="headerlink" href="#packing-api-example" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/quantization/pack_excode.hpp&gt;</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;cstddef&gt;</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;cstdint&gt;</span>
@@ -1491,30 +1802,7 @@ of 64 for these layouts. The implementation is in
 <a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">        </span><span class="n">code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">compact_code</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">bits</span>
 <a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="p">);</span>
 <a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="p">}</span>
-</code></pre></div></p>
-<p>The following shows the compact storage format for every 64 dimensions.</p>
-<h2 id="1-bit">1-bit<a class="headerlink" href="#1-bit" title="Permanent link">&para;</a></h2>
-<p>The code sequentially stores the binary value for each of the 64 dimensions. </p>
-<h2 id="2-bit">2-bit<a class="headerlink" href="#2-bit" title="Permanent link">&para;</a></h2>
-<p><img align="center" alt="2-bit Storage" src="../assets/img/compact/2bit.png" width="300px" /></p>
-<p>The code is stored in a byte array of length 16. Each row in the figure represents a byte. The 0-th byte stores the 2-bit codes of the 0-th, 16-th, 32-th and 48-th dimensions. The 1-th byte stores the 2-bit codes of the 1-th, 17-th, 33-th and 49-th dimensions, and so on. This layout supports efficient shifting and masking in the library's AVX2, AVX-512, and NEON unpacking kernels.</p>
-<h2 id="3-bit-2-bit-1-bit">3-bit = 2-bit + 1-bit<a class="headerlink" href="#3-bit-2-bit-1-bit" title="Permanent link">&para;</a></h2>
-<h2 id="4-bit">4-bit<a class="headerlink" href="#4-bit" title="Permanent link">&para;</a></h2>
-<p><img align="center" alt="4-bit Storage" src="../assets/img/compact/4bit.png" width="600px" /></p>
-<p>The code is stored in a byte array of length 32. The 0-th byte stores the 4-bit codes of the 0-th and 16-th dimensions. The 1-th byte stores the 4-bit codes of the 1-th and 17-th dimensions, and so on. This layout supports efficient shifting and masking in the library's AVX2, AVX-512, and NEON unpacking kernels.</p>
-<h2 id="5-bit-4-bit-1-bit">5-bit = 4-bit + 1-bit<a class="headerlink" href="#5-bit-4-bit-1-bit" title="Permanent link">&para;</a></h2>
-<h2 id="6-bit">6-bit<a class="headerlink" href="#6-bit" title="Permanent link">&para;</a></h2>
-<p><img align="center" alt="6-bit Storage" src="../assets/img/compact/6bit.png" width="900px" /></p>
-<p>The code is stored in a byte array of length 48. </p>
-<ul>
-<li>The first 16 bytes store the 6-bit codes of the 0-th to the 15-th dimensions and the upper 2-bit codes of the 32-th to 47-th dimensions.</li>
-<li>The second 16 bytes store the 6-bit codes of the 16-th to the 31-th dimensions and the upper 2-bit codes of the 48-th to 63-th dimensions.</li>
-<li>The third 16 bytes store the lower 4-bit codes of the 32-th to 47-th dimensions and the lower 4-bit codes of the 48-th to 63-th dimensions.</li>
-</ul>
-<p>This layout supports efficient shifting and masking in the library's AVX2, AVX-512, and NEON unpacking kernels.</p>
-<h2 id="7-bit-6-bit-1-bit">7-bit = 6-bit + 1-bit<a class="headerlink" href="#7-bit-6-bit-1-bit" title="Permanent link">&para;</a></h2>
-<h2 id="8-bit">8-bit<a class="headerlink" href="#8-bit" title="Permanent link">&para;</a></h2>
-<p>The code of 8-bit is aligned with byte arrays and needs no specialized design.</p>
+</code></pre></div>
 
 
 

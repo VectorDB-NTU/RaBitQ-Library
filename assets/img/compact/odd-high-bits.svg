@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="410" viewBox="0 0 800 410" role="img" aria-labelledby="title desc">
+<title id="title">Odd widths: the highest bits are transposed</title><desc id="desc">Standalone one-bit byte zero holds coordinates zero through seven. In a three-, five-, or seven-bit block, byte B holds highest bits of coordinates zero, eight, through fifty-six.</desc>
+<g font-family="DejaVu Sans, sans-serif" fill="#172033">
+<rect width="800" height="410" rx="12" fill="#ffffff"/>
+<text x="24" y="35" font-size="23" text-anchor="start" font-weight="bold">Odd widths: the highest bits are transposed</text>
+<text x="24" y="64" font-size="17" text-anchor="start" font-weight="normal">Each row is one byte. Left = bit 0 (LSB); right = bit 7 (MSB).</text>
+<text x="24" y="131" font-size="17" text-anchor="start" font-weight="bold">1-bit byte 0</text>
+<rect x="176" y="100" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="212.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[0]</text>
+<text x="212.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="248" y="100" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="284.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[1]</text>
+<text x="284.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="320" y="100" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="356.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[2]</text>
+<text x="356.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="392" y="100" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="428.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[3]</text>
+<text x="428.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="464" y="100" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="500.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[4]</text>
+<text x="500.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="536" y="100" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="572.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[5]</text>
+<text x="572.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="608" y="100" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="644.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[6]</text>
+<text x="644.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="680" y="100" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="716.0" y="124" font-size="18" text-anchor="middle" font-weight="normal">c[7]</text>
+<text x="716.0" y="146" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<text x="24" y="187" font-size="17" text-anchor="start" font-weight="normal">3-, 5-, 7-bit full blocks: take the highest bit h from each code.</text>
+<text x="24" y="236" font-size="17" text-anchor="start" font-weight="bold">Byte B</text>
+<rect x="176" y="205" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="212.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[0]</text>
+<text x="212.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="248" y="205" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="284.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[8]</text>
+<text x="284.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="320" y="205" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="356.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[16]</text>
+<text x="356.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="392" y="205" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="428.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[24]</text>
+<text x="428.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="464" y="205" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="500.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[32]</text>
+<text x="500.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="536" y="205" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="572.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[40]</text>
+<text x="572.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="608" y="205" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="644.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[48]</text>
+<text x="644.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="680" y="205" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="716.0" y="229" font-size="18" text-anchor="middle" font-weight="normal">c[56]</text>
+<text x="716.0" y="251" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<text x="24" y="304" font-size="17" text-anchor="start" font-weight="bold">Byte B + 1</text>
+<rect x="176" y="273" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="212.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[1]</text>
+<text x="212.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="248" y="273" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="284.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[9]</text>
+<text x="284.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="320" y="273" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="356.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[17]</text>
+<text x="356.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="392" y="273" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="428.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[25]</text>
+<text x="428.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="464" y="273" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="500.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[33]</text>
+<text x="500.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="536" y="273" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="572.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[41]</text>
+<text x="572.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="608" y="273" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="644.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[49]</text>
+<text x="644.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<rect x="680" y="273" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="716.0" y="297" font-size="18" text-anchor="middle" font-weight="normal">c[57]</text>
+<text x="716.0" y="319" font-size="14" text-anchor="middle" font-weight="normal">bit h</text>
+<text x="24" y="362" font-size="17" text-anchor="start" font-weight="normal">3-bit: B = 16, h = 2     5-bit: B = 32, h = 4     7-bit: B = 48, h = 6</text>
+<text x="24" y="390" font-size="17" text-anchor="start" font-weight="normal">Continue through byte B + 7. Each full block has its own eight-byte plane.</text>
+</g>
+</svg>
