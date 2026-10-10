@@ -1542,16 +1542,31 @@ L2 ground truth for OpenAI.</p>
 </tbody>
 </table>
 <h2 id="package-installation">Package installation<a class="headerlink" href="#package-installation" title="Permanent link">&para;</a></h2>
+<p>The tables and figures are historical results, labeled RaBitQ-Library 0.5.2.
+The published source, scripts, and results are available together at snapshot
+<code>a332c1ce97588aaed4f6a8a5476f84a81f947313</code>. To run that snapshot's protocol,
+start in a separate checkout and activate your benchmark Python environment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>--no-checkout<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git<span class="w"> </span>RaBitQ-benchmark-snapshot
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-benchmark-snapshot
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>git<span class="w"> </span>checkout<span class="w"> </span>--detach<span class="w"> </span>a332c1ce97588aaed4f6a8a5476f84a81f947313
+</code></pre></div>
+<p>This pins the published snapshot, not a verified original measurement binary:
+the published CSVs do not record the exact source commit used for those binaries.
+The version label alone does not establish that they match the <code>v0.5.2</code> release tag.
+Exact reproduction of the original binaries therefore remains unverified.</p>
+<p>To benchmark current code instead, use your current checkout and record its
+commit and any local changes. Treat those measurements as a new run, separate
+from the historical results below.</p>
 <p>Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
 source providing <code>g++-13</code> and the <code>multiverse</code> component for MKL.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>build-essential<span class="w"> </span>g++-13<span class="w"> </span>git<span class="w"> </span>numactl<span class="w"> </span>curl<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>libmkl-dev<span class="w"> </span>libmkl-rt<span class="w"> </span>libmkl-gnu-thread
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>benchmarks/install_baselines.py<span class="w"> </span>--jobs<span class="w"> </span><span class="m">12</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nb">source</span><span class="w"> </span>benchmarks/env.sh
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>build-essential<span class="w"> </span>g++-13<span class="w"> </span>git<span class="w"> </span>numactl<span class="w"> </span>curl<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>libmkl-dev<span class="w"> </span>libmkl-rt<span class="w"> </span>libmkl-gnu-thread
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>benchmarks/install_baselines.py<span class="w"> </span>--jobs<span class="w"> </span><span class="m">12</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nb">source</span><span class="w"> </span>benchmarks/env.sh
 </code></pre></div>
-<p>The installer builds RaBitQ from the checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
+<p>The installer builds RaBitQ from the selected checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
 in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
 and verification records are saved in <code>build/benchmark-baselines/</code>.
 Use <code>--dry-run</code> to preview installation commands.</p>
@@ -1624,16 +1639,17 @@ checks are outside construction timing.</p>
 <p>Each method has one build or fit per dataset; results do not measure run-to-run
 variation.</p>
 <h2 id="data-and-reproduction">Data and reproduction<a class="headerlink" href="#data-and-reproduction" title="Permanent link">&para;</a></h2>
-<p>Run from the repository root after installation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Prepare data, run all benchmarks, and export results</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>benchmarks/reproduce.py
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Prepare data only</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>benchmarks/download_datasets.py
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Selected results</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>ivf<span class="w"> </span>--datasets<span class="w"> </span>gist1m
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--datasets<span class="w"> </span>dbpedia<span class="w"> </span>--methods<span class="w"> </span>qgkmeans
+<p>Run from the selected checkout's repository root after installation. Use the
+same checkout for installation and measurement:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Prepare data, run all benchmarks, and export results</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>python<span class="w"> </span>benchmarks/reproduce.py
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Prepare data only</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>python<span class="w"> </span>benchmarks/download_datasets.py
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Selected results</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>ivf<span class="w"> </span>--datasets<span class="w"> </span>gist1m
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--datasets<span class="w"> </span>dbpedia<span class="w"> </span>--methods<span class="w"> </span>qgkmeans
 </code></pre></div>
 <p>Downloads preserve the published splits and check file sizes and vector shapes. GIST and
 OpenAI need about 26 GB for downloads and prepared data; indexes and temporary
