@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="490" viewBox="0 0 800 490" role="img" aria-labelledby="title desc">
+<title id="title">3-bit example: 96 coordinates, 36 bytes</title><desc id="desc">A 24-byte complete block is followed by a 12-byte tail. Tail codes are packed consecutively, even across byte boundaries.</desc>
+<g font-family="DejaVu Sans, sans-serif" fill="#172033">
+<rect width="800" height="490" rx="12" fill="#ffffff"/>
+<text x="24" y="35" font-size="23" text-anchor="start" font-weight="bold">3-bit example: 96 coordinates, 36 bytes</text>
+<text x="24" y="64" font-size="17" text-anchor="start" font-weight="normal">Detail rows: one byte each. Left = bit 0 (LSB); right = bit 7 (MSB).</text>
+<rect x="24" y="85" width="480" height="65" fill="#dbeafe" stroke="#64748b"/>
+<rect x="504" y="85" width="240" height="65" fill="#fef3c7" stroke="#64748b"/>
+<text x="264" y="112" font-size="18" text-anchor="middle" font-weight="normal">Coordinates 0–63</text>
+<text x="264" y="137" font-size="17" text-anchor="middle" font-weight="normal">bytes 0–23: split planes</text>
+<text x="624" y="112" font-size="18" text-anchor="middle" font-weight="normal">Coordinates 64–95</text>
+<text x="624" y="137" font-size="17" text-anchor="middle" font-weight="normal">bytes 24–35: tail</text>
+<text x="24" y="180" font-size="16" text-anchor="start" font-weight="normal">Tail detail: coordinate numbers below refer to the entire 96-coordinate input.</text>
+<text x="24" y="231" font-size="17" text-anchor="start" font-weight="bold">Byte 24</text>
+<rect x="176" y="200" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="212.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[64]</text>
+<text x="212.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="248" y="200" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="284.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[64]</text>
+<text x="284.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="320" y="200" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="356.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[64]</text>
+<text x="356.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="392" y="200" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="428.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[65]</text>
+<text x="428.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="464" y="200" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="500.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[65]</text>
+<text x="500.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="536" y="200" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="572.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[65]</text>
+<text x="572.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="608" y="200" width="72" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="644.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[66]</text>
+<text x="644.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="680" y="200" width="72" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="716.0" y="224" font-size="18" text-anchor="middle" font-weight="normal">c[66]</text>
+<text x="716.0" y="246" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<text x="24" y="303" font-size="17" text-anchor="start" font-weight="bold">Byte 25</text>
+<rect x="176" y="272" width="72" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="212.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[66]</text>
+<text x="212.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="248" y="272" width="72" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="284.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[67]</text>
+<text x="284.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="320" y="272" width="72" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="356.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[67]</text>
+<text x="356.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="392" y="272" width="72" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="428.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[67]</text>
+<text x="428.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="464" y="272" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="500.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[68]</text>
+<text x="500.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="536" y="272" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="572.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[68]</text>
+<text x="572.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="608" y="272" width="72" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="644.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[68]</text>
+<text x="644.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="680" y="272" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="716.0" y="296" font-size="18" text-anchor="middle" font-weight="normal">c[69]</text>
+<text x="716.0" y="318" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<text x="24" y="375" font-size="17" text-anchor="start" font-weight="bold">Byte 26</text>
+<rect x="176" y="344" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="212.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[69]</text>
+<text x="212.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="248" y="344" width="72" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="284.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[69]</text>
+<text x="284.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="320" y="344" width="72" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="356.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[70]</text>
+<text x="356.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="392" y="344" width="72" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="428.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[70]</text>
+<text x="428.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="464" y="344" width="72" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="500.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[70]</text>
+<text x="500.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<rect x="536" y="344" width="72" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="572.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[71]</text>
+<text x="572.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 0</text>
+<rect x="608" y="344" width="72" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="644.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[71]</text>
+<text x="644.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 1</text>
+<rect x="680" y="344" width="72" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="716.0" y="368" font-size="18" text-anchor="middle" font-weight="normal">c[71]</text>
+<text x="716.0" y="390" font-size="14" text-anchor="middle" font-weight="normal">bit 2</text>
+<text x="24" y="438" font-size="17" text-anchor="start" font-weight="normal">c[66] crosses bytes 24/25; c[69] crosses bytes 25/26.</text>
+<text x="24" y="466" font-size="17" text-anchor="start" font-weight="normal">This consecutive tail rule applies to 2, 3, 5, 6, and 7 extended bits.</text>
+</g>
+</svg>

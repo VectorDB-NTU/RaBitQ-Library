@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="350" viewBox="0 0 800 350" role="img" aria-labelledby="title desc">
+<title id="title">6-bit: split c[48] across three bytes</title><desc id="desc">Codes zero, sixteen and thirty-two fill low six bits; successive two-bit pieces of code forty-eight fill the high bits.</desc>
+<g font-family="DejaVu Sans, sans-serif" fill="#172033">
+<rect width="800" height="350" rx="12" fill="#ffffff"/>
+<text x="24" y="35" font-size="23" text-anchor="start" font-weight="bold">6-bit: split c[48] across three bytes</text>
+<text x="24" y="64" font-size="17" text-anchor="start" font-weight="normal">Each row is one byte. Left = bit 0 (LSB); right = bit 7 (MSB).</text>
+<text x="24" y="117" font-size="17" text-anchor="start" font-weight="bold">Byte 0</text>
+<rect x="176" y="86" width="432" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="392.0" y="110" font-size="18" text-anchor="middle" font-weight="normal">c[0]</text>
+<text x="392.0" y="132" font-size="14" text-anchor="middle" font-weight="normal">all six code bits → byte bits 0–5</text>
+<rect x="608" y="86" width="144" height="58" fill="#dcfce7" stroke="#64748b"/>
+<text x="680.0" y="110" font-size="18" text-anchor="middle" font-weight="normal">c[48]</text>
+<text x="680.0" y="132" font-size="14" text-anchor="middle" font-weight="normal">code bits 0–1</text>
+<text x="24" y="187" font-size="17" text-anchor="start" font-weight="bold">Byte 16</text>
+<rect x="176" y="156" width="432" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="392.0" y="180" font-size="18" text-anchor="middle" font-weight="normal">c[16]</text>
+<text x="392.0" y="202" font-size="14" text-anchor="middle" font-weight="normal">all six code bits → byte bits 0–5</text>
+<rect x="608" y="156" width="144" height="58" fill="#fef3c7" stroke="#64748b"/>
+<text x="680.0" y="180" font-size="18" text-anchor="middle" font-weight="normal">c[48]</text>
+<text x="680.0" y="202" font-size="14" text-anchor="middle" font-weight="normal">code bits 2–3</text>
+<text x="24" y="257" font-size="17" text-anchor="start" font-weight="bold">Byte 32</text>
+<rect x="176" y="226" width="432" height="58" fill="#dbeafe" stroke="#64748b"/>
+<text x="392.0" y="250" font-size="18" text-anchor="middle" font-weight="normal">c[32]</text>
+<text x="392.0" y="272" font-size="14" text-anchor="middle" font-weight="normal">all six code bits → byte bits 0–5</text>
+<rect x="608" y="226" width="144" height="58" fill="#fce7f3" stroke="#64748b"/>
+<text x="680.0" y="250" font-size="18" text-anchor="middle" font-weight="normal">c[48]</text>
+<text x="680.0" y="272" font-size="14" text-anchor="middle" font-weight="normal">code bits 4–5</text>
+<text x="24" y="319" font-size="17" text-anchor="start" font-weight="normal">The right-hand field always occupies byte bits 6–7.</text>
+<text x="24" y="341" font-size="17" text-anchor="start" font-weight="normal">Repeat for c[49] … c[63] in bytes 1/17/33 … 15/31/47.</text>
+</g>
+</svg>
