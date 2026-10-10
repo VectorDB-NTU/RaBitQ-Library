@@ -344,7 +344,10 @@ Search may return fewer than `k` results once points are removed: the missing sl
 hold `kPidMax` (`2**32 - 1` in Python) with an infinite distance, as when the probed
 clusters hold fewer than `k` points.
 
-The value lives in the ordinary batch data, so the file format does not change and
-removal survives `save` and `load`. No file written before `remove` existed has an
-infinite `f_add`, so nothing in an old file is reinterpreted. A file that has
-removals also loads in release 0.5.0, where the removed points never appear in results.
+The removal marker lives in the ordinary batch data and needs no additional
+format change; removal survives `save` and `load`. No file written before
+`remove` existed has an infinite `f_add`, so nothing in an old file is
+reinterpreted. Release 0.5.0 also excludes removed points when reading its
+supported legacy formats. However, current saves always use `RABQIDX1` v2,
+including when resaving a loaded legacy index. Older releases cannot read these
+files, regardless of whether they contain removals.

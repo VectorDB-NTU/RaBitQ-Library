@@ -47,8 +47,8 @@ def clusters(base_data: np.ndarray):
 def brute_force_knn(data: np.ndarray, queries: np.ndarray, k: int):
     """Exact L2 k-NN. Returns (ids, sq_dists) of shape (nq, k).
 
-    Note: distances are *squared* L2. Ordering is identical to L2, so
-    recall comparisons against index results (which return true L2) are valid.
+    Distances are squared L2. Index L2 searches return squared distances or
+    quantized estimates of them; recall compares neighbor IDs, not distances.
     """
     # (nq, n, dim) — stays in RAM comfortably for small test sizes
     diffs = queries[:, np.newaxis, :] - data[np.newaxis, :, :]

@@ -34,6 +34,26 @@ L2 ground truth for OpenAI.
 
 ## Package installation
 
+The tables and figures are historical results, labeled RaBitQ-Library 0.5.2.
+The published source, scripts, and results are available together at snapshot
+`a332c1ce97588aaed4f6a8a5476f84a81f947313`. To run that snapshot's protocol,
+start in a separate checkout and activate your benchmark Python environment:
+
+```bash
+git clone --no-checkout https://github.com/VectorDB-NTU/RaBitQ-Library.git RaBitQ-benchmark-snapshot
+cd RaBitQ-benchmark-snapshot
+git checkout --detach a332c1ce97588aaed4f6a8a5476f84a81f947313
+```
+
+This pins the published snapshot, not a verified original measurement binary:
+the published CSVs do not record the exact source commit used for those binaries.
+The version label alone does not establish that they match the `v0.5.2` release tag.
+Exact reproduction of the original binaries therefore remains unverified.
+
+To benchmark current code instead, use your current checkout and record its
+commit and any local changes. Treat those measurements as a new run, separate
+from the historical results below.
+
 Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
 source providing `g++-13` and the `multiverse` component for MKL.
 
@@ -46,7 +66,7 @@ python benchmarks/install_baselines.py --jobs 12
 source benchmarks/env.sh
 ```
 
-The installer builds RaBitQ from the checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
+The installer builds RaBitQ from the selected checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
 in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
 and verification records are saved in `build/benchmark-baselines/`.
 Use `--dry-run` to preview installation commands.
@@ -92,7 +112,8 @@ variation.
 
 ## Data and reproduction
 
-Run from the repository root after installation:
+Run from the selected checkout's repository root after installation. Use the
+same checkout for installation and measurement:
 
 ```bash
 # Prepare data, run all benchmarks, and export results

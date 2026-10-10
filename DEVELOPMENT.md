@@ -359,8 +359,10 @@ raw-format fallback; preserve both unless a breaking change is explicitly reques
 
 IVF `remove` stores a removed point as `f_add = +inf` inside the existing batch data, so it needs no
 discriminator. No index written before `remove` existed has an infinite `f_add`, so nothing in an old
-file is reinterpreted, and a file that has removals loads in release 0.5.0 too, where those points
-never appear in results. Keep this convention when touching IVF code:
+file is reinterpreted. In the legacy file formats readable by release 0.5.0, that reader also
+excludes removed points. This compatibility of the removal marker does not extend to the current
+writer's `RABQIDX1` v2 format: older releases cannot read current saves, even when resaving a loaded
+legacy index. Keep this convention when touching IVF code:
 
 - Every estimator and scan path must turn `f_add = +inf` into an infinite estimated distance and an
   infinite lower bound, and never into NaN. A NaN distance would enter the result buffer.

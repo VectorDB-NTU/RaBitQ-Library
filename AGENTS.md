@@ -196,8 +196,9 @@ Centroids, data, and queries compared by the same estimator must be in the same 
 
 Rotator state is part of persisted index state. Loading an index must restore the exact rotation
 used at construction; generating a new random rotator produces silently incorrect distances.
-Honor stored padded dimensions instead of recomputing them from current defaults. Old IVF formats
-omit this field and must retain their historical 64-dimension padding when loaded.
+Honor stored padded dimensions instead of recomputing them from current defaults. IVF `RABQIDX1`
+v1 and v2 files explicitly store this field; preserve it for both versions. Only legacy unversioned
+quantized IVF files and old raw v1 files omit it and infer historical 64-dimension padding.
 Unreleased pad16 files whose stored dimension is not divisible by 32 are rejected.
 
 ### Distance conventions
