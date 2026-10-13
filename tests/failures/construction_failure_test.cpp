@@ -27,7 +27,12 @@ std::array<void*, 4096> live{};
 size_t live_count = 0;
 
 bool should_fail() {
-    if (fail_constructor || (fail_parallel && omp_get_level() > 0)) {
+#if _OPENMP >= 200805
+    const bool in_region = omp_get_level() > 0;
+#else
+    const bool in_region = omp_in_parallel() != 0;
+#endif
+    if (fail_constructor || (fail_parallel && in_region)) {
         if (remaining.fetch_sub(1) == 0) {
             fail_constructor = false;
             fail_parallel = false;
@@ -181,14 +186,33 @@ TEST(ConstructionFailure, HnswConstructorReleasesEveryAllocation) {
 #endif
 }
 
-TEST(ConstructionFailure, IvfWorkerErrorsReachCallerAndAllowRetry) {
+class ConstructionWorkerFailure : public ::testing::TestWithParam<size_t> {
+    void SetUp() override {
+#if _OPENMP < 200805
+        if (GetParam() == 1) {
+            bool detectable = false;
+#pragma omp parallel num_threads(1)
+            { detectable = omp_in_parallel() != 0; }
+            if (!detectable) {
+                GTEST_SKIP() << "This OpenMP runtime cannot identify one-thread regions";
+            }
+        }
+#endif
+        omp_set_dynamic(0);
+    }
+};
+
+INSTANTIATE_TEST_SUITE_P(Threads, ConstructionWorkerFailure, ::testing::Values(1U, 4U));
+
+TEST_P(ConstructionWorkerFailure, IvfWorkerErrorsReachCallerAndAllowRetry) {
     const auto data = vectors();
     std::vector<float> centers(2 * 64, 0.0F);
     std::vector<rabitqlib::PID> ids(64);
     for (size_t i = 0; i < ids.size(); ++i) {
         ids[i] = i % 2;
     }
-    for (const size_t threads : {1U, 4U}) {
+    const size_t threads = GetParam();
+    {
         for (const size_t bits : {1U, 4U, 32U}) {
             rabitqlib::ivf::IVF index(64, 64, 2, bits);
             expect_parallel_failure([&] {
@@ -209,10 +233,11 @@ TEST(ConstructionFailure, IvfWorkerErrorsReachCallerAndAllowRetry) {
     }
 }
 
-TEST(ConstructionFailure, QgInitializationWorkerErrorsReachCaller) {
+TEST_P(ConstructionWorkerFailure, QgInitializationWorkerErrorsReachCaller) {
     using namespace rabitqlib;
     const auto data = vectors();
-    for (const size_t threads : {1U, 4U}) {
+    const size_t threads = GetParam();
+    {
         for (const auto init :
              {symqg::QGInitialization::Random, symqg::QGInitialization::PiPNN}) {
             for (const size_t bits : {0U, 4U, 8U}) {
@@ -235,10 +260,11 @@ TEST(ConstructionFailure, QgInitializationWorkerErrorsReachCaller) {
     }
 }
 
-TEST(ConstructionFailure, QgRefinementWorkerErrorsReachCaller) {
+TEST_P(ConstructionWorkerFailure, QgRefinementWorkerErrorsReachCaller) {
     using namespace rabitqlib;
     const auto data = vectors();
-    for (const size_t threads : {1U, 4U}) {
+    const size_t threads = GetParam();
+    {
         for (const size_t skip : {0U, 4U, 64U}) {
             symqg::QuantizedGraph<float> graph(
                 64, 64, 32, METRIC_L2, RotatorType::FhtKacRotator, 4, 42

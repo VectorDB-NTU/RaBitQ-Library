@@ -14,9 +14,9 @@
 
 #include "rabitqlib/core/detail/rabitq_impl.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/fastscan/data_layout.hpp"
 #include "rabitqlib/utils/openmp.hpp"
 #ifdef RABITQ_TEST_FASTSCAN
+#include "rabitqlib/fastscan/data_layout.hpp"
 #include "rabitqlib/fastscan/detail/encoder.hpp"
 #include "rabitqlib/fastscan/encoder.hpp"
 #include "rabitqlib/fastscan/query.hpp"
@@ -33,7 +33,12 @@ bool fail_allocation() {
         return false;
     }
 #if RABITQ_USE_OPENMP
+#if _OPENMP >= 200805
     const int level = omp_get_level();
+#else
+    // OpenMP 2.0 can identify active teams, but not serialized regions.
+    const int level = omp_in_parallel();
+#endif
     int previous = deepest_region.load();
     while (previous < level && !deepest_region.compare_exchange_weak(previous, level)) {}
 #endif
@@ -95,6 +100,7 @@ struct Outcome {
     bool retry_ok = false;
     size_t allocations = 0;
     int level = 0;
+    bool outer_active = false;
 };
 
 template <typename T, bool Parallel, bool Batch, bool Public = false>
@@ -154,6 +160,9 @@ Outcome run_cold_thread(bool grow, bool outer_region, size_t fail_at) {
             encode(32);
         }
         const auto exercise = [&] {
+#if RABITQ_USE_OPENMP
+            outcome.outer_active = omp_in_parallel() != 0;
+#endif
             failure_at = fail_at;
             allocation_count = 0;
             deepest_region = 0;
@@ -202,7 +211,11 @@ void check_failures(bool outer_region) {
         ASSERT_FALSE(probe.caught);
         ASSERT_GT(probe.allocations, Batch ? 1U : 0U);
 #if RABITQ_USE_OPENMP
+#if _OPENMP >= 200805
         EXPECT_EQ(probe.level, Parallel ? 1 : (outer_region ? 1 : 0));
+#else
+        EXPECT_EQ(probe.level, Parallel || probe.outer_active ? 1 : 0);
+#endif
 #else
         EXPECT_EQ(probe.level, 0);
 #endif
