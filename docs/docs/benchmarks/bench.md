@@ -109,6 +109,10 @@ checks are outside construction timing.
 
 Each method has one build or fit per dataset; results do not measure run-to-run
 variation.
+The committed CSVs support checking the displayed tables and plotted points,
+but do not include the original raw run logs or measurement binaries. They are
+archived results, not an independent reproduction or results from the current
+source tree. The experiments in the cited papers are separate measurements.
 
 ## Data and reproduction
 

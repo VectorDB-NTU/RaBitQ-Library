@@ -4,6 +4,14 @@ Apply the same sampled transformation to data, centroids and queries.
 RaBitQ Library provides FHT/Kac rotation (the default) and a dense random
 orthogonal transformation.
 
+The default FHT/Kac transform is an efficient structured approximation to a
+random orthogonal rotation. [SymphonyQG, Section 3.1.4](https://dl.acm.org/doi/abs/10.1145/3709730)
+describes using a Fast Hadamard-based Fast Johnson–Lindenstrauss Transform to
+reduce rotation work from $O(D^2)$ to $O(D\log D)$. This library combines
+Hadamard transforms, random sign flips and the Givens steps described below.
+The transform preserves norms; its sampling distribution approximates the
+uniform random rotation used in the RaBitQ analysis.
+
 The default FHT/Kac rotator supports `float` and accepts input dimensions from 64 through 65,536 inclusive. It pads to a multiple of 32 and uses AVX or NEON kernels
 for power-of-two blocks through `2^16`. Allocate the
 output using `rotator->size()`, which can exceed the input dimension.

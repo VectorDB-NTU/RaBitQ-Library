@@ -62,6 +62,12 @@ The expressions below describe the data-code error with an unquantized query
 under the random-rotation model. They do not include floating-point roundoff or
 additional query/LUT quantization error. The one-bit probabilistic bound is
 derived in [RaBitQ, Section 3.2](https://arxiv.org/pdf/2405.12497).
+The default [FHT/Kac rotation](rotator.md) efficiently approximates the random
+orthogonal rotation, following the Fast JLT implementation approach in SymphonyQG.
+For one-bit estimation, query/LUT quantization error is typically negligible
+relative to the data-code error. For higher-bit batch estimation,
+[high-accuracy FastScan](../kernel_ip.md#batch-code) reduces the LUT error
+carried into refinement.
 
 ### Estimator of Euclidean distance
 

@@ -6,6 +6,11 @@ from [NGT](https://github.com/yahoojapan/NGT), with batched RaBitQ distance esti
 FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.
 
+The [original paper](https://dl.acm.org/doi/abs/10.1145/3709730) uses raw vectors for
+precise candidate distances during traversal. This library's optional 4/8-bit
+storage and PiPNN initialization are implementation extensions; the paper's
+reported performance should not be attributed to these configurations.
+
 ## Minimal workflow
 
 ### Python

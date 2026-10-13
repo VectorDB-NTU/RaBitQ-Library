@@ -1,17 +1,26 @@
-# Compact vector search with RaBitQ
+---
+title: RaBitQ Library
+hide:
+  - toc
+---
 
 <div class="hero" markdown>
 
-**RaBitQ Library** is a C++17 library with Python bindings for compact,
-accurate vector quantization and approximate nearest-neighbor search.
+<p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
 
-Build with the low-level quantizer or use complete IVF, HNSW, and SymphonyQG
-indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
-(Apple Silicon).
+# Compact vectors.<br>Accurate search. { #compact-vector-search-with-rabitq }
+
+<p class="hero-description">Vector quantization and approximate nearest-neighbor
+search. Start with a quantizer, or build with complete IVF, HNSW, and SymphonyQG indexes.</p>
+
+<div class="hero-actions" markdown>
 
 [Get started](quick_start.md){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/VectorDB-NTU/RaBitQ-Library){ .md-button }
-[Install from PyPI](https://pypi.org/project/rabitqlib/){ .md-button }
+[Explore C++ integration &rarr;](cpp_integration.md)
+
+</div>
+
+<p class="hero-platforms">Linux x86-64 &amp; ARM64 · Windows x86-64 · macOS ARM64</p>
 
 </div>
 

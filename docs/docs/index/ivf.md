@@ -321,13 +321,9 @@ unchanged if it throws. Every call copies the whole storage, so:
 - Each call has a fixed cost that grows with the size of the whole index, on top of a
   cost per new vector. **Add many vectors per call rather than one at a time.**
 
-On an index of 1,000,000 vectors with 128 dimensions, 1,024 clusters and 1 bit
-(8 threads, portable build, Intel i7-12700KF), adding 1,000 vectors in one call took
-about 5 ms, and adding the same vectors one call each took about 3 s (2.8 s and 3.7 s
-in two runs). For that 33 MB file, a process that had just loaded it held about
-65 MB, and peaked at about 100 MB during one `add` of 1,000 vectors.
-
 There is no spare capacity: every `add` moves the data.
+Measure update latency and peak memory with your index size, bit width and batch
+size; serialized file size alone does not determine peak process memory.
 
 ### Recall after `add`
 
