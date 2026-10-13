@@ -45,7 +45,10 @@ endif()
 add_library(rabitq_compile_options INTERFACE)
 target_compile_features(rabitq_compile_options INTERFACE cxx_std_17)
 target_compile_definitions(rabitq_compile_options INTERFACE
-    RABITQ_USE_OPENMP=$<BOOL:${RABITQ_USE_OPENMP}>)
+    RABITQ_USE_OPENMP=$<BOOL:${RABITQ_USE_OPENMP}>
+    # Eigen-backed TLS/storage may be allocated by native code and freed by a
+    # generic consumer. Keep its layout and aligned-allocation policy identical.
+    EIGEN_MAX_ALIGN_BYTES=64 EIGEN_MAX_STATIC_ALIGN_BYTES=64)
 if(RABITQ_USE_OPENMP)
     target_link_libraries(rabitq_compile_options INTERFACE OpenMP::OpenMP_CXX)
 endif()
@@ -59,7 +62,7 @@ if(MSVC)
 endif()
 if(RABITQ_ENABLE_SANITIZERS)
     # Keep sanitizer instrumentation consistent across public inline code and
-    # the core (Eigen's allocation policy depends on __SANITIZE_ADDRESS__).
+    # compiled components, including their runtime linkage.
     target_compile_options(rabitq_compile_options INTERFACE
         "$<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-fsanitize=address,undefined;-fno-omit-frame-pointer>"
     )

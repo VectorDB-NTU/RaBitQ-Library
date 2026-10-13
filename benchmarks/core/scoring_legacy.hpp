@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
@@ -9,6 +10,11 @@
 
 namespace scoring_benchmark {
 namespace api = rabitqlib::quant::v1;
+
+inline bool scores_match(float actual, float expected, double tolerance) {
+    return std::isfinite(actual) && std::isfinite(expected) && std::isfinite(tolerance) &&
+           tolerance >= 0 && std::abs(static_cast<double>(actual) - expected) <= tolerance;
+}
 
 struct Query {
     const float* values;

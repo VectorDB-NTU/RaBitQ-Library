@@ -38,6 +38,8 @@ if(INTEGRATION STREQUAL "PACKAGE")
     add_library(component_header_check OBJECT ${header_sources})
     target_link_libraries(component_header_check PRIVATE rabitqlib::${RABITQ_COMPONENT})
 else()
+    # FetchContent writes this path into a generated CMake script.
+    file(TO_CMAKE_PATH "${RABITQ_SOURCE_DIR}" RABITQ_SOURCE_DIR)
     set(RABITQ_BUILD_INDEX OFF CACHE BOOL "" FORCE)
     set(RABITQ_BUILD_FASTSCAN OFF CACHE BOOL "" FORCE)
     if(RABITQ_COMPONENT STREQUAL "fastscan")

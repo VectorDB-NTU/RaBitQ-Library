@@ -184,15 +184,21 @@ int run(int argc, char** argv) {
             2 * gamma * std::abs(factors[row].rescale) * max_code * absolute_query +
             8 * eps *
                 (1 + std::abs(factors[row].add) + std::abs(legacy.add) + std::abs(checked));
-        if (std::abs(
-                checked - scoring_benchmark::unchecked_inline(legacy, code, factors[row])
-            ) > tolerance ||
-            std::abs(
-                checked - scoring_benchmark::unchecked_call(legacy, code, factors[row])
-            ) > tolerance ||
-            std::abs(
-                checked - scoring_benchmark::unchecked_ref(legacy, code, factors[row])
-            ) > tolerance) {
+        if (!scoring_benchmark::scores_match(
+                checked,
+                scoring_benchmark::unchecked_inline(legacy, code, factors[row]),
+                tolerance
+            ) ||
+            !scoring_benchmark::scores_match(
+                checked,
+                scoring_benchmark::unchecked_call(legacy, code, factors[row]),
+                tolerance
+            ) ||
+            !scoring_benchmark::scores_match(
+                checked,
+                scoring_benchmark::unchecked_ref(legacy, code, factors[row]),
+                tolerance
+            )) {
             throw std::runtime_error("Checked and unchecked score results differ");
         }
     }

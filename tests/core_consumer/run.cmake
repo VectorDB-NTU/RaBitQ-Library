@@ -56,10 +56,15 @@ foreach(component IN ITEMS core fastscan)
     endif()
     foreach(method IN ITEMS ADD_SUBDIRECTORY FETCHCONTENT PACKAGE)
         set(build "${work}/${method}")
+        set(consumer_source "${RABITQ_SOURCE_DIR}")
+        if(method STREQUAL "FETCHCONTENT")
+            # Exercise native Windows path spelling on every host.
+            string(REPLACE "/" "\\" consumer_source "${consumer_source}")
+        endif()
         run("${CMAKE_COMMAND}" -S "${work}/consumer" -B "${build}"
             ${configure_options} "-DINTEGRATION=${method}"
             "-DRABITQ_COMPONENT=${component}"
-            "-DRABITQ_SOURCE_DIR=${RABITQ_SOURCE_DIR}"
+            "-DRABITQ_SOURCE_DIR=${consumer_source}"
             "-DCMAKE_PREFIX_PATH=${work}/relocated")
         run("${CMAKE_COMMAND}" --build "${build}" --config Release --parallel 2)
         run("${CMAKE_CTEST_COMMAND}" --test-dir "${build}" -C Release --output-on-failure)

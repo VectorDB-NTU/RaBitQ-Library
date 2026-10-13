@@ -94,6 +94,7 @@ GTEST_NO_INLINE_ void operator delete[](void* ptr, size_t) noexcept {
 }
 
 namespace {
+template <typename T>
 struct Outcome {
     bool caught = false;
     bool first_ok = false;
@@ -101,11 +102,25 @@ struct Outcome {
     size_t allocations = 0;
     int level = 0;
     bool outer_active = false;
+    std::vector<uint8_t> codes;
+    std::vector<T> add, rescale, error;
+
+    bool matches(
+        const uint8_t* actual_codes,
+        const std::vector<T>& actual_add,
+        const std::vector<T>& actual_rescale,
+        const std::vector<T>& actual_error
+    ) const {
+        return std::equal(codes.begin(), codes.end(), actual_codes) && add == actual_add &&
+               rescale == actual_rescale && error == actual_error;
+    }
 };
 
 template <typename T, bool Parallel, bool Batch, bool Public = false>
-Outcome run_cold_thread(bool grow, bool outer_region, size_t fail_at) {
-    Outcome outcome;
+Outcome<T> run_cold_thread(
+    bool grow, bool outer_region, size_t fail_at, const Outcome<T>* reference = nullptr
+) {
+    Outcome<T> outcome;
     // A new native thread gives both it and its OpenMP team cold TLS buffers.
     std::thread worker([&] {
 #if RABITQ_USE_OPENMP
@@ -114,7 +129,7 @@ Outcome run_cold_thread(bool grow, bool outer_region, size_t fail_at) {
 #endif
         constexpr size_t kRows = 4, kDim = 128;
         std::vector<T> data(kRows * kDim, T{0.5}), centroid(kDim, T{0});
-        std::vector<uint8_t> codes(32 * kDim / 8);
+        std::vector<uint8_t> codes((Batch ? 32 : kRows) * kDim / 8);
         std::vector<T> add(kRows), rescale(kRows), error(kRows);
 #ifdef RABITQ_TEST_FASTSCAN
         std::vector<char> batch(rabitqlib::BatchDataMap<T>::data_bytes(kDim));
@@ -159,6 +174,22 @@ Outcome run_cold_thread(bool grow, bool outer_region, size_t fail_at) {
         if (grow) {
             encode(32);
         }
+        const uint8_t* code_data = codes.data();
+#ifdef RABITQ_TEST_FASTSCAN
+        if constexpr (Public) {
+            code_data = rabitqlib::ConstBatchDataMap<T>(batch.data(), kDim).bin_code();
+        }
+#endif
+        const auto valid_result = [&] {
+            for (size_t i = 0; i < kRows; ++i) {
+                if (!std::isfinite(add[i]) || !std::isfinite(rescale[i]) ||
+                    !std::isfinite(error[i])) {
+                    return false;
+                }
+            }
+            return reference == nullptr ||
+                   reference->matches(code_data, add, rescale, error);
+        };
         const auto exercise = [&] {
 #if RABITQ_USE_OPENMP
             outcome.outer_active = omp_in_parallel() != 0;
@@ -169,16 +200,11 @@ Outcome run_cold_thread(bool grow, bool outer_region, size_t fail_at) {
             watching = true;
             try {
                 encode(kDim);
-                outcome.first_ok = true;
-                for (size_t i = 0; i < kRows; ++i) {
-                    outcome.first_ok &= std::isfinite(add[i]) &&
-                                        std::isfinite(rescale[i]) &&
-                                        std::isfinite(error[i]);
-                }
             } catch (const std::bad_alloc&) { outcome.caught = true; }
             watching = false;
             outcome.allocations = allocation_count;
             outcome.level = deepest_region;
+            outcome.first_ok = !outcome.caught && valid_result();
         };
 #if RABITQ_USE_OPENMP
         if (outer_region) {
@@ -191,12 +217,17 @@ Outcome run_cold_thread(bool grow, bool outer_region, size_t fail_at) {
         {
             exercise();
         }
-        encode(kDim);
-        outcome.retry_ok = true;
-        for (size_t i = 0; i < kRows; ++i) {
-            outcome.retry_ok &= std::isfinite(add[i]) && std::isfinite(rescale[i]) &&
-                                std::isfinite(error[i]);
+        // Capture the no-failure probe outside allocation tracking. Each trial
+        // still starts on a fresh thread and compares against this fixed result.
+        if (reference == nullptr) {
+            outcome.codes.assign(code_data, code_data + codes.size());
+            outcome.add = add;
+            outcome.rescale = rescale;
+            outcome.error = error;
+            reference = &outcome;
         }
+        encode(kDim);
+        outcome.retry_ok = valid_result();
     });
     worker.join();
     return outcome;
@@ -209,6 +240,8 @@ void check_failures(bool outer_region) {
             grow, outer_region, std::numeric_limits<size_t>::max()
         );
         ASSERT_FALSE(probe.caught);
+        ASSERT_TRUE(probe.first_ok);
+        ASSERT_TRUE(probe.retry_ok);
         ASSERT_GT(probe.allocations, Batch ? 1U : 0U);
 #if RABITQ_USE_OPENMP
 #if _OPENMP >= 200805
@@ -222,16 +255,45 @@ void check_failures(bool outer_region) {
         size_t caught_count = 0;
         for (size_t point = 0; point < probe.allocations; ++point) {
             SCOPED_TRACE(::testing::Message() << "grow=" << grow << " failure=" << point);
-            const auto result =
-                run_cold_thread<T, Parallel, Batch, Public>(grow, outer_region, point);
+            const auto result = run_cold_thread<T, Parallel, Batch, Public>(
+                grow, outer_region, point, &probe
+            );
             // An OpenMP runtime allocation can fail without stopping encoding.
-            // In that case the first result must still be valid.
+            // In that case the first result must match the no-failure probe.
             EXPECT_TRUE(result.caught || result.first_ok);
             caught_count += result.caught;
             EXPECT_TRUE(result.retry_ok);
         }
         EXPECT_GT(caught_count, 0U);
     }
+}
+
+TEST(CompactCodesFailure, ReferenceRejectsIncompleteAndCorruptOutputs) {
+    Outcome<float> reference;
+    reference.codes = {0xAA, 0x55};
+    reference.add = {1};
+    reference.rescale = {2};
+    reference.error = {3};
+    auto actual = reference;
+    const auto matches = [&] {
+        return reference.matches(
+            actual.codes.data(), actual.add, actual.rescale, actual.error
+        );
+    };
+    EXPECT_TRUE(matches());
+    actual.codes[0] ^= 1;
+    EXPECT_FALSE(matches());
+    actual = reference;
+    for (auto* factors : {&actual.add, &actual.rescale, &actual.error}) {
+        const float original = factors->front();
+        factors->front() = 0;
+        EXPECT_FALSE(matches());
+        factors->front() = original;
+    }
+    // Unwritten output is finite, but cannot pass the reference comparison.
+    std::fill(actual.codes.begin(), actual.codes.end(), 0);
+    actual.add[0] = actual.rescale[0] = actual.error[0] = 0;
+    EXPECT_FALSE(matches());
 }
 
 TEST(CompactCodesFailure, SerialColdScratchAndGrowth) {

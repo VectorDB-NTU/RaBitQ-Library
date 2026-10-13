@@ -402,6 +402,9 @@ contain declarations and small accessors; their operations compile in
 `src/index/hnsw_search_impl.hpp` to retain per-ISA template instantiation.
 The installed consumer compiles and links each index header independently while poisoning
 encoding, scoring, rotation implementation and vendor headers to enforce this boundary.
+All CMake components export 64-byte Eigen alignment limits so native and generic
+translation units share compatible storage and TLS allocation rules. Retain these
+definitions in installed exports; SIMD backends keep their private Eigen namespaces.
 Both two-factor and three-factor batch layouts/encoders belong to
 `fastscan/{data_layout,encoder}.hpp`. Index-only nearest-neighbor helpers
 belong in `index/detail/`, not generic numerical `utils/space.hpp`.

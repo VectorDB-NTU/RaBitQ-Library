@@ -17,6 +17,9 @@
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
+static_assert(EIGEN_DEFAULT_ALIGN_BYTES == 64);
+static_assert(EIGEN_MAX_STATIC_ALIGN_BYTES == 64);
+
 namespace {
 constexpr size_t kDimension = 65;
 constexpr size_t kPoints = 67;
