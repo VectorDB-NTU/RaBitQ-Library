@@ -16,7 +16,7 @@
         <link rel="prev" href="..">
       
       
-        <link rel="next" href="../releases/0.6.0/">
+        <link rel="next" href="../installation/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Quick Start - RaBitQ Library</title>
+        <title>Quick start - RaBitQ Library</title>
       
     
     
@@ -44,12 +44,6 @@
       
     
     
-      
-        
-        
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
     
@@ -71,7 +65,7 @@
     
     
     
-    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="deep-purple">
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
   
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
@@ -116,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Quick Start
+              Quick start
             
           </span>
         </div>
@@ -129,7 +123,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="deep-purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
       <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
@@ -139,7 +133,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
       <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
@@ -307,7 +301,7 @@
   <span class="md-ellipsis">
     
   
-    Quick Start
+    Quick start
   
 
     
@@ -325,7 +319,7 @@
   <span class="md-ellipsis">
     
   
-    Quick Start
+    Quick start
   
 
     
@@ -351,29 +345,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Requirements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#python" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Python
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Python">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
   <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -383,8 +354,8 @@
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
+      
+        <li class="md-nav__item">
   <a href="#build-and-search-an-ivf-index" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -394,125 +365,37 @@
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#add-and-remove-ivf-vectors" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#read-the-results" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Add and remove IVF vectors
+        Read the results
       
     </span>
   </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#add-and-remove-hnsw-vectors" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Add and remove HNSW vectors
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#threading-and-file-paths" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Threading and file paths
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#index-file-compatibility" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Index file compatibility
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#build-the-python-bindings-from-source" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Build the Python bindings from source
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#c" class="md-nav__link">
+  <a href="#measure-recall" class="md-nav__link">
     <span class="md-ellipsis">
       
-        C++
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="C++">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#c-examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        C++ examples
+        Measure recall
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#use-in-another-c-project" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#save-and-load" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use in another C++ project
+        Save and load
       
     </span>
   </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#install-the-c-library" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install the C++ library
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#run-the-c-tests-on-linux" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run the C++ tests on Linux
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -541,8 +424,64 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cpp_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    C++ Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
+      
+        
       
         
       
@@ -559,17 +498,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    Release Notes
+    Release notes
   
 
     
@@ -580,16 +519,44 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
   
-    Release Notes
+    Release notes
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.7.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -647,6 +614,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -660,10 +631,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
             
   
   
@@ -681,8 +652,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -783,6 +754,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../rabitq/core_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stable core API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modular_migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modular migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../rabitq/estimator/" class="md-nav__link">
         
   
@@ -855,10 +882,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_8" id="__nav_6_8_label" tabindex="0">
             
   
   
@@ -876,8 +903,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -901,7 +928,7 @@
   <span class="md-ellipsis">
     
   
-    Compact Code Storage
+    Compact code storage
   
 
     
@@ -929,7 +956,7 @@
   <span class="md-ellipsis">
     
   
-    Inner Product
+    Inner product
   
 
     
@@ -973,6 +1000,8 @@
       
         
       
+        
+      
     
     
     
@@ -986,17 +1015,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    Vector Search
+    Vector search
   
 
     
@@ -1007,16 +1036,44 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
-    Vector Search
+    Vector search
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared contracts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1133,10 +1190,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
             
   
   
@@ -1154,8 +1211,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1257,10 +1314,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
         
           
-          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
             
   
   
@@ -1278,8 +1335,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_8">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1331,7 +1388,7 @@
   <span class="md-ellipsis">
     
   
-    IVF Indexes
+    IVF indexes
   
 
     
@@ -1359,7 +1416,7 @@
   <span class="md-ellipsis">
     
   
-    Graph Indexes
+    Graph indexes
   
 
     
@@ -1435,29 +1492,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#requirements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Requirements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#python" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Python
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Python">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
   <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1467,8 +1501,8 @@
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
+      
+        <li class="md-nav__item">
   <a href="#build-and-search-an-ivf-index" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1478,125 +1512,37 @@
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#add-and-remove-ivf-vectors" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#read-the-results" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Add and remove IVF vectors
+        Read the results
       
     </span>
   </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#add-and-remove-hnsw-vectors" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Add and remove HNSW vectors
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#threading-and-file-paths" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Threading and file paths
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#index-file-compatibility" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Index file compatibility
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#build-the-python-bindings-from-source" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Build the Python bindings from source
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#c" class="md-nav__link">
+  <a href="#measure-recall" class="md-nav__link">
     <span class="md-ellipsis">
       
-        C++
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="C++">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#c-examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        C++ examples
+        Measure recall
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#use-in-another-c-project" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#save-and-load" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use in another C++ project
+        Save and load
       
     </span>
   </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#install-the-c-library" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install the C++ library
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#run-the-c-tests-on-linux" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run the C++ tests on Linux
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1636,74 +1582,20 @@
   
 
 
-<h1 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h1>
-<p>RaBitQ Library provides Python bindings for complete vector-search indexes and
-a C++17 API for both indexes and low-level quantization.</p>
-<h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Platform</th>
-<th>CPU baseline</th>
-<th>Python wheel targets</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Linux x86-64</td>
-<td>AVX2 and FMA</td>
-<td>CPython 3.11–3.14</td>
-</tr>
-<tr>
-<td>Linux ARM64 (AArch64)</td>
-<td>NEON</td>
-<td>CPython 3.11–3.14</td>
-</tr>
-<tr>
-<td>Windows x86-64</td>
-<td>AVX2 and FMA</td>
-<td>CPython 3.11–3.14</td>
-</tr>
-<tr>
-<td>macOS 14+ ARM64 (Apple Silicon)</td>
-<td>NEON</td>
-<td>CPython 3.11–3.14</td>
-</tr>
-</tbody>
-</table>
-<p>Source builds require a C++17 compiler, OpenMP, and CMake 3.20 or newer.
-Windows uses MSVC (Visual Studio 2026 with the Desktop development with C++
-workload and CMake 4.2+ for its generator). Apple Silicon uses AppleClang and
-an external OpenMP runtime such as Homebrew <code>libomp</code>.</p>
-<p>Linux ARM64 source builds and repaired wheels run on native AArch64 CI.
-Linux ARM64 wheels carry <code>manylinux_2_27_aarch64</code> and
-<code>manylinux_2_28_aarch64</code> tags.</p>
-<details>
-<summary>CPU dispatch details</summary>
-
-On x86-64, optional AVX-512 kernels require AVX2, FMA, and AVX-512F/BW/DQ;
-MSVC builds also require AVX-512VL/CD. Popcount-specific kernels additionally
-require AVX-512 VPOPCNTDQ. Detection checks CPU features and OS support for
-the required register state. Missing AVX-512 features select the AVX2 backend.
-
-On ARM64, the build excludes x86 kernels and uses NEON and portable scalar
-implementations. Standard FastScan requires AVX2/FMA, a supported AVX-512
-backend, or NEON; scalar fallbacks do not remove that requirement.
-
-</details>
-
-<h2 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h2>
-<h3 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.6.0"</span>
+<h1 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h1>
+<p>Build, search, save and reload a small IVF index with Python. This guide describes
+<strong>0.7.0</strong> and uses synthetic data, so no dataset download is required.
+For C++, go directly to <a href="../cpp_integration/">C++ integration</a>.</p>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.7.0"</span>
 </code></pre></div>
-<p>Configurable IVF routing and the concurrency contract below require 0.6.0;
-see the <a href="../releases/0.6.0/">upgrade notes</a>. For unreleased changes,
-<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#python-changes">install from a checkout</a>.</p>
-<p>Wheels target the platforms above and require no compiler or CMake.
-Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
-need a separate OpenMP installation.
-Release wheels disable native CPU tuning and select supported kernels at runtime.</p>
-<h3 id="build-and-search-an-ivf-index">Build and search an IVF index<a class="headerlink" href="#build-and-search-an-ivf-index" title="Permanent link">&para;</a></h3>
+<p>Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64 and
+macOS 14+ ARM64. x86-64 requires AVX2/FMA; ARM64 uses NEON.
+See <a href="../installation/">installation</a> for platform details and source builds.</p>
+<p>Supply data and queries with shape <code>(count, dim)</code> in the original dimension.
+Python indexes convert them to contiguous float32 and accept <code>64 &lt;= dim &lt;= 65536</code>;
+they rotate and pad internally. See <a href="../index/usage/#input-requirements">input requirements</a>.</p>
+<h2 id="build-and-search-an-ivf-index">Build and search an IVF index<a class="headerlink" href="#build-and-search-an-ivf-index" title="Permanent link">&para;</a></h2>
 <p>The following complete example uses deterministic synthetic data and does not
 require a dataset download:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -1718,214 +1610,85 @@ require a dataset download:</p>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="p">)</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">clustering</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">index</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="p">(</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="n">dim</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">max_elements</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">num_clusters</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="n">metric</span><span class="o">=</span><span class="s2">"l2"</span><span class="p">,</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="p">)</span>
-<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">index</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">centroids</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">assignments</span><span class="p">)</span>
-<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
-<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
-<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="nb">print</span><span class="p">(</span><span class="n">ids</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">distances</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># (5, 10) (5, 10)</span>
-<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="nb">print</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># IVF requires exactly max_elements rows when building.</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">index</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="p">(</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">dim</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">max_elements</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">num_clusters</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="n">metric</span><span class="o">=</span><span class="s2">"l2"</span><span class="p">,</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="p">)</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="n">index</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">centroids</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">assignments</span><span class="p">)</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="nb">print</span><span class="p">(</span><span class="n">ids</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">distances</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># (5, 10) (5, 10)</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="nb">print</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
-<p>For raw-vector reranking, use <code>nbits=32</code> in the constructor above. The index
-copies the original float32 vectors instead of storing extra-bit codes, while
-retaining one-bit codes for filtering. Build, search, and save/load use the
-same APIs; the original data can be released after construction.</p>
-<p>IVF selects FastScan precision automatically: HACC for 4–9-bit codes, standard
-FastScan for 1–3-bit codes and raw vectors. To override that choice:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">high_accuracy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">high_accuracy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Omit high_accuracy, or pass None, to use automatic selection.</span>
+<h2 id="read-the-results">Read the results<a class="headerlink" href="#read-the-results" title="Permanent link">&para;</a></h2>
+<p>Both outputs have shape <code>(number_of_queries, k)</code>. IDs are zero-based row numbers
+in the data supplied to <code>build</code>; added vectors receive new IDs without renumbering
+existing ones. Results are ordered by increasing distance: <code>metric="l2"</code> estimates
+squared Euclidean distance, while <code>metric="ip"</code> estimates <code>1 - dot(data, query)</code>.
+Smaller values are better for both metrics. Quantized distances are estimates,
+not exact distances to the original vectors.</p>
+<p>IVF and HNSW may return fewer than <code>k</code> valid neighbors, for example after removals
+or when the probed IVF clusters contain too few points. Unfilled slots contain
+ID <code>2**32 - 1</code> and distance <code>+inf</code>. Filter them with
+<code>valid = ids != np.iinfo(np.uint32).max</code> before using IDs to index your data.</p>
+<p>The <code>metric</code> argument accepts <code>"l2"</code> and <code>"ip"</code> (also <code>"innerproduct"</code>). For
+cosine search, normalize database and query vectors first and use <code>metric="ip"</code>.</p>
+<h2 id="measure-recall">Measure recall<a class="headerlink" href="#measure-recall" title="Permanent link">&para;</a></h2>
+<p>For this small L2 example, compute exact neighbors from the original vectors,
+then compare several probe counts on the same built index. Recall@10 is the mean
+fraction of exact top-10 IDs returned for each query.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">k</span> <span class="o">=</span> <span class="mi">10</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Float64 exhaustive distances are practical for this tiny dataset only.</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">delta</span> <span class="o">=</span> <span class="n">queries</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">exact_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">delta</span> <span class="o">*</span> <span class="n">delta</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">exact_ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">exact_distances</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"stable"</span><span class="p">)[:,</span> <span class="p">:</span><span class="n">k</span><span class="p">]</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="k">for</span> <span class="n">nprobe</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">):</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">candidate_ids</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="n">nprobe</span><span class="p">)</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">recall</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="n">np</span><span class="o">.</span><span class="n">intersect1d</span><span class="p">(</span><span class="n">found</span><span class="p">,</span> <span class="n">expected</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">/</span> <span class="n">k</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="k">for</span> <span class="n">found</span><span class="p">,</span> <span class="n">expected</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">candidate_ids</span><span class="p">,</span> <span class="n">exact_ids</span><span class="p">)</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="p">])</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"nprobe=</span><span class="si">{</span><span class="n">nprobe</span><span class="si">}</span><span class="s2">: Recall@</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">recall</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </code></pre></div>
-<h3 id="add-and-remove-ivf-vectors">Add and remove IVF vectors<a class="headerlink" href="#add-and-remove-ivf-vectors" title="Permanent link">&para;</a></h3>
-<p>Starting with 0.5.1, a built or loaded IVF index can accept new vectors and exclude
-existing vectors from search without the original dataset:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">new_vectors</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="mi">50</span><span class="p">,</span> <span class="mi">64</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">)</span>  <span class="c1"># automatic cluster routing; ids 500..549</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>  <span class="c1"># returns 10; storage is retained</span>
+<p>Missing-result IDs cannot match any ground-truth ID and count as misses.
+Probing more clusters searches more candidates, but even probing all five does
+not guarantee recall of 1: quantized scoring and filtering remain approximate.</p>
+<p>This small example demonstrates the calculation. For tuning, use representative
+held-out queries and compare recall with latency; see the <a href="../benchmarks/bench/">benchmark guide</a>.
+The exhaustive array above is only suitable for small datasets. IP ground truth
+must rank <code>1 - dot</code> instead of squared L2.</p>
+<h2 id="save-and-load">Save and load<a class="headerlink" href="#save-and-load" title="Permanent link">&para;</a></h2>
+<p>Continue with the same <code>index</code> and <code>queries</code>. This example uses a temporary
+directory that is removed when the block finishes; use your own persistent path
+when keeping an index.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tempfile</span><span class="w"> </span><span class="kn">import</span> <span class="n">TemporaryDirectory</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">with</span> <span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">directory</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"ivf.index"</span><span class="p">)</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">loaded</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">loaded_ids</span><span class="p">,</span> <span class="n">loaded_distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">nprobe</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">np</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_array_equal</span><span class="p">(</span><span class="n">loaded_ids</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">np</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_allclose</span><span class="p">(</span><span class="n">loaded_distances</span><span class="p">,</span> <span class="n">distances</span><span class="p">)</span>
 </code></pre></div>
-<p>Batch additions because each <code>add()</code> copies the index storage. Removed IDs are
-not reused, and both additions and removals survive save/load. See the
-<a href="../index/ivf/#updating-an-index">IVF update guide</a> for costs and limits.</p>
-<p>The <code>metric</code> argument accepts <code>"l2"</code> and <code>"ip"</code> (also spelled
-<code>"innerproduct"</code>). To search by cosine similarity, normalize database and
-query vectors first and use <code>metric="ip"</code>.</p>
-<h3 id="add-and-remove-hnsw-vectors">Add and remove HNSW vectors<a class="headerlink" href="#add-and-remove-hnsw-vectors" title="Permanent link">&para;</a></h3>
-<p>With 0.5.2 or newer, reuse <code>data</code>, <code>queries</code>, and <code>clustering</code> from the IVF
-example above to build and update an HNSW index:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">HnswIndex</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">hnsw</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="p">(</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">dim</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">max_elements</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">M</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">)</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">hnsw</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">centroids</span><span class="p">,</span> <span class="n">clustering</span><span class="o">.</span><span class="n">assignments</span><span class="p">)</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># HNSW needs explicit capacity growth before adding beyond max_elements.</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">new_vectors</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="mi">50</span><span class="p">,</span> <span class="mi">64</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">hnsw</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">hnsw</span><span class="o">.</span><span class="n">max_elements</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">))</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">new_vectors</span><span class="p">)</span>  <span class="c1"># automatic nearest-centroid routing</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>  <span class="c1"># returns 10</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">hnsw</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
-</code></pre></div>
-<p>Removed points remain in the graph and count toward capacity, but never appear
-in results. Additions and removals survive save/load; files containing HNSW
-removals require 0.5.2 or newer. Do not update an index while it is being searched.
-See the <a href="../index/hnsw/#updating-an-index">HNSW update guide</a> for recall and capacity
-considerations.</p>
-<p>See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/python">Python examples</a>
-for IVF, HNSW, and SymphonyQG. For clustering, choose
-<a href="../clustering/#rabitqkmeans">RaBitQKMeans</a> for flat assignment, recommended for small cluster
-counts, or <a href="../clustering/#qgkmeans">QGKMeans</a> for graph assignment.</p>
-<h3 id="threading-and-file-paths">Threading and file paths<a class="headerlink" href="#threading-and-file-paths" title="Permanent link">&para;</a></h3>
-<p>Starting with 0.6.0, the library releases the Python GIL during native index search,
-construction, updates, and file I/O. The following contract applies to
-<code>IvfIndex</code>, <code>HnswIndex</code>, and <code>SymqgIndex</code>:</p>
-<table>
-<thead>
-<tr>
-<th>Operation on the same index</th>
-<th>Concurrent access</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>search</code>, <code>search_batch</code>, <code>save</code>, and property reads</td>
-<td>May run together</td>
-</tr>
-<tr>
-<td><code>build</code>, <code>add</code>, <code>remove</code>, and <code>resize</code>, where available</td>
-<td>Require exclusive access</td>
-</tr>
-</tbody>
-</table>
-<p>A conflicting call immediately raises
-<code>RuntimeError("Index is busy: conflicting operation in progress")</code>.
-It does not wait or queue an update. Access protection includes Python input
-conversion and is released when the operation returns or raises an exception.
-Different index objects can operate independently. Concurrent saves must use
-different output paths, including any sidecar files.</p>
-<p>Search parameters such as <code>ef</code>, <code>nprobe</code>, precision, and <code>num_threads</code> belong to
-each call. When using a Python thread pool, consider <code>num_threads=1</code> to avoid
-starting multiple native worker pools. Keep input arrays and any shared backing
-storage unchanged for the entire call; do not resize or modify them from another
-thread. Returned result arrays own their storage.</p>
-<p>These access checks belong to the Python wrappers. C++ callers must synchronize
-index updates themselves and use separate search output buffers.</p>
-<p><code>num_threads=0</code> selects the detected available logical CPU count. Positive values
-set an upper limit, capped at that count; small workloads may use fewer workers.
-Python index methods default to one thread; clustering defaults to <code>0</code>.
-On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
-before starting the program.</p>
-<p>Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
-in C++; Python paths are Unicode strings on all platforms.</p>
-<h3 id="index-file-compatibility">Index file compatibility<a class="headerlink" href="#index-file-compatibility" title="Permanent link">&para;</a></h3>
-<p>The compatibility suite loads frozen files written by v0.5.2, compares search
-IDs and distances, and verifies save/load migration and rejection of truncated
-or unsupported versions. See the
-<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence">fixture provenance and coverage</a>.
-Compatibility is format-specific; preserving old readers' ability to open new
-files is not guaranteed. Consult each index's format documentation before
-downgrading the library.</p>
-<h3 id="build-the-python-bindings-from-source">Build the Python bindings from source<a class="headerlink" href="#build-the-python-bindings-from-source" title="Permanent link">&para;</a></h3>
-<p>Source builds require Python 3.11 or newer, a C++17 compiler, CMake 3.20 or
-newer, and OpenMP. To install the current development version on Ubuntu or
-Debian:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>build-essential<span class="w"> </span>cmake<span class="w"> </span>libomp-dev
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-Library
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.
-</code></pre></div>
-<p>On Apple Silicon, use a native ARM64 Python environment. From the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>brew<span class="w"> </span>install<span class="w"> </span>cmake<span class="w"> </span>ninja<span class="w"> </span>libomp
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.<span class="w"> </span>-Ccmake.define.OpenMP_ROOT<span class="o">=</span><span class="s2">"</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>libomp<span class="k">)</span><span class="s2">"</span>
-</code></pre></div>
-<p>On Windows, install the build tools listed above, then run <code>python -m pip install .</code>
-from the repository root. For a portable source build on any supported platform,
-also pass <code>-Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code>.</p>
-<h2 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h2>
-<p>On Linux, clone the repository and build the library and examples:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-Library
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-</code></pre></div>
-<p>CMake enables native CPU tuning by default where supported by the compiler.
-For portable binaries within a supported OS and architecture, configure with
-<code>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF</code>; runtime kernel selection remains active.
-See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/README.md#quick-start">platform-specific build commands</a>
-for Linux ARM64, Windows, and Apple Silicon.</p>
-<h3 id="c-examples">C++ examples<a class="headerlink" href="#c-examples" title="Permanent link">&para;</a></h3>
-<p>Example executables are written to <code>bin/</code>. Their source demonstrates complete
-indexing and querying workflows:</p>
-<ul>
-<li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp">IVF RaBitQ</a></li>
-<li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp">HNSW RaBitQ</a></li>
-<li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/symqg_indexing.cpp">SymphonyQG</a></li>
-<li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/quantizer.cpp">Low-level quantization</a></li>
-</ul>
-<p>The low-level quantization example is provided as source and is not currently a
-CMake target. For the GIST benchmark workflow, see
-<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/example.sh"><code>example.sh</code></a>.</p>
-<h3 id="use-in-another-c-project">Use in another C++ project<a class="headerlink" href="#use-in-another-c-project" title="Permanent link">&para;</a></h3>
-<p>The C++ API and ABI are still evolving. For reproducible builds, pin a release
-or commit and include RaBitQ-Library as a Git submodule:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>git<span class="w"> </span>submodule<span class="w"> </span>add<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git<span class="w"> </span>third_party/rabitqlib
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>&lt;release-or-commit&gt;
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>git<span class="w"> </span>add<span class="w"> </span>third_party/rabitqlib
-</code></pre></div>
-<p>Add the library and link its namespaced target in your <code>CMakeLists.txt</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_SAMPLES</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">add_subdirectory</span><span class="p">(</span><span class="s">third_party/rabitqlib</span><span class="p">)</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::rabitqlib</span><span class="p">)</span>
-</code></pre></div>
-<p>Update the pinned revision deliberately when adopting upstream changes:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>fetch
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>&lt;release-or-commit&gt;
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>git<span class="w"> </span>add<span class="w"> </span>third_party/rabitqlib
-</code></pre></div>
-<h3 id="install-the-c-library">Install the C++ library<a class="headerlink" href="#install-the-c-library" title="Permanent link">&para;</a></h3>
-<p>Installation is useful for package managers, container images, and shared server
-environments. Disable native optimization for use on other CPUs:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-DRABITQ_BUILD_SAMPLES<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>-DCMAKE_INSTALL_PREFIX<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>cmake<span class="w"> </span>--install<span class="w"> </span>build
-</code></pre></div>
-<p>Consume the installed package with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="p">)</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::rabitqlib</span><span class="p">)</span>
-</code></pre></div>
-<p>For a non-system prefix, point CMake to the installation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-</code></pre></div>
-<p>Both submodule and installed-package integration require OpenMP on the consuming
-system. The <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/consumer">downstream consumer test</a>
-provides a complete installed-package example.</p>
-<h3 id="run-the-c-tests-on-linux">Run the C++ tests on Linux<a class="headerlink" href="#run-the-c-tests-on-linux" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DRABITQ_BUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
-</code></pre></div>
-<p>GoogleTest is downloaded during test configuration.</p>
+<p>The loaded index owns its data and restores the saved rotation. IVF indexes using
+HNSW centroid routing also need the accompanying <code>.hnsw</code> file; keep it with the
+main index. This small example uses Flat routing and has no sidecar.
+See <a href="../index/usage/#index-file-compatibility">file compatibility</a> before downgrading.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Learn how the <a href="../rabitq/rabitq/">RaBitQ quantizer</a> works.</li>
-<li>Select an index: <a href="../index/ivf/">IVF</a>, <a href="../index/hnsw/">HNSW</a>, or
-  <a href="../index/qg/">SymphonyQG</a>.</li>
-<li>Review the
-  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md">contribution workflow</a>
-  before opening a pull request.</li>
+<li><a href="../index/ivf/">IVF</a>: raw-vector reranking, precision, centroid routing and updates.</li>
+<li><a href="../index/hnsw/">HNSW</a> and <a href="../index/qg/">SymphonyQG</a>: graph-index workflows and parameters.</li>
+<li><a href="../index/usage/">Index usage contracts</a>: counts, threading, input lifetimes and file paths.</li>
+<li><a href="../clustering/">Clustering</a>: choose flat RaBitQKMeans or graph-based QGKMeans.</li>
+<li><a href="../cpp_integration/">C++ integration</a>: builds, installation and component selection.</li>
+<li><a href="../rabitq/core_api/">Stable core API</a>: integrate quantization into your own storage.</li>
 </ul>
 
 
@@ -1979,13 +1742,13 @@ provides a complete installed-package example.</p>
         
         
           
-          <a href="../releases/0.6.0/" class="md-footer__link md-footer__link--next" aria-label="Next: 0.6.0">
+          <a href="../installation/" class="md-footer__link md-footer__link--next" aria-label="Next: Installation">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                0.6.0
+                Installation
               </div>
             </div>
             <div class="md-footer__button md-icon">

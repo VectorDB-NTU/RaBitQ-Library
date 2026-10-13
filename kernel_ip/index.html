@@ -16,7 +16,7 @@
         <link rel="prev" href="../compact_code/">
       
       
-        <link rel="next" href="../index/ivf/">
+        <link rel="next" href="../index/usage/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Inner Product - RaBitQ Library</title>
+        <title>Inner product - RaBitQ Library</title>
       
     
     
@@ -44,12 +44,6 @@
       
     
     
-      
-        
-        
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
     
@@ -71,7 +65,7 @@
     
     
     
-    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="deep-purple">
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
   
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
@@ -80,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#kernel-inner-product" class="md-skip">
+        <a href="#inner-product-kernels" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Inner Product
+              Inner product
             
           </span>
         </div>
@@ -129,7 +123,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="deep-purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
       <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
@@ -139,7 +133,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-purple"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
       <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
@@ -298,7 +292,61 @@
   <span class="md-ellipsis">
     
   
-    Quick Start
+    Quick start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cpp_integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    C++ Integration
   
 
     
@@ -322,6 +370,8 @@
       
         
       
+        
+      
     
     
     
@@ -335,17 +385,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    Release Notes
+    Release notes
   
 
     
@@ -356,16 +406,44 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
   
-    Release Notes
+    Release notes
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.7.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -425,6 +503,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -438,10 +520,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
             
   
   
@@ -459,8 +541,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_4">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -561,6 +643,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../rabitq/core_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stable core API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modular_migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modular migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../rabitq/estimator/" class="md-nav__link">
         
   
@@ -635,10 +773,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_8" checked>
         
           
-          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_8" id="__nav_6_8_label" tabindex="0">
             
   
   
@@ -656,8 +794,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_4_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -681,7 +819,7 @@
   <span class="md-ellipsis">
     
   
-    Compact Code Storage
+    Compact code storage
   
 
     
@@ -718,7 +856,7 @@
   <span class="md-ellipsis">
     
   
-    Inner Product
+    Inner product
   
 
     
@@ -736,7 +874,7 @@
   <span class="md-ellipsis">
     
   
-    Inner Product
+    Inner product
   
 
     
@@ -765,19 +903,19 @@
   <a href="#the-kernel-for-binary-codes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Kernel for Binary Codes
+        The kernel for binary codes
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The Kernel for Binary Codes">
+    <nav class="md-nav" aria-label="The kernel for binary codes">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#single-code" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Single Code
+        Single code
       
     </span>
   </a>
@@ -788,7 +926,7 @@
   <a href="#batch-code" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Batch Code
+        Batch code
       
     </span>
   </a>
@@ -804,7 +942,7 @@
   <a href="#the-kernel-for-multi-bit-codes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Kernel for Multi-bit Codes
+        The kernel for multi-bit codes
       
     </span>
   </a>
@@ -850,6 +988,8 @@
       
         
       
+        
+      
     
     
     
@@ -863,17 +1003,17 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
             
   
   
   <span class="md-ellipsis">
     
   
-    Vector Search
+    Vector search
   
 
     
@@ -884,16 +1024,44 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
-    Vector Search
+    Vector search
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared contracts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1010,10 +1178,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
             
   
   
@@ -1031,8 +1199,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1134,10 +1302,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
         
           
-          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
             
   
   
@@ -1155,8 +1323,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_8">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1208,7 +1376,7 @@
   <span class="md-ellipsis">
     
   
-    IVF Indexes
+    IVF indexes
   
 
     
@@ -1236,7 +1404,7 @@
   <span class="md-ellipsis">
     
   
-    Graph Indexes
+    Graph indexes
   
 
     
@@ -1315,19 +1483,19 @@
   <a href="#the-kernel-for-binary-codes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Kernel for Binary Codes
+        The kernel for binary codes
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The Kernel for Binary Codes">
+    <nav class="md-nav" aria-label="The kernel for binary codes">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#single-code" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Single Code
+        Single code
       
     </span>
   </a>
@@ -1338,7 +1506,7 @@
   <a href="#batch-code" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Batch Code
+        Batch code
       
     </span>
   </a>
@@ -1354,7 +1522,7 @@
   <a href="#the-kernel-for-multi-bit-codes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The Kernel for Multi-bit Codes
+        The kernel for multi-bit codes
       
     </span>
   </a>
@@ -1386,21 +1554,20 @@
   
 
 
-<h1 id="kernel-inner-product">Kernel - Inner Product<a class="headerlink" href="#kernel-inner-product" title="Permanent link">&para;</a></h1>
+<h1 id="inner-product-kernels">Inner-product kernels<a class="headerlink" href="#inner-product-kernels" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>Inner-product kernels are selected at runtime. The library provides AVX2/FMA
 and AVX-512 implementations on x86-64, plus NEON and portable scalar
 implementations on ARM64. AVX-512 VPOPCNTDQ is used by popcount-specific
 x86 paths when available.</p>
 </blockquote>
-<p>This part introduces how to compute the inner product between quantization codes and rotated query vectors i.e., <span class="arithmatex"><span class="MathJax_Preview">\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;</span><script type="math/tex">\left< \mathbf{x}_0,\mathbf{q}_r'\right></script></span> and <span class="arithmatex"><span class="MathJax_Preview">\left&lt; \mathbf{x}_u,\mathbf{q}_r'\right&gt;</span><script type="math/tex">\left< \mathbf{x}_u,\mathbf{q}_r'\right></script></span>. The implementation includes two types:</p>
-<ol>
-<li>The inner product between binary codes and <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span>.</li>
-<li>The inner product between multi-bit codes and <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span>.</li>
-</ol>
-<h2 id="the-kernel-for-binary-codes">The Kernel for Binary Codes<a class="headerlink" href="#the-kernel-for-binary-codes" title="Permanent link">&para;</a></h2>
-<h3 id="single-code">Single Code<a class="headerlink" href="#single-code" title="Permanent link">&para;</a></h3>
-<p>We compute the inner product between a single binary vector <span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_0</span><script type="math/tex">\mathbf{x}_0</script></span> and a floating-point vector <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> via bitwise-and <code>&amp;</code> and <code>popcnt</code>. We first quantize <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> into a vector of 4-bit unsigned integers (based on a fast version of RaBitQ). </p>
+<p>These kernels compute inner products of sign or multi-bit codes with a rotated
+query. The notation follows the <a href="../rabitq/estimator/">Estimator</a>.</p>
+<h2 id="the-kernel-for-binary-codes">The kernel for binary codes<a class="headerlink" href="#the-kernel-for-binary-codes" title="Permanent link">&para;</a></h2>
+<h3 id="single-code">Single code<a class="headerlink" href="#single-code" title="Permanent link">&para;</a></h3>
+<p>For a sign code <span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_0</span><script type="math/tex">\mathbf{x}_0</script></span>, first quantize the rotated query
+<span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> into four-bit unsigned integers using the fast RaBitQ encoder.
+Then use bitwise-and <code>&amp;</code> and <code>popcnt</code> to estimate the inner product.</p>
 <div class="arithmatex">
 <div class="MathJax_Preview">
 \mathbf{q}_r'\approx \Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D
@@ -1409,7 +1576,7 @@ x86 paths when available.</p>
 \mathbf{q}_r'\approx \Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D
 </script>
 </div>
-<p>Let <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u^{(i)}</span><script type="math/tex">\mathbf{q}_u^{(i)}</script></span> be the <span class="arithmatex"><span class="MathJax_Preview">i</span><script type="math/tex">i</script></span>-th bit of <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u</span><script type="math/tex">\mathbf{q}_u</script></span>. Then with the quantized vector <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u</span><script type="math/tex">\mathbf{q}_u</script></span>, we can compute the inner product based on the following formula:</p>
+<p>Let <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u^{(i)}</span><script type="math/tex">\mathbf{q}_u^{(i)}</script></span> be bit plane <span class="arithmatex"><span class="MathJax_Preview">i</span><script type="math/tex">i</script></span> of <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u</span><script type="math/tex">\mathbf{q}_u</script></span>. Then:</p>
 <div class="arithmatex">
 <div class="MathJax_Preview">
 \begin{align}
@@ -1430,24 +1597,34 @@ x86 paths when available.</p>
 \end{align}
 </script>
 </div>
-<h3 id="batch-code">Batch Code<a class="headerlink" href="#batch-code" title="Permanent link">&para;</a></h3>
-<p>We compute the inner product between a batch of binary vectors <span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_0</span><script type="math/tex">\mathbf{x}_0</script></span> and a floating-point vector <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> via <code>FastScan</code>. Here we provide a brief introduction and refer readers to a detailed <a href="https://github.com/facebookresearch/faiss/wiki/Fast-accumulation-of-PQ-and-AQ-codes-(FastScan)">tutorial by Faiss</a>.</p>
-<p>For a <span class="arithmatex"><span class="MathJax_Preview">D</span><script type="math/tex">D</script></span>-bit binary, we split it into <span class="arithmatex"><span class="MathJax_Preview">M=D/4</span><script type="math/tex">M=D/4</script></span> segments. We prepare look-up-tables for each segment.
-- <span class="arithmatex"><span class="MathJax_Preview">\mathrm{LUT}[m][mask]</span><script type="math/tex">\mathrm{LUT}[m][mask]</script></span>: the inner product with <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> in the <span class="arithmatex"><span class="MathJax_Preview">m</span><script type="math/tex">m</script></span>-th segment, i.e., the <span class="arithmatex"><span class="MathJax_Preview">(4m)</span><script type="math/tex">(4m)</script></span>-th to the <span class="arithmatex"><span class="MathJax_Preview">(4m+3)</span><script type="math/tex">(4m+3)</script></span>-th dimensions, when the code in the <span class="arithmatex"><span class="MathJax_Preview">m</span><script type="math/tex">m</script></span>-th segment equals to <span class="arithmatex"><span class="MathJax_Preview">mask</span><script type="math/tex">mask</script></span>. </p>
+<h3 id="batch-code">Batch code<a class="headerlink" href="#batch-code" title="Permanent link">&para;</a></h3>
+<p>FastScan scores batches of sign codes using query lookup tables. See the
+<a href="https://github.com/facebookresearch/faiss/wiki/Fast-accumulation-of-PQ-and-AQ-codes-(FastScan)">Faiss tutorial</a>
+for background.</p>
+<p>For a <span class="arithmatex"><span class="MathJax_Preview">D</span><script type="math/tex">D</script></span>-bit binary code, we split it into <span class="arithmatex"><span class="MathJax_Preview">M=D/4</span><script type="math/tex">M=D/4</script></span> segments. We prepare look-up-tables for each segment.
+- <span class="arithmatex"><span class="MathJax_Preview">\mathrm{LUT}[m][mask]</span><script type="math/tex">\mathrm{LUT}[m][mask]</script></span>: the inner product with <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> in the <span class="arithmatex"><span class="MathJax_Preview">m</span><script type="math/tex">m</script></span>-th segment, i.e., the <span class="arithmatex"><span class="MathJax_Preview">(4m)</span><script type="math/tex">(4m)</script></span>-th to the <span class="arithmatex"><span class="MathJax_Preview">(4m+3)</span><script type="math/tex">(4m+3)</script></span>-th dimensions, when the code in the <span class="arithmatex"><span class="MathJax_Preview">m</span><script type="math/tex">m</script></span>-th segment equals to <span class="arithmatex"><span class="MathJax_Preview">mask</span><script type="math/tex">mask</script></span>.</p>
 <p>Based on the look-up-tables, we can compute the inner product as follows:</p>
 <div class="arithmatex">
 <div class="MathJax_Preview">
 \begin{align}
-\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]] 
+\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
 \end{align}
 </div>
 <script type="math/tex; mode=display">
 \begin{align}
-\left< \mathbf{x}_0,\mathbf{q}_r'\right>= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]] 
+\left< \mathbf{x}_0,\mathbf{q}_r'\right>= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
 \end{align}
 </script>
 </div>
-<h2 id="the-kernel-for-multi-bit-codes">The Kernel for Multi-bit Codes<a class="headerlink" href="#the-kernel-for-multi-bit-codes" title="Permanent link">&para;</a></h2>
+<p>This equality describes real-valued lookup tables. Standard FastScan quantizes
+the entries to eight bits for SIMD accumulation. For one-bit data codes, that
+additional error is typically negligible relative to the RaBitQ encoding error.
+As the data-code bit width increases, the encoding error shrinks and LUT precision
+becomes more significant. High-accuracy FastScan (HACC) uses 16-bit LUT entries
+to reduce the error carried from the sign-code inner product into extra-bit
+refinement. IVF selects HACC by default for 4–9 total bits and standard FastScan
+for 1–3 bits or raw-vector reranking; see <a href="../index/ivf/#querying">precision selection</a>.</p>
+<h2 id="the-kernel-for-multi-bit-codes">The kernel for multi-bit codes<a class="headerlink" href="#the-kernel-for-multi-bit-codes" title="Permanent link">&para;</a></h2>
 <p>For multi-bit codes, the packed unsigned values are unpacked and accumulated
 by the selected AVX2/FMA, AVX-512, NEON, or scalar kernel. The dispatch table supports zero
 through eight extended bits; full RaBitQ codes therefore contain one through
@@ -1487,7 +1664,7 @@ nine bits per dimension.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../compact_code/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Compact Code Storage">
+          <a href="../compact_code/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Compact code storage">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1497,20 +1674,20 @@ nine bits per dimension.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Compact Code Storage
+                Compact code storage
               </div>
             </div>
           </a>
         
         
           
-          <a href="../index/ivf/" class="md-footer__link md-footer__link--next" aria-label="Next: IVF RaBitQ">
+          <a href="../index/usage/" class="md-footer__link md-footer__link--next" aria-label="Next: Shared contracts">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                IVF RaBitQ
+                Shared contracts
               </div>
             </div>
             <div class="md-footer__button md-icon">
