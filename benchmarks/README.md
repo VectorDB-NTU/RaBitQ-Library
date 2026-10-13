@@ -15,8 +15,8 @@ Results: [IVF](../docs/docs/benchmarks/ivf.md),
 
 From the repository root, after installing the documented system prerequisites
 and activating a Python 3.13 environment, these commands measure the active checkout.
-To repeat the published 0.5.2 software configuration, first use the
-[pinned historical checkout](../docs/docs/benchmarks/bench.md#package-installation).
+Published library results use 0.7.0; baseline results retain historical measurements.
+See the [recorded revisions and environments](../docs/docs/benchmarks/bench.md#package-installation).
 Keep measurements of different revisions in separate output directories.
 
 ```bash

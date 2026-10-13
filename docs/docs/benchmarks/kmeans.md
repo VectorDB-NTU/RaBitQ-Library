@@ -1,8 +1,8 @@
 # K-means benchmark
 
-These are historical measurements labeled RaBitQ-Library 0.5.2. See the
-[recorded snapshot and reproduction limits](bench.md#package-installation).
-Measurements of the modular source tree require a separate run.
+RaBitQ-Library results were measured with **0.7.0 on 2026-10-13**.
+Baseline results are retained from the historical measurements and were not rerun.
+See the [source revisions, environments and comparison limits](bench.md#package-installation).
 
 Compare **QGKMeans**, **Faiss K-means**, and **SuperKMeans** using their Python APIs.
 Metrics are total time, WCSS, and recall@10 with 1% of clusters probed.
@@ -56,7 +56,7 @@ outside timing.
 <!-- kmeans:gist1m:start -->
 | Method | Total time (s) | WCSS | Recall@10 (40 probes) | Iterations |
 | --- | ---: | ---: | ---: | ---: |
-| QGKMeans | 16.00 | 1034787.87 | 0.819600 | 25 |
+| QGKMeans | 15.68 | 1034787.87 | 0.819600 | 25 |
 | Faiss K-means | 84.17 | 1034624.88 | 0.815700 | 25 |
 | SuperKMeans | 28.14 | 1034648.39 | 0.820700 | 25 |
 <!-- kmeans:gist1m:end -->
@@ -66,7 +66,7 @@ outside timing.
 <!-- kmeans:dbpedia:start -->
 | Method | Total time (s) | WCSS | Recall@10 (40 probes) | Iterations |
 | --- | ---: | ---: | ---: | ---: |
-| QGKMeans | 24.08 | 620378.132 | 0.893900 | 25 |
+| QGKMeans | 22.37 | 620378.132 | 0.893900 | 25 |
 | Faiss K-means | 171.03 | 620737.534 | 0.894700 | 25 |
 | SuperKMeans | 35.23 | 620268.628 | 0.896800 | 24 |
 <!-- kmeans:dbpedia:end -->

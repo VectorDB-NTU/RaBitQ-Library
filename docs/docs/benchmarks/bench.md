@@ -26,33 +26,41 @@ L2 ground truth for OpenAI.
 | CPU | One Intel Xeon Gold 6418H, 24 cores, 48 hardware threads |
 | Construction / clustering | 48 threads |
 | Query throughput | 1 process, 1 search thread, 1 query per call |
-| Platform | Ubuntu 22.04.5 LTS, Linux 6.8.0-84-generic, x86-64 |
+| Platform | Ubuntu 22.04, x86-64; RaBitQ 0.7.0: Linux 6.8.0-138-generic; historical baselines: Linux 6.8.0-84-generic |
 | Python / NumPy | 3.13.15 / 2.5.2 |
-| Construction and clustering compiler / CMake | GCC 13.1.0 / 3.28.3, Release |
-| RaBitQ-Library | 0.5.2 |
+| Compiler / CMake | RaBitQ 0.7.0: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; historical baselines: GCC 13.1.0 / 3.28.3, Release |
+| RaBitQ-Library | 0.7.0, measured 2026-10-13 |
 | Baselines | Faiss 1.15.0, SuperKMeans 0.2.0; Intel MKL 2020.4, GNU OpenMP |
 
 ## Package installation
 
-The tables and figures are historical results, labeled RaBitQ-Library 0.5.2.
-The published source, scripts, and results are available together at snapshot
-`a332c1ce97588aaed4f6a8a5476f84a81f947313`. To run that snapshot's protocol,
-start in a separate checkout and activate your benchmark Python environment:
+The RaBitQ-Library rows and curves were refreshed on 2026-10-13 using 0.7.0.
+The measurement checkout was `de793e8a978a51a7031efefe96573043e8251bb7`;
+the installed wheel was built from `0c7578126b84e08b98816c0e01f0824a0a79525f`,
+which has the same source tree. The measured extension SHA-256 was
+`48560860ef4ddc6d929e53a36afd233de3569dcce74d6c46338a11a1113c9ed4`.
+
+Faiss and SuperKMeans measurements are retained unchanged from the historical
+snapshot `a332c1ce97588aaed4f6a8a5476f84a81f947313`; they were not rerun.
+The baseline configurations, search grids and timing definitions are unchanged.
+These comparisons combine separate measurement sessions and different compiler
+and kernel versions, as recorded above; they are not a controlled measurement
+of the effect of upgrading RaBitQ alone.
+
+To use the source tree measured for 0.7.0, start in a separate checkout and
+activate your benchmark Python environment:
 
 ```bash
 git clone --no-checkout https://github.com/VectorDB-NTU/RaBitQ-Library.git RaBitQ-benchmark-snapshot
 cd RaBitQ-benchmark-snapshot
-git checkout --detach a332c1ce97588aaed4f6a8a5476f84a81f947313
+git checkout --detach de793e8a978a51a7031efefe96573043e8251bb7
 ```
 
-This pins the published snapshot, not a verified original measurement binary:
-the published CSVs do not record the exact source commit used for those binaries.
-The version label alone does not establish that they match the `v0.5.2` release tag.
-Exact reproduction of the original binaries therefore remains unverified.
-
-To benchmark current code instead, use your current checkout and record its
-commit and any local changes. Treat those measurements as a new run, separate
-from the historical results below.
+For the historical results labeled 0.5.2, use snapshot
+`a332c1ce97588aaed4f6a8a5476f84a81f947313` instead. That snapshot does not
+identify the original measurement binaries, whose exact reproduction remains
+unverified. For any new measurement, record the source commit, local changes,
+compiler and build options, and use a separate output directory.
 
 Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
 source providing `g++-13` and the `multiverse` component for MKL.
@@ -69,7 +77,10 @@ source benchmarks/env.sh
 The installer builds RaBitQ from the selected checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
 in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
 and verification records are saved in `build/benchmark-baselines/`.
-Use `--dry-run` to preview installation commands.
+Use `--dry-run` to preview installation commands. The installer defaults to the
+historical GCC 13 toolchain; it does not recreate the GCC 14.3.0 wheel used for
+the 0.7.0 measurements. Match the recorded compiler and native-optimization
+setting when comparing new library timings.
 
 ## Construction and search settings
 
@@ -110,9 +121,12 @@ checks are outside construction timing.
 Each method has one build or fit per dataset; results do not measure run-to-run
 variation.
 The committed CSVs support checking the displayed tables and plotted points,
-but do not include the original raw run logs or measurement binaries. They are
-archived results, not an independent reproduction or results from the current
-source tree. The experiments in the cited papers are separate measurements.
+but do not include raw run logs or measurement binaries. The 0.7.0 raw records,
+logs and indexes are retained locally under
+`results/benchmarks-0.7.0-20261013-2239/`, including the run manifest and the
+provenance of the reused local OpenAI dataset. Historical baseline raw logs and
+binaries are not included. No run-to-run or shared-host noise correction is
+applied. The experiments in the cited papers are separate measurements.
 
 ## Data and reproduction
 
@@ -125,6 +139,12 @@ python benchmarks/reproduce.py
 
 # Prepare data only
 python benchmarks/download_datasets.py
+
+# Repeat only the library methods (leave historical baseline exports unchanged)
+python benchmarks/reproduce.py --output-dir results/benchmarks-new-run \
+  --methods rabitq-ivf-raw rabitq-ivf-1p4 rabitq-ivf-1p8 \
+  rabitq-symqg-raw rabitq-symqg-4 rabitq-symqg-8 \
+  rabitq-hnsw-1p4 rabitq-hnsw-1p8 qgkmeans
 
 # Selected results
 python benchmarks/reproduce.py --benchmarks ivf --datasets gist1m

@@ -1,8 +1,8 @@
 # Graph benchmark
 
-These are historical measurements labeled RaBitQ-Library 0.5.2. See the
-[recorded snapshot and reproduction limits](bench.md#package-installation).
-Measurements of the modular source tree require a separate run.
+RaBitQ-Library results were measured with **0.7.0 on 2026-10-13**.
+Baseline results are retained from the historical measurements and were not rerun.
+See the [source revisions, environments and comparison limits](bench.md#package-installation).
 
 Settings and results for eight configurations. See the [overview](bench.md) for
 hardware, datasets, and measurement definitions.
@@ -48,11 +48,11 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:gist1m:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| SymphonyQG raw | 0.00 | 38.74 | 38.74 | 3.27 | 7.51 |
-| SymphonyQG 4-bit | 0.00 | 38.41 | 38.41 | 1.86 | 4.39 |
-| SymphonyQG 8-bit | 0.00 | 38.42 | 38.42 | 2.04 | 4.84 |
-| HNSW RaBitQ 1+4 | 1.24 | 70.57 | 71.81 | 0.35 | 0.72 |
-| HNSW RaBitQ 1+8 | 1.39 | 76.69 | 78.09 | 0.55 | 1.16 |
+| SymphonyQG raw | 0.00 | 34.54 | 34.54 | 3.20 | 7.51 |
+| SymphonyQG 4-bit | 0.00 | 37.02 | 37.02 | 1.79 | 4.39 |
+| SymphonyQG 8-bit | 0.00 | 37.85 | 37.85 | 1.99 | 4.84 |
+| HNSW RaBitQ 1+4 | 1.39 | 71.06 | 72.46 | 0.33 | 0.72 |
+| HNSW RaBitQ 1+8 | 1.39 | 77.65 | 79.04 | 0.53 | 1.16 |
 | Faiss HNSW Flat | 0.00 | 78.94 | 78.94 | 1.61 | 3.71 |
 | Faiss HNSW SQ4 | 1.06 | 55.11 | 56.17 | 0.24 | 0.58 |
 | Faiss HNSW SQ8 | 1.08 | 47.12 | 48.20 | 0.42 | 1.03 |
@@ -67,11 +67,11 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:dbpedia:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| SymphonyQG raw | 0.00 | 59.40 | 59.40 | 5.06 | 11.79 |
-| SymphonyQG 4-bit | 0.00 | 57.92 | 57.92 | 2.85 | 6.80 |
-| SymphonyQG 8-bit | 0.00 | 57.17 | 57.17 | 3.35 | 7.51 |
-| HNSW RaBitQ 1+4 | 1.59 | 111.02 | 112.61 | 0.57 | 1.05 |
-| HNSW RaBitQ 1+8 | 1.53 | 122.57 | 124.10 | 0.83 | 1.76 |
+| SymphonyQG raw | 0.00 | 53.35 | 53.35 | 5.01 | 11.79 |
+| SymphonyQG 4-bit | 0.00 | 54.93 | 54.93 | 2.73 | 6.80 |
+| SymphonyQG 8-bit | 0.00 | 55.38 | 55.38 | 3.27 | 7.51 |
+| HNSW RaBitQ 1+4 | 1.57 | 112.62 | 114.18 | 0.48 | 1.05 |
+| HNSW RaBitQ 1+8 | 1.74 | 124.84 | 126.58 | 0.79 | 1.76 |
 | Faiss HNSW Flat | 0.00 | 147.53 | 147.53 | 2.69 | 5.85 |
 | Faiss HNSW SQ4 | 1.74 | 101.82 | 103.57 | 0.36 | 0.85 |
 | Faiss HNSW SQ8 | 1.79 | 80.66 | 82.45 | 0.64 | 1.56 |
