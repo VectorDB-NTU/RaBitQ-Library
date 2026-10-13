@@ -2,15 +2,11 @@
 
 #include <cstddef>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::ivf {
 
-/**
- * @brief Cluster is used for ivf index with rabitq+. Components are only used for record
- * the addresses for different part of data.
- *
- */
+// Non-owning view of one IVF cluster's codes, reranking data and point IDs.
 class Cluster {
    private:
     size_t num_;                  // Num of vectors in this cluster
@@ -20,9 +16,11 @@ class Cluster {
 
    public:
     explicit Cluster(size_t, char*, char*, PID*);
-    Cluster(const Cluster& other);
-    Cluster(Cluster&& other) noexcept;
-    ~Cluster() {}
+    Cluster(const Cluster&) = default;
+    Cluster(Cluster&&) noexcept = default;
+    Cluster& operator=(const Cluster&) = delete;
+    Cluster& operator=(Cluster&&) = delete;
+    ~Cluster() = default;
 
     [[nodiscard]] char* batch_data() const { return this->batch_data_; }
 
@@ -36,15 +34,4 @@ class Cluster {
 inline Cluster::Cluster(size_t num, char* batch_data, char* ex_data, PID* ids)
     : num_(num), batch_data_(batch_data), ex_data_(ex_data), ids_(ids) {}
 
-inline Cluster::Cluster(const Cluster& other)
-    : num_(other.num_)
-    , batch_data_(other.batch_data_)
-    , ex_data_(other.ex_data_)
-    , ids_(other.ids_) {}
-
-inline Cluster::Cluster(Cluster&& other) noexcept
-    : num_(other.num_)
-    , batch_data_(other.batch_data_)
-    , ex_data_(other.ex_data_)
-    , ids_(other.ids_) {}
 }  // namespace rabitqlib::ivf

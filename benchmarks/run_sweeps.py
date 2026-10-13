@@ -20,7 +20,7 @@ def main():
     parser.add_argument(
         "--output-dir", type=Path, default=Path("results/benchmarks/ann")
     )
-    parser.add_argument("--methods", nargs="+", choices=[case[0] for case in CASES])
+    parser.add_argument("--methods", nargs="+", choices=[case.name for case in CASES])
     args = parser.parse_args()
     # One native search thread, including BLAS transforms.
     env = dict(
@@ -28,7 +28,8 @@ def main():
     )
     failed = []
     for dataset in args.datasets:
-        for name, _, _ in CASES:
+        for case in CASES:
+            name = case.name
             if args.methods is not None and name not in args.methods:
                 continue
             initial = args.output_dir / dataset / f"{name}.json"

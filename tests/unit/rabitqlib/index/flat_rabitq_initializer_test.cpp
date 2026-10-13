@@ -9,13 +9,18 @@
 #include <ios>
 #include <iterator>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::ivf {
 namespace {

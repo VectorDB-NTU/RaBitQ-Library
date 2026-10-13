@@ -5,7 +5,7 @@
 
 #include "../simd/packed_tail_avx2.hpp"
 #include "../simd/warmup_kernels.hpp"
-#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/core/query.hpp"
 
 namespace rabitqlib::hnsw::detail {
 

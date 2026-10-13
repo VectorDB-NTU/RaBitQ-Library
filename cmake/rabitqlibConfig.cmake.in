@@ -1,9 +1,15 @@
 @PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)
-include("${CMAKE_CURRENT_LIST_DIR}/rabitqOpenMP.cmake")
-find_dependency(OpenMP REQUIRED)
+set(rabitqlib_USE_OPENMP @RABITQ_USE_OPENMP@)
+if(rabitqlib_USE_OPENMP)
+    include("${CMAKE_CURRENT_LIST_DIR}/rabitqOpenMP.cmake")
+    find_dependency(OpenMP REQUIRED COMPONENTS CXX)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/rabitqlibTargets.cmake")
 
+set(rabitqlib_core_FOUND TRUE)
+set(rabitqlib_fastscan_FOUND @RABITQ_BUILD_FASTSCAN@)
+set(rabitqlib_index_FOUND @RABITQ_BUILD_INDEX@)
 check_required_components(rabitqlib)

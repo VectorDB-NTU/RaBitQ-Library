@@ -1,66 +1,68 @@
 # Quantizer
 
-RaBitQLib includes two versions of implementations for the RaBitQ algorithm and designs various data formats to ease practical deployment. Specifically, the two implementaions offer different trade-offs as follows. 
+For a new per-vector quantization integration, start with the
+[stable core API v1](core_api.md#minimal-example). This page is an advanced
+reference for the existing encoding interfaces and five data formats below.
 
-1. Optimal accuracy with longer quantization time.
-2. Nearly-optimal accuracy with significantly fast quantization.
+| Your task | Start here |
+| --- | --- |
+| Encode and score individual vectors in your own storage | [Stable core API v1](core_api.md): caller-owned buffers, separate factors and a source-stability contract |
+| Score batches with FastScan | [FastScan integration](../cpp_integration.md#fastscan-integration) and the batch formats below |
+| Integrate existing scalar, split-code or record layouts | [Data format reference](#data-format) below; these advanced interfaces are outside the v1 stability guarantee |
+| Build a complete vector-search index | [Quick start](../quick_start.md) |
 
-Various advanced data formats are provided to support the following needs. 
-
-1. Drop-in replacement for uniform scalar quantization.
-2. Efficient distance estimation for single vectors.
-3. Efficient distance estimation for batched vectors.
-4. Incremental distance estimation for splitted single vectors.
-5. Incremental distance estimation for splitted batched vectors.
-
-These data formats map raw floating-point vectors into `uint8` or `uint32`
+These data formats map floating-point vectors into `uint8` or `uint32`
 codes. For the packed extended-code layouts, see
-`rabitqlib/quantization/pack_excode.hpp`.
+`rabitqlib/core/pack_excode.hpp`.
 
 The examples below focus on layouts and omit rotation. In an index, rotate data,
 centroids, and queries with the same rotator first and use its padded dimension.
-Query snippets use `rabitqlib/index/estimator.hpp`; the full-vector example also
-needs `<iostream>` and `<numeric>`.
-
-RaBitQ quantizer is included in `rabitq_impl.hpp` and `rabitq.hpp`.
-```css
-.
-├── rabitqlib
-│   ├── ...
-│   └── quantization
-│       ├── ...
-│       ├── rabitq_impl.hpp
-│       └── rabitq.hpp
-└── ...
-```
+Single-vector query snippets use `rabitqlib/core/estimator.hpp` and link
+`rabitqlib::core`; batch-query snippets use `rabitqlib/fastscan/estimator.hpp` and link
+`rabitqlib::fastscan`. Both batch formats use `fastscan/encoder.hpp` and
+`fastscan/data_layout.hpp`; their 32-vector packing is in `fastscan/pack_codes.hpp`.
+The old `quantization/` and generic `index/` forwarding paths have been removed.
+See the [migration guide](../modular_migration.md) and
+[modular C++ integration](../cpp_integration.md#core-only-c-integration).
 
 ## Implementations
-Let $B$ be the bit-width for each dimension. Both implementations of RaBitQ include two steps. 
 
-1. Compute a **binary code** by recording the sign of every coordinate. 
-2. Compute an **ex-code** of $B-1$ bits (when $B>1$).
+Let $B$ be the total bits per dimension. Encoding produces two parts:
 
-The binary code is easily computed by the function `one_bit_code` in `rabitq_impl.hpp`.
+1. A **sign code**: one bit per coordinate.
+2. An **extra-bit code**: the remaining $B-1$ bits when $B>1$.
 
-The computation of ex-codes includes two versions of implementation. 
+The internal sign encoder is in `core/detail/rabitq_impl.hpp`. Use the public
+entry points in `core/encoder.hpp` or `fastscan/encoder.hpp`; implementation
+headers are not a stable integration surface.
 
-In the first implementation, we compute the ex-codes of RaBitQ based on the algorithm described in the RaBitQ [SIGMOD paper](https://doi.org/10.1145/3725413) (Section 3.2.2). For a vector, to minimize the quantization error, the algorithm tries many different rescaling factors. For each rescaling factor, it rescales the vector and performs rounding (i.e., scalar quantization) to generate a quantization code. Then it finds out the factor and codes which minimizes the quantization error. Note that in the library, the range of enumeration is approriately shrinked, which brings better efficiency without affecting the accuracy.
+Choose between two extra-code encoding paths:
 
-In the second implementation, instead of enumerating different rescaling factors, it directly rounds every vector based on the **expected optimal factor**. Specifically, recall that all data vectors are randomly rotated before quantization. The expected optimal factor is computed as follows. We sample several random vectors which follow uniform distribution on the unit sphere and use the first implementation to quantize them. We record the optimal factor for each and take the average of the optimal factors as the expected optimal factor. This implementation introduces some accuracy decrease while significantly speeds up the quantization.
+The default path searches the configured rescaling interval
+for the best quantized direction, following the RaBitQ [SIGMOD paper](https://doi.org/10.1145/3725413)
+(Section 3.2.2). The current implementation can use SIMD to evaluate and prune
+intervals; a scalar event sweep remains the reference and fallback when the SIMD
+search cannot certify a winner. This path preserves the reference tie and rounding rules.
 
+The fast path reuses a calibrated scaling factor instead of searching per vector.
+`faster_config` samples uniformly distributed unit vectors, finds their scaling
+factors with the default path, and averages them. Calibrate once during setup
+and reuse the result for the same padded dimension and total bit width. This
+reduces encoding work at a possible accuracy cost; evaluate it on your data.
 
+## Data format
 
-## Data Format
+### Format 1: Scalar codes
 
-### Format 1 - Drop-in Replacement of Uniform Scalar Quantization
+Use scalar codes when your application manages its own storage. The encoder
+returns unpacked integer codes, a scale and an offset; packing is separate.
 
-This format allows RaBitQ to be used as a direct replacement for uniform scalar quantization, which offers higher accuracy under the same bit-width. The improvement of accuracy is significant when the bit-width is small ($B < 6$).
 ```cpp
 #include <cstdint>
 #include <random>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/core/encoder.hpp"
 
 int main() {
     size_t dim = 768;
@@ -90,27 +92,28 @@ int main() {
     );
 
     // Note that with this interface, the codes are not compactly stored.
-    // To compactly store the codes, please refer to
-    // `rabitqlib/quantization/pack_excode.hpp`
+    // For packed storage, see
+    // `rabitqlib/core/pack_excode.hpp`
 
     return 0;
 }
 ```
 
-
-
-### Format 2 - Distance Estimation for a Single Vector
-
+### Format 2: Single-vector scoring
 
 #### Indexing
 
-This format is designed for computing distance metrics between data vectors and query vectors efficiently. It includes precomputed factors to ease similarity calculations.
+Encode one vector into unpacked integer codes and three distance-estimation
+factors. The application stores the codes and factors separately or together.
+
 ```cpp
 #include <cstdint>
+#include <iostream>
+#include <numeric>
 #include <random>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/core/encoder.hpp"
 
 int main() {
     size_t dim = 768;
@@ -161,24 +164,25 @@ int main() {
     );
 
     // Note that with this interface, the codes are not compactly stored.
-    // To compactly store the codes, please refer to
-    // `rabitqlib/quantization/pack_excode.hpp`
+    // For packed storage, see
+    // `rabitqlib/core/pack_excode.hpp`
 
     return 0;
 }
 ```
 
 #### Querying
-After quantization, we can use the pre-computed quantization codes and factors to get estimated distance for a given query.Here, we separately stored factors and quantization codes, and user may choose to compact them all together to get a improve space locality (e.g., implementation in our index). Also, we did not rotate the vectors in this example for simplicity of illustration.
+
+Score a query using the encoded vector and its factors.
+Insert the following before `return 0` in the indexing example above.
+
 ```cpp
-...
-    ...... // we omit the quantization code here
     std::vector<float> query(dim);
     for (size_t i = 0; i < dim; ++i) {
         query[i] = dist(gen);
     }
 
-    // please refer to estimator.md for defination of these factors
+    // See the Estimation guide for these query factors.
     float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
     float k1xsumq = c_1 * std::accumulate(query.begin(), query.end(), 0.F);
     float g_add = rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim);
@@ -201,23 +205,23 @@ After quantization, we can use the pre-computed quantization codes and factors t
 
 ```
 
-
-### Format 3 - Distance Estimation for a Batch of Vectors (for QG)
-A variant of this data format is used in QG. 
+### Format 3: Batch scoring (QG)
 
 #### Indexing
-This format is designed for scenarios where distances need to be computed between a query vector and multiple data vectors (quantized into 1-bit per dimension) simultaneously, providing significant performance improvements with [FastScan](https://arxiv.org/abs/1704.07355) for batch processing. 
-In practical implementation of our SymphonyQG index, the data is compactly stored. Please refer to `QGBatchDataMap` in `rabitqlib/quantization/data_layout.hpp` for detailed information.
 
-
+Encode up to 32 vectors for batched one-bit distance estimation with
+[FastScan](https://arxiv.org/abs/1704.07355).
+SymphonyQG and clustering use the two-factor `QGBatchDataMap` layout from
+`rabitqlib/fastscan/data_layout.hpp`. Its encoder lives in
+`rabitqlib/fastscan/encoder.hpp`; both are owned by the FastScan component.
 
 ```cpp
 #include <cstdint>
 #include <random>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/index/estimator.hpp"
+#include "rabitqlib/fastscan/encoder.hpp"
+#include "rabitqlib/fastscan/estimator.hpp"
 
 int main() {
     size_t dim = 768;
@@ -248,7 +252,8 @@ int main() {
 ```
 
 #### Querying
-During querying, a query is pre-processed as follows. Then FastScan can be called to estimate distance batch by batch. The detailed implementation is in `rabitqlib/index/estimator.hpp`. 
+
+Prepare the query lookup tables once, then score each encoded batch.
 Insert the following before `return 0` in the indexing example, reusing its
 initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
@@ -267,10 +272,8 @@ initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
     std::vector<float> est_distance(batch_size);  // store the estimated distances
 
-    // We suggest users to customize the kernel if some outputs are not needed.
-    // Eg., QG does not need error bounds, thus we only get the estimated distance here.
-    // If users want to maintain the information of error bound, please refer to our
-    // implementation of IVF index.
+    // QG scoring returns estimates only. Use the IVF batch format below
+    // when error intervals are needed.
 
     rabitqlib::qg_batch_estdist(
         batch_data.data(), processed_query, dim, est_distance.data()
@@ -278,19 +281,21 @@ initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
 ```
 
-### Format 4 - Incremental Distance Estimation for Split Single Vectors (for HNSW)
-This format can be used in HNSW. 
-
+### Format 4: Split single-vector scoring (HNSW)
 
 #### Indexing
-This format supports computing distances incrementally when vectors are split across multiple memory locations or when only partial vector information is available at a time.
 
+Store a vector as separate sign and extra-bit codes, with factors for each.
+Score the sign code first, then refine selected candidates using the extra bits.
+HNSW uses this layout.
 
 ```cpp
+#include <cmath>
 #include <random>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/core/encoder.hpp"
+#include "rabitqlib/core/estimator.hpp"
 
 int main() {
     size_t dim = 768;
@@ -341,19 +346,21 @@ int main() {
 
 #### Querying
 
+Insert this before `return 0` in the indexing example, reusing its data and dimensions.
+
 ```cpp
-...
-    size_t dim = 768;  // the dimensionality
-    size_t bits = 5;   // the bit-width of DATA vectors
     std::vector<float> query(dim);
+    for (auto& value : query) {
+        value = dist(gen);
+    }
 
     // Queries use four bits, independently of the data code width.
-    rabitqlib::quant::RabitqConfig config = rabitqlib::quant::faster_config(
+    rabitqlib::quant::RabitqConfig query_config = rabitqlib::quant::faster_config(
         dim, rabitqlib::SplitSingleQuery<float>::kNumBits
     );
 
     rabitqlib::SplitSingleQuery<float> processed_query(
-        query.data(), dim, bits - 1, config, rabitqlib::METRIC_L2
+        query.data(), dim, bits - 1, query_config, rabitqlib::METRIC_L2
     );
 
     // This standalone example omits rotation, so query and centroid are both raw.
@@ -400,17 +407,21 @@ int main() {
     );
 ```
 
-### Format 5 - Incremental Distance Estimation for Split Batched Vectors (for IVF)
-This data format is used in IVF.
+### Format 5: Split batch scoring (IVF)
 
 #### Indexing
-This format combines the benefits of batched processing with incremental computation, allowing efficient distance estimation when dealing with large collections of split vectors.
+
+Batch the sign codes for FastScan and store each vector's extra-bit codes
+separately. IVF uses this layout to filter a batch before refining candidates.
 
 ```cpp
+#include <cmath>
 #include <random>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/core/estimator.hpp"
+#include "rabitqlib/fastscan/encoder.hpp"
+#include "rabitqlib/fastscan/estimator.hpp"
 
 int main() {
     size_t dim = 768;
@@ -468,10 +479,13 @@ int main() {
 
 #### Querying
 
+Insert this before `return 0` in the indexing example, reusing its buffers and dimensions.
+
 ```cpp
-    size_t dim = 768;  // the dimensionality
-    size_t bits = 5;   // the bit-width of DATA vectors
     std::vector<float> query(dim);
+    for (auto& value : query) {
+        value = dist(gen);
+    }
 
     // The flag use_hacc controls the precision of FastScan.
     // `use_hacc = false` - each number in LUTs is quantized into 8 bits.
@@ -490,16 +504,12 @@ int main() {
         std::sqrt(rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim));
     processed_query.set_g_add(distance_norm);
 
-    size_t batch_size = 32;
-
     std::vector<float> est_distance(batch_size);  // store the estimated distances
     std::vector<float> low_distance(batch_size);  // store the lower bound
     std::vector<float> ip_x0_qr(batch_size
     );  // store the intermediate result of inner product
 
-    // We suggest users to customize the kernel if some outputs are not needed.
-    // For example, QG does not need error bounds, see `qg_batch_estdist` in
-    // `rabitqlib/index/estimator.hpp` for details.
+    // For estimates without error intervals, see the QG batch format above.
 
     rabitqlib::split_batch_estdist(
         batch_data.data(),
@@ -515,7 +525,8 @@ int main() {
     auto ip_func = rabitqlib::select_excode_ipfunc(bits - 1);
 
     size_t i = 15;
-    rabitqlib::split_distance_boosting(
+    // Replace this candidate's one-bit estimate with the refined distance.
+    est_distance[i] = rabitqlib::split_distance_boosting(
         ex_data.data() + (i * rabitqlib::ExDataMap<float>::data_bytes(dim, bits - 1)),
         ip_func,
         processed_query,
@@ -525,3 +536,61 @@ int main() {
     );
 
 ```
+
+## Batch API contracts
+
+Batch query preparation and scoring require a positive dimension divisible by 16.
+Index pipelines use multiples of 32, which also satisfy the packed extra-code
+requirements. Use the same working dimension for encoding, query preparation and
+scoring; none of these batch calls rotates or pads an input vector for you.
+
+Single-batch encoders accept 0 through 32 logical vectors. Zero vectors leave the
+output unchanged; more than 32 throws `std::invalid_argument` before writing.
+For larger inputs, iterate in chunks of `fastscan::kBatchSize`, as shown in
+`sample/cpp/fastscan` in the same checkout. Every batch, including a tail, needs
+full `BatchDataMap<T>` or `QGBatchDataMap<T>` storage and 32 score outputs. Read only
+its logical results. Buffers belong to the caller; encoders retain no input pointers.
+`quantize_one_batch<T, true>` uses OpenMP when enabled and otherwise runs serially.
+Allocation exceptions propagate to the caller, including from worker threads; a
+failed encoding may leave partial output, so retry or discard that batch.
+
+`BatchQuery<T>` and QG encoding/scoring support `float` and `double`. LUT preparation
+uses the same scalar type as the query; float uses SIMD dispatch, while double
+uses generic arithmetic without narrowing to float. Byte LUTs still quantize the
+query, so double does not make estimates exact. Split batch scoring and
+`SplitSingleQuery<float>` use float32 query paths; the latter does not support
+`SplitSingleQuery<double>`.
+
+A default `BatchQuery<T>` must be prepared with `reset` before scoring. Its reset
+scratch needs **`padded_dim * 4` elements of `T`**, not bytes. Reset borrows query,
+scratch and optional precomputed correction only for the call; it owns the resulting
+LUT and clears `g_add`. Reuse the scratch between calls, then call `set_g_add` for
+the current centroid. `BatchQuery::set_g_add` takes squared L2 distance, or
+`1 - dot(query, centroid)` for IP.
+
+`SplitBatchQuery` owns its LUT but borrows the rotated query for later refinement;
+keep that vector alive and unchanged. Its `set_g_add` takes the **L2 norm** of
+`query - centroid` for either metric, plus `dot(query, centroid)` for IP. All operands
+must use the same rotated, padded domain. The standalone FastScan example demonstrates
+both metrics with a nonzero centroid.
+
+For repeated queries, default-construct `SplitBatchQuery<T>` and use `reset`.
+LUT scratch needs `padded_dim * 4` elements of `T`; HACC also needs that many
+`uint16_t` elements (pass `nullptr` in standard mode). Scratch is call-only and
+must not overlap other buffers. The query remains borrowed until the next successful
+reset or destruction. `ex_bits` must be in `[0, 8]`.
+
+Only first preparation or capacity growth may allocate. Success clears `g_add`
+and `g_error`; call `set_g_add` again before scoring. Invalid arguments or allocation
+failure preserve the previous state.
+
+Single-vector estimators also have named-result functions (`estimate_split_single`,
+`estimate_split_single_full`, `estimate_xy_base`, and `estimate_xy_full`) returning
+`distance`, `lower_bound`, and `inner_product` fields instead of taking three output
+references. Both forms use the same numerical implementation.
+
+Scoring rejects unprepared queries, mismatched dimensions and mismatched HACC modes
+with `std::invalid_argument` before touching output. Pass `prepared.padded_dim()`
+and, for split scoring, `prepared.use_hacc()` to reuse the prepared shape. The batch
+buffer must still contain codes encoded for that shape: raw buffers carry no metadata
+or capacity, so the caller must allocate them using the corresponding data map.

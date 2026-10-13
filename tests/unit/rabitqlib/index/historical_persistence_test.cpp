@@ -9,9 +9,12 @@
 #include <string>
 #include <vector>
 
+#include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -49,7 +52,14 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         }
     };
     const auto exercise = [&](auto& index, const auto& search) {
+        const size_t removed = name.find("qg") == 0 ? 0 : 1;
+        const auto check_counts = [&] {
+            EXPECT_EQ(index.num_stored_points(), count);
+            EXPECT_EQ(index.num_points(), count - removed);
+            EXPECT_GE(index.max_elements(), index.num_stored_points());
+        };
         index.load(path.c_str());
+        check_counts();
         EXPECT_EQ(index.dimension(), dim);
         const auto metric = name.find("_ip") != std::string::npos ? METRIC_IP : METRIC_L2;
         EXPECT_EQ(index.metric_type(), metric);
@@ -57,10 +67,12 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         compare();
         index.save(output.string().c_str());
         index.load(output.string().c_str());
+        check_counts();
         search();
         compare();
         std::filesystem::resize_file(output, std::filesystem::file_size(output) - 1);
         EXPECT_THROW(index.load(output.string().c_str()), std::runtime_error);
+        check_counts();
         search();
         compare();
         std::filesystem::remove(output);

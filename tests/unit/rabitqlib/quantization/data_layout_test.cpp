@@ -1,16 +1,16 @@
-#include "rabitqlib/quantization/data_layout.hpp"
+#include "rabitqlib/core/data_layout.hpp"
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 #include <type_traits>
 
-#include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/quantization/rabitq.hpp"
+#include "rabitqlib/core/encoder.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -21,63 +21,11 @@ float load_float(const char* data) {
     return value;
 }
 
-TEST(DataLayoutTest, BatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
-    constexpr size_t kDim = 64;
-    constexpr size_t kCodeBytes = kDim * fastscan::kBatchSize / 8;
-    constexpr size_t kDataBytes = kCodeBytes + (3 * fastscan::kBatchSize * sizeof(float));
-    const size_t data_bytes = BatchDataMap<float>::data_bytes(kDim);
-    ASSERT_EQ(data_bytes, kCodeBytes + (3 * fastscan::kBatchSize * sizeof(float)));
-
-    alignas(float) std::array<char, kDataBytes + 2> storage;
-    storage.fill(char{0x5a});
-    char* data = storage.data() + 1;
-    ASSERT_NE(
-        reinterpret_cast<uintptr_t>(data + kCodeBytes) % alignof(float), uintptr_t{0}
-    );
-    BatchDataMap<float> batch(data, kDim);
-    batch.f_add()[0] = 1.25F;
-    batch.f_rescale()[0] = -2.5F;
-    batch.f_error()[fastscan::kBatchSize - 1] = 3.75F;
-
-    ConstBatchDataMap<float> stored(data, kDim);
-    EXPECT_FLOAT_EQ(stored.f_add()[0], 1.25F);
-    EXPECT_FLOAT_EQ(stored.f_rescale()[0], -2.5F);
-    EXPECT_FLOAT_EQ(stored.f_error()[fastscan::kBatchSize - 1], 3.75F);
-    EXPECT_FLOAT_EQ(load_float(data + kCodeBytes), 1.25F);
-    EXPECT_FLOAT_EQ(
-        load_float(data + kCodeBytes + (fastscan::kBatchSize * sizeof(float))), -2.5F
-    );
-    EXPECT_FLOAT_EQ(
-        load_float(data + kCodeBytes + ((3 * fastscan::kBatchSize - 1) * sizeof(float))),
-        3.75F
-    );
-    EXPECT_EQ(storage.front(), char{0x5a});
-    EXPECT_EQ(storage.back(), char{0x5a});
-}
-
-TEST(DataLayoutTest, QgBatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
-    constexpr size_t kDim = 64;
-    constexpr size_t kCodeBytes = kDim * fastscan::kBatchSize / 8;
-    constexpr size_t kDataBytes = kCodeBytes + (2 * fastscan::kBatchSize * sizeof(float));
-    const size_t data_bytes = QGBatchDataMap<float>::data_bytes(kDim);
-    ASSERT_EQ(data_bytes, kCodeBytes + (2 * fastscan::kBatchSize * sizeof(float)));
-
-    alignas(float) std::array<char, kDataBytes + 2> storage{};
-    char* data = storage.data() + 1;
-    ASSERT_NE(
-        reinterpret_cast<uintptr_t>(data + kCodeBytes) % alignof(float), uintptr_t{0}
-    );
-    QGBatchDataMap<float> batch(data, kDim);
-    std::fill_n(batch.f_add(), fastscan::kBatchSize, 4.25F);
-    std::fill_n(batch.f_rescale(), fastscan::kBatchSize, -5.5F);
-
-    ConstQGBatchDataMap<float> stored(data, kDim);
-    EXPECT_FLOAT_EQ(stored.f_add()[fastscan::kBatchSize - 1], 4.25F);
-    EXPECT_FLOAT_EQ(stored.f_rescale()[fastscan::kBatchSize - 1], -5.5F);
-    EXPECT_FLOAT_EQ(load_float(data + kCodeBytes), 4.25F);
-    EXPECT_FLOAT_EQ(
-        load_float(data + kCodeBytes + (fastscan::kBatchSize * sizeof(float))), -5.5F
-    );
+TEST(DataLayoutTest, ExtraCodeSizeRejectsOverflow) {
+    const size_t max_size = std::numeric_limits<size_t>::max();
+    EXPECT_EQ(ExDataMap<float>::data_bytes(max_size, 0), 0);
+    EXPECT_THROW(ExDataMap<float>::data_bytes(max_size / 8 + 1, 8), std::length_error);
+    EXPECT_EQ(ExDataMap<float>::data_bytes(max_size / 8, 8), max_size / 8 + 8);
 }
 
 TEST(DataLayoutTest, SingleCodeFactorsKeepPackedOffsetsOnUnalignedStorage) {

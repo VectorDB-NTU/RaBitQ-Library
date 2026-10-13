@@ -40,7 +40,10 @@ Run any examples you add or change, including examples inside Markdown.
 
 Source builds support Linux and Windows x86-64 with AVX2/FMA (AVX-512
 optional), and Linux and macOS ARM64 with NEON. They need CMake 3.20 or newer,
-a C++17 compiler, and OpenMP. Windows x86-64 uses Visual Studio 2026. See the
+a C++17 compiler, and OpenMP for ANN/Python. Core/FastScan can disable OpenMP
+with `RABITQ_USE_OPENMP=OFF`; pure core also has scalar kernels for CPUs without
+the FastScan SIMD baseline. See [component builds](docs/docs/cpp_integration.md#core-only-c-integration).
+Windows x86-64 uses Visual Studio 2026. See the
 [platform-specific build instructions](tests/README.md#quick-start) for
 [Linux ARM64](tests/README.md#linux-arm64) and
 [Apple Silicon](tests/README.md#macos-arm64).
@@ -75,7 +78,7 @@ Install the checkout and test dependencies, then run one test to check your setu
 
 ```bash
 python -m pip install ".[test]"
-python -m pytest tests/python/test_ivf.py::test_search_output_shape -q
+python -m pytest tests/python/test_ivf.py::test_search_output_contract -q
 ```
 
 On Apple Silicon, pass the OpenMP prefix and disable native tuning when building
@@ -85,7 +88,7 @@ the extension in the same environment:
 python -m pip install ".[test]" \
     -Ccmake.define.OpenMP_ROOT="$(brew --prefix libomp)" \
     -Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
-python -m pytest tests/python/test_ivf.py::test_search_output_shape -q
+python -m pytest tests/python/test_ivf.py::test_search_output_contract -q
 ```
 
 This builds the C++ extension, so the source-build prerequisites above apply.
@@ -175,8 +178,7 @@ another. Each task can be a separate PR.
 
 | Task | Where to start | Done when |
 | --- | --- | --- |
-| Explain Python search results | [Quick start](docs/docs/quick_start.md), [IVF binding](python_bindings/ivf_bindings.cpp), and [IVF tests](tests/python/test_ivf.py) | A short explanation covers result shapes, how IDs map to input rows, and what L2 distances represent, checked against the implementation. The example runs and the strict docs build passes. |
-| Add a self-contained IVF save/load example | [Python examples](sample/python/), [README quick start](README.md#python-quick-start), and [IVF tests](tests/python/test_ivf.py) | A deterministic script builds from synthetic data, saves to a temporary directory, reloads, and checks that search IDs and distances match. It needs no dataset download, cleans up its temporary files, passes Python checks, and is linked from the README. |
+| Automate the documentation quick-start check | [Quick start](docs/docs/quick_start.md), [documentation workflow](.github/workflows/docs.yml), and [Python tests](tests/python/) | A check executes the documented Python example blocks in order against the current package, verifies the save/load assertions, and cleans up temporary files without keeping a second copy of the example. |
 
 ## Feedback and further reading
 

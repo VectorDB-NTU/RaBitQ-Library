@@ -1,3 +1,4 @@
+#if defined(__aarch64__) || defined(_M_ARM64)
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -6,15 +7,17 @@
 #include <cstdint>
 #include <cstring>
 #include <random>
+#include <stdexcept>
 #include <vector>
 
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/hnsw_dispatch.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
-#include "rabitqlib/simd/hnsw_dispatch.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
-#if defined(__aarch64__) || defined(_M_ARM64)
 namespace rabitqlib {
 TEST(NeonHnsw, WarmupHandlesUnalignedCodesTailsAndWideCounts) {
     if (!cpu::has_neon()) {
@@ -104,20 +107,20 @@ TEST(NeonHnsw, SearchMatchesGenericOnSameGraphForBothMetricsAndAllWidths) {
                         value = distribution(random);
                     }
                     for (size_t ef : {10U, 64U}) {
-                        auto expected =
-                            hnsw::detail::search_knn_generic(index, query.data(), 5, ef);
-                        auto actual =
-                            hnsw::detail::search_knn_neon(index, query.data(), 5, ef);
+                        auto expected = hnsw::detail::search_knn_sorted_generic(
+                            index, query.data(), 5, ef
+                        );
+                        auto actual = hnsw::detail::search_knn_sorted_neon(
+                            index, query.data(), 5, ef
+                        );
                         ASSERT_EQ(expected.size(), actual.size());
-                        while (!expected.empty()) {
-                            EXPECT_EQ(actual.top().second, expected.top().second);
+                        for (size_t i = 0; i < expected.size(); ++i) {
+                            EXPECT_EQ(actual[i].second, expected[i].second);
                             EXPECT_NEAR(
-                                actual.top().first,
-                                expected.top().first,
-                                2e-5F * std::max(1.0F, std::abs(expected.top().first))
+                                actual[i].first,
+                                expected[i].first,
+                                2e-5F * std::max(1.0F, std::abs(expected[i].first))
                             );
-                            actual.pop();
-                            expected.pop();
                         }
                     }
                 }

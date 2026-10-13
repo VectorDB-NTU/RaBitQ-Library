@@ -1,15 +1,19 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <random>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/index/estimator.hpp"
-#include "rabitqlib/index/query.hpp"
-#include "rabitqlib/quantization/data_layout.hpp"
-#include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/quantization/rabitq_impl.hpp"
+#include "rabitqlib/core/data_layout.hpp"
+#include "rabitqlib/core/detail/rabitq_impl.hpp"
+#include "rabitqlib/core/encoder.hpp"
+#include "rabitqlib/core/estimator.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/query.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "test_helpers.hpp"
 
@@ -27,11 +31,9 @@ std::vector<float> RandomVec(size_t dim, std::mt19937& gen) {
     return v;
 }
 
-// The function writes packed codes into the data blocks and no unpacker exists.
-// Recover the raw per-dimension codes through the library's own reader instead
-// of reimplementing seven SIMD bit layouts: a one-hot query makes the ex-code
-// inner product return exactly code[j]. This asserts the codes as the search
-// path actually interprets them, which is the property that matters.
+// A one-hot query makes the ex-code inner product return exactly code[j].
+// This checks how scoring interprets the packed codes independently of the
+// library's unpacker, rather than only round-tripping through paired code paths.
 std::vector<uint8_t> UnpackViaIpKernel(const uint8_t* packed, size_t dim, size_t bits) {
     std::vector<uint8_t> out(dim, 0);
     if (bits == 0) {
@@ -75,8 +77,8 @@ XySplitResult SplitCode(
         extra_bits > 0 ? ExDataMap<float>::data_bytes(dim, extra_bits) : 1, 0
     );
 
-    // Through the public entry point: rabitq_impl now takes raw buffers, and
-    // rabitq.hpp is what maps them onto BaseDataMap/ExDataMap.
+    // The public entry point in core/encoder.hpp maps the raw buffers onto
+    // BaseDataMap/ExDataMap.
     quant::quantize_xy_single(
         data.data(),
         centroid.data(),

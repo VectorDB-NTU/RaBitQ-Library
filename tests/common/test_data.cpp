@@ -1,7 +1,9 @@
 #include "test_data.hpp"
 
-#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <random>
+#include <vector>
 
 namespace rabitq_test {
 

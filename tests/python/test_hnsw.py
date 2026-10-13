@@ -25,10 +25,6 @@ def built_hnsw(base_data, clusters):
 # ── construction ──────────────────────────────────────────────────────────────
 
 
-def test_is_built(built_hnsw):
-    assert built_hnsw.is_built
-
-
 @pytest.mark.parametrize("m", [0, 1])
 def test_rejects_too_small_m(m):
     with pytest.raises(ValueError, match="^HNSW M must be at least 2$"):
@@ -57,6 +53,7 @@ def test_rejected_rebuild_preserves_index(base_data, clusters, tmp_path, reload)
 
 
 def test_properties(built_hnsw):
+    assert built_hnsw.is_built
     assert built_hnsw.dim == DIM
     assert built_hnsw.nbits == 4
     assert built_hnsw.metric == "l2"
@@ -85,32 +82,24 @@ def test_parallel_build_preserves_self_retrieval(base_data, clusters):
 # ── search output shape and dtype ─────────────────────────────────────────────
 
 
-def test_search_output_shape(built_hnsw, query_data):
+def test_search_output_contract(built_hnsw, query_data):
     ids, dists = built_hnsw.search(query_data, k=_TOPK, ef=_EF)
     assert ids.shape == (N_QUERIES, _TOPK)
     assert dists.shape == (N_QUERIES, _TOPK)
-
-
-def test_search_output_dtype(built_hnsw, query_data):
-    ids, dists = built_hnsw.search(query_data, k=_TOPK, ef=_EF)
-    assert np.issubdtype(ids.dtype, np.integer)
+    assert ids.dtype == np.uint32
     assert dists.dtype == np.float32
-
-
-def test_search_ids_in_range(built_hnsw, query_data):
-    ids, _ = built_hnsw.search(query_data, k=_TOPK, ef=_EF)
     assert np.all(ids < N_VECTORS)
-
-
-def test_search_distances_nonneg(built_hnsw, query_data):
-    _, dists = built_hnsw.search(query_data, k=_TOPK, ef=_EF)
     assert np.all(dists >= 0)
 
 
-def test_ef_default(built_hnsw, query_data):
+@pytest.mark.parametrize("k", [1, 10, 17])
+def test_ef_default(built_hnsw, query_data, k):
     """ef=0 should use the internal default (max(k, 10))."""
-    ids, dists = built_hnsw.search(query_data, k=_TOPK)
-    assert ids.shape == (N_QUERIES, _TOPK)
+    expected_ids, expected_distances = built_hnsw.search(query_data, k=k, ef=max(k, 10))
+    for kwargs in ({}, {"ef": 0}):
+        ids, distances = built_hnsw.search(query_data, k=k, **kwargs)
+        np.testing.assert_array_equal(ids, expected_ids)
+        np.testing.assert_array_equal(distances, expected_distances)
 
 
 def test_single_query(built_hnsw, query_data):
@@ -145,7 +134,7 @@ def test_wrong_data_dim_raises(clusters):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="^data dimension does not match index dim$"):
         idx.build(bad_data, centroids, cluster_ids)
 
 
@@ -160,13 +149,15 @@ def test_out_of_range_cluster_id_raises(base_data, clusters):
 
 def test_wrong_query_dim_raises(built_hnsw):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="^query dimension does not match index dim$"):
         built_hnsw.search(bad_queries, k=1)
 
 
 def test_search_before_build_raises(query_data):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
-    with pytest.raises(Exception):
+    with pytest.raises(
+        RuntimeError, match="^HnswIndex must be built or loaded before search$"
+    ):
         idx.search(query_data[:1], k=1)
 
 
@@ -250,12 +241,11 @@ def test_add_into_a_dense_graph_retrieves_every_point(base_data, clusters):
     np.testing.assert_array_equal(ids[:, 0], np.arange(400, N_VECTORS))
 
 
-def test_add_without_cluster_ids_routes(partial_hnsw, base_data, clusters):
-    _, cluster_ids = clusters
+def test_add_without_cluster_ids_preserves_self_retrieval(partial_hnsw, base_data):
     ids = partial_hnsw.add(base_data[400:])
     np.testing.assert_array_equal(ids, np.arange(400, N_VECTORS))
-    # Round-robin clusters, so routing should recover the original assignment for
-    # most points; the centroids are close together and a few land elsewhere.
+    # Automatically routed points must remain searchable even though nearest-centroid
+    # routing need not reproduce the round-robin assignments used during construction.
     found, _ = partial_hnsw.search(base_data[400:], k=1, ef=N_VECTORS)
     assert np.count_nonzero(found[:, 0] == np.arange(400, N_VECTORS)) >= 0.95 * 100
 
@@ -382,10 +372,11 @@ def _removable(nbits=4, metric="l2", count=120, dim=64, seed=61):
 
 def _everything(index, queries):
     """With k and ef at the point count, search visits every reachable point."""
-    return index.search(queries, k=index.num_points, ef=index.num_points)
+    return index.search(queries, k=index.num_stored_points, ef=index.num_stored_points)
 
 
-@pytest.mark.parametrize("nbits", [1, 2, 4, 8, 9])
+# C++ HnswRemoveTest covers intermediate widths; keep both storage endpoints here.
+@pytest.mark.parametrize("nbits", [1, 9])
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     idx, old, new = _removable(nbits=nbits, metric=metric)
@@ -399,7 +390,8 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     assert idx.remove(removed) == 4
     assert idx.remove(removed) == 0
     assert idx.remove([]) == 0
-    assert idx.num_points == count
+    assert idx.num_points == count - 4
+    assert idx.num_stored_points == count
 
     def check(index):
         ids, dists = _everything(index, queries)
@@ -429,7 +421,8 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     for index in (idx, loaded, plain):
         index.resize(count + len(new))
         index.add(new)
-        assert index.num_points == count + len(new)
+        assert index.num_stored_points == count + len(new)
+        assert index.num_points == count + len(new) - (0 if index is plain else 4)
 
     # The original still supports add after remove, and its resulting graph must
     # round-trip exactly without any further insertions.

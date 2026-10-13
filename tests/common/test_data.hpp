@@ -2,7 +2,6 @@
 #define RABITQ_TEST_DATA_HPP
 
 #include <cstddef>
-#include <random>
 #include <vector>
 
 namespace rabitq_test {

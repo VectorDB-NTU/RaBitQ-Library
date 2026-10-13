@@ -1,16 +1,20 @@
 #pragma once
 
 #include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/packed.hpp"
 
 namespace py = pybind11;
 
@@ -125,6 +129,43 @@ ensure_1d_integer_array(py::handle value, const char* name) {
         throw std::invalid_argument(std::string(name) + " must contain integers");
     }
     return ensure_1d_array<int64_t>(value, name);
+}
+
+// Validate before narrowing, and own the result for APIs that mutate assignments.
+inline std::vector<PID> checked_cluster_ids(
+    py::handle value,
+    size_t rows,
+    size_t clusters,
+    const char* range_error = "cluster_ids must be in [0, num_clusters)"
+) {
+    const auto checked_copy = [&](const auto& ids) {
+        if (static_cast<size_t>(ids.shape(0)) != rows) {
+            throw std::invalid_argument(
+                "cluster_ids length must match number of rows in data"
+            );
+        }
+        std::vector<PID> result(rows);
+        using Value = typename std::decay_t<decltype(ids)>::value_type;
+        // C-contiguous NumPy arrays can still have an unaligned data pointer.
+        const rabitqlib::detail::ConstPackedArrayView<Value> values(
+            reinterpret_cast<const char*>(ids.data())
+        );
+        for (size_t i = 0; i < rows; ++i) {
+            const int64_t id = values[i];
+            if (id < 0 || static_cast<uint64_t>(id) >= clusters ||
+                static_cast<uint64_t>(id) > std::numeric_limits<PID>::max()) {
+                throw std::invalid_argument(range_error);
+            }
+            result[i] = static_cast<PID>(id);
+        }
+        return result;
+    };
+    // Already-native IDs need no intermediate int64 array. Keep the owned copy
+    // required by construction APIs, and validate it just like wider integers.
+    if (py::isinstance<py::array_t<PID>>(value)) {
+        return checked_copy(ensure_1d_array<PID>(value, "cluster_ids"));
+    }
+    return checked_copy(ensure_1d_integer_array(value, "cluster_ids"));
 }
 
 }  // namespace rabitqlib::python_bindings

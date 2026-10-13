@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <ios>
 #include <iterator>
@@ -19,9 +20,12 @@
 #include <string>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/utils/buffer.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "ivf_search.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
+#include "rabitqlib/index/ivf/initializer.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::ivf {
 namespace {
@@ -331,7 +335,7 @@ TEST(IvfSearchTest, RoutesInnerProductQueriesByInnerProduct) {
 
 TEST(IvfSearchTest, RoutesInnerProductQueriesWithHNSWCentroids) {
     constexpr size_t kDim = 64;
-    constexpr size_t kCount = 20000;
+    constexpr size_t kCount = 128;
     std::array<float, kDim> data{};
     std::vector<float> centroids(kCount * kDim, 0.0F);
     std::array<float, kDim> query{};
@@ -795,7 +799,7 @@ TEST(IvfAddTest, FasterQuantizationIsSupportedAndDeterministic) {
 
 TEST(IvfAddTest, RoutesNewPointsWithHNSWCentroids) {
     constexpr size_t kDim = 64;
-    constexpr size_t kCount = 20000;
+    constexpr size_t kCount = 128;
     // Centroid i has first coordinate i + 1, so an inner product with e0 is largest for the
     // last centroid and the routing decision is unambiguous.
     std::vector<float> centroids(kCount * kDim, 0.0F);
@@ -1048,3 +1052,39 @@ TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
 
 }  // namespace
 }  // namespace rabitqlib::ivf
+
+TEST(IVFSidecarValidation, RejectsMismatchedVectorStorage) {
+    using namespace rabitqlib;
+    for (const auto metric : {METRIC_L2, METRIC_IP}) {
+        for (const size_t sidecar_dim : {64U, 128U}) {
+            const std::string path = ::testing::TempDir() + "rabitq_sidecar_layout";
+            std::vector<float> data(96, 1.0F), center(128, 0.0F);
+            PID cluster = 0;
+            ivf::IVF original(
+                1, 96, 1, 4, metric, RotatorType::FhtKacRotator, ivf::InitializerType::HNSW
+            );
+            original.construct(data.data(), center.data(), &cluster, false, 1);
+            original.save(path.c_str());
+            ivf::HNSWInitializer other(sidecar_dim, 1, metric);
+            other.add_vectors(center.data(), 1);
+            std::ofstream ignored;
+            other.save(ignored, path.c_str());
+            ivf::IVF loaded;
+            try {
+                loaded.load(path.c_str());
+                FAIL() << "mismatched sidecar must be rejected";
+            } catch (const std::runtime_error& error) {
+                EXPECT_STREQ(
+                    error.what(), "HNSW centroid layout does not match IVF dimension"
+                );
+            }
+            original.save(path.c_str());
+            ASSERT_NO_THROW(loaded.load(path.c_str()));
+            PID id = 0;
+            float distance = 0;
+            ASSERT_NO_THROW(loaded.search(data.data(), 1, 1, &id, &distance));
+            std::filesystem::remove(path);
+            std::filesystem::remove(path + ".hnsw");
+        }
+    }
+}

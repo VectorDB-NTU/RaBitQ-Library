@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+project(rabitqlib_stable_core_example LANGUAGES CXX)
+find_package(rabitqlib CONFIG REQUIRED COMPONENTS core)
+add_executable(stable_core_example main.cpp)
+target_link_libraries(stable_core_example PRIVATE rabitqlib::core)
+enable_testing()
+add_test(NAME stable_core_example COMMAND stable_core_example)

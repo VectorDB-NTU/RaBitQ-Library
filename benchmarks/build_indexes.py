@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,48 +26,90 @@ DATASETS = {
 }
 DATASET_SHAPES = {"gist1m": (1000000, 960), "dbpedia": (999000, 1536)}
 
-CASES = (
-    ("rabitq-ivf-raw", "rabitq-ivf", ("--bits", "32")),
-    ("rabitq-ivf-1p4", "rabitq-ivf", ("--bits", "5")),
-    ("rabitq-ivf-1p8", "rabitq-ivf", ("--bits", "9")),
-    ("faiss-rabitqfs-raw", "faiss-ivf-rabitq-fs", ("--bits", "1")),
-    ("faiss-rabitqfs-1p4", "faiss-ivf-rabitq-fs", ("--bits", "5")),
-    ("faiss-rabitqfs-1p8", "faiss-ivf-rabitq-fs", ("--bits", "9")),
-    ("faiss-pqfs", "faiss-ivf-pqfs", ()),
-    ("faiss-opq-pqfs", "faiss-ivf-pqfs", ("--opq",)),
-    ("rabitq-symqg-raw", "rabitq-symqg", ("--quantization-bits", "0")),
-    ("rabitq-symqg-4", "rabitq-symqg", ("--quantization-bits", "4")),
-    ("rabitq-symqg-8", "rabitq-symqg", ("--quantization-bits", "8")),
-    ("rabitq-hnsw-1p4", "rabitq-hnsw", ("--bits", "5")),
-    ("rabitq-hnsw-1p8", "rabitq-hnsw", ("--bits", "9")),
-    ("faiss-hnsw-flat", "faiss-hnsw-flat", ()),
-    ("faiss-hnsw-sq4", "faiss-hnsw-sq4", ()),
-    ("faiss-hnsw-sq8", "faiss-hnsw-sq8", ()),
-)
 
-LABELS = (
-    "IVF RaBitQ raw",
-    "IVF RaBitQ 1+4",
-    "IVF RaBitQ 1+8",
-    "Faiss IVF RaBitQfs raw + RFlat",
-    "Faiss IVF RaBitQfs 1+4",
-    "Faiss IVF RaBitQfs 1+8",
-    "Faiss IVF PQfs + RFlat",
-    "Faiss OPQ-IVF PQfs + RFlat",
-    "SymphonyQG raw",
-    "SymphonyQG 4-bit",
-    "SymphonyQG 8-bit",
-    "HNSW RaBitQ 1+4",
-    "HNSW RaBitQ 1+8",
-    "Faiss HNSW Flat",
-    "Faiss HNSW SQ4",
-    "Faiss HNSW SQ8",
+@dataclass(frozen=True)
+class Case:
+    name: str
+    label: str
+    method: str
+    family: str
+    parameters: dict
+
+    def cli_args(self):
+        args = []
+        for key, value in self.parameters.items():
+            args.append("--" + key.replace("_", "-"))
+            if value is not True:
+                args.append(str(value))
+        return args
+
+
+CASES = (
+    Case("rabitq-ivf-raw", "IVF RaBitQ raw", "rabitq-ivf", "ivf", {"bits": 32}),
+    Case("rabitq-ivf-1p4", "IVF RaBitQ 1+4", "rabitq-ivf", "ivf", {"bits": 5}),
+    Case("rabitq-ivf-1p8", "IVF RaBitQ 1+8", "rabitq-ivf", "ivf", {"bits": 9}),
+    Case(
+        "faiss-rabitqfs-raw",
+        "Faiss IVF RaBitQfs raw + RFlat",
+        "faiss-ivf-rabitq-fs",
+        "ivf",
+        {"bits": 1},
+    ),
+    Case(
+        "faiss-rabitqfs-1p4",
+        "Faiss IVF RaBitQfs 1+4",
+        "faiss-ivf-rabitq-fs",
+        "ivf",
+        {"bits": 5},
+    ),
+    Case(
+        "faiss-rabitqfs-1p8",
+        "Faiss IVF RaBitQfs 1+8",
+        "faiss-ivf-rabitq-fs",
+        "ivf",
+        {"bits": 9},
+    ),
+    Case("faiss-pqfs", "Faiss IVF PQfs + RFlat", "faiss-ivf-pqfs", "ivf", {}),
+    Case(
+        "faiss-opq-pqfs",
+        "Faiss OPQ-IVF PQfs + RFlat",
+        "faiss-ivf-pqfs",
+        "ivf",
+        {"opq": True},
+    ),
+    Case(
+        "rabitq-symqg-raw",
+        "SymphonyQG raw",
+        "rabitq-symqg",
+        "graphs",
+        {"quantization_bits": 0},
+    ),
+    Case(
+        "rabitq-symqg-4",
+        "SymphonyQG 4-bit",
+        "rabitq-symqg",
+        "graphs",
+        {"quantization_bits": 4},
+    ),
+    Case(
+        "rabitq-symqg-8",
+        "SymphonyQG 8-bit",
+        "rabitq-symqg",
+        "graphs",
+        {"quantization_bits": 8},
+    ),
+    Case("rabitq-hnsw-1p4", "HNSW RaBitQ 1+4", "rabitq-hnsw", "graphs", {"bits": 5}),
+    Case("rabitq-hnsw-1p8", "HNSW RaBitQ 1+8", "rabitq-hnsw", "graphs", {"bits": 9}),
+    Case("faiss-hnsw-flat", "Faiss HNSW Flat", "faiss-hnsw-flat", "graphs", {}),
+    Case("faiss-hnsw-sq4", "Faiss HNSW SQ4", "faiss-hnsw-sq4", "graphs", {}),
+    Case("faiss-hnsw-sq8", "Faiss HNSW SQ8", "faiss-hnsw-sq8", "graphs", {}),
 )
 
 
 def validate_record(record, dataset, name):
     """Reject results that do not match the published ANN configuration."""
-    method, extra = next((m, e) for n, m, e in CASES if n == name)
+    case = next(case for case in CASES if case.name == name)
+    method = case.method
     base, queries, truth, metric = DATASETS[dataset]
     n, dim = DATASET_SHAPES[dataset]
     expected = {
@@ -80,17 +123,15 @@ def validate_record(record, dataset, name):
         "socket": 0,
         "k": 10,
     }
-    if "ivf" in method:
-        expected.update(nlist=4096, opq="--opq" in extra)
+    if case.family == "ivf":
+        expected.update(nlist=4096, opq=False)
     if "hnsw" in method:
         expected.update(m=16, ef_construction=200)
         if method == "rabitq-hnsw":
             expected["hnsw_clusters"] = 16
     if method == "rabitq-symqg":
         expected.update(degree=32, ef_construction=200)
-    for option in ("--bits", "--quantization-bits"):
-        if option in extra:
-            expected[option[2:].replace("-", "_")] = int(extra[extra.index(option) + 1])
+    expected.update(case.parameters)
     cfg = record["config"]
     if (
         any(cfg.get(key) != value for key, value in expected.items())
@@ -115,14 +156,15 @@ def main():
     parser.add_argument(
         "--output-dir", type=Path, default=Path("results/benchmarks/ann")
     )
-    parser.add_argument("--methods", nargs="+", choices=[case[0] for case in CASES])
+    parser.add_argument("--methods", nargs="+", choices=[case.name for case in CASES])
     parser.add_argument("--threads", type=int, default=48)
     args = parser.parse_args()
 
     failed = []
     for dataset in args.datasets:
         base, queries, truth, metric = DATASETS[dataset]
-        for name, method, extra in CASES:
+        for case in CASES:
+            name, method = case.name, case.method
             if args.methods is not None and name not in args.methods:
                 continue
             output = args.output_dir / dataset / f"{name}.json"
@@ -177,7 +219,7 @@ def main():
                 str(index_dir),
                 "--output",
                 str(output),
-                *extra,
+                *case.cli_args(),
             ]
             print(f"START {dataset} {name}", flush=True)
             with log.open("w") as stream:

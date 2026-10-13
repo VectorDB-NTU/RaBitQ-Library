@@ -14,10 +14,10 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 if __package__:
-    from .build_indexes import CASES, DATASETS, LABELS, validate_record
+    from .build_indexes import CASES, DATASETS, validate_record
     from .query_index import settings
 else:
-    from build_indexes import CASES, DATASETS, LABELS, validate_record
+    from build_indexes import CASES, DATASETS, validate_record
     from query_index import settings
 
 
@@ -55,8 +55,8 @@ def main():
     parser.add_argument(
         "--methods",
         nargs="+",
-        choices=[case[0] for case in CASES],
-        default=[case[0] for case in CASES],
+        choices=[case.name for case in CASES],
+        default=[case.name for case in CASES],
     )
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -103,8 +103,7 @@ def main():
 
     for dataset, family in product(args.datasets, ("ivf", "graphs")):
         if not any(
-            name in args.methods and ("ivf" if "ivf" in method else "graphs") == family
-            for name, method, _ in CASES
+            case.name in args.methods and case.family == family for case in CASES
         ):
             continue
         fig, ax = plt.subplots(figsize=(12, 9))
@@ -123,11 +122,8 @@ def main():
         )
         handles = []
         recalls = []
-        for ordinal, ((name, method, _), label) in enumerate(
-            (case, label)
-            for case, label in zip(CASES, LABELS, strict=True)
-            if ("ivf" if "ivf" in case[1] else "graphs") == family
-        ):
+        for ordinal, case in enumerate(case for case in CASES if case.family == family):
+            name = case.name
             if (dataset, name) not in measurements:
                 continue
             points = []
@@ -140,7 +136,14 @@ def main():
             marker = markers[ordinal % len(markers)]
             style = "-" if name.startswith("rabitq-") else "--"
             handles.append(
-                Line2D([], [], color=color, marker=marker, linestyle=style, label=label)
+                Line2D(
+                    [],
+                    [],
+                    color=color,
+                    marker=marker,
+                    linestyle=style,
+                    label=case.label,
+                )
             )
             if points:
                 x, y = zip(*points)
@@ -189,7 +192,8 @@ def main():
         plt.close(fig)
         print(f"Wrote {path}")
     for dataset in DATASETS:
-        for name, _, _ in CASES:
+        for case in CASES:
+            name = case.name
             for setting, recall, qps in measurements.get((dataset, name), []):
                 rows.append(
                     (

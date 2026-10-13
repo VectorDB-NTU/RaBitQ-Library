@@ -6,47 +6,84 @@ from [NGT](https://github.com/yahoojapan/NGT), with batched RaBitQ distance esti
 FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.
 
-Set `quantization_bits=0` for raw vectors (default), or `4`/`8` for quantized SymphonyQG.
-All three modes pad the rotated domain to a multiple of 32. Loading an older
-index preserves its saved padded dimension, including historical multiples of 64.
-Older library versions that enforce 64-dimension padding cannot load new files
-whose padded dimension is not a multiple of 64.
-Quantized vectors share a rotated global centroid. Refinement temporarily
-reconstructs source vectors and estimates distances to stored target codes;
-reverse edges are rescored because these estimates are directional. Raw refinement
-uses owned raw vectors. No full reconstructed-vector cache is retained by default.
-
-## Index Construction
-
-[PiPNN](https://dl.acm.org/doi/abs/10.1145/3770855.3817891) is the default initializer
-for fast indexing, followed by one SymphonyQG refinement iteration. Random
-initialization remains available and uses three iterations by default.
+## Minimal workflow
 
 ### Python
+
+Use `data` and `queries` from the [Quick start](../quick_start.md), or supply your
+own float32 arrays. SymphonyQG builds directly from vectors and needs no clustering
+step. The degree-32 example requires at least 33 data points.
 
 ```python
 from rabitqlib import SymqgIndex
 
 # data and queries are float32 arrays with shape (count, dim).
 index = SymqgIndex(dim=data.shape[1], max_degree=32, metric="l2", quantization_bits=0)
-index.build(data, ef_construction=200, num_threads=32, init="pipnn")
+index.build(data, ef_construction=200, num_threads=1, init="pipnn")
 index.save("qg_example.index")
 
 loaded = SymqgIndex.load("qg_example.index")
 ids, distances = loaded.search_batch(queries, k=10, ef=100, num_threads=1)
 ```
 
-This example uses `search_batch()`, which requires 0.5.2 or newer. On earlier
-versions, use `search()` with the same arguments.
-
-`init` defaults to `"pipnn"`; use `"random"` for random initialization.
-Supported metrics are `"l2"` and `"ip"`. `max_degree` must be a multiple of 32
-and smaller than the point count. `ef_construction` controls the build search
-window; `ef` controls the query search window. Python defaults to one thread.
+`search()` accepts the same arguments and is equivalent to `search_batch()`.
 
 ### C++
 
-The C++ API provides `rabitqlib::symqg::QuantizedGraph<float>` and `QGBuilder`.
+Link `rabitqlib::index`. Here `data` is a row-major `std::vector<float>` with
+`rows * cols` values, and `query` contains `cols` values; use at least 33 rows.
+See [C++ integration](../cpp_integration.md) for build setup.
+
+```cpp
+#include <vector>
+#include <rabitqlib/index/symqg/qg.hpp>
+#include <rabitqlib/index/symqg/qg_builder.hpp>
+
+using namespace rabitqlib::symqg;
+
+// data contains rows * cols floats.
+QuantizedGraph<float> qg(rows, cols, 32);
+{
+    QGBuilder builder(qg, 200, data.data(), 1, QGInitialization::PiPNN);
+    builder.build();
+} // release builder scratch before saving
+qg.set_ef(100);
+std::vector<rabitqlib::PID> ids(10);
+std::vector<float> distances(10);
+qg.search(query.data(), 10, ids.data(), distances.data());
+qg.save("qg_example.index");
+```
+
+## Parameters and limits
+
+| Parameter | Contract |
+| --- | --- |
+| `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
+| `max_degree` | Required positive multiple of 32, strictly smaller than the point count. |
+| `quantization_bits` | 0 for owned raw vectors (default), or 4/8 for quantized storage. |
+| `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
+| `ef_construction` | Required positive construction search window. |
+| `init` | Python `"pipnn"` (default) or `"random"`. |
+| `k`, `ef` | Python requires `1 <= k <= num_points` and `ef >= k`. |
+| `num_threads` | Python defaults to 1; 0 selects available logical CPUs. |
+
+Both Python search names return `(ids, distances)` arrays. Distances are squared
+L2 or `1 - dot`, ordered from smallest to largest; quantized storage returns
+estimates. SymphonyQG has no incremental add/remove API. See shared
+[input, count and concurrency contracts](usage.md).
+
+## Index construction
+
+See the shared [index count contract](usage.md#index-counts). C++
+`num_vertices()` returns the configured graph size, even before building.
+
+[PiPNN](https://dl.acm.org/doi/abs/10.1145/3770855.3817891) is the default initializer
+for fast indexing, followed by one SymphonyQG refinement iteration. Random
+initialization remains available and uses three iterations by default.
+
+Include `rabitqlib/index/symqg/qg.hpp` and `qg_builder.hpp` from the same directory,
+and link `rabitqlib::index`. The C++ API provides
+`rabitqlib::symqg::QuantizedGraph<float>` and `QGBuilder`.
 Only float vectors are supported; C++17 declarations may omit `<float>` through
 class template argument deduction:
 
@@ -71,44 +108,26 @@ for PiPNN or three passes for `QGInitialization::Random`; `build(n)` requests
 `n >= 2` passes. The older overload with a numeric fifth argument uses that value
 as the random-initialization seed.
 
-`builder.reset(data)` reinitializes vectors of the same shape and reuses workspace.
-Input may be released after reset returns; rebuild before querying or saving.
-`cache_vectors=true` retains transformed vectors and query factors
-(`4 * num * padded_dim` bytes plus factors). [QGKMeans](../clustering.md#qgkmeans) enables
-this for its centroid graph; the cache is not persisted. The graph seed controls
-rotation, and the builder seed controls random initialization and fallback edges.
-PiPNN uses fixed internal seeds.
-
-```cpp
-using namespace rabitqlib::symqg;
-
-// data contains rows * cols floats.
-QuantizedGraph<float> qg(rows, cols, 32);
-{
-    QGBuilder builder(qg, 200, data.data(), 32, QGInitialization::PiPNN);
-    builder.build();
-} // release builder scratch before saving
-qg.save("qg_example.index");
-```
+### Input lifetime and rebuilds
 
 The caller can release input vectors after the `QGBuilder` constructor returns.
-Python retains the caller's array during `build`. Complete the build before
-querying or saving. Initialization does not change query-distance conventions or
-save/load formats.
+Python retains the caller's array during `build`. Complete construction before
+querying or saving.
 
-### Data Layout
+`builder.reset(data)` reinitializes vectors of the same shape and reuses workspace.
+Input may be released after reset returns; rebuild before querying or saving.
 
-Each row contains:
+### Vector cache
 
-```text
-[Raw vector or packed 4/8-bit code + factors]
-[One-bit neighbor codes + factors]
-[Neighbor IDs]
-```
+`cache_vectors=true` retains transformed vectors and query factors
+(`4 * num * padded_dim` bytes plus factors). [QGKMeans](../clustering.md#qgkmeans) enables
+this for its centroid graph; the cache is not persisted.
 
-Neighbor codes use FastScan batches of 32, which determines the degree alignment.
-Quantized storage reduces each vector's size but not its neighborhood codes;
-those codes and temporary refinement pools still consume substantial memory.
+### Random seeds
+
+The graph seed controls FHT/Kac rotation; MatrixRotator samples its own matrix.
+The builder seed controls random initialization and fallback edges. PiPNN uses
+fixed internal seeds.
 
 ## Querying
 
@@ -125,7 +144,7 @@ std::vector<float> distances(10);
 qg.search(query.data(), 10, ids.data(), distances.data());
 ```
 
-Starting with 0.5.2, C++ `search_batch()` accepts contiguous row-major batches
+C++ `search_batch()` accepts contiguous row-major batches
 and reuses scratch storage within each worker, preserving the results of
 independent `search()` calls:
 
@@ -145,21 +164,18 @@ do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 `set_ef()` while searches are running.
 
-Python provides `search_batch(queries, k, ef, num_threads=1)` starting with 0.5.2.
-The existing `search()` accepts the same two-dimensional array and remains an equivalent
-entry point. Both return `(ids, distances)` arrays of shape `(num_queries, k)`,
-including empty batches. Both APIs default to one worker; `num_threads=0`
+Python `search_batch(queries, k, ef, num_threads=1)` and `search()` accept
+the same two-dimensional query array. Both return `(ids, distances)` arrays
+of shape `(num_queries, k)`, including empty batches. Both APIs default to one worker; `num_threads=0`
 selects the available logical CPU count, capped by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.
 
-Python search releases the GIL and uses the `ef` passed to each call without
-changing a shared default. Concurrent searches may use different windows.
-A concurrent `build()` on the same index raises `RuntimeError` immediately;
-see the [Python concurrency contract](../quick_start.md#threading-and-file-paths).
+Python searches use per-call `ef` values. For access rules, see the
+[concurrency contract](usage.md#threading-and-file-paths).
 
-Starting with 0.6.0, C++ also provides
+For C++, use
 `search_batch_with_ef(queries, num_queries, k, ids, distances, ef, num_threads=1)`
-for concurrent calls with independent windows:
+to run concurrent calls with independent windows:
 
 ```cpp
 qg.search_batch_with_ef(
@@ -173,3 +189,31 @@ All concurrent searches require separate outputs and an unchanged index.
 
 See `sample/cpp/symqg_indexing.cpp`, `sample/cpp/symqg_querying.cpp`, and their
 Python counterparts for complete examples.
+
+## Persistence
+
+All three modes pad the rotated domain to a multiple of 32. Loading an older
+index preserves its saved padded dimension, including historical multiples of 64.
+Older library versions that enforce 64-dimension padding cannot load new files
+whose padded dimension is not a multiple of 64.
+
+## Implementation details
+
+Quantized vectors share a rotated global centroid. Refinement temporarily
+reconstructs source vectors and estimates distances to stored target codes;
+reverse edges are rescored because these estimates are directional. Raw refinement
+uses owned raw vectors. No full reconstructed-vector cache is retained by default.
+
+### Data layout
+
+Each row contains:
+
+```text
+[Raw vector or packed 4/8-bit code + factors]
+[One-bit neighbor codes + factors]
+[Neighbor IDs]
+```
+
+Neighbor codes use FastScan batches of 32, which determines the degree alignment.
+Quantized storage reduces each vector's size but not its neighborhood codes;
+those codes and temporary refinement pools still consume substantial memory.

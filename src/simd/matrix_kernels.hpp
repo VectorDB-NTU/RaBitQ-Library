@@ -10,7 +10,7 @@
 #define RABITQ_MATRIX_EIGEN_NAMESPACE rabitqlib_eigen_generic
 #endif
 #define Eigen RABITQ_MATRIX_EIGEN_NAMESPACE
-#include "rabitqlib/third/Eigen/Dense"
+#include "rabitqlib/third/Eigen/Core"
 #undef Eigen
 
 namespace rabitqlib::simd {

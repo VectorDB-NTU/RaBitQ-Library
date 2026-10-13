@@ -9,27 +9,38 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <ios>
 #include <iterator>
 #include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
+#include "rabitqlib/core/encoder.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/hnsw_dispatch.hpp"
+#include "rabitqlib/index/hnsw/hnsw_quant.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::hnsw {
 
 struct HnswPruningTestAccess {
     static void quantize(HierarchicalNSW& index, PID id, const float* rotated) {
-        const auto* centroid = reinterpret_cast<const float*>(index.centroids_memory_);
+        const auto* centroid =
+            reinterpret_cast<const float*>(index.centroids_memory_.get());
         quant::quantize_compact_one_bit(
             rotated, centroid, index.padded_dim_, index.get_bindata_by_internalid(id)
         );
     }
 
     static float distance(const HierarchicalNSW& index, PID target, PID query) {
-        return index.get_quant_dist(target, query);
+        detail::QuantQuery cached;
+        return index.get_quant_dist(target, query, cached);
     }
 
     static std::vector<PID> connect(HierarchicalNSW& index, PID incoming) {
@@ -39,15 +50,15 @@ struct HnswPruningTestAccess {
             neighbors[i + 1] = static_cast<PID>(i + 1);
         }
         std::fill_n(index.get_linklist0(incoming), index.maxM0_ + 1, PID{0});
-        detail::quant_query().clear();
+        detail::QuantQuery cached;
         maxheap<std::pair<float, PID>> candidates;
-        candidates.emplace(index.get_quant_dist(0, incoming), 0);
-        index.mutually_connect_quant(incoming, candidates, 0);
+        candidates.emplace(index.get_quant_dist(0, incoming, cached), 0);
+        index.mutually_connect_quant(incoming, candidates, 0, cached);
         return {neighbors + 1, neighbors + 1 + index.get_list_count(neighbors)};
     }
 
     static PID entry_point_label(const HierarchicalNSW& index) {
-        return index.get_external_label(index.enterpoint_node_);
+        return index.get_external_label(index.entry_point_id_);
     }
 
     static PID internal_id(const HierarchicalNSW& index, PID label) {
@@ -63,7 +74,7 @@ struct HnswPruningTestAccess {
     // Give internal slot i the label count - 1 - i, as parallel construction can
     // when threads take slots out of order.
     static void reverse_labels(HierarchicalNSW& index) {
-        const size_t count = index.num_points();
+        const size_t count = index.num_stored_points();
         index.label_lookup_.clear();
         for (size_t i = 0; i < count; ++i) {
             const auto label = static_cast<PID>(count - 1 - i);
@@ -74,6 +85,83 @@ struct HnswPruningTestAccess {
 };
 
 namespace {
+TEST(HnswQuantQuery, MovesPreserveOwnedQueryAndLeaveSourceReusable) {
+    using detail::QuantQuery;
+    static_assert(!std::is_copy_constructible_v<QuantQuery>);
+    static_assert(!std::is_copy_assignable_v<QuantQuery>);
+    static_assert(std::is_nothrow_move_constructible_v<QuantQuery>);
+    static_assert(std::is_nothrow_move_assignable_v<QuantQuery>);
+    const auto prepare = [](QuantQuery& query, PID id, float value) {
+        query.rotated.assign(64, value);
+        query.prepared.emplace(
+            query.rotated.data(), 64, 3, quant::RabitqConfig{}, METRIC_IP
+        );
+        query.prepared->set_g_add(3, 2);
+        query.id = id;
+    };
+    QuantQuery retained;
+    prepare(retained, 1, 0.25F);
+    {
+        QuantQuery original;
+        prepare(original, 7, 0.5F);
+        QuantQuery moved(std::move(original));
+        EXPECT_EQ(original.id, kPidMax);
+        EXPECT_FALSE(original.prepared.has_value());
+        ASSERT_TRUE(moved.prepared.has_value());
+        EXPECT_EQ(moved.prepared->rotated_query(), moved.rotated.data());
+        prepare(original, 9, 1.0F);
+        EXPECT_EQ(moved.rotated.front(), 0.5F);
+        retained = std::move(moved);
+        EXPECT_EQ(moved.id, kPidMax);
+        EXPECT_FALSE(moved.prepared.has_value());
+    }
+    ASSERT_TRUE(retained.prepared.has_value());
+    EXPECT_EQ(retained.id, 7U);
+    EXPECT_EQ(retained.prepared->rotated_query(), retained.rotated.data());
+    EXPECT_EQ(retained.prepared->rotated_query()[63], 0.5F);
+    EXPECT_EQ(retained.prepared->kbxsumq(), -240.0F);
+    EXPECT_EQ(retained.prepared->g_add(), -2.0F);
+    auto& alias = retained;
+    retained = std::move(alias);
+    ASSERT_TRUE(retained.prepared.has_value());
+    EXPECT_EQ(retained.prepared->rotated_query(), retained.rotated.data());
+    retained = QuantQuery{};
+    EXPECT_EQ(retained.id, kPidMax);
+    EXPECT_FALSE(retained.prepared.has_value());
+    EXPECT_TRUE(retained.rotated.empty());
+}
+
+TEST(HnswSearchTest, EqualDistancesUseExternalLabelOrder) {
+    constexpr size_t kCount = 24, kDim = 65;
+    std::vector<float> data(kCount * kDim, 0), centroid(kDim, 0), queries(3 * kDim, 0);
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {1U, 4U, 9U}) {
+            SCOPED_TRACE(metric);
+            SCOPED_TRACE(bits);
+            std::vector<PID> clusters(kCount, 0);
+            HierarchicalNSW index(kCount, kDim, bits, 8, 32, 42, metric);
+            index.construct(
+                1, centroid.data(), kCount, data.data(), clusters.data(), 1, true
+            );
+            HnswPruningTestAccess::reverse_labels(index);
+            const PID removed = 3;
+            index.remove(&removed, 1);
+            for (size_t threads : {1U, 3U}) {
+                const auto results = index.search(queries.data(), 3, kCount, 32, threads);
+                for (const auto& row : results) {
+                    // Equal vectors need not make every graph node reachable.
+                    // Verify the returned set's ordering, not exact-search recall.
+                    ASSERT_GE(row.size(), 2U);
+                    EXPECT_TRUE(std::is_sorted(row.begin(), row.end()));
+                    for (const auto& result : row) {
+                        EXPECT_NE(result.second, removed);
+                        EXPECT_EQ(result.first, row.front().first);
+                    }
+                }
+            }
+        }
+    }
+}
 
 TEST(HnswPruningTest, ScoresNewAndExistingNeighborsWithTheSameQuery) {
     constexpr size_t kDim = 64;
@@ -95,7 +183,6 @@ TEST(HnswPruningTest, ScoresNewAndExistingNeighborsWithTheSameQuery) {
     for (PID id = 0; id < kCount; ++id) {
         HnswPruningTestAccess::quantize(index, id, data.data() + (id * kDim));
     }
-    detail::quant_query().clear();
     const float existing_distance = HnswPruningTestAccess::distance(index, 1, 0);
     EXPECT_LT(HnswPruningTestAccess::distance(index, kIncoming, 0), existing_distance);
     EXPECT_GT(HnswPruningTestAccess::distance(index, 0, kIncoming), existing_distance);
@@ -649,10 +736,10 @@ TEST(HnswAddTest, AddIntoAnEmptyIndexBuildsFromScratch) {
 }
 
 TEST(HnswConstructionTest, RejectsTooSmallM) {
-    for (const size_t M : {0U, 1U}) {
-        SCOPED_TRACE(M);
+    for (const size_t m : {0U, 1U}) {
+        SCOPED_TRACE(m);
         try {
-            HierarchicalNSW index(8, 64, 4, M, 10);
+            HierarchicalNSW index(8, 64, 4, m, 10);
             FAIL() << "M below 2 must be rejected";
         } catch (const std::invalid_argument& error) {
             EXPECT_STREQ(error.what(), "HNSW M must be at least 2");
@@ -864,7 +951,7 @@ std::unique_ptr<HierarchicalNSW> build_for_remove(
 Results search_everything(
     HierarchicalNSW& index, const AddFixture& fixture, size_t queries
 ) {
-    const size_t count = index.num_points();
+    const size_t count = index.num_stored_points();
     return index.search(fixture.data.data(), queries, count, count, 1);
 }
 
@@ -927,7 +1014,8 @@ TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
 
         EXPECT_EQ(index->remove(labels.data(), labels.size()), unique);
         EXPECT_EQ(index->remove(labels.data(), labels.size()), 0U);
-        EXPECT_EQ(index->num_points(), kCount);
+        EXPECT_EQ(index->num_points(), kCount - unique);
+        EXPECT_EQ(index->num_stored_points(), kCount);
 
         // Survivors keep their order and their distances.
         EXPECT_EQ(
@@ -1173,19 +1261,19 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
     using namespace rabitqlib;
     using namespace rabitqlib::hnsw;
     constexpr size_t count = 24;
-    using Search = decltype(&hnsw::detail::search_knn_generic);
-    std::vector<Search> backends{hnsw::detail::search_knn};
+    using Search = decltype(&hnsw::detail::search_knn_sorted_generic);
+    std::vector<Search> backends{hnsw::detail::search_knn_sorted};
 #if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2())
-        backends.push_back(hnsw::detail::search_knn_avx2);
+        backends.push_back(hnsw::detail::search_knn_sorted_avx2);
     if (cpu::has_avx512_core())
-        backends.push_back(hnsw::detail::search_knn_avx512_core);
+        backends.push_back(hnsw::detail::search_knn_sorted_avx512_core);
     if (cpu::has_avx512_popcnt())
-        backends.push_back(hnsw::detail::search_knn_avx512_popcnt);
+        backends.push_back(hnsw::detail::search_knn_sorted_avx512_popcnt);
 #endif
 #if defined(__aarch64__) || defined(_M_ARM64)
     if (cpu::has_neon())
-        backends.push_back(hnsw::detail::search_knn_neon);
+        backends.push_back(hnsw::detail::search_knn_sorted_neon);
 #endif
     for (size_t dim : {64U, 96U, 128U, 160U, 256U, 544U, 576U}) {
         std::mt19937 random(642);
@@ -1208,20 +1296,26 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
                 // Insertion reconstructs stored sign/extra-bit tails before linking.
                 index.add(data.data() + (count - 4) * dim, 4, clusters.data(), true, 1);
                 const auto reference =
-                    hnsw::detail::search_knn_generic(index, query.data(), 5, count);
+                    hnsw::detail::search_knn_sorted_generic(index, query.data(), 5, count);
+                const auto ordered =
+                    hnsw::detail::search_knn_sorted(index, query.data(), 5, count);
+                auto heap = hnsw::detail::search_knn(index, query.data(), 5, count);
+                ASSERT_EQ(heap.size(), ordered.size());
+                for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
+                    EXPECT_EQ(heap.top(), *it);
+                    heap.pop();
+                }
                 for (auto search : backends) {
-                    auto expected = reference;
+                    const auto& expected = reference;
                     auto actual = search(index, query.data(), 5, count);
                     ASSERT_EQ(actual.size(), expected.size());
-                    while (!expected.empty()) {
-                        EXPECT_EQ(actual.top().second, expected.top().second);
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        EXPECT_EQ(actual[i].second, expected[i].second);
                         EXPECT_NEAR(
-                            actual.top().first,
-                            expected.top().first,
-                            2e-5F * std::max(1.0F, std::abs(expected.top().first))
+                            actual[i].first,
+                            expected[i].first,
+                            2e-5F * std::max(1.0F, std::abs(expected[i].first))
                         );
-                        actual.pop();
-                        expected.pop();
                     }
                 }
             }
@@ -1267,4 +1361,23 @@ TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
             EXPECT_TRUE(second.get());
         }
     }
+}
+
+TEST(HnswSearchValidation, RejectsZeroKBeforeParallelSearch) {
+    using namespace rabitqlib;
+    std::vector<float> data(128, 0.5F), center(64, 0.0F);
+    PID clusters[2] = {0, 0};
+    hnsw::HierarchicalNSW index(2, 64, 4, 2, 16, 100);
+    index.construct(1, center.data(), 2, data.data(), clusters, 1, false);
+    for (const size_t threads : {1U, 4U}) {
+        for (const size_t count : {0U, 1U, 2U}) {
+            try {
+                index.search(data.data(), count, 0, 10, threads);
+                FAIL() << "zero k must be rejected";
+            } catch (const std::invalid_argument& error) {
+                EXPECT_STREQ(error.what(), "HNSW k must be greater than zero");
+            }
+        }
+    }
+    EXPECT_EQ(index.search(data.data(), 1, 1, 10, 1)[0].size(), 1U);
 }

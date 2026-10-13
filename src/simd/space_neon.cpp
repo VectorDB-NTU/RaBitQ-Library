@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-#include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 
 namespace rabitqlib::simd {
 namespace {

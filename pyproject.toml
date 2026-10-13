@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "rabitqlib"
-version = "0.6.0"
+version = "0.7.0"
 description = "RaBitQ Python bindings for indexes and clustering"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,7 +33,8 @@ test = ["pytest>=7", "numpy"]
 # Disable directory auto-discovery so we can map it via CMake's install target
 wheel.packages = []
 
-# Python packages need the extension and core library, not C++ sample executables.
+# Python wheels include the extension and its core/FastScan/index dependencies;
+# C++ sample executables are disabled.
 cmake.args = [
     "-DRABITQ_BUILD_PYTHON_BINDINGS=ON",
     "-DRABITQ_BUILD_SAMPLES=OFF",

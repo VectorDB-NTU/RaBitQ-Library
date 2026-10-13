@@ -1,12 +1,15 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 // Link-time substitutes, isolated from both production detection and the main suite.

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <gtest/internal/gtest-port.h>
 
 #include <array>
 #include <atomic>
@@ -12,6 +13,7 @@
 #include <vector>
 
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace {
 std::atomic<bool> fail_enabled{false};
@@ -117,6 +119,8 @@ TEST(HnswConstructionAllocationTest, EveryAllocationFailureLeavesEmptyReusableIn
             }
             ++failures;
             EXPECT_EQ(index.num_points(), 0U);
+            EXPECT_EQ(index.num_stored_points(), 0U);
+            EXPECT_EQ(index.max_elements(), kCapacity);
             EXPECT_EQ(index.num_clusters(), 0U);
             const auto empty = index.search(fixture.data.data(), 1, 1, kCapacity, 1);
             ASSERT_EQ(empty.size(), 1U);
@@ -141,6 +145,47 @@ TEST(HnswConstructionAllocationTest, EveryAllocationFailureLeavesEmptyReusableIn
         EXPECT_GT(failures, 0U);
         EXPECT_TRUE(succeeded);
     }
+}
+
+TEST(HnswResizeAllocationTest, FailurePreservesEveryLinkOwner) {
+    Fixture fixture;
+    size_t failures = 0;
+    bool succeeded = false;
+    for (size_t allocation = 0; allocation < 32; ++allocation) {
+        SCOPED_TRACE(allocation);
+        HierarchicalNSW index(kCapacity, kDim, 4, 2, 10, 1);
+        auto clusters = fixture.clusters;
+        index.construct(
+            1,
+            fixture.centroid.data(),
+            kCapacity,
+            fixture.data.data(),
+            clusters.data(),
+            1,
+            false
+        );
+        const auto before = index.search(fixture.data.data(), kCapacity, 3, kCapacity, 1);
+        bool failed = false;
+        {
+            AllocationFailure failure(allocation);
+            try {
+                index.resize(2 * kCapacity);
+            } catch (const std::bad_alloc&) { failed = true; }
+        }
+        EXPECT_EQ(index.num_points(), kCapacity);
+        EXPECT_EQ(index.search(fixture.data.data(), kCapacity, 3, kCapacity, 1), before);
+        if (!failed) {
+            EXPECT_EQ(index.max_elements(), 2 * kCapacity);
+            succeeded = true;
+            break;
+        }
+        ++failures;
+        EXPECT_EQ(index.max_elements(), kCapacity);
+        ASSERT_NO_THROW(index.resize(2 * kCapacity));
+        EXPECT_EQ(index.search(fixture.data.data(), kCapacity, 3, kCapacity, 1), before);
+    }
+    EXPECT_GT(failures, 0U);
+    EXPECT_TRUE(succeeded);
 }
 
 TEST(HnswAddAllocationTest, AllocatesReturnedIdsBeforeMutation) {
@@ -260,7 +305,7 @@ TEST(HnswAddAllocationTest, EveryAllocationFailureLeavesUsableIndex) {
                 ASSERT_NO_THROW(loaded.load(path.c_str()));
                 EXPECT_EQ(loaded.num_points(), index.num_points());
                 EXPECT_EQ(loaded.search(fixture.data.data(), 1, 1, kCapacity, 1), results);
-                const auto next_id = static_cast<PID>(loaded.num_points());
+                const auto next_id = static_cast<PID>(loaded.num_stored_points());
                 EXPECT_EQ(
                     loaded.add(
                         fixture.data.data() + ((1 + kAdded) * kDim),

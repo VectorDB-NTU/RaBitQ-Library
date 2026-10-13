@@ -7,10 +7,10 @@
 #include <stdexcept>
 #include <vector>
 
-#include "rabitqlib/quantization/pack_excode.hpp"
-#include "rabitqlib/simd/pack_excode_dispatch.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/pack_excode_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/pack_excode.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"

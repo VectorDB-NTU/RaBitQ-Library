@@ -4,15 +4,18 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <ios>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
+#include "rabitqlib/utils/rotator.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 2) {

@@ -4,16 +4,24 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <ios>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/parallel_for.hpp"
+#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
 namespace {
@@ -228,36 +236,41 @@ TEST(HNSWInitializerTest, ConcurrentSearchesKeepRoutingStateSynchronized) {
     EXPECT_FALSE(invalid_result);
 }
 
-TEST(ParallelForTest, AutomaticThreadCountProcessesEveryItem) {
-    std::atomic<size_t> calls{0};
-    parallel_for(0, 100, 0, [&](size_t, size_t) { ++calls; });
-    EXPECT_EQ(calls, 100U);
-}
-
-TEST(ParallelForTest, EmptyRangeDoesNotInvokeFunction) {
-    size_t calls = 0;
-    parallel_for(5, 5, 0, [&](size_t, size_t) { ++calls; });
-    EXPECT_EQ(calls, 0U);
-}
-
 TEST(ParallelForTest, JoinsWorkersBeforeRethrowingFunctionException) {
-    std::atomic<size_t> active{0};
-    EXPECT_THROW(
-        parallel_for(
-            0,
-            100,
-            4,
-            [&](size_t id, size_t) {
-                ++active;
-                --active;
+    if (rabitqlib::resolve_num_threads(2) < 2) {
+        GTEST_SKIP() << "Requires two available workers";
+    }
+    std::promise<void> worker_started, release_worker;
+    auto started = worker_started.get_future().share();
+    auto release = release_worker.get_future();
+    std::atomic<bool> worker_finished{false};
+    auto result = std::async(std::launch::async, [&] {
+        try {
+            rabitqlib::index_detail::parallel_for(0, 2, 2, [&](size_t id, size_t) {
                 if (id == 0) {
+                    if (started.wait_for(std::chrono::seconds(5)) !=
+                        std::future_status::ready) {
+                        throw std::runtime_error("Second worker did not start");
+                    }
                     throw std::runtime_error("parallel failure");
                 }
-            }
-        ),
-        std::runtime_error
-    );
-    EXPECT_EQ(active, 0U);
+                worker_started.set_value();
+                release.wait();
+                worker_finished = true;
+            });
+        } catch (const std::runtime_error& error) {
+            EXPECT_STREQ(error.what(), "parallel failure");
+            return worker_finished.load();
+        }
+        ADD_FAILURE() << "Worker exception was not propagated";
+        return false;
+    });
+    EXPECT_EQ(started.wait_for(std::chrono::seconds(5)), std::future_status::ready);
+    // Keep one callback outstanding while the other throws. The caller must not
+    // observe that exception until the outstanding callback has completed.
+    EXPECT_EQ(result.wait_for(std::chrono::milliseconds(20)), std::future_status::timeout);
+    release_worker.set_value();
+    EXPECT_TRUE(result.get());
 }
 
 }  // namespace

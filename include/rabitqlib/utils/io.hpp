@@ -51,7 +51,6 @@ void read_value(std::ifstream& input, T& value, const char* description) {
 
 }  // namespace io_impl
 
-// get num of bytes
 inline size_t get_filesize(const char* filename) {
     const auto file_size =
         std::filesystem::file_size(rabitqlib::io_impl::filesystem_path(filename));

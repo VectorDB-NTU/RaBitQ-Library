@@ -4,8 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "space_float_kernels.hpp"
 
 namespace rabitqlib::simd {

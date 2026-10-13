@@ -1,9 +1,14 @@
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <string>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/core/detail/eigen.hpp"
+#include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
 

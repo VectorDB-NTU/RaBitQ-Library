@@ -15,11 +15,12 @@
 #include <vector>
 
 #include "bindings_common.hpp"
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/fastscan/fastscan.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace py = pybind11;
 
@@ -89,7 +90,6 @@ class SymqgIndex {
             builder.build();
         }
         index_ = std::move(index);
-        num_points_ = num_points;
         built_ = true;
     }
 
@@ -99,7 +99,7 @@ class SymqgIndex {
         if (!built_) {
             throw std::runtime_error("SymqgIndex must be built or loaded before search");
         }
-        if (k == 0 || k > num_points_) {
+        if (k == 0 || k > index_->num_points()) {
             throw std::invalid_argument("k must be between 1 and num_points");
         }
         if (ef == 0) {
@@ -152,7 +152,6 @@ class SymqgIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(path.c_str());
         }
-        wrapper.num_points_ = wrapper.index_->num_vertices();
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_degree_ = wrapper.index_->degree_bound();
         wrapper.metric_ = wrapper.index_->metric_type();
@@ -171,7 +170,15 @@ class SymqgIndex {
     }
     [[nodiscard]] size_t num_points() const {
         const auto operation = access_.read();
-        return num_points_;
+        return index_ ? index_->num_points() : 0;
+    }
+    [[nodiscard]] size_t num_stored_points() const {
+        const auto operation = access_.read();
+        return index_ ? index_->num_stored_points() : 0;
+    }
+    [[nodiscard]] size_t max_elements() const {
+        const auto operation = access_.read();
+        return index_ ? index_->max_elements() : 0;
     }
     [[nodiscard]] bool is_built() const {
         const auto operation = access_.read();
@@ -191,7 +198,6 @@ class SymqgIndex {
 
     size_t dim_ = 0;
     size_t max_degree_ = 0;
-    size_t num_points_ = 0;
     rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
     size_t quantization_bits_ = 0;
     bool built_ = false;
@@ -242,6 +248,8 @@ void register_symqg(py::module_& m) {
         .def_property_readonly("dim", &SymqgIndex::dim)
         .def_property_readonly("max_degree", &SymqgIndex::max_degree)
         .def_property_readonly("num_points", &SymqgIndex::num_points)
+        .def_property_readonly("num_stored_points", &SymqgIndex::num_stored_points)
+        .def_property_readonly("max_elements", &SymqgIndex::max_elements)
         .def_property_readonly("is_built", &SymqgIndex::is_built)
         .def_property_readonly("metric", &SymqgIndex::metric)
         .def_property_readonly("quantization_bits", &SymqgIndex::quantization_bits);

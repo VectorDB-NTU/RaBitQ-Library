@@ -9,8 +9,9 @@
 #include <string>
 #include <system_error>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/utils/io.hpp"
+#include "rabitqlib/utils/path.hpp"
 
 namespace kmeans_example {
 

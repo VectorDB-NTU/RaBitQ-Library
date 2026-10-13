@@ -1,96 +1,228 @@
-#include "rabitqlib/quantization/rabitq.hpp"
-
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "rabitqlib/core/data_layout.hpp"
+#include "rabitqlib/core/detail/rabitq_impl.hpp"
+#include "rabitqlib/core/encoder.hpp"
+#include "rabitqlib/core/estimator.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/query.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/warmup_space.hpp"
+
 namespace rabitqlib::quant {
 namespace {
 
-template <typename T, bool Parallel>
-void check_one_bit_batches() {
-    // Alternate dimensions to exercise scratch growth and shrinking on each thread.
-    for (size_t dim : {64U, 8U, 128U, 16U, 768U, 24U, 192U, 56U, 72U, 64U}) {
-        for (size_t num : {0U, 1U, 15U, 16U, 17U, 31U, 32U, 33U, 64U, 65U}) {
-            for (MetricType metric : {METRIC_L2, METRIC_IP}) {
-                SCOPED_TRACE(
-                    ::testing::Message()
-                    << "dim=" << dim << " num=" << num << " metric=" << metric
-                );
-                std::vector<T> centroid(dim);
-                std::vector<T> data(num * dim);
-                for (size_t d = 0; d < dim; ++d) {
-                    centroid[d] = static_cast<T>(static_cast<int>(d % 7) - 3) / 8;
-                    for (size_t i = 0; i < num; ++i) {
-                        const T residual =
-                            i % 3 == 0
-                                ? T{0}
-                                : static_cast<T>(static_cast<int>((i + d) % 11) - 5) / 4;
-                        data[i * dim + d] = centroid[d] + residual;
-                    }
-                }
-                // A guard byte/factor also verifies empty inputs and tail writes.
-                const size_t packed_bytes = ((num + 31) / 32) * 32 * (dim / 8);
-                std::vector<uint8_t> expected(packed_bytes + 1, 0xA5);
-                std::vector<uint8_t> actual = expected;
-                std::vector<uint8_t> compact(num * dim / 8);
-                std::vector<T> expected_add(num + 1, T{123});
-                std::vector<T> expected_rescale = expected_add;
-                std::vector<T> expected_error = expected_add;
-                std::vector<T> actual_add = expected_add;
-                std::vector<T> actual_rescale = expected_add;
-                std::vector<T> actual_error = expected_add;
-                for (size_t i = 0; i < num; ++i) {
-                    rabitq_impl::one_bit::one_bit_compact_code(
-                        data.data() + i * dim,
-                        centroid.data(),
-                        dim,
-                        compact.data() + i * dim / 8,
-                        expected_add[i],
-                        expected_rescale[i],
-                        expected_error[i],
-                        metric
-                    );
-                }
-                fastscan::pack_codes(dim, compact.data(), num, expected.data());
-                rabitq_impl::one_bit::one_bit_batch_code<T, Parallel>(
+struct DispatchedEstimateKernel {
+    static constexpr auto mask_ip_x0_q =
+        static_cast<float (*)(const float*, const uint64_t*, size_t)>(
+            &rabitqlib::mask_ip_x0_q
+        );
+    static constexpr auto warmup_ip_x0_q_512 = static_cast<
+        float (*)(const uint64_t*, const uint64_t*, float, float, size_t, size_t)>(
+        &rabitqlib::warmup_ip_x0_q_512
+    );
+};
+
+TEST(SingleEstimatorTest, NamedResultsPreserveLegacyOutputOrder) {
+    const auto check = [](const auto& result, float distance, float lower, float ip) {
+        EXPECT_EQ(result.distance, distance);
+        EXPECT_EQ(result.lower_bound, lower);
+        EXPECT_EQ(result.inner_product, ip);
+    };
+    for (size_t dim : {64U, 96U}) {
+        std::vector<float> data(dim), centroid(dim), query(dim);
+        for (size_t i = 0; i < dim; ++i) {
+            data[i] = static_cast<float>(i % 11) * 0.25F;
+            centroid[i] = static_cast<float>(i % 3) * 0.125F;
+            query[i] = static_cast<float>(i % 7) * -0.25F;
+        }
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            const float g_add = metric == METRIC_L2 ? 9.0F : -2.0F;
+            constexpr float g_error = 3.0F;
+            for (size_t bits = 1; bits <= 9; ++bits) {
+                const size_t ex_bits = bits - 1;
+                std::vector<char> bin(BinDataMap<float>::data_bytes(dim));
+                std::vector<char> extra(ExDataMap<float>::data_bytes(dim, ex_bits));
+                quantize_split_single(
                     data.data(),
                     centroid.data(),
-                    num,
                     dim,
-                    actual.data(),
-                    actual_add.data(),
-                    actual_rescale.data(),
-                    actual_error.data(),
+                    ex_bits,
+                    bin.data(),
+                    extra.data(),
                     metric
                 );
-                EXPECT_EQ(actual, expected);
-                EXPECT_EQ(actual_add, expected_add);
-                EXPECT_EQ(actual_rescale, expected_rescale);
-                EXPECT_EQ(actual_error, expected_error);
+                SplitSingleQuery<float> prepared(
+                    query.data(), dim, ex_bits, RabitqConfig{}, metric
+                );
+                float distance, lower, ip;
+                split_single_estdist(
+                    bin.data(), prepared, dim, ip, distance, lower, g_add, g_error
+                );
+                check(
+                    estimate_split_single(bin.data(), prepared, dim, g_add, g_error),
+                    distance,
+                    lower,
+                    ip
+                );
+                split_single_estdist_direct<DispatchedEstimateKernel>(
+                    bin.data(), prepared, dim, ip, distance, lower, g_add, g_error
+                );
+                check(
+                    estimate_split_single_direct<DispatchedEstimateKernel>(
+                        bin.data(), prepared, dim, g_add, g_error
+                    ),
+                    distance,
+                    lower,
+                    ip
+                );
+                if (ex_bits == 0) {
+                    continue;
+                }
+                auto ip_func = select_excode_ipfunc(ex_bits);
+                split_single_fulldist(
+                    bin.data(),
+                    extra.data(),
+                    ip_func,
+                    prepared,
+                    dim,
+                    ex_bits,
+                    distance,
+                    lower,
+                    ip,
+                    g_add,
+                    g_error
+                );
+                check(
+                    estimate_split_single_full(
+                        bin.data(),
+                        extra.data(),
+                        ip_func,
+                        prepared,
+                        dim,
+                        ex_bits,
+                        g_add,
+                        g_error
+                    ),
+                    distance,
+                    lower,
+                    ip
+                );
+                split_single_fulldist_direct<DispatchedEstimateKernel>(
+                    bin.data(),
+                    extra.data(),
+                    ip_func,
+                    prepared,
+                    dim,
+                    ex_bits,
+                    distance,
+                    lower,
+                    ip,
+                    g_add,
+                    g_error
+                );
+                check(
+                    estimate_split_single_full_direct<DispatchedEstimateKernel>(
+                        bin.data(),
+                        extra.data(),
+                        ip_func,
+                        prepared,
+                        dim,
+                        ex_bits,
+                        g_add,
+                        g_error
+                    ),
+                    distance,
+                    lower,
+                    ip
+                );
+            }
+            for (auto widths :
+                 {std::pair<size_t, size_t>{1, 0}, {1, 4}, {4, 0}, {4, 4}, {8, 1}}) {
+                const auto [base_bits, ex_bits] = widths;
+                std::vector<char> base(BaseDataMap<float>::data_bytes(dim, base_bits));
+                std::vector<char> extra(ExDataMap<float>::data_bytes(dim, ex_bits));
+                quantize_xy_single(
+                    data.data(),
+                    centroid.data(),
+                    dim,
+                    base_bits,
+                    ex_bits,
+                    base.data(),
+                    extra.data(),
+                    metric
+                );
+                SplitSingleQuery<float> prepared(
+                    query.data(), dim, ex_bits, RabitqConfig{}, metric, base_bits
+                );
+                auto base_ip = select_excode_ipfunc(base_bits);
+                auto extra_ip = select_excode_ipfunc(ex_bits);
+                float distance, lower, ip;
+                xy_single_base_dist(
+                    base.data(),
+                    base_ip,
+                    prepared,
+                    dim,
+                    base_bits,
+                    ip,
+                    distance,
+                    lower,
+                    g_add,
+                    g_error
+                );
+                check(
+                    estimate_xy_base(
+                        base.data(), base_ip, prepared, dim, base_bits, g_add, g_error
+                    ),
+                    distance,
+                    lower,
+                    ip
+                );
+                xy_single_full_dist(
+                    base.data(),
+                    extra.data(),
+                    base_ip,
+                    extra_ip,
+                    prepared,
+                    dim,
+                    base_bits,
+                    ex_bits,
+                    distance,
+                    lower,
+                    ip,
+                    g_add,
+                    g_error
+                );
+                check(
+                    estimate_xy_full(
+                        base.data(),
+                        extra.data(),
+                        base_ip,
+                        extra_ip,
+                        prepared,
+                        dim,
+                        base_bits,
+                        ex_bits,
+                        g_add,
+                        g_error
+                    ),
+                    distance,
+                    lower,
+                    ip
+                );
             }
         }
     }
-}
-
-TEST(RabitqOneBitBatchTest, MatchesIndividualEncoding) {
-    check_one_bit_batches<float, false>();
-    check_one_bit_batches<double, false>();
-}
-
-TEST(RabitqOneBitBatchTest, ParallelMatchesIndividualEncoding) {
-    const int previous_threads = omp_get_max_threads();
-    omp_set_num_threads(2);
-    check_one_bit_batches<float, true>();
-    check_one_bit_batches<double, true>();
-    omp_set_num_threads(previous_threads);
 }
 
 int level_from_thresholds(double magnitude, double t, int max_code) {

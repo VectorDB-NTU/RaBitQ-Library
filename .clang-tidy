@@ -19,12 +19,30 @@ Checks: >
   performance-*,
   portability-*,
   readability-duplicate-include,
+  readability-identifier-naming,
   readability-inconsistent-declaration-parameter-name,
   readability-misleading-indentation,
   readability-redundant-control-flow,
   -portability-simd-intrinsics,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
-# Keep the selected first-party baseline regression-free. Repository-wide
-# naming checks remain deferred because they would change public APIs.
-WarningsAsErrors: "*"
+# Keep the established checks blocking. Naming starts as warnings while existing
+# internal/parameter names are migrated; do not bulk-fix public interfaces.
+WarningsAsErrors: "*,-readability-identifier-naming"
+
+CheckOptions:
+  # Check locals, parameters and private fields. Public member/function names,
+  # types, enums and macros retain their current compatibility contracts.
+  readability-identifier-naming.LocalVariableCase: lower_case
+  readability-identifier-naming.ParameterCase: lower_case
+  # M is the existing HNSW graph-degree parameter, including its public constructor.
+  readability-identifier-naming.ParameterIgnoredRegexp: '^M$'
+  readability-identifier-naming.LocalConstantCase: lower_case
+  # Runtime const values stay snake_case. Also accept existing named constants
+  # such as kBatchSize; const/constexpr alone does not express that distinction.
+  readability-identifier-naming.LocalConstantIgnoredRegexp: '^k[A-Z][a-zA-Z0-9]*$'
+  readability-identifier-naming.PrivateMemberCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: '_'
+  # Preserve these existing graph parameters and formula coefficient names.
+  # Keep exceptions explicit rather than exempting all capitalized identifiers.
+  readability-identifier-naming.PrivateMemberIgnoredRegexp: '^(M|maxM|maxM0|G_add|G_error|G_k1xSumq|G_kbaseSumq|G_kbxSumq)_$'

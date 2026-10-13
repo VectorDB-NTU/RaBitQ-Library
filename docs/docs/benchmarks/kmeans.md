@@ -1,5 +1,9 @@
 # K-means benchmark
 
+These are historical measurements labeled RaBitQ-Library 0.5.2. See the
+[recorded snapshot and reproduction limits](bench.md#package-installation).
+Measurements of the modular source tree require a separate run.
+
 Compare **QGKMeans**, **Faiss K-means**, and **SuperKMeans** using their Python APIs.
 Metrics are total time, WCSS, and recall@10 with 1% of clusters probed.
 
@@ -9,7 +13,7 @@ Metrics are total time, WCSS, and recall@10 with 1% of clusters probed.
 | --- | --- |
 | Threads | 48; methods run sequentially in separate processes |
 | Clustering | Flat L2, 4,096 clusters |
-| Training | All raw float32 base vectors; no sampling, quantization, or hierarchy |
+| Training | All float32 base vectors; no input subsampling or prequantization; nonhierarchical training |
 | Iterations | At most 25; stopping thresholds below |
 | Final assignment | Exact nearest centroid after the last update |
 | Seed / fits | 42 / one fit per method and dataset |
@@ -25,7 +29,8 @@ search. Centroids are not normalized.
 | `faiss.Kmeans` | CPU, `nredo=1`, `max_points_per_centroid=N`, `spherical=False`, `early_stop_threshold=0`; exact final `index.search(x, 1)` |
 | `superkmeans.SuperKMeans` | v0.2.0, `quantizer="f32"`, `hierarchical=False`, `sampling_fraction=1`, `angular=False`, `use_blas_only=False`, `early_termination=True`, `tol=1e-4`; exact final `assign(x, centroids)` |
 
-`N` is the full base count. Methods retain their own training assignment algorithms
+`N` is the full base count. These input settings do not disable internal
+quantization, such as QGKMeans' one-bit neighbor codes. Methods retain their own training assignment algorithms
 and initializers; the same seed does not guarantee identical starting centroids.
 
 ## Metrics

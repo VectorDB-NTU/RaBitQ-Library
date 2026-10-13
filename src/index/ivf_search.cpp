@@ -1,8 +1,9 @@
+#include "ivf_search.hpp"
+
 #include <cstddef>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
-#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::ivf::detail {
 // Keep the scalar top-k loop out of the large inlined IVF search body. This avoids

@@ -1,8 +1,14 @@
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <string>
 
+#include "rabitqlib/core/detail/eigen.hpp"
+#include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
 
@@ -70,14 +76,14 @@ int run(int argc, char* argv[]) {
     size_t dim = data.cols();
 
     size_t random_seed = 100;  // by default 100
-    auto* hnsw = new rabitqlib::hnsw::HierarchicalNSW(
+    rabitqlib::hnsw::HierarchicalNSW hnsw(
         num_points, dim, total_bits, m, ef, random_seed, metric_type
     );
 
     rabitqlib::StopW stopw;
     stopw.reset();
 
-    hnsw->construct(
+    hnsw.construct(
         centroids.rows(),
         centroids.data(),
         num_points,
@@ -91,7 +97,7 @@ int run(int argc, char* argv[]) {
     total_time /= 1e6;
 
     std::cout << "indexing time = " << total_time << "s" << '\n';
-    hnsw->save(index_file);
+    hnsw.save(index_file);
 
     std::cout << "index saved..." << '\n';
 

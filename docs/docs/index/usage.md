@@ -1,0 +1,140 @@
+# Index usage contracts
+
+Shared input, count, concurrency and persistence conventions for IVF, HNSW and
+SymphonyQG. Start with the [Python quick start](../quick_start.md) for a complete example.
+
+## Input requirements
+
+`IvfIndex`, `HnswIndex`, and `SymqgIndex` accept data and query arrays with shape
+`(count, dim)`, converted to contiguous float32. Their FHT/Kac rotation requires
+`64 <= dim <= 65536`. Supply the original dimension; the indexes pad internally
+to a multiple of 32. Queries and centroids must have the same original dimension
+as the indexed data.
+
+These limits apply to the Python indexes. The C++ [stable core API](../rabitq/core_api.md)
+accepts working dimensions from 2, with multiples of 32 required for `SplitPacked`.
+C++ [MatrixRotator](../rabitq/rotator.md) has separate dimension and storage requirements;
+the Python indexes do not expose a rotator choice.
+
+## Index counts
+
+The unified count properties below are introduced in **0.7.0**. In particular,
+HNSW's `num_points` now excludes removed records; see the
+[count migration guide](../modular_migration.md#unified-index-counts) when upgrading.
+
+IVF, HNSW, and SymphonyQG expose these read-only Python properties
+(C++ uses the same names with `()`):
+
+| Property | Meaning |
+| --- | --- |
+| `max_elements` | Logical record capacity, excluding SIMD padding |
+| `num_points` | Nonremoved points |
+| `num_stored_points` | Stored records, including removed ones |
+
+`0 <= num_points <= num_stored_points <= max_elements`. Before building, both
+point counts are zero; configured capacity may be nonzero.
+
+At build time, IVF requires exactly `max_elements` input rows. HNSW accepts
+1 through `max_elements` rows, so it can reserve capacity for later additions.
+
+Removal decreases only `num_points`; slots and IDs remain occupied. Append IDs
+start at the previous `num_stored_points`. Use this stored count for ID bounds,
+and `num_points` for a live count. Counts survive save/load.
+
+IVF grows automatically and has no spare logical capacity after build or append.
+HNSW's `resize` changes only capacity. SymphonyQG has no incremental updates;
+all three counts are equal after build.
+
+## Estimate storage
+
+The following estimates describe the main float32 index storage, not total process
+memory or peak construction memory. Let `d` be the original dimension, `D` the
+stored padded dimension, and `B` the total quantized bits per dimension. New
+indexes use `D = 32 * ceil(d / 32)`; loaded indexes retain their saved padding.
+
+For IVF/HNSW, codes and factors occupy `V(B)` bytes per vector:
+
+- One bit: `V(1) = D / 8 + 12` (three float32 factors).
+- Two through nine bits: `V(B) = D * B / 8 + 20` (three binary and two extra-code factors).
+
+| Index / mode | Main bytes per stored point or capacity slot |
+| --- | --- |
+| IVF quantized | Approximately `V(B) + 4`, including the point ID |
+| IVF raw (`nbits=32`) | Approximately `D / 8 + 12 + 4*d + 4`, including filtering codes, raw vector and ID |
+| HNSW | `V(B) + 8*M + 12` per **capacity slot** for base-layer records: up to `2*M` neighbor IDs, a link count, cluster ID and label |
+| SymphonyQG raw | `4*d + R*(D/8 + 12)`, where `R = max_degree` |
+| SymphonyQG quantized | `D*B/8 + 8 + R*(D/8 + 12)`, with `B` equal to 4 or 8 |
+
+IVF allocates one-bit codes and their three factors in full batches of 32
+**per cluster**. For cluster sizes `n_c`, that part costs
+`sum(32 * ceil(n_c / 32)) * (D/8 + 12)` bytes. Extra codes/raw vectors and IDs
+use the stored point count. Small clusters therefore increase padding overhead.
+Centroids, routing structures and cluster metadata are additional.
+
+HNSW allocates base-layer records for `max_elements`, including unused capacity.
+Upper-layer edges, label maps, locks, visited lists and other bookkeeping are
+additional. Removing points does not reclaim their storage in either IVF or HNSW.
+
+SymphonyQG stores a one-bit code and two factors **for each neighbor in each row**,
+plus a four-byte neighbor ID. This accounts for `R*(D/8 + 12)` bytes per row,
+even in quantized mode: reducing the vector's own code width does not shrink
+these neighborhood copies.
+
+For example, with `d=D=128`, four-bit storage, `M=16` and `R=32`, the terms above
+are about 88 bytes per IVF point before batch padding, 224 bytes per HNSW capacity
+slot, and 968 bytes per SymphonyQG row. These are layout calculations, not measured
+RSS. All indexes also retain rotation state; construction, query scratch,
+allocator overhead and update workspaces add to memory use. Measure process
+memory on the intended workload when sizing a deployment.
+
+These formulas follow `BatchDataMap` / `QGBatchDataMap` in
+`fastscan/data_layout.hpp`, `BinDataMap` / `ExDataMap` in `core/data_layout.hpp`,
+and the index record layouts described in the individual guides. Applications
+allocating code buffers should call the corresponding `data_bytes()` helpers
+rather than hardcode these estimates.
+
+## Threading and file paths
+
+The library releases the Python GIL during native index search,
+construction, updates, and file I/O. The following contract applies to
+`IvfIndex`, `HnswIndex`, and `SymqgIndex`:
+
+| Operation on the same index | Concurrent access |
+| --- | --- |
+| `search`, `search_batch`, `save`, and property reads | May run together |
+| `build`, `add`, `remove`, and `resize`, where available | Require exclusive access |
+
+A conflicting call immediately raises
+`RuntimeError("Index is busy: conflicting operation in progress")`.
+It does not wait or queue an update. Access protection includes Python input
+conversion and is released when the operation returns or raises an exception.
+Different index objects can operate independently. Concurrent saves must use
+different output paths, including any sidecar files.
+
+Search parameters such as `ef`, `nprobe`, precision, and `num_threads` belong to
+each call. When using a Python thread pool, consider `num_threads=1` to avoid
+starting multiple native worker pools. Keep input arrays and any shared backing
+storage unchanged for the entire call; do not resize or modify them from another
+thread. Returned result arrays own their storage.
+
+These access checks belong to the Python wrappers. C++ callers must synchronize
+index updates themselves and use separate search output buffers.
+
+`num_threads=0` selects the detected available logical CPU count. Positive values
+set an upper limit, capped at that count; small workloads may use fewer workers.
+Python index methods default to one thread; clustering defaults to `0`.
+On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
+before starting the program.
+
+Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
+in C++; Python paths are Unicode strings on all platforms.
+
+## Index file compatibility
+
+The compatibility suite loads frozen files written by v0.5.2, compares search
+IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. See the
+[fixture provenance and coverage](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence).
+Compatibility is format-specific; preserving old readers' ability to open new
+files is not guaranteed. Consult each index's format documentation before
+downgrading the library.

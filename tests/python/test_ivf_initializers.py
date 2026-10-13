@@ -1,5 +1,6 @@
 """Explicit centroid routing, persistence, and legacy initializer inference."""
 
+import struct
 from pathlib import Path
 
 import numpy as np
@@ -8,7 +9,48 @@ from rabitqlib import IvfIndex
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("bits", list(range(1, 10)) + [32])
+@pytest.mark.parametrize("damage", ["entry", "neighbor", "level"])
+def test_hnsw_rejects_corrupt_sidecar(tmp_path, metric, damage):
+    count, dim = 64, 64
+    data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
+    index = IvfIndex(dim, count, count, 4, metric, initializer="hnsw")
+    index.build(data, data, np.arange(count, dtype=np.uint32), num_threads=1)
+    expected = index.search(data[:2], 1, 4, num_threads=1)
+    path = tmp_path / "centroids.index"
+    index.save(str(path))
+    sidecar = Path(str(path) + ".hnsw")
+    original = sidecar.read_bytes()
+    damaged = bytearray(original)
+    # hnswlib writes native POD fields individually, with no inter-field padding.
+    size_t_bytes = struct.calcsize("@N")
+    level_offset = 6 * size_t_bytes
+    entry_offset = level_offset + struct.calcsize("@i")
+    if damage == "entry":
+        capacity = struct.unpack_from("@N", original, size_t_bytes)[0]
+        struct.pack_into("@I", damaged, entry_offset, capacity)
+        message = "Invalid HNSW centroid entry point or maximum level"
+    elif damage == "neighbor":
+        header_bytes = entry_offset + 4 + 4 * size_t_bytes + 8
+        struct.pack_into("@H", damaged, header_bytes, 1)
+        struct.pack_into("@I", damaged, header_bytes + 4, count)
+        message = "Invalid HNSW centroid neighbor or target level"
+    else:
+        max_level = struct.unpack_from("@i", original, level_offset)[0]
+        struct.pack_into("@i", damaged, level_offset, max_level + 1)
+        message = "Invalid HNSW centroid level structure"
+    sidecar.write_bytes(damaged)
+    with pytest.raises(RuntimeError, match=f"^{message}$"):
+        IvfIndex.load(str(path))
+    sidecar.write_bytes(original)
+    loaded = IvfIndex.load(str(path))
+    actual = loaded.search(data[:2], 1, 4, num_threads=1)
+    for left, right in zip(expected, actual):
+        np.testing.assert_array_equal(left, right)
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+# Routing is independent of bit width; retain each distinct reranking storage path.
+@pytest.mark.parametrize("bits", [1, 4, 32])
 @pytest.mark.parametrize("initializer", ["auto", "flat", "flat_rabitq", "hnsw"])
 def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     rng = np.random.default_rng(773)
@@ -69,21 +111,35 @@ def test_auto_initializer_thresholds(clusters, expected):
         assert IvfIndex(64, 1, clusters, 1, initializer=mode).initializer == mode
 
 
-@pytest.mark.parametrize("bits", [1, 32])
-@pytest.mark.parametrize("clusters", [3, 5000, 19999, 20000])
-@pytest.mark.parametrize("format_version", ["v1", "legacy"])
-def test_legacy_formats_infer_historical_initializer(
-    tmp_path, bits, clusters, format_version
-):
-    rng = np.random.default_rng(43)
-    centroids = rng.standard_normal((clusters, 64)).astype(np.float32)
+@pytest.fixture(
+    scope="module",
+    params=[
+        (bits, clusters) for bits in (1, 32) for clusters in (3, 5000, 19999, 20000)
+    ],
+    ids=lambda case: f"{case[0]}bit-{case[1]}clusters",
+)
+def historical_ivf(request):
+    # The two format cases only read/search/save this source index. Share the
+    # expensive historical HNSW construction; damaged files stay per-test.
+    bits, clusters = request.param
+    centroids = (
+        np.random.default_rng(43).standard_normal((clusters, 64)).astype(np.float32)
+    )
     historical = "flat" if clusters < 20000 else "hnsw"
     index = IvfIndex(64, 3, clusters, bits, initializer=historical)
     index.build(centroids[:3], centroids, np.arange(3, dtype=np.uint32), 2)
+    return index, centroids[:3].copy()
+
+
+@pytest.mark.parametrize("format_version", ["v1", "legacy"])
+def test_legacy_formats_infer_historical_initializer(
+    tmp_path, historical_ivf, format_version
+):
+    index, queries = historical_ivf
     path = tmp_path / "v1.index"
     index.save(str(path))
     # v2 must honor the stored type even when today's Auto would choose differently.
-    assert IvfIndex.load(str(path)).initializer == historical
+    assert IvfIndex.load(str(path)).initializer == index.initializer
     payload = bytearray(path.read_bytes())
     if format_version == "v1":
         # v1 has the same payload but no initializer field after padded_dim.
@@ -92,14 +148,12 @@ def test_legacy_formats_infer_historical_initializer(
     else:
         # Dimension 64 also matches the padding inferred by both older formats.
         payload = payload[28:]
-        if bits == 32:
+        if index.nbits == 32:
             payload = b"RBFQRAW1" + (1).to_bytes(4, "little") + payload
     path.write_bytes(payload)
     loaded = IvfIndex.load(str(path))
     assert loaded.initializer == index.initializer
-    for left, right in zip(
-        index.search(centroids[:3], 1, 2), loaded.search(centroids[:3], 1, 2)
-    ):
+    for left, right in zip(index.search(queries, 1, 2), loaded.search(queries, 1, 2)):
         np.testing.assert_array_equal(left, right)
 
 

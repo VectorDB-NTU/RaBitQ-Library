@@ -6,6 +6,7 @@
 
 #include "rabitqlib/clustering/detail/kmeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::clustering::detail {
 namespace {

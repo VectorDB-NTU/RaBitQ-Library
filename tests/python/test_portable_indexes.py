@@ -5,15 +5,7 @@ import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 
-@pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("dim", [64, 65, 81, 97])
-@pytest.mark.parametrize(
-    "kind,bits",
-    [(kind, bits) for kind in ("ivf", "hnsw") for bits in range(1, 10)]
-    + [("ivf", 32)]
-    + [("qg", bits) for bits in (0, 4, 8)],
-)
-def test_portable_index_round_trip(tmp_path, metric, dim, kind, bits):
+def check_index_round_trip(tmp_path, metric, dim, kind, bits):
     rng = np.random.default_rng(764)
     data = rng.standard_normal((96, dim)).astype(np.float32)
     # Unit vectors make self-query the exact winner for both metrics.
@@ -72,40 +64,55 @@ def test_portable_index_round_trip(tmp_path, metric, dim, kind, bits):
         stored_padded = int.from_bytes(payload[24:32], "little")
     assert stored_padded == (dim + multiple - 1) // multiple * multiple
     loaded = type(index).load(str(path))
+    assert loaded.dim == dim
+    assert loaded.metric == metric
+    assert (loaded.quantization_bits if kind == "qg" else loaded.nbits) == bits
     actual_ids, actual_distances = loaded.search(queries, k=5, **search_args)
     np.testing.assert_array_equal(actual_ids, ids)
     np.testing.assert_array_equal(actual_distances, distances)
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("bits", range(1, 10))
-def test_hnsw_multi_block_kernel_round_trip(tmp_path, metric, bits):
-    # 960 coordinates exercise a full 512-bit query block and its 448-bit tail.
-    test_portable_index_round_trip(tmp_path, metric, 960, "hnsw", bits)
-
-
-@pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("dim", [193, 960])
 @pytest.mark.parametrize(
     "kind,bits",
-    [("ivf", 5), ("ivf", 32), ("hnsw", 5), ("qg", 0), ("qg", 4), ("qg", 8)],
+    [(kind, bits) for kind in ("ivf", "hnsw") for bits in range(1, 10)]
+    + [("ivf", 32)]
+    + [("qg", bits) for bits in (0, 4, 8)],
 )
-def test_rotation_padded_domain_round_trip(tmp_path, metric, dim, kind, bits):
-    test_portable_index_round_trip(tmp_path, metric, dim, kind, bits)
+def test_supported_storage_round_trip(tmp_path, metric, kind, bits):
+    # Every public width crosses the Python boundary once per metric, with padding.
+    # C++ owns the width x dimension x backend numerical reference matrices.
+    check_index_round_trip(tmp_path, metric, 65, kind, bits)
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("dim", [511, 513])
-@pytest.mark.parametrize("kind,bits", [("ivf", 3), ("ivf", 5), ("hnsw", 5), ("qg", 0)])
-def test_query_preparation_block_boundaries(tmp_path, metric, dim, kind, bits):
-    # Exercise both sides of the 512-coordinate transpose block, standard/HACC
-    # LUT quantization, and persistence with original dimensions requiring padding.
-    test_portable_index_round_trip(tmp_path, metric, dim, kind, bits)
+@pytest.mark.parametrize(
+    "kind,bits,dim",
+    [
+        ("ivf", 1, 64),
+        ("ivf", 3, 511),
+        ("ivf", 4, 513),
+        ("ivf", 9, 97),
+        ("ivf", 32, 960),
+        ("hnsw", 1, 64),
+        ("hnsw", 5, 511),
+        ("hnsw", 5, 513),
+        ("hnsw", 9, 960),
+        ("qg", 0, 511),
+        ("qg", 0, 513),
+        ("qg", 4, 97),
+        ("qg", 8, 193),
+    ],
+)
+def test_padded_domain_boundaries(tmp_path, metric, dim, kind, bits):
+    # Representative integration paths: aligned input, compact tails, both sides
+    # of a 512-coordinate query block, and multi-block rotation/raw reranking.
+    check_index_round_trip(tmp_path, metric, dim, kind, bits)
 
 
 @pytest.mark.parametrize("kind,bits", [("ivf", 4), ("hnsw", 4), ("qg", 4)])
 def test_rejects_development_only_padding(tmp_path, kind, bits):
-    test_portable_index_round_trip(tmp_path, "l2", 65, kind, bits)
+    check_index_round_trip(tmp_path, "l2", 65, kind, bits)
     path = tmp_path / "portable.index"
     payload = bytearray(path.read_bytes())
     offset = {"ivf": 16, "hnsw": 24, "qg": 12 + 3 * np.dtype(np.uintp).itemsize}[kind]

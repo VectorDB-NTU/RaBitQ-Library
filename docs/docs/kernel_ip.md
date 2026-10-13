@@ -1,26 +1,26 @@
-# Kernel - Inner Product
+# Inner-product kernels
 
 > Inner-product kernels are selected at runtime. The library provides AVX2/FMA
 > and AVX-512 implementations on x86-64, plus NEON and portable scalar
 > implementations on ARM64. AVX-512 VPOPCNTDQ is used by popcount-specific
 > x86 paths when available.
 
-This part introduces how to compute the inner product between quantization codes and rotated query vectors i.e., $\left< \mathbf{x}_0,\mathbf{q}_r'\right>$ and $\left< \mathbf{x}_u,\mathbf{q}_r'\right>$. The implementation includes two types:
+These kernels compute inner products of sign or multi-bit codes with a rotated
+query. The notation follows the [Estimator](rabitq/estimator.md).
 
-1. The inner product between binary codes and $\mathbf{q}_r'$.
-2. The inner product between multi-bit codes and $\mathbf{q}_r'$.
+## The kernel for binary codes
 
+### Single code
 
-## The Kernel for Binary Codes
-
-### Single Code
-We compute the inner product between a single binary vector $\mathbf{x}_0$ and a floating-point vector $\mathbf{q}_r'$ via bitwise-and `&` and `popcnt`. We first quantize $\mathbf{q}_r'$ into a vector of 4-bit unsigned integers (based on a fast version of RaBitQ). 
+For a sign code $\mathbf{x}_0$, first quantize the rotated query
+$\mathbf{q}_r'$ into four-bit unsigned integers using the fast RaBitQ encoder.
+Then use bitwise-and `&` and `popcnt` to estimate the inner product.
 
 $$
 \mathbf{q}_r'\approx \Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D
 $$
 
-Let $\mathbf{q}_u^{(i)}$ be the $i$-th bit of $\mathbf{q}_u$. Then with the quantized vector $\mathbf{q}_u$, we can compute the inner product based on the following formula:
+Let $\mathbf{q}_u^{(i)}$ be bit plane $i$ of $\mathbf{q}_u$. Then:
 
 $$
 \begin{align}
@@ -32,23 +32,24 @@ $$
 \end{align}
 $$
 
+### Batch code
 
-### Batch Code
-We compute the inner product between a batch of binary vectors $\mathbf{x}_0$ and a floating-point vector $\mathbf{q}_r'$ via `FastScan`. Here we provide a brief introduction and refer readers to a detailed [tutorial by Faiss](https://github.com/facebookresearch/faiss/wiki/Fast-accumulation-of-PQ-and-AQ-codes-(FastScan)).
+FastScan scores batches of sign codes using query lookup tables. See the
+[Faiss tutorial](https://github.com/facebookresearch/faiss/wiki/Fast-accumulation-of-PQ-and-AQ-codes-(FastScan))
+for background.
 
-For a $D$-bit binary, we split it into $M=D/4$ segments. We prepare look-up-tables for each segment.
-- $\mathrm{LUT}[m][mask]$: the inner product with $\mathbf{q}_r'$ in the $m$-th segment, i.e., the $(4m)$-th to the $(4m+3)$-th dimensions, when the code in the $m$-th segment equals to $mask$. 
+For a $D$-bit binary code, we split it into $M=D/4$ segments. We prepare look-up-tables for each segment.
+- $\mathrm{LUT}[m][mask]$: the inner product with $\mathbf{q}_r'$ in the $m$-th segment, i.e., the $(4m)$-th to the $(4m+3)$-th dimensions, when the code in the $m$-th segment equals to $mask$.
 
 Based on the look-up-tables, we can compute the inner product as follows:
 
 $$
 \begin{align}
-\left< \mathbf{x}_0,\mathbf{q}_r'\right>= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]] 
+\left< \mathbf{x}_0,\mathbf{q}_r'\right>= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
 \end{align}
 $$
 
-
-## The Kernel for Multi-bit Codes
+## The kernel for multi-bit codes
 
 For multi-bit codes, the packed unsigned values are unpacked and accumulated
 by the selected AVX2/FMA, AVX-512, NEON, or scalar kernel. The dispatch table supports zero

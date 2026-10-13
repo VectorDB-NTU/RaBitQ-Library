@@ -1,5 +1,9 @@
 # Graph benchmark
 
+These are historical measurements labeled RaBitQ-Library 0.5.2. See the
+[recorded snapshot and reproduction limits](bench.md#package-installation).
+Measurements of the modular source tree require a separate run.
+
 Settings and results for eight configurations. See the [overview](bench.md) for
 hardware, datasets, and measurement definitions.
 

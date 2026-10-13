@@ -100,7 +100,7 @@ inline void packing_2bit_excode_intrinsics(
     // Full blocks preserve the existing byte layout.
     for (size_t j = 0; j < dim - dim % 64; j += 64) {
         // pack 64 2-bit codes into 128 bits (16 bytes)
-        // the lower 2 bits of each byte represent vec00 to vec04...
+        // Byte i holds codes i, i+16, i+32, i+48 from low to high bits.
         __m128i vec_00_to_15 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw));
         __m128i vec_16_to_31 =
             _mm_loadu_si128(reinterpret_cast<const __m128i*>(o_raw + 16));

@@ -1,10 +1,18 @@
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <iostream>
+#include <ratio>
+#include <utility>
 #include <vector>
 
+#include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 std::vector<size_t> efs = {10,  20,  40,  50,  60,  80,  100, 150,  170,  190, 200,
                            250, 300, 400, 500, 600, 700, 800, 1000, 1500, 2000};

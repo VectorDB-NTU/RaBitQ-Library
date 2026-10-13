@@ -6,8 +6,8 @@
 #include <pybind11/pytypes.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -16,8 +16,9 @@
 #include <vector>
 
 #include "bindings_common.hpp"
-#include "rabitqlib/defines.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/packed.hpp"
 
 namespace py = pybind11;
 
@@ -34,15 +35,14 @@ class HnswIndex {
         const std::string& metric = "l2",
         size_t random_seed = 100
     )
-        : dim_(dim)
-        , max_elements_(max_elements)
-        , M_(M)
-        , ef_construction_(ef_construction)
-        , nbits_(nbits)
-        , metric_(metric_from_string(metric))
-        , random_seed_(random_seed)
-        , index_(std::make_unique<rabitqlib::hnsw::HierarchicalNSW>(
-              max_elements, dim, nbits, M, ef_construction, random_seed, metric_
+        : index_(std::make_unique<rabitqlib::hnsw::HierarchicalNSW>(
+              max_elements,
+              dim,
+              nbits,
+              M,
+              ef_construction,
+              random_seed,
+              metric_from_string(metric)
           )) {}
 
     void build(
@@ -55,45 +55,28 @@ class HnswIndex {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
-        auto cluster_ids_array =
-            ensure_1d_array<rabitqlib::PID>(cluster_ids, "cluster_ids");
 
-        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
         if (data_array.shape(0) == 0 ||
-            static_cast<size_t>(data_array.shape(0)) > max_elements_) {
+            static_cast<size_t>(data_array.shape(0)) > index_->max_elements()) {
             throw std::invalid_argument(
                 "number of data rows must be between 1 and max_elements"
             );
         }
-        if (static_cast<size_t>(centroids_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(centroids_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("centroid dimension does not match index dim");
         }
-        if (static_cast<size_t>(cluster_ids_array.shape(0)) !=
-            static_cast<size_t>(data_array.shape(0))) {
-            throw std::invalid_argument(
-                "cluster_ids length must match number of rows in data"
-            );
-        }
-
         const size_t num_clusters = static_cast<size_t>(centroids_array.shape(0));
         if (num_clusters == 0) {
             throw std::invalid_argument("at least one centroid is required");
         }
-        for (py::ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
-            if (cluster_ids_array.data()[i] >= num_clusters) {
-                throw std::invalid_argument("cluster_ids contains an out-of-range value");
-            }
-        }
-        // Ensure cluster_ids are writable for the C++ API by making a copy
-        std::vector<rabitqlib::PID> cluster_ids_vec(
-            static_cast<size_t>(cluster_ids_array.shape(0))
-        );
-        std::memcpy(
-            cluster_ids_vec.data(),
-            cluster_ids_array.data(),
-            cluster_ids_vec.size() * sizeof(rabitqlib::PID)
+        auto cluster_ids_vec = checked_cluster_ids(
+            cluster_ids,
+            static_cast<size_t>(data_array.shape(0)),
+            num_clusters,
+            "cluster_ids contains an out-of-range value"
         );
 
         const auto* data_ptr = data_array.data();
@@ -111,7 +94,6 @@ class HnswIndex {
                 fast_quantization
             );
         }
-        num_clusters_ = num_clusters;
         built_ = true;
     }
 
@@ -126,29 +108,14 @@ class HnswIndex {
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before add");
         }
-        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
         const auto rows = static_cast<size_t>(data_array.shape(0));
 
-        // Validate as int64 first: casting straight to uint32 would wrap negative
-        // or oversized values onto valid clusters.
         std::vector<rabitqlib::PID> assigned;
         if (!cluster_ids.is_none()) {
-            auto cluster_ids_array = ensure_1d_integer_array(cluster_ids, "cluster_ids");
-            if (static_cast<size_t>(cluster_ids_array.shape(0)) != rows) {
-                throw std::invalid_argument(
-                    "cluster_ids length must match number of rows in data"
-                );
-            }
-            assigned.reserve(rows);
-            for (py::ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
-                const int64_t id = cluster_ids_array.data()[i];
-                if (id < 0 || static_cast<uint64_t>(id) >= num_clusters_) {
-                    throw std::invalid_argument("cluster_ids must be in [0, num_clusters)");
-                }
-                assigned.push_back(static_cast<rabitqlib::PID>(id));
-            }
+            assigned = checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
         }
 
         // Allocated before the index is touched.
@@ -175,7 +142,6 @@ class HnswIndex {
         }
         py::gil_scoped_release release;
         index_->resize(new_max_elements);
-        max_elements_ = index_->max_elements();
     }
 
     size_t remove(py::handle ids) {
@@ -184,14 +150,17 @@ class HnswIndex {
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before remove");
         }
-        // Labels are dense: construct gives 0..n-1 and add continues from num_points.
-        const size_t count = index_->num_points();
+        // Removed labels remain allocated; validate against the full stored ID range.
+        const size_t count = index_->num_stored_points();
         std::vector<rabitqlib::PID> to_remove;
         to_remove.reserve(static_cast<size_t>(ids_array.shape(0)));
+        const rabitqlib::detail::ConstPackedArrayView<int64_t> values(
+            reinterpret_cast<const char*>(ids_array.data())
+        );
         for (py::ssize_t i = 0; i < ids_array.shape(0); ++i) {
-            const int64_t id = ids_array.data()[i];
+            const int64_t id = values[static_cast<size_t>(i)];
             if (id < 0 || static_cast<uint64_t>(id) >= count) {
-                throw std::invalid_argument("ids must be in [0, num_points)");
+                throw std::invalid_argument("ids must be in [0, num_stored_points)");
             }
             to_remove.push_back(static_cast<rabitqlib::PID>(id));
         }
@@ -203,6 +172,10 @@ class HnswIndex {
         const auto operation = access_.read();
         return built_ ? index_->num_points() : 0;
     }
+    [[nodiscard]] size_t num_stored_points() const {
+        const auto operation = access_.read();
+        return built_ ? index_->num_stored_points() : 0;
+    }
 
     py::tuple search(py::handle queries, size_t k, size_t ef = 0, size_t num_threads = 1) {
         const auto operation = access_.read();
@@ -210,13 +183,14 @@ class HnswIndex {
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before search");
         }
-        if (dim_ != 0 && static_cast<size_t>(query_array.shape(1)) != dim_) {
+        if (index_->dimension() != 0 &&
+            static_cast<size_t>(query_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("query dimension does not match index dim");
         }
         if (ef == 0) {
             ef = std::max<size_t>(k, 10);
         }
-        if (k == 0 || k > max_elements_) {
+        if (k == 0 || k > index_->max_elements()) {
             throw std::invalid_argument("k must be between 1 and max_elements");
         }
 
@@ -271,28 +245,21 @@ class HnswIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(path.c_str());
         }
-        wrapper.dim_ = wrapper.index_->dimension();
-        wrapper.max_elements_ = wrapper.index_->max_elements();
-        wrapper.M_ = wrapper.index_->M();
-        wrapper.ef_construction_ = wrapper.index_->ef_construction();
-        wrapper.nbits_ = wrapper.index_->nbits();
-        wrapper.num_clusters_ = wrapper.index_->num_clusters();
-        wrapper.metric_ = wrapper.index_->metric_type();
         wrapper.built_ = true;
         return wrapper;
     }
 
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
-        return dim_;
+        return index_->dimension();
     }
     [[nodiscard]] size_t max_elements() const {
         const auto operation = access_.read();
-        return max_elements_;
+        return index_->max_elements();
     }
     [[nodiscard]] size_t nbits() const {
         const auto operation = access_.read();
-        return nbits_;
+        return index_->nbits();
     }
     [[nodiscard]] bool is_built() const {
         const auto operation = access_.read();
@@ -300,24 +267,16 @@ class HnswIndex {
     }
     [[nodiscard]] size_t num_clusters() const {
         const auto operation = access_.read();
-        return num_clusters_;
+        return index_->num_clusters();
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
-        return metric_to_string(metric_);
+        return metric_to_string(index_->metric_type());
     }
 
    private:
     HnswIndex() = default;
 
-    size_t dim_ = 0;
-    size_t max_elements_ = 0;
-    size_t M_ = 0;
-    size_t ef_construction_ = 0;
-    size_t nbits_ = 0;
-    rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
-    size_t random_seed_ = 100;
-    size_t num_clusters_ = 0;
     bool built_ = false;
     mutable IndexAccess access_;
     std::unique_ptr<rabitqlib::hnsw::HierarchicalNSW> index_;
@@ -371,7 +330,8 @@ void register_hnsw(py::module_& m) {
             &HnswIndex::remove,
             py::arg("ids"),
             "Exclude ids from later search results and return how many were newly "
-            "removed. Removed points stay in the graph and in num_points, and cannot "
+            "removed. Removed points stay in the graph and in num_stored_points, and "
+            "cannot "
             "be restored."
         )
         .def("save", &HnswIndex::save, py::arg("path"))
@@ -379,6 +339,7 @@ void register_hnsw(py::module_& m) {
         .def_property_readonly("dim", &HnswIndex::dim)
         .def_property_readonly("max_elements", &HnswIndex::max_elements)
         .def_property_readonly("num_points", &HnswIndex::num_points)
+        .def_property_readonly("num_stored_points", &HnswIndex::num_stored_points)
         .def_property_readonly("nbits", &HnswIndex::nbits)
         .def_property_readonly("num_clusters", &HnswIndex::num_clusters)
         .def_property_readonly("is_built", &HnswIndex::is_built)

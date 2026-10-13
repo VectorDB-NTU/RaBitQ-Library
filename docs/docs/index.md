@@ -34,60 +34,37 @@ indexes on Linux x86-64 and ARM64, Windows x86-64, or macOS ARM64
   </div>
 </div>
 
-## New in 0.6.0
+## New in 0.7.0
 
-- **Concurrent Python queries:** Native searches release the GIL and use independent
-  parameters; conflicting updates raise an exception.
-- **IVF centroid routing:** Choose Flat, Flat RaBitQ, HNSW, or automatic selection.
-- **32-coordinate padding:** New indexes pad to multiples of 32; loading preserves
-  the saved rotation and padding.
-- **Build integration:** Eigen 5.0.1; CMake optimization flags no longer propagate
-  to downstream targets.
+- **Modular C++ integration:** Link core, FastScan, or indexes independently.
+- **Stable core API v1:** Encode and estimate distances with caller-owned buffers
+  and workspace, with no heap allocation on valid calls.
+- **Optional OpenMP:** Build core and FastScan without an OpenMP dependency.
+- **Unified index counts:** Distinguish capacity, stored records, and live points
+  consistently in C++ and Python.
 
-Read the [0.6.0 upgrade notes](releases/0.6.0.md) before rebuilding indexes,
-sharing files with older installations, or updating a downstream C++ library.
+This documentation describes 0.7.0. Read the
+[0.7.0 upgrade notes](releases/0.7.0.md) before updating an existing application.
 
 ## Start with Python
 
 See [installation options](quick_start.md#install) for supported platforms and source builds.
 
 ```bash
-python -m pip install "rabitqlib>=0.6.0"
+python -m pip install "rabitqlib>=0.7.0"
 ```
 
-Build an IVF index and search a batch of queries:
+The [complete quick start](quick_start.md) builds and searches an IVF index with
+synthetic data, explains the results, and demonstrates save/load. No external
+dataset or clustering package is needed.
 
-```python
-import numpy as np
-from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
+[Start the Python example](quick_start.md#build-and-search-an-ivf-index){ .md-button .md-button--primary }
 
-rng = np.random.default_rng(42)
-data = rng.standard_normal((500, 64)).astype(np.float32)
-queries = rng.standard_normal((5, 64)).astype(np.float32)
+## C++ components
 
-clustering = RaBitQKMeans(
-    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
-)
-clustering.train(data)
-
-index = IvfIndex(
-    dim=64,
-    max_elements=len(data),
-    num_clusters=5,
-    nbits=4,
-    metric="l2",
-)
-index.build(data, clustering.centroids, clustering.assignments)
-
-ids, distances = index.search(queries, k=10, nprobe=5)
-print(ids.shape, distances.shape)  # (5, 10) (5, 10)
-```
-
-Starting with 0.5.1, IVF also supports [adding and removing vectors](index/ivf.md#updating-an-index)
-without rebuilding the index or retaining the original dataset.
-Starting with 0.5.2, HNSW supports [adding and removing vectors and resizing capacity](index/hnsw.md#updating-an-index).
-
-[Continue to the complete quick start](quick_start.md){ .md-button .md-button--primary }
+The [0.7.0 component model](modular_migration.md) provides independent core and
+FastScan targets alongside the index library, plus a [stable core v1 API](rabitq/core_api.md).
+Use a matching source checkout or 0.7.0 installation for these interfaces.
 
 ## Choose an index
 
@@ -105,26 +82,18 @@ optimize its access pattern.
 These are typical relative profiles, not fixed guarantees. Actual memory,
 latency, and recall depend on vector dimension, quantization width, graph
 degree, and search parameters.
+See [memory estimates](index/usage.md#estimate-storage) for the main storage costs,
+including SymphonyQG's copies of neighbor codes.
 
 ## Why RaBitQ?
 
-- **High accuracy with tiny codes.** RaBitQ provides strong similarity
-  estimates across different bit widths and remains effective with a one-bit
-  code per padded dimension plus per-vector factors.
-- **Fast distance estimation.** IVF and SymphonyQG use
-  [FastScan](https://arxiv.org/abs/1704.07355) for batched estimates; HNSW
-  uses single-code SIMD kernels.
-- **Theoretical error bounds.** An asymptotically optimal error bound supports
-  reliable ordering and reranking.
-- **Multiple integration points.** Use the quantizer directly or select a
-  complete vector-search index.
+RaBitQ combines compact codes with distance estimates and probabilistic error
+intervals. The [algorithm overview](rabitq/rabitq.md) explains the rotation,
+encoding and scoring workflow; the [benchmarks](benchmarks/bench.md) report
+measured memory, recall and throughput for specific configurations.
 
-The library supports Euclidean distance and inner product. Cosine similarity
-can be implemented by normalizing vectors and using inner product.
-It implements the [1-bit RaBitQ](https://arxiv.org/abs/2405.12497) and
-[multi-bit RaBitQ](https://doi.org/10.1145/3725413) research from the
-[VectorDB Group](https://vectordb-ntu.github.io/) at Nanyang Technological
-University.
+The library supports squared L2 and inner-product distance (`1 - dot`). For cosine
+search, normalize data and queries before using inner product.
 
 ## Used across the vector-search ecosystem
 

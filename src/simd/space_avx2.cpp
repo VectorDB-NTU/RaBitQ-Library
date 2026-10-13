@@ -6,8 +6,7 @@
 #include <cstring>
 
 #include "packed_tail_avx2.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "space_float_kernels.hpp"
 
 namespace rabitqlib::simd {

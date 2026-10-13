@@ -5,11 +5,16 @@
 #include <limits>
 #include <vector>
 
+#include "rabitqlib/clustering/detail/kmeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace {
@@ -93,7 +98,7 @@ int main() {
         return 1;
     }
 
-    // Exercise both header-defined IVF and compiled SymphonyQG with both
+    // Exercise the compiled IVF and SymphonyQG implementations with both
     // rotators, including Eigen-backed ownership across the library boundary.
     for (const auto rotator :
          {rabitqlib::RotatorType::FhtKacRotator, rabitqlib::RotatorType::MatrixRotator}) {

@@ -6,7 +6,7 @@
 #include <cstring>
 #include <stdexcept>
 
-#include "rabitqlib/simd/rotator_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/rotator_dispatch.hpp"
 
 namespace rabitqlib::simd {
 namespace {

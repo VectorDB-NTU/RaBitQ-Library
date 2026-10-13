@@ -9,14 +9,16 @@
 #include <utility>
 #include <vector>
 
-#include "rabitqlib/quantization/rabitq_impl.hpp"
-#include "rabitqlib/simd/quantization_dispatch.hpp"
+#include "rabitqlib/core/detail/rabitq_impl.hpp"
+#include "rabitqlib/core/detail/simd/quantization_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace rabitqlib::quant {
 namespace {
 
 using RescaleSearch = double (*)(const float*, size_t, int, double, double);
+using WorkspaceRescaleSearch =
+    double (*)(const float*, size_t, int, double, double, double*, double*);
 
 std::vector<int> levels_at_threshold(
     const std::vector<float>& magnitudes, double scale, int max_code
@@ -136,6 +138,15 @@ class RabitqRescaleBackendTest : public ::testing::TestWithParam<bool> {
         return simd::best_rescale_factor_generic;
 #endif
     }
+
+    WorkspaceRescaleSearch workspace_search() const {
+#if defined(__x86_64__) || defined(_M_X64)
+        return GetParam() ? simd::best_rescale_factor_with_workspace_avx512
+                          : simd::best_rescale_factor_with_workspace_avx2;
+#else
+        return simd::best_rescale_factor_with_workspace_generic;
+#endif
+    }
 };
 
 TEST_P(RabitqRescaleBackendTest, MatchesExhaustiveObjectiveAndCanonicalThreshold) {
@@ -171,6 +182,23 @@ TEST_P(RabitqRescaleBackendTest, MatchesExhaustiveObjectiveAndCanonicalThreshold
                 const auto [start, end] = search_interval(magnitudes, bits);
                 const int max_code = (1 << bits) - 1;
                 const double t = search()(magnitudes.data(), dim, max_code, start, end);
+                std::vector<double> promoted(dim + 2, -123.0);
+                std::vector<double> reciprocals(dim + 2, -123.0);
+                EXPECT_EQ(
+                    workspace_search(
+                    )(magnitudes.data(),
+                      dim,
+                      max_code,
+                      start,
+                      end,
+                      promoted.data() + 1,
+                      reciprocals.data() + 1),
+                    t
+                );
+                EXPECT_EQ(promoted.front(), -123.0);
+                EXPECT_EQ(promoted.back(), -123.0);
+                EXPECT_EQ(reciprocals.front(), -123.0);
+                EXPECT_EQ(reciprocals.back(), -123.0);
                 ASSERT_TRUE(std::isfinite(t));
                 if (t >= 0)
                     expect_optimal_canonical_scale(magnitudes, max_code, start, end, t);
@@ -214,7 +242,9 @@ TEST_P(RabitqRescaleBackendTest, ReusesScratchAcrossDimensionsAndThreads) {
     }
 
     size_t mismatches = 0;
+#if RABITQ_USE_OPENMP
 #pragma omp parallel for num_threads(8) schedule(dynamic, 1) reduction(+ : mismatches)
+#endif
     for (std::ptrdiff_t call = 0; call < 160; ++call) {
         const size_t index = static_cast<size_t>(call) % inputs.size();
         const auto& magnitudes = inputs[index];

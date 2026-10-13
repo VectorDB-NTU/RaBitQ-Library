@@ -3,18 +3,26 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <optional>
 #include <random>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/index/query.hpp"
-#include "rabitqlib/quantization/data_layout.hpp"
-#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/core/metric.hpp"                   // IWYU pragma: export
+#include "rabitqlib/core/types.hpp"                    // IWYU pragma: export
+#include "rabitqlib/index/detail/visited_set_fwd.hpp"  // IWYU pragma: export
+#include "rabitqlib/index/types.hpp"                   // IWYU pragma: export
 #include "rabitqlib/utils/memory.hpp"
-#include "rabitqlib/utils/rotator.hpp"
-#include "rabitqlib/utils/space.hpp"
-#include "rabitqlib/utils/visited_set.hpp"
+#include "rabitqlib/utils/packed.hpp"
+
+namespace rabitqlib {
+template <typename T>
+class Rotator;
+template <typename T>
+class BatchQuery;
+namespace buffer {
+template <typename T>
+class SearchBuffer;
+}
+}  // namespace rabitqlib
 
 namespace rabitqlib::symqg {
 
@@ -41,23 +49,42 @@ template <typename T = float>
 class QuantizedGraph;
 
 template <>
+class QuantizedGraph<float>;
+
+namespace detail {
+struct SearchScratchView;
+
+void search_with_workspace(
+    QuantizedGraph<float>& graph,
+    const float* query,
+    uint32_t knn,
+    uint32_t* results,
+    float* dists,
+    SearchScratchView scratch,
+    PID hint = kPidMax,
+    const float* k1xsumq = nullptr
+);
+}  // namespace detail
+
+template <>
 class QuantizedGraph<float> {
     friend class QGBuilder;
+    friend void detail::
+        search_with_workspace(QuantizedGraph<float>&, const float*, uint32_t, uint32_t*, float*, detail::SearchScratchView, PID, const float*);
     friend struct QGConstructionTestAccess;
 
    private:
-    size_t num_points_ = 0;    // num points
-    size_t degree_bound_ = 0;  // degree bound
-    size_t dim_ = 0;           // dimension
-    size_t padded_dim_ = 0;    // padded dimension
-    // Raw-vector distance.
+    size_t num_points_ = 0;
+    size_t degree_bound_ = 0;
+    size_t dim_ = 0;
+    size_t padded_dim_ = 0;
     float (*raw_dist_func_)(const float*, const float*, size_t) = nullptr;
-    PID entry_point_ = 0;  // Entry point of graph
+    PID entry_point_ = 0;
     MetricType metric_type_ = MetricType::METRIC_L2;
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
     std::vector<float> centroid_;   // rotated global centroid for qg-quant
-    ex_ipfunc quantized_ip_func_ = nullptr;
+    float (*quantized_ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
     using RowStorage =
         std::vector<float, memory::DefaultInitAlignedAllocator<float, 64, true>>;
@@ -68,23 +95,17 @@ class QuantizedGraph<float> {
     // Builders and load() fill rows before use; leave scalars uninitialized so
     // construction workers first-touch their own pages instead of zeroing serially.
     RowStorage data_;
-    std::unique_ptr<Rotator<float>> rotator_;  // data rotator
+    std::unique_ptr<Rotator<float>> rotator_;
 
     // Position of row data (raw vector or packed qg-quant vector), neighbor
     // quantization data, and neighbor IDs. Since every degree equals degree_bound_
     // (a multiple of 32), the degree does not need to be stored per vertex.
-    size_t batch_data_offset_ = 0;  // offset of qg batch data
-    size_t neighbor_offset_ = 0;    // offset of neighbors
-    size_t row_offset_ = 0;         // length of entire row
+    size_t batch_data_offset_ = 0;
+    size_t neighbor_offset_ = 0;
+    size_t row_offset_ = 0;  // length of entire row
     size_t ef_ = 0;
     bool ready_ = false;
     uint32_t seed_ = 42;
-
-    // Owned by QGBuilder and never persisted.
-    struct BuildCache {
-        std::vector<float> rotated_vectors;
-        std::vector<QuantizedQuery> queries;
-    };
 
     [[nodiscard]] static size_t checked_add(size_t lhs, size_t rhs);
 
@@ -96,7 +117,7 @@ class QuantizedGraph<float> {
 
     void initialize_layout();
 
-    void initialize();
+    void initialize(bool randomize_rotation = true);
 
     void copy_vectors(const float*, size_t);
 
@@ -130,14 +151,7 @@ class QuantizedGraph<float> {
     void search_impl(const float*, uint32_t, uint32_t*, float*, size_t);
 
     void
-    search_with_scratch_impl(const float*, uint32_t, uint32_t*, float*, float*, float*, float*, BatchQuery<float>&, buffer::SearchBuffer<float>&, buffer::SearchBuffer<float>&, VisitedSet&, PID, const float*);
-
-    const float* prepare_build_query(
-        PID,
-        std::vector<float>&,
-        std::optional<QuantizedQuery>&,
-        const BuildCache* = nullptr
-    ) const;
+    search_with_scratch_impl(const float*, uint32_t, uint32_t*, float*, detail::SearchScratchView, PID, const float*);
 
     float point_distance(const float*, const QuantizedQuery*, PID) const;
 
@@ -166,26 +180,19 @@ class QuantizedGraph<float> {
         );
     }
 
-    void find_candidates(
+    // Inputs are in this graph's rotated, padded domain. The centroid is the
+    // source vertex; data contains one vector per neighbor, in ID order.
+    void encode_neighbors(
         PID,
-        size_t,
-        std::vector<AnnCandidate<float>>&,
-        VisitedSet&,
-        const std::vector<uint32_t>&,
-        const BuildCache* = nullptr
-    ) const;
-
-    void update_qg(
-        PID,
-        const std::vector<AnnCandidate<float>>&,
-        const BuildCache* = nullptr,
-        std::vector<float>* = nullptr
+        const std::vector<PID>&,
+        const float* rotated_data,
+        const float* rotated_centroid
     );
 
     void
     update_results(buffer::SearchBuffer<float>&, VisitedSet&, const float*, const QuantizedQuery*);
 
-    inline void scan_neighbors(
+    void scan_neighbors(
         const BatchQuery<float>&,
         PID,
         float*,
@@ -214,6 +221,13 @@ class QuantizedGraph<float> {
     QuantizedGraph(QuantizedGraph&&) noexcept;
     QuantizedGraph& operator=(QuantizedGraph&&) noexcept;
 
+    // Capacity, nonremoved points, and stored records, respectively. Until building
+    // completes, both point counts are zero. This index has no remove operation.
+    [[nodiscard]] size_t max_elements() const;
+    [[nodiscard]] size_t num_points() const;
+    [[nodiscard]] size_t num_stored_points() const;
+
+    // Configured graph size, also used by builders before rows are searchable.
     [[nodiscard]] size_t num_vertices() const;
 
     [[nodiscard]] size_t dimension() const;
@@ -236,7 +250,6 @@ class QuantizedGraph<float> {
 
     void set_ef(size_t);
 
-    /* search and copy results to KNN */
     void search(
         const float* __restrict__ query,
         uint32_t knn,
@@ -277,12 +290,14 @@ class QuantizedGraph<float> {
     /**
      * Search using caller-owned scratch buffers.
      *
-     * This avoids per-query allocations and can use a previous result as a
-     * warm-start hint. The search and result buffers must be sized for ef and
-     * knn respectively. rotated_query_scratch, est_dist_scratch, and
-     * lut_float_scratch require padded_dim(), degree_bound(), and
-     * padded_dim() * 4 elements respectively. The visited set must be
-     * initialized before the first search; an uninitialized set raises
+     * Reuses scratch and can use a previous result as a warm-start hint.
+     * BatchQuery may allocate LUT storage on its first use or when its shape changes;
+     * this is not the stable core v1 zero-allocation interface. Search and result
+     * buffers must be sized for ef and knn respectively. rotated_query_scratch and
+     * lut_float_scratch need D and 4 * D floats, where D is the graph's stored padded
+     * dimension; this advanced caller must already know D. dimension() is the original
+     * input dimension. est_dist_scratch needs degree_bound() floats. The visited set must
+     * be initialized before the first search; an uninitialized set raises
      * std::invalid_argument. Concurrent searches require separate scratch
      * buffers, including visited sets.
      *

@@ -124,36 +124,47 @@ for the LLVM 22 example above, that is `libomp-22-dev`. An older installed
 ```bash
 cmake -S . -B build-includes -G Ninja \
   -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
-  -DRABITQ_BUILD_SAMPLES=OFF \
-  -DRABITQ_BUILD_TESTS=OFF \
-  -DRABITQ_BUILD_PYTHON_BINDINGS=OFF \
+  -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
+  -Dpybind11_DIR="$(python -m pybind11 --cmakedir)" \
+  -DRABITQ_BUILD_SAMPLES=ON \
+  -DRABITQ_BUILD_TESTS=ON \
+  -DRABITQ_BUILD_BENCHMARKS=ON \
+  -DRABITQ_BUILD_PYTHON_BINDINGS=ON \
   -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
   -DCMAKE_BUILD_TYPE=Release
 ./scripts/check-includes.sh build-includes
 ```
 
-The script checks library sources using their compilation database and checks
-headers as main files, since this clang-tidy check does not report findings in
-included headers. Private headers are checked with AVX2 and AVX-512 flags. New
-untracked files are included, and tracked files deleted from the working tree are skipped.
-Vendored files are excluded. The script also ignores suggestions to include
-Eigen and hnswlib implementation headers behind their existing public headers;
-these vendor snapshots lack the export annotations needed by include-cleaner.
-`INCLUDE_JOBS` controls parallelism (default: 2).
-The script fails for findings or analyzer errors and does not modify files.
+The script checks every configured first-party source, including bindings, samples,
+tests and benchmarks. Disable optional targets above for a smaller check; skipped
+files are listed explicitly. Installed-package consumers and the historical fixture
+generator have separate build configurations and must be checked in those contexts.
+The historical generator requires the pinned release headers described in
+[its README](tests/fixtures/persistence/README.md).
 
-Review suggestions before applying them, especially for templates and public
-forwarding headers. For a source file, automatic fixes can be applied with:
+Headers are checked as main files with `-x c++-header`, preserving `#pragma once`
+for mutually including headers. Include Cleaner does not report findings in included
+headers, so a source-only pass is insufficient. Public headers inherit configured
+component flags; numerical headers also run with OpenMP disabled. Private headers
+inherit the flags of their configured source consumers through local includes,
+covering the enabled ISA variants without maintaining a second backend list.
+Run a separate AArch64 compilation database to cover NEON; an x86 check lists those
+files as skipped. New untracked files are included, and tracked files deleted from
+the working tree are skipped. `INCLUDE_JOBS` controls parallelism (default: 2), and
+`PYTHON` can select the existing project interpreter for the driver.
 
-```bash
-"${CLANG_TIDY:-clang-tidy}" -p build-includes \
-  --config='{CheckOptions: {misc-include-cleaner.IgnoreHeaders: "rabitqlib/third/Eigen/src/.*;rabitqlib/third/hnswlib/(hnswalg|space_l2)[.]h"}}' \
-  --checks='-*,misc-include-cleaner' --fix src/simd/dispatch.cpp
-```
+Vendored files are excluded. The check ignores suggestions to include Eigen/hnswlib
+implementation headers behind their public entry points, and pybind11's internal
+`detail/common.h` behind `PYBIND11_MODULE`. These vendor headers lack the export
+annotations needed by Include Cleaner. First-party export annotations describe
+intentional API re-exports; `keep` annotations retain configuration-only includes
+and explicit header-compilation tests. Neither is a general unused-include waiver.
 
-Review the diff, run formatting, and rebuild and test affected code after fixes.
-Findings can vary between LLVM releases. This include check is independent of
-the existing general clang-tidy job.
+The script fails for include findings, duplicate includes or analyzer errors and
+does not modify files. Review suggestions across supported configurations before
+applying them. Preserve public re-exports, frozen source consumers and conditional
+includes. Format changes and rebuild/test affected targets after fixes. Findings can
+vary between LLVM releases; this check is independent of the general clang-tidy job.
 
 ### Focused static analysis
 
@@ -248,12 +259,33 @@ This matches CI's script set. Also pass any changed shell scripts outside
 
 ## Implementation recipes
 
+### Validation, ownership, and numerical preparation
+
+Keep validation at the public operation boundary and reuse only invariants established
+for that operation. Buffer contents and per-record factors may change between calls:
+validate them again even when reusing a query or workspace.
+
+| Boundary | Ownership and checks | Internal numerical work |
+| --- | --- | --- |
+| Python conversion | `ensure_*` returns a normalized NumPy owner retained across GIL release; `checked_cluster_ids` validates every ID while making the owned PID copy required by builders | Native calls borrow those arrays only within their established lifetime |
+| Stable core v1 | Callers own codes, factors, queries and workspace; each operation checks its buffers and ranges | Prepared queries retain validated dimensions, bit width, metric and kernel selection; conversion checks both layouts and each logical code before writing output |
+| FastScan LUT preparation | `Lut` owns prepared bytes; constructor/reset check shape once, then check borrowed scratch and resize owned storage | Private `build_lut` performs preparation with the established shape and scratch; reset reuses capacity |
+| Query correction | `BatchQuery` owns its LUT and scalar corrections; `SplitBatchQuery` additionally borrows the rotated query for reranking | Complete LUT reset before updating the query's metric and correction metadata |
+
+Keep the v1 `compute` checks for each code view, finite factors, unpacked code values,
+and finite output. Keep scratch APIs allocation-bounded as documented; pointer reuse
+alone is not permission to skip validation. The FastScan scratch pointers are borrowed
+only during preparation and must never become retained query storage. Test rejected
+resets, scratch reuse, and changed records alongside normal numerical parity.
+
 ### Add or change a SIMD kernel
 
-1. Define the backend-neutral entry point under `include/rabitqlib/simd/`.
-2. Update all applicable declarations and AVX2/AVX-512 implementations in `src/simd/` or
-   `src/index/`.
-3. Register selection and unsupported-CPU behavior in `src/simd/dispatch.cpp` when dispatched.
+1. Define the backend-neutral entry point under the owning module's `detail/` headers.
+2. Update all applicable declarations and AVX2/AVX-512 implementations in `src/simd/` (core),
+   `src/fastscan/` (FastScan), or `src/index/` (indexes).
+3. Register selection and unsupported-CPU behavior in `src/simd/dispatch.cpp` when dispatched
+   (batch scoring uses `src/fastscan/fastscan_dispatch.cpp`, HNSW search uses
+   `src/index/hnsw_dispatch.cpp`).
 4. If adding a translation unit, put it in the correct ISA source group and flags in
    `CMakeLists.txt`.
 5. Add differential tests against a scalar or simple reference, including boundary dimensions,
@@ -264,16 +296,21 @@ must happen in generic code first.
 
 #### Dispatch conventions and coverage
 
-- Keep backend-neutral declarations in `include/rabitqlib/simd/*_dispatch.hpp` and
-  implementations in `src/simd/*_{generic,neon,avx2,avx512}.cpp`. HNSW keeps its existing
+- Keep core backend declarations in `include/rabitqlib/core/detail/simd/`, FastScan
+  declarations in `fastscan/detail/`, and HNSW declarations in `index/detail/`. Keep
+  core implementations in `src/simd/*_{generic,neon,avx2,avx512}.cpp` and FastScan
+  implementations in `src/fastscan/`. HNSW keeps its existing
   `src/index/` implementations and compatibility namespaces.
-- Select a cached function pointer through `resolve_kernel` in `src/simd/dispatch.cpp`.
+- Select a cached function pointer through the private shared resolver in
+  `src/simd/dispatch_resolver.hpp`. Core, FastScan and HNSW have separate dispatch translation units.
   The x86 order is AVX-512, AVX2/FMA, then the portable generic implementation. ARM64
   selects NEON for raw float distances, FastScan, packed-code dot products (1–8 extra
   bits), masked sums, binary warmup, HNSW search, and FHT/Kac rotation including
   sign flipping, query-bit transposition, uint8/uint16 scalar quantization, and
   FastScan LUT construction. Extra-code packing retains a portable scalar implementation.
-  Public wrappers do not repeat feature checks.
+  Cache selection in thread-safe function-local statics, including tables; public calls must
+  work before `main()` regardless of translation-unit initialization order. Public wrappers
+  do not repeat feature checks.
   Standard FastScan accumulation requires AVX2/FMA, AVX-512, or NEON and throws
   `std::runtime_error` when no supported SIMD backend is available. Its scalar kernel
   is retained as a correctness reference only, never as a runtime fallback.
@@ -287,6 +324,25 @@ must happen in generic code first.
   Missing group features select the AVX2 fallback; they do not raise the library's minimum
   CPU requirements. Native tuning defaults to on for local builds and must be explicitly
   disabled for distributed builds; release wheels already set it to off.
+- FastScan selects one immutable private `Backend` in `src/fastscan/fastscan_backend.hpp`
+  and `fastscan_dispatch.cpp`. LUT production, HACC conversion, accumulation and batch
+  correction must be chosen as a compatible group. Standard LUTs share consecutive
+  16-entry tables; HACC has paired 32-byte planes (AVX2/generic/NEON) or grouped 64-byte
+  planes (AVX-512). These are transient query layouts, not persisted-code formats.
+  Do not select producer and consumer independently when adding a backend.
+- Dispatch once at a generic operation boundary. Warm wrappers cache their selected
+  function pointer; keep feature selection and backend-table access in cold initialization.
+  A backend may directly compose an accumulator only when its LUT layout is established.
+  AVX-512 batch correction does so. Explicit AVX2/generic correction entry points also
+  accept host-prepared queries and intentionally retain host accumulation dispatch;
+  their function name alone does not specify the LUT format. Estimator templates require
+  explicit accumulator arguments so new call sites must make this choice deliberately.
+  Never bypass public dimension checks, unsupported-CPU errors or initialization safety.
+- Keep performance regression workloads in [component hot-path benchmarks](benchmarks/hotpaths/README.md).
+  Validate numerical results first, then inspect generated code and alternate comparable
+  baseline/candidate runs. Keep failed experiments and quality results. Fusion, inlining,
+  scratch reuse and dispatch changes need measurements across relevant vector sizes;
+  a short-vector improvement does not justify applying it to wider vectors.
 - Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
   headers use internal linkage so independently compiled backends retain their own bodies.
   The AVX FHT intrinsics in `src/simd/fht_kernels.hpp` use the private kernel namespace
@@ -327,15 +383,65 @@ macOS and Linux ARM64 have native C++ and installed-wheel CI. The reference suit
 also exercise portable scalar kernels on x86, including byte-for-byte packing parity
 with the selected x86 backend.
 
+### Module build boundaries
+
+Core must not depend on FastScan scoring or index headers, objects or symbols. FastScan
+must not depend on indexes. The canonical headers are under `core/`, `fastscan/` and
+`index/{ivf,hnsw,symqg}/`. Old `quantization/`, `utils/rotator.hpp` and generic
+`index/{query,lut,estimator}.hpp` forwarders have been removed. Migrate consumers to
+their owning module; see the [migration guide](docs/docs/modular_migration.md).
+Core-only installs exclude FastScan/index/clustering headers and vendored hnswlib.
+Installed detail headers support templates and are not public APIs. Internal-only
+non-template dispatch declarations stay in `src/`.
+`defines.hpp` has been removed. Keep metrics in `core/metric.hpp`, scalar quantizer,
+rotation and quantization configuration in `core/types.hpp`, Eigen aliases in `core/detail/eigen.hpp`, and ANN values
+in `index/types.hpp`. Do not introduce an umbrella that couples them again.
+IVF initializer choices live in `index/ivf/types.hpp`. IVF/HNSW/SymphonyQG public index headers
+contain declarations and small accessors; their operations compile in
+`src/index/{ivf,hnsw,qg}.cpp`. Backend translation units include HNSW's private
+`src/index/hnsw_search_impl.hpp` to retain per-ISA template instantiation.
+The installed consumer compiles and links each index header independently while poisoning
+encoding, scoring, rotation implementation and vendor headers to enforce this boundary.
+Both two-factor and three-factor batch layouts/encoders belong to
+`fastscan/{data_layout,encoder}.hpp`. Index-only nearest-neighbor helpers
+belong in `index/detail/`, not generic numerical `utils/space.hpp`.
+FastScan's 32-vector packing, inverse packing, batch size and permutation are owned by
+`fastscan/pack_codes.hpp`; the batch encoder adapter lives in `fastscan/detail/encoder.hpp`.
+Core retains per-vector packing and encoding loops independent of that batch format.
+`utils/packed.hpp` supplies generic unaligned byte access for both numerical layouts and
+index records. The `CoreModuleBoundary` test rejects format-specific declarations copied
+into core even if they introduce no upward header include.
+
+Keep core's and FastScan's architecture source groups explicit in CMake. The NEON LUT
+implementation belongs to `fastscan_neon.cpp`, while scalar-query preprocessing belongs
+to `query_neon.cpp`. All dispatchers share the private resolver and CPU predicates.
+Eigen remains bundled. `RABITQ_USE_OPENMP=OFF` removes OpenMP from core/FastScan builds;
+ANN still requires it. Guard optional numerical OpenMP calls/pragmas with the exported
+`RABITQ_USE_OPENMP` definition via `utils/openmp.hpp`; do not provide global fake `omp_*`
+functions. Test both configurations, including installed consumers. Python is a MODULE extension with an optional
+build-tree alias; it is not a C++ link library or a C++ package component.
+Validate these boundaries with the
+[external-consumer checks](tests/README.md#core-only-cmake-package-tests).
+
+### Stable core API changes
+
+`core/api.hpp` is the source-stable float32 v1 boundary; the implementation is
+`src/core/api.cpp`. See [its contract](docs/docs/rabitq/core_api.md). Keep the frozen
+consumer, API unit tests and both `core_api_no_alloc_*` processes in the validation
+matrix. The scalar allocation process forces cached dispatch onto the exact event
+fallback. Do not replace that fallback with an approximate winner to avoid allocations.
+Legacy and caller-backed paths share factor/search implementations. Validate numerical
+parity against a saved pre-change build when changing those shared implementations.
+
 ### Change quantization or packing
 
 Check all of these together:
 
-- `quantization/rabitq.hpp` and `quantization/rabitq_impl.hpp`;
-- `quantization/data_layout.hpp` and `quantization/pack_excode.hpp`;
+- `core/encoder.hpp` and `core/detail/rabitq_impl.hpp`;
+- `core/data_layout.hpp` and `core/pack_excode.hpp`;
 - SIMD pack, inner-product, and FastScan kernels;
-- query-side factors in `index/query.hpp`;
-- estimators in `index/estimator.hpp`;
+- query-side factors in `core/query.hpp` and `fastscan/query.hpp`;
+- estimators in `core/estimator.hpp` and `fastscan/estimator.hpp`;
 - IVF, HNSW, and SymphonyQG consumers;
 - C++ tests for factor finiteness, reconstruction, sign convention, pack/unpack, and estimates.
 

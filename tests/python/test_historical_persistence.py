@@ -49,7 +49,9 @@ def test_historical_load_search_and_resave(name, tmp_path):
     for index in (original, cls.load(str(destination))):
         assert index.dim == 65
         assert index.metric == name.rsplit("_", 1)[1]
-        assert (index.max_elements if cls is IvfIndex else index.num_points) == count
+        assert index.num_stored_points == count
+        assert index.num_points == count - (0 if cls is SymqgIndex else 1)
+        assert index.max_elements >= index.num_stored_points
         actual_ids, actual_distances = index.search(queries, 5, **options)
         np.testing.assert_array_equal(actual_ids, ids)
         # Distances may differ across AVX2, AVX-512, NEON, and compiler reductions.
@@ -80,7 +82,7 @@ def test_unknown_historical_version_is_rejected(name, tmp_path):
 
 @pytest.mark.parametrize("name", ["ivf4_l2", "ivf4_ip", "ivf32_l2", "ivf32_ip"])
 def test_ivf_v1_header_uses_historical_payload_and_padding(name, tmp_path):
-    path, cls, _, queries, ids, distances, options = reference(name)
+    path, cls, count, queries, ids, distances, options = reference(name)
     raw = name.startswith("ivf32")
     # The intermediate IVF v1 layout prepends explicit padding to the same
     # historical payload. This synthetic header test complements frozen files;
@@ -91,6 +93,9 @@ def test_ivf_v1_header_uses_historical_payload_and_padding(name, tmp_path):
     destination.write_bytes(header + payload)
     index = cls.load(str(destination))
     assert index.initializer == "flat"
+    assert index.num_stored_points == count
+    assert index.num_points == count - 1
+    assert index.max_elements == count
     actual_ids, actual_distances = index.search(queries, 5, **options)
     np.testing.assert_array_equal(actual_ids, ids)
     np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)

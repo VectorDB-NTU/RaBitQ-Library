@@ -1,12 +1,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 #include "../simd/hnsw_neon_kernels.hpp"
-#include "rabitqlib/defines.hpp"
+#include "hnsw_search_impl.hpp"  // IWYU pragma: keep (backend template definitions)
 #include "rabitqlib/index/hnsw/hnsw.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::hnsw::detail {
 
@@ -33,10 +33,10 @@ struct HnswNeonKernel {
     }
 };
 
-maxheap<std::pair<float, PID>> search_knn_neon(
+std::vector<std::pair<float, PID>> search_knn_sorted_neon(
     HierarchicalNSW& index, const float* rotated_query, size_t topk, size_t ef
 ) {
-    return index.search_knn_direct<HnswNeonKernel>(
+    return index.search_knn_sorted_direct<HnswNeonKernel>(
         rotated_query, topk, ef == 0 ? index.ef_ : ef
     );
 }
