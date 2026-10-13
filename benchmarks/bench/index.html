@@ -1689,19 +1689,19 @@ L2 ground truth for OpenAI.</p>
 </tr>
 <tr>
 <td>Platform</td>
-<td>Ubuntu 22.04.5 LTS, Linux 6.8.0-84-generic, x86-64</td>
+<td>Ubuntu 22.04, x86-64; RaBitQ 0.7.0: Linux 6.8.0-138-generic; historical baselines: Linux 6.8.0-84-generic</td>
 </tr>
 <tr>
 <td>Python / NumPy</td>
 <td>3.13.15 / 2.5.2</td>
 </tr>
 <tr>
-<td>Construction and clustering compiler / CMake</td>
-<td>GCC 13.1.0 / 3.28.3, Release</td>
+<td>Compiler / CMake</td>
+<td>RaBitQ 0.7.0: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; historical baselines: GCC 13.1.0 / 3.28.3, Release</td>
 </tr>
 <tr>
 <td>RaBitQ-Library</td>
-<td>0.5.2</td>
+<td>0.7.0, measured 2026-10-13</td>
 </tr>
 <tr>
 <td>Baselines</td>
@@ -1710,21 +1710,28 @@ L2 ground truth for OpenAI.</p>
 </tbody>
 </table>
 <h2 id="package-installation">Package installation<a class="headerlink" href="#package-installation" title="Permanent link">&para;</a></h2>
-<p>The tables and figures are historical results, labeled RaBitQ-Library 0.5.2.
-The published source, scripts, and results are available together at snapshot
-<code>a332c1ce97588aaed4f6a8a5476f84a81f947313</code>. To run that snapshot's protocol,
-start in a separate checkout and activate your benchmark Python environment:</p>
+<p>The RaBitQ-Library rows and curves were refreshed on 2026-10-13 using 0.7.0.
+The measurement checkout was <code>de793e8a978a51a7031efefe96573043e8251bb7</code>;
+the installed wheel was built from <code>0c7578126b84e08b98816c0e01f0824a0a79525f</code>,
+which has the same source tree. The measured extension SHA-256 was
+<code>48560860ef4ddc6d929e53a36afd233de3569dcce74d6c46338a11a1113c9ed4</code>.</p>
+<p>Faiss and SuperKMeans measurements are retained unchanged from the historical
+snapshot <code>a332c1ce97588aaed4f6a8a5476f84a81f947313</code>; they were not rerun.
+The baseline configurations, search grids and timing definitions are unchanged.
+These comparisons combine separate measurement sessions and different compiler
+and kernel versions, as recorded above; they are not a controlled measurement
+of the effect of upgrading RaBitQ alone.</p>
+<p>To use the source tree measured for 0.7.0, start in a separate checkout and
+activate your benchmark Python environment:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>--no-checkout<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git<span class="w"> </span>RaBitQ-benchmark-snapshot
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>RaBitQ-benchmark-snapshot
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>git<span class="w"> </span>checkout<span class="w"> </span>--detach<span class="w"> </span>a332c1ce97588aaed4f6a8a5476f84a81f947313
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>git<span class="w"> </span>checkout<span class="w"> </span>--detach<span class="w"> </span>de793e8a978a51a7031efefe96573043e8251bb7
 </code></pre></div>
-<p>This pins the published snapshot, not a verified original measurement binary:
-the published CSVs do not record the exact source commit used for those binaries.
-The version label alone does not establish that they match the <code>v0.5.2</code> release tag.
-Exact reproduction of the original binaries therefore remains unverified.</p>
-<p>To benchmark current code instead, use your current checkout and record its
-commit and any local changes. Treat those measurements as a new run, separate
-from the historical results below.</p>
+<p>For the historical results labeled 0.5.2, use snapshot
+<code>a332c1ce97588aaed4f6a8a5476f84a81f947313</code> instead. That snapshot does not
+identify the original measurement binaries, whose exact reproduction remains
+unverified. For any new measurement, record the source commit, local changes,
+compiler and build options, and use a separate output directory.</p>
 <p>Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
 source providing <code>g++-13</code> and the <code>multiverse</code> component for MKL.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>sudo<span class="w"> </span>apt-get<span class="w"> </span>update
@@ -1737,7 +1744,10 @@ source providing <code>g++-13</code> and the <code>multiverse</code> component f
 <p>The installer builds RaBitQ from the selected checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
 in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
 and verification records are saved in <code>build/benchmark-baselines/</code>.
-Use <code>--dry-run</code> to preview installation commands.</p>
+Use <code>--dry-run</code> to preview installation commands. The installer defaults to the
+historical GCC 13 toolchain; it does not recreate the GCC 14.3.0 wheel used for
+the 0.7.0 measurements. Match the recorded compiler and native-optimization
+setting when comparing new library timings.</p>
 <h2 id="construction-and-search-settings">Construction and search settings<a class="headerlink" href="#construction-and-search-settings" title="Permanent link">&para;</a></h2>
 <p>IVF uses 4,096 clusters. HNSW uses <code>M=16</code> and <code>efConstruction=200</code>;
 SymphonyQG uses degree 32. Family pages list all method settings.</p>
@@ -1807,9 +1817,12 @@ checks are outside construction timing.</p>
 <p>Each method has one build or fit per dataset; results do not measure run-to-run
 variation.
 The committed CSVs support checking the displayed tables and plotted points,
-but do not include the original raw run logs or measurement binaries. They are
-archived results, not an independent reproduction or results from the current
-source tree. The experiments in the cited papers are separate measurements.</p>
+but do not include raw run logs or measurement binaries. The 0.7.0 raw records,
+logs and indexes are retained locally under
+<code>results/benchmarks-0.7.0-20261013-2239/</code>, including the run manifest and the
+provenance of the reused local OpenAI dataset. Historical baseline raw logs and
+binaries are not included. No run-to-run or shared-host noise correction is
+applied. The experiments in the cited papers are separate measurements.</p>
 <h2 id="data-and-reproduction">Data and reproduction<a class="headerlink" href="#data-and-reproduction" title="Permanent link">&para;</a></h2>
 <p>Run from the selected checkout's repository root after installation. Use the
 same checkout for installation and measurement:</p>
@@ -1819,9 +1832,15 @@ same checkout for installation and measurement:</p>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Prepare data only</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>python<span class="w"> </span>benchmarks/download_datasets.py
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Selected results</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>ivf<span class="w"> </span>--datasets<span class="w"> </span>gist1m
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--datasets<span class="w"> </span>dbpedia<span class="w"> </span>--methods<span class="w"> </span>qgkmeans
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Repeat only the library methods (leave historical baseline exports unchanged)</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--output-dir<span class="w"> </span>results/benchmarks-new-run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span>--methods<span class="w"> </span>rabitq-ivf-raw<span class="w"> </span>rabitq-ivf-1p4<span class="w"> </span>rabitq-ivf-1p8<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span>rabitq-symqg-raw<span class="w"> </span>rabitq-symqg-4<span class="w"> </span>rabitq-symqg-8<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">  </span>rabitq-hnsw-1p4<span class="w"> </span>rabitq-hnsw-1p8<span class="w"> </span>qgkmeans
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="c1"># Selected results</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>ivf<span class="w"> </span>--datasets<span class="w"> </span>gist1m
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--datasets<span class="w"> </span>dbpedia<span class="w"> </span>--methods<span class="w"> </span>qgkmeans
 </code></pre></div>
 <p>Downloads preserve the published splits and check file sizes and vector shapes. GIST and
 OpenAI need about 26 GB for downloads and prepared data; indexes and temporary
