@@ -1,4 +1,4 @@
-# Compact Storage of Codes
+# Compact code storage
 
 This section describes packing **extended codes** with 1–8 bits per dimension.
 IVF and HNSW store a separate sign bit, giving total quantized widths of 1–9 bits;
@@ -7,7 +7,7 @@ are multiples of 32. Pass the padded dimension and already padded, quantized
 codes: the packing function does not add padding itself. For rotated vectors,
 use the dimension returned by `rotator->size()`; see [Random Rotation](rabitq/rotator.md).
 The implementation is in
-`rabitqlib/quantization/pack_excode.hpp`.
+`rabitqlib/core/pack_excode.hpp`.
 
 ## How to read the layouts
 
@@ -74,8 +74,6 @@ the detail represents one stored bit; a code can cross a byte boundary.
 
 Use `unpacking_rabitqplus_code` with the same dimension and extended bit width to
 recover the codes; the packed layout is independent of the selected SIMD backend.
-
-
 
 ## 1-bit
 
@@ -199,7 +197,7 @@ Each code is copied directly: byte `i` is `c[i]`. A complete block occupies
 ## Packing API example
 
 ```cpp
-#include <rabitqlib/quantization/pack_excode.hpp>
+#include <rabitqlib/core/pack_excode.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>

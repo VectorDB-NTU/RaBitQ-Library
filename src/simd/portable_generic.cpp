@@ -5,10 +5,10 @@
 #include <cstring>
 #include <stdexcept>
 
-#include "rabitqlib/simd/pack_excode_dispatch.hpp"
-#include "rabitqlib/simd/rotator_dispatch.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/pack_excode_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/rotator_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
 #include "rabitqlib/utils/bitops.hpp"
 
 namespace rabitqlib::simd {
@@ -81,6 +81,21 @@ void pack(const uint8_t* raw, uint8_t* compact, size_t dim) {
 // Inverse of pack, over the same mapping. Not a search path, so scalar only.
 template <size_t Bits>
 void unpack(const uint8_t* compact, uint8_t* raw, size_t dim) {
+    if constexpr (Bits == 8) {
+        std::copy_n(compact, dim, raw);
+        return;
+    }
+    if constexpr (Bits == 4) {
+        // Each group of eight bytes holds two interleaved groups of eight nibbles.
+        for (size_t i = 0; i < dim; i += 16) {
+            for (size_t j = 0; j < 8; ++j) {
+                const uint8_t pair = compact[i / 2 + j];
+                raw[i + j] = pair & 0x0f;
+                raw[i + 8 + j] = pair >> 4;
+            }
+        }
+        return;
+    }
     const size_t full = (Bits == 1 || Bits == 4 || Bits == 8) ? dim : dim - dim % 64;
     for (size_t i = 0; i < full; ++i) {
         unsigned code = 0;

@@ -16,9 +16,7 @@ else:
 
 
 def main():
-    families = {
-        name: "ivf" if "ivf" in method else "graphs" for name, method, _ in CASES
-    }
+    families = {case.name: case.family for case in CASES}
     families.update(dict.fromkeys(KMEANS_METHODS, "kmeans"))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

@@ -18,7 +18,7 @@ NPROBES = [5, 10, 20, 40, 80, 120, 200]
 
 def main(args=None) -> None:
     # 1. Load queries and ground truth
-    queries = read_fvecs(args.query_file)
+    queries = np.ascontiguousarray(read_fvecs(args.query_file))
     gt = read_ivecs(args.gt_file)
     nq = queries.shape[0]
     print(f"Queries: {queries.shape}, GT: {gt.shape}")

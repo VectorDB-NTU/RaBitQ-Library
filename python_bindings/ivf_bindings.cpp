@@ -17,10 +17,11 @@
 #include <vector>
 
 #include "bindings_common.hpp"
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/packed.hpp"
 
 namespace py = pybind11;
 
@@ -65,21 +66,18 @@ class IvfIndex {
         size_t nbits,
         const std::string& metric = "l2",
         const std::string& initializer = "auto"
-    )
-        : dim_(dim)
-        , max_elements_(max_elements)
-        , num_clusters_(num_clusters)
-        , nbits_(nbits)
-        , metric_(metric_from_string(metric))
-        , index_(std::make_unique<rabitqlib::ivf::IVF>(
-              max_elements,
-              dim,
-              num_clusters,
-              nbits,
-              metric_,
-              rabitqlib::RotatorType::FhtKacRotator,
-              initializer_from_string(initializer)
-          )) {}
+    ) {
+        const auto metric_type = metric_from_string(metric);
+        index_ = std::make_unique<rabitqlib::ivf::IVF>(
+            max_elements,
+            dim,
+            num_clusters,
+            nbits,
+            metric_type,
+            rabitqlib::RotatorType::FhtKacRotator,
+            initializer_from_string(initializer)
+        );
+    }
 
     void build(
         py::handle data,
@@ -91,34 +89,29 @@ class IvfIndex {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
-        auto cluster_ids_array =
-            ensure_1d_array<rabitqlib::PID>(cluster_ids, "cluster_ids");
 
-        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
-        if (static_cast<size_t>(data_array.shape(0)) != max_elements_) {
+        if (static_cast<size_t>(data_array.shape(0)) != index_->max_elements()) {
             throw std::invalid_argument("number of data rows must match index max_elements"
             );
         }
-        if (static_cast<size_t>(centroids_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(centroids_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("centroid dimension does not match index dim");
         }
-        if (static_cast<size_t>(centroids_array.shape(0)) != num_clusters_) {
+        if (static_cast<size_t>(centroids_array.shape(0)) != index_->num_clusters()) {
             throw std::invalid_argument(
                 "number of centroid rows must match index num_clusters"
             );
         }
-        if (static_cast<size_t>(cluster_ids_array.shape(0)) !=
-            static_cast<size_t>(data_array.shape(0))) {
-            throw std::invalid_argument(
-                "cluster_ids length must match number of rows in data"
-            );
-        }
+        auto cluster_ids_vec = checked_cluster_ids(
+            cluster_ids, static_cast<size_t>(data_array.shape(0)), index_->num_clusters()
+        );
 
         const auto* data_ptr = data_array.data();
         const auto* centroids_ptr = centroids_array.data();
-        const auto* cluster_ids_ptr = cluster_ids_array.data();
+        const auto* cluster_ids_ptr = cluster_ids_vec.data();
         {
             py::gil_scoped_release release;
             index_->construct(
@@ -139,32 +132,17 @@ class IvfIndex {
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before add");
         }
-        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("data dimension does not match index dim");
         }
         const auto rows = static_cast<size_t>(data_array.shape(0));
 
-        // Validate cluster IDs as int64 first: casting straight to uint32 would wrap
-        // negative or oversized values onto valid clusters.
         std::vector<rabitqlib::PID> assigned;
         if (!cluster_ids.is_none()) {
-            auto cluster_ids_array = ensure_1d_integer_array(cluster_ids, "cluster_ids");
-            if (static_cast<size_t>(cluster_ids_array.shape(0)) != rows) {
-                throw std::invalid_argument(
-                    "cluster_ids length must match number of rows in data"
-                );
-            }
-            assigned.reserve(rows);
-            for (py::ssize_t i = 0; i < cluster_ids_array.shape(0); ++i) {
-                const int64_t id = cluster_ids_array.data()[i];
-                if (id < 0 || static_cast<uint64_t>(id) >= num_clusters_) {
-                    throw std::invalid_argument("cluster_ids must be in [0, num_clusters)");
-                }
-                assigned.push_back(static_cast<rabitqlib::PID>(id));
-            }
+            assigned = checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
         }
 
-        const size_t first = index_->max_elements();
+        const size_t first = index_->num_stored_points();
         // Allocate the returned IDs before committing any changes to the index.
         auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
         auto* ids_data = ids.mutable_data();
@@ -183,7 +161,6 @@ class IvfIndex {
                 num_threads
             );
         }
-        max_elements_ = index_->max_elements();
         return ids;
     }
 
@@ -195,10 +172,13 @@ class IvfIndex {
         }
         std::vector<rabitqlib::PID> to_remove;
         to_remove.reserve(static_cast<size_t>(ids_array.shape(0)));
+        const rabitqlib::detail::ConstPackedArrayView<int64_t> values(
+            reinterpret_cast<const char*>(ids_array.data())
+        );
         for (py::ssize_t i = 0; i < ids_array.shape(0); ++i) {
-            const int64_t id = ids_array.data()[i];
-            if (id < 0 || static_cast<uint64_t>(id) >= max_elements_) {
-                throw std::invalid_argument("ids must be in [0, max_elements)");
+            const int64_t id = values[static_cast<size_t>(i)];
+            if (id < 0 || static_cast<uint64_t>(id) >= index_->num_stored_points()) {
+                throw std::invalid_argument("ids must be in [0, num_stored_points)");
             }
             to_remove.push_back(static_cast<rabitqlib::PID>(id));
         }
@@ -218,10 +198,10 @@ class IvfIndex {
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before search");
         }
-        if (static_cast<size_t>(query_array.shape(1)) != dim_) {
+        if (static_cast<size_t>(query_array.shape(1)) != index_->dimension()) {
             throw std::invalid_argument("query dimension does not match index dim");
         }
-        if (k == 0 || k > max_elements_) {
+        if (k == 0 || k > index_->max_elements()) {
             throw std::invalid_argument("k must be between 1 and max_elements");
         }
         if (nprobe == 0) {
@@ -274,30 +254,33 @@ class IvfIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(path.c_str());
         }
-        wrapper.dim_ = wrapper.index_->dimension();
-        wrapper.max_elements_ = wrapper.index_->max_elements();
-        wrapper.num_clusters_ = wrapper.index_->num_clusters();
-        wrapper.nbits_ = wrapper.index_->nbits();
-        wrapper.metric_ = wrapper.index_->metric_type();
         wrapper.built_ = true;
         return wrapper;
     }
 
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
-        return dim_;
+        return index_->dimension();
     }
     [[nodiscard]] size_t max_elements() const {
         const auto operation = access_.read();
-        return max_elements_;
+        return index_->max_elements();
+    }
+    [[nodiscard]] size_t num_points() const {
+        const auto operation = access_.read();
+        return index_->num_points();
+    }
+    [[nodiscard]] size_t num_stored_points() const {
+        const auto operation = access_.read();
+        return index_->num_stored_points();
     }
     [[nodiscard]] size_t num_clusters() const {
         const auto operation = access_.read();
-        return num_clusters_;
+        return index_->num_clusters();
     }
     [[nodiscard]] size_t nbits() const {
         const auto operation = access_.read();
-        return nbits_;
+        return index_->nbits();
     }
     [[nodiscard]] bool is_built() const {
         const auto operation = access_.read();
@@ -309,17 +292,12 @@ class IvfIndex {
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
-        return metric_to_string(metric_);
+        return metric_to_string(index_->metric_type());
     }
 
    private:
     IvfIndex() = default;
 
-    size_t dim_ = 0;
-    size_t max_elements_ = 0;
-    size_t num_clusters_ = 0;
-    size_t nbits_ = 0;
-    rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
     bool built_ = false;
     mutable IndexAccess access_;
     std::unique_ptr<rabitqlib::ivf::IVF> index_;
@@ -391,6 +369,8 @@ void register_ivf(py::module_& m) {
         .def_static("load", &IvfIndex::load, py::arg("path"))
         .def_property_readonly("dim", &IvfIndex::dim)
         .def_property_readonly("max_elements", &IvfIndex::max_elements)
+        .def_property_readonly("num_points", &IvfIndex::num_points)
+        .def_property_readonly("num_stored_points", &IvfIndex::num_stored_points)
         .def_property_readonly("num_clusters", &IvfIndex::num_clusters)
         .def_property_readonly("nbits", &IvfIndex::nbits)
         .def_property_readonly("is_built", &IvfIndex::is_built)

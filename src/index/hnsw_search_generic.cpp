@@ -1,11 +1,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
-#include "rabitqlib/defines.hpp"
+#include "hnsw_search_impl.hpp"  // IWYU pragma: keep (backend template definitions)
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::hnsw::detail {
 
@@ -30,10 +32,10 @@ struct HnswGenericKernel {
     }
 };
 
-maxheap<std::pair<float, PID>> search_knn_generic(
+std::vector<std::pair<float, PID>> search_knn_sorted_generic(
     HierarchicalNSW& index, const float* rotated_query, size_t topk, size_t ef
 ) {
-    return index.search_knn_direct<HnswGenericKernel>(
+    return index.search_knn_sorted_direct<HnswGenericKernel>(
         rotated_query, topk, ef == 0 ? index.ef_ : ef
     );
 }

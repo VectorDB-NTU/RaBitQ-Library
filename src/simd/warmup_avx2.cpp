@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
 #include "warmup_kernels.hpp"
 
 namespace rabitqlib::simd {

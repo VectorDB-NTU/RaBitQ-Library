@@ -27,11 +27,8 @@ def built_symqg(base_data):
 # ── construction ──────────────────────────────────────────────────────────────
 
 
-def test_is_built(built_symqg):
-    assert built_symqg.is_built
-
-
 def test_properties(built_symqg):
+    assert built_symqg.is_built
     assert built_symqg.dim == DIM
     assert built_symqg.max_degree == _MAX_DEGREE
     assert built_symqg.num_points == N_VECTORS
@@ -42,25 +39,13 @@ def test_properties(built_symqg):
 # ── search output shape and dtype ─────────────────────────────────────────────
 
 
-def test_search_output_shape(built_symqg, query_data):
+def test_search_output_contract(built_symqg, query_data):
     ids, dists = built_symqg.search(query_data, k=_TOPK, ef=_EF)
     assert ids.shape == (N_QUERIES, _TOPK)
     assert dists.shape == (N_QUERIES, _TOPK)
-
-
-def test_search_output_dtype(built_symqg, query_data):
-    ids, dists = built_symqg.search(query_data, k=_TOPK, ef=_EF)
-    assert np.issubdtype(ids.dtype, np.integer)
+    assert ids.dtype == np.uint32
     assert dists.dtype == np.float32
-
-
-def test_search_ids_in_range(built_symqg, query_data):
-    ids, _ = built_symqg.search(query_data, k=_TOPK, ef=_EF)
     assert np.all(ids < N_VECTORS)
-
-
-def test_search_distances_nonneg(built_symqg, query_data):
-    _, dists = built_symqg.search(query_data, k=_TOPK, ef=_EF)
     assert np.all(dists >= 0)
 
 
@@ -71,40 +56,45 @@ def test_single_query(built_symqg, query_data):
 
 @pytest.mark.parametrize("bits", [0, 4, 8])
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("method", ["search", "search_batch"])
-def test_batch_search_matches_individual_queries(tmp_path, bits, metric, method):
+def test_batch_search_matches_individual_queries(tmp_path, bits, metric):
     rng = np.random.default_rng(73)
     data = rng.standard_normal((97, 65)).astype(np.float32)
-    queries = rng.standard_normal((19, 65)).astype(np.float32)
+    queries = rng.standard_normal((19, 130)).astype(np.float32)[:, ::2]
+    assert not queries.flags.c_contiguous
     queries[4] = queries[0]
     index = SymqgIndex(65, 32, metric=metric, quantization_bits=bits)
     index.build(data, ef_construction=48, num_threads=1)
     path = str(tmp_path / "batch.index")
     index.save(path)
     restored = SymqgIndex.load(path)
-    search = getattr(restored, method)
 
-    for k, ef in [(7, 64), (1, 1), (7, 64)]:
-        individual = [index.search(query[None, :], k=k, ef=ef) for query in queries]
+    # C++ owns the full ef/thread matrix. These scenarios retain the two aliases,
+    # serial/automatic/parallel scheduling, changing windows, and strided inputs
+    # while sharing a single build for each metric/storage pair.
+    for k, ef, threads in [
+        (7, 64, 1),
+        (1, 1, 4),
+        (7, 64, 4),
+        (10, 16, 0),
+        (10, 128, 2),
+        (1, 64, 8),
+    ]:
+        individual = [
+            index.search(query.copy()[None, :], k=k, ef=ef) for query in queries
+        ]
         expected_ids = np.concatenate([result[0] for result in individual])
         expected_distances = np.concatenate([result[1] for result in individual])
-        for threads in [1, 4]:
+        for method in ("search", "search_batch"):
+            search = getattr(restored, method)
             ids, distances = search(queries, k=k, ef=ef, num_threads=threads)
             np.testing.assert_array_equal(ids, expected_ids)
-            np.testing.assert_array_equal(distances, expected_distances)
+            np.testing.assert_array_equal(
+                distances.view(np.uint32), expected_distances.view(np.uint32)
+            )
             empty_ids, empty_distances = search(
                 queries[:0], k=k, ef=ef, num_threads=threads
             )
             assert empty_ids.shape == empty_distances.shape == (0, k)
-
-
-def test_search_batch_accepts_noncontiguous_queries(built_symqg, query_data):
-    queries = query_data[::2]
-    assert not queries.flags.c_contiguous
-    expected = built_symqg.search(queries.copy(), k=5, ef=_EF)
-    actual = built_symqg.search_batch(queries, k=5, ef=_EF, num_threads=0)
-    np.testing.assert_array_equal(actual[0], expected[0])
-    np.testing.assert_array_equal(actual[1], expected[1])
 
 
 def test_search_batch_validates_inputs(built_symqg, query_data):
@@ -150,20 +140,22 @@ def test_recall_vs_brute_force(built_symqg, base_data, query_data):
 def test_wrong_data_dim_raises():
     idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="^data dimension does not match index dim$"):
         idx.build(bad_data, ef_construction=_EF_BUILD)
 
 
 def test_wrong_query_dim_raises(built_symqg):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="^query dimension does not match index dim$"):
         built_symqg.search(bad_queries, k=1, ef=_EF)
 
 
 def test_search_before_build_raises():
     idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     queries = np.zeros((5, DIM), dtype=np.float32)
-    with pytest.raises(Exception):
+    with pytest.raises(
+        RuntimeError, match="^SymqgIndex must be built or loaded before search$"
+    ):
         idx.search(queries, k=1, ef=_EF)
 
 
@@ -237,12 +229,14 @@ def test_successful_rebuild_replaces_index(base_data, tmp_path, bits):
 
 
 def test_invalid_degree_raises():
-    with pytest.raises(Exception):
+    with pytest.raises(
+        ValueError, match="^max_degree must be a positive multiple of 32$"
+    ):
         SymqgIndex(DIM, max_degree=16)
 
 
 def test_invalid_quantization_bits_raises():
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="^quantization_bits must be 0, 4, or 8$"):
         SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=6)
 
 

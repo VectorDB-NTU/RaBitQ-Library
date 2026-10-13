@@ -1,6 +1,7 @@
 #include "rabitqlib/clustering/qgkmeans.hpp"
 
 #include <gtest/gtest.h>
+#include <gtest/internal/gtest-port.h>
 #include <omp.h>
 
 #include <algorithm>
@@ -14,15 +15,116 @@
 #include <string>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
+#include "rabitqlib/index/detail/visited_set.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::qgkmeans {
 namespace {
+
+TEST(QGKMeansQuerySumTest, CachePolicyAndSuccessfulFillControlValidity) {
+    struct Case {
+        size_t dim;
+        size_t iterations;
+        FinalAssignmentMode final_assignment;
+        bool enabled;
+    };
+    for (const auto configuration :
+         {Case{960, 25, FinalAssignmentMode::Approximate, false},
+          Case{1024, 1, FinalAssignmentMode::Exact, false},
+          Case{1024, 1, FinalAssignmentMode::Approximate, true},
+          Case{1024, 2, FinalAssignmentMode::Exact, true}}) {
+        QGKMeansParameters parameters;
+        parameters.niter = configuration.iterations;
+        parameters.final_assignment = configuration.final_assignment;
+        detail::QuerySumCache cache(configuration.dim, parameters);
+        EXPECT_EQ(cache.cached(0), nullptr);
+        if (!configuration.enabled) {
+            // Disabled preparation must not attempt an allocation, even at this size.
+            EXPECT_NO_THROW(cache.prepare(std::numeric_limits<size_t>::max()));
+            cache.store(0, 1.0F);
+            cache.complete();
+            EXPECT_EQ(cache.cached(0), nullptr);
+            continue;
+        }
+        cache.prepare(2);
+        cache.store(0, 1.0F);
+        // Partial data remains unavailable until the whole assignment succeeds.
+        EXPECT_EQ(cache.cached(0), nullptr);
+        cache.prepare(2);
+        cache.store(0, 2.0F);
+        cache.store(1, 3.0F);
+        cache.complete();
+        const float* data = cache.cached(0);
+        ASSERT_NE(data, nullptr);
+        EXPECT_FLOAT_EQ(data[0], 2.0F);
+        EXPECT_FLOAT_EQ(data[1], 3.0F);
+        cache.prepare(2);
+        cache.store(0, 99.0F);
+        EXPECT_EQ(cache.cached(0), data);
+        EXPECT_FLOAT_EQ(data[0], 2.0F);
+    }
+    detail::QuerySumCache disabled(nullptr, true);
+    disabled.complete();
+    EXPECT_EQ(disabled.cached(0), nullptr);
+}
+
+TEST(QGAssignerTest, CallerOwnedQuerySumsMatchUncachedAcrossRebuilds) {
+    constexpr size_t kClusters = 33, kPoints = 64;
+    for (size_t dim : {64U, 1024U}) {
+        std::vector<float> data(kPoints * dim), centroids(kClusters * dim);
+        for (size_t i = 0; i < data.size(); ++i) {
+            data[i] = std::sin(static_cast<float>(i) * 0.13F);
+        }
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            for (uint32_t bits : {0U, 4U, 8U}) {
+                QGAssigner cached(dim, kClusters, 32, 40, 8, 1, 2, 42, metric, bits);
+                QGAssigner reference(dim, kClusters, 32, 40, 8, 1, 2, 42, metric, bits);
+                std::vector<float> sums(kPoints, std::numeric_limits<float>::quiet_NaN());
+                std::vector<PID> ids(kPoints), expected_ids(kPoints);
+                std::vector<float> distances(kPoints), expected_distances(kPoints);
+                std::vector<float> first_sums;
+                for (size_t iteration = 0; iteration < 3; ++iteration) {
+                    for (size_t i = 0; i < centroids.size(); ++i) {
+                        centroids[i] = std::cos(static_cast<float>(i + iteration) * 0.17F);
+                    }
+                    cached.assign(
+                        centroids.data(),
+                        data.data(),
+                        kPoints,
+                        ids.data(),
+                        distances.data(),
+                        iteration == 2 ? nullptr : sums.data(),
+                        iteration != 0
+                    );
+                    reference.assign(
+                        centroids.data(),
+                        data.data(),
+                        kPoints,
+                        expected_ids.data(),
+                        expected_distances.data()
+                    );
+                    EXPECT_EQ(ids, expected_ids);
+                    EXPECT_EQ(distances, expected_distances);
+                    if (iteration == 0) {
+                        for (float sum : sums) {
+                            EXPECT_TRUE(std::isfinite(sum));
+                        }
+                        first_sums = sums;
+                    } else {
+                        EXPECT_EQ(sums, first_sums);
+                    }
+                }
+            }
+        }
+    }
+}
 
 TEST(QGKMeansTest, UsesTwentyFiveIterationsByDefault) {
     EXPECT_EQ(QGKMeansParameters{}.niter, 25U);

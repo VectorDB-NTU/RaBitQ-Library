@@ -3,16 +3,24 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <fstream>
+#include <ios>
 #include <limits>
 #include <stdexcept>
 #include <vector>
 
-#include "rabitqlib/index/estimator.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/fastscan/data_layout.hpp"
+#include "rabitqlib/fastscan/encoder.hpp"
+#include "rabitqlib/fastscan/estimator.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
+#include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
-#include "rabitqlib/index/query.hpp"
-#include "rabitqlib/quantization/data_layout.hpp"
-#include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/space.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
 FlatRaBitQInitializer::FlatRaBitQInitializer(size_t d, size_t k, MetricType metric)
@@ -47,7 +55,7 @@ void FlatRaBitQInitializer::add_vectors(const float* centroids, size_t num_threa
         global_centroid_[d] = static_cast<float>(sum / static_cast<double>(num_cluster_));
     }
     const size_t batch_bytes = BatchDataMap<float>::data_bytes(dim_);
-    parallel_for(
+    rabitqlib::index_detail::parallel_for(
         0,
         div_round_up(num_cluster_, fastscan::kBatchSize),
         num_threads,

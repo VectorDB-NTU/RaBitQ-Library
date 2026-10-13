@@ -4,7 +4,7 @@
 #include <cstring>
 #include <limits>
 
-#include "rabitqlib/simd/rotator_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/rotator_dispatch.hpp"
 #include "rotator_kernels.hpp"
 
 namespace rabitqlib::simd {

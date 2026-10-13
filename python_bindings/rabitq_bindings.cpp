@@ -1,8 +1,8 @@
 #include <pybind11/detail/common.h>
 #include <pybind11/pybind11.h>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
 namespace py = pybind11;

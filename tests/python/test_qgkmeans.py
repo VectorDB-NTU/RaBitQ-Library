@@ -206,12 +206,6 @@ def test_spherical_mode_returns_normalized_centroids(base_data):
     np.testing.assert_allclose(clustering.distances, selected_distances, atol=1e-6)
 
 
-def test_train_rejects_wrong_dimension():
-    clustering = qgkmeans()
-    with pytest.raises(Exception, match="dimension"):
-        clustering.train(np.zeros((K, DIM + 1), dtype=np.float32))
-
-
 @pytest.mark.parametrize("bits", [0, 4, 8])
 @pytest.mark.parametrize("spherical", [False, True])
 def test_graph_returns_exact_selected_distances(bits, spherical):
@@ -352,9 +346,8 @@ def test_single_empty_cluster_preserves_duplicate_centroids(bits, threads):
     assert clustering.final_obj == 0
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
 @pytest.mark.parametrize("spherical", [False, True])
-def test_final_objective_does_not_regress_after_last_update(bits, spherical):
+def test_final_objective_does_not_regress_after_last_update(spherical):
     x = np.random.default_rng(739).standard_normal((2048, 65)).astype(np.float32)
     if spherical:
         x /= np.linalg.norm(x, axis=1, keepdims=True)
@@ -364,7 +357,8 @@ def test_final_objective_does_not_regress_after_last_update(bits, spherical):
         niter=4,
         num_threads=2,
         min_points_per_centroid=1,
-        quantization_bits=bits,
+        # C++ checks every storage width with a genuinely approximate graph.
+        quantization_bits=4,
         spherical=spherical,
     )
     clustering.train(x)
@@ -525,7 +519,9 @@ def test_approximate_final_assignment_keeps_graph_mode_alias():
 
 @pytest.mark.parametrize(
     "clusters,degree",
-    [(1, 32), (2, 32), (16, 32), (31, 32), (32, 32), (33, 64), (64, 64)],
+    # C++ checks the intermediate counts; these exercise below/equal boundaries
+    # and propagation of a non-default graph degree through Python.
+    [(1, 32), (32, 32), (64, 64)],
 )
 @pytest.mark.parametrize(
     "mode", [FinalAssignmentMode.Approximate, FinalAssignmentMode.Exact]

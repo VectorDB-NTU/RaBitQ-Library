@@ -1,7 +1,8 @@
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/core/rotator.hpp"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "rabitqlib/core/detail/simd/rotator_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "test_data.hpp"
@@ -583,3 +585,31 @@ TEST(FhtDispatchTest, AvxBackendsMatchBitwiseForCompactTails) {
     }
 }
 #endif
+
+TEST(MatrixRotatorFactory, DoublePreservesNormAndRejectsFloatOnlyRotation) {
+    const size_t dim = 64;
+    std::unique_ptr<Rotator<double>> rotator(
+        choose_rotator<double>(dim, RotatorType::MatrixRotator)
+    );
+    ASSERT_NE(rotator, nullptr);
+    std::vector<double> input(dim), output(rotator->size());
+    double expected = 0;
+    for (size_t i = 0; i < dim; ++i) {
+        input[i] = static_cast<double>(i % 7) - 3;
+        expected += input[i] * input[i];
+    }
+    rotator->rotate(input.data(), output.data());
+    double actual = 0;
+    for (double x : output) {
+        actual += x * x;
+    }
+    EXPECT_NEAR(actual, expected, 1e-10 * expected);
+    try {
+        std::unique_ptr<Rotator<double>> unsupported(
+            choose_rotator<double>(dim, RotatorType::FhtKacRotator)
+        );
+        FAIL() << "double FHT must be rejected";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "FhtKacRotator only supports float");
+    }
+}

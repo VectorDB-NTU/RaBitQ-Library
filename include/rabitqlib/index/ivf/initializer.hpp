@@ -1,14 +1,9 @@
 #pragma once
 
-#include <omp.h>
-
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
-#include <exception>
 #include <fstream>
 #include <ios>
 #include <memory>
@@ -16,19 +11,19 @@
 #include <queue>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/parallel_for.hpp"
+#include "rabitqlib/index/ivf/detail/hnsw_sidecar.hpp"
+#include "rabitqlib/index/ivf/types.hpp"  // IWYU pragma: export
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/third/hnswlib/hnswlib.h"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/space.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
-enum class InitializerType : uint32_t { Auto = 0, Flat = 1, FlatRaBitQ = 2, HNSW = 3 };
-
 inline InitializerType resolve_initializer_type(InitializerType type, size_t clusters) {
     switch (type) {
         case InitializerType::Auto:
@@ -42,97 +37,6 @@ inline InitializerType resolve_initializer_type(InitializerType type, size_t clu
             return type;
     }
     throw std::invalid_argument("Invalid IVF initializer type");
-}
-
-template <class Function>
-inline void parallel_for(size_t start, size_t end, size_t numThreads, Function fn) {
-    if (start >= end) {
-        return;
-    }
-    numThreads = std::min(resolve_num_threads(numThreads), end - start);
-
-    if (numThreads == 1) {
-        for (size_t id = start; id < end; id++) {
-            fn(id, 0);
-        }
-    } else {
-#if defined(_OPENMP) && _OPENMP >= 201307
-        if (omp_get_proc_bind() != omp_proc_bind_false) {
-            // Native threads inherit only the caller's place. Let OpenMP honor
-            // the configured placement of the whole team when binding is enabled.
-            std::vector<std::exception_ptr> errors(numThreads);
-#pragma omp parallel for num_threads(numThreads) schedule(dynamic)
-            for (size_t id = start; id < end; ++id) {
-                const size_t worker = static_cast<size_t>(omp_get_thread_num());
-                if (!errors[worker]) {
-                    try {
-                        fn(id, worker);
-                    } catch (...) { errors[worker] = std::current_exception(); }
-                }
-            }
-            for (const auto& error : errors) {
-                if (error) {
-                    std::rethrow_exception(error);
-                }
-            }
-            return;
-        }
-#endif
-        std::vector<std::thread> threads;
-        std::atomic<size_t> current(start);
-
-        // keep track of exceptions in threads
-        // https://stackoverflow.com/a/32428427/1713196
-        std::exception_ptr last_exception = nullptr;
-        std::mutex last_except_mutex;
-
-        const auto join_threads = [&threads] {
-            for (auto& thread : threads) {
-                if (thread.joinable()) {
-                    thread.join();
-                }
-            }
-        };
-
-        try {
-            threads.reserve(numThreads);
-            for (size_t thread_id = 0; thread_id < numThreads; ++thread_id) {
-                threads.emplace_back([&, thread_id] {
-                    while (true) {
-                        size_t id = current.fetch_add(1);
-
-                        if (id >= end) {
-                            break;
-                        }
-
-                        try {
-                            fn(id, thread_id);
-                        } catch (...) {
-                            std::unique_lock<std::mutex> last_except_lock(last_except_mutex
-                            );
-                            last_exception = std::current_exception();
-                            /*
-                             * This will work even when current is the largest value that
-                             * size_t can fit, because fetch_add returns the previous value
-                             * before the increment (what will result in overflow
-                             * and produce 0 instead of current + 1).
-                             */
-                            current = end;
-                            break;
-                        }
-                    }
-                });
-            }
-        } catch (...) {
-            current = end;
-            join_threads();
-            throw;
-        }
-        join_threads();
-        if (last_exception) {
-            std::rethrow_exception(last_exception);
-        }
-    }
 }
 
 /**
@@ -330,9 +234,14 @@ class HNSWInitializer : public Initializer {
     void add_vectors(const float* cent, size_t num_threads) override {
         size_t start = 0;
         size_t rows = num_cluster_;
-        parallel_for(start, rows, num_threads, [&](size_t row, size_t /*thread_id*/) {
-            alg_hnsw_->addPoint(cent + (row * dim_), row);
-        });
+        rabitqlib::index_detail::parallel_for(
+            start,
+            rows,
+            num_threads,
+            [&](size_t row, size_t /*thread_id*/) {
+                alg_hnsw_->addPoint(cent + (row * dim_), row);
+            }
+        );
         rebuild_label_lookup();
     }
 
@@ -349,6 +258,9 @@ class HNSWInitializer : public Initializer {
         alg_hnsw_->setEf(std::max(size_t{768}, 2 * nprobe));
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             alg_hnsw_->searchKnn(query, nprobe);
+        if (result.size() != nprobe) {
+            throw std::runtime_error("HNSW centroid graph returned too few candidates");
+        }
 
         for (size_t i = 0; i < nprobe; ++i) {
             candidates[i].distance = metric_type_ == METRIC_IP
@@ -369,7 +281,17 @@ class HNSWInitializer : public Initializer {
     void load(std::ifstream&, const char* filename) override {
         std::string hnsw(filename);
         hnsw += ".hnsw";
+        detail::validate_hnsw_sidecar_file(hnsw, num_cluster_, space_->get_data_size());
         alg_hnsw_->loadIndex(hnsw, space_, num_cluster_);
+        const auto& graph = *alg_hnsw_;
+        if (graph.offsetData_ > graph.label_offset_ ||
+            graph.label_offset_ > graph.size_data_per_element_ ||
+            graph.label_offset_ - graph.offsetData_ != space_->get_data_size() ||
+            graph.size_data_per_element_ - graph.label_offset_ !=
+                sizeof(hnswlib::labeltype)) {
+            throw std::runtime_error("HNSW centroid layout does not match IVF dimension");
+        }
+        detail::validate_hnsw_centroid_graph(graph);
         rebuild_label_lookup();
     }
 

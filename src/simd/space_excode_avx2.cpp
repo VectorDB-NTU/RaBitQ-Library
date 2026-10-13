@@ -4,7 +4,7 @@
 #include <cstring>
 
 #include "packed_tail_avx2.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 
 namespace rabitqlib::simd::excode_ipimpl {
 
@@ -57,11 +57,10 @@ inline float mm256_reduce_add_ps(__m256 v) {
     return _mm_cvtss_f32(h);
 }
 
-// ip16: this function is used to compute inner product of
-// vectors padded to multiple of 16
-// fxu1: the inner product is computed between float and 1-bit unsigned int (lay out can be
-// found rabitq_impl.hpp)
-// avx512: only applicable for avx512
+// ip16_fxu1 consumes groups of 16 float query values and packed 1-bit codes.
+// This translation unit uses AVX2/FMA; callers should use runtime dispatch.
+// Packed extra-bit layouts are owned by core/pack_excode.hpp.
+
 float ip16_fxu1_avx2(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {

@@ -1,14 +1,10 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 
-#include <omp.h>
-
 #include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <fstream>
 #include <ios>
 #include <limits>
@@ -19,22 +15,27 @@
 #include <utility>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/index/query.hpp"
-#include "rabitqlib/quantization/data_layout.hpp"
-#include "rabitqlib/quantization/pack_excode.hpp"
-#include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/simd/estimator_dispatch.hpp"
+#include "rabitqlib/core/data_layout.hpp"
+#include "rabitqlib/core/encoder.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/pack_excode.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/fastscan/data_layout.hpp"
+#include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/encoder.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
+#include "rabitqlib/index/detail/parallel_exception.hpp"
+#include "rabitqlib/index/detail/visited_set.hpp"
+#include "rabitqlib/index/symqg/detail/search_scratch.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/bitops.hpp"
-#include "rabitqlib/utils/buffer.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/path.hpp"
-#include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
-#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::symqg {
 
@@ -75,6 +76,12 @@ size_t QuantizedGraph<float>::padded_dimension(size_t dim) {
 }
 
 size_t QuantizedGraph<float>::num_vertices() const { return this->num_points_; }
+
+size_t QuantizedGraph<float>::max_elements() const { return num_points_; }
+
+size_t QuantizedGraph<float>::num_points() const { return ready_ ? num_points_ : 0; }
+
+size_t QuantizedGraph<float>::num_stored_points() const { return ready_ ? num_points_ : 0; }
 
 size_t QuantizedGraph<float>::dimension() const { return this->dim_; }
 
@@ -167,38 +174,55 @@ void QuantizedGraph<float>::copy_vectors(const float* data, size_t num_threads) 
         if (centroid_.size() != padded_dim_) {
             throw std::logic_error("qg-quant centroid must be set before copying vectors");
         }
-#pragma omp parallel num_threads(thread_count)
         {
-            std::vector<float> rotated_data(padded_dim_);
-            std::vector<uint8_t> quantized_data(padded_dim_);
+            index_detail::ParallelException failure;
+#pragma omp parallel num_threads(thread_count)
+            {
+                std::vector<float> rotated_data;
+                std::vector<uint8_t> quantized_data;
+                try {
+                    rotated_data.resize(padded_dim_);
+                    quantized_data.resize(padded_dim_);
+                } catch (...) { failure.capture(); }
 #pragma omp for schedule(static)
-            for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
-                 ++index) {
-                const size_t i = static_cast<size_t>(index);
-                rotator_->rotate(data + (dim_ * i), rotated_data.data());
-                ExDataMap<float> output(
-                    get_quantized_vector(i), padded_dim_, quantization_bits_
-                );
-                float f_add;
-                float f_rescale;
-                float unused_f_error = 0;
-                quant::quantize_full_single(
-                    rotated_data.data(),
-                    centroid_.data(),
-                    padded_dim_,
-                    quantization_bits_,
-                    quantized_data.data(),
-                    f_add,
-                    f_rescale,
-                    unused_f_error,
-                    metric_type_
-                );
-                output.f_add_ex() = f_add;
-                output.f_rescale_ex() = f_rescale;
-                quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
-                    quantized_data.data(), output.ex_code(), padded_dim_, quantization_bits_
-                );
+                for (std::ptrdiff_t index = 0;
+                     index < static_cast<std::ptrdiff_t>(num_points_);
+                     ++index) {
+                    if (failure.failed()) {
+                        continue;
+                    }
+                    try {
+                        const size_t i = static_cast<size_t>(index);
+                        rotator_->rotate(data + (dim_ * i), rotated_data.data());
+                        ExDataMap<float> output(
+                            get_quantized_vector(i), padded_dim_, quantization_bits_
+                        );
+                        float f_add;
+                        float f_rescale;
+                        float unused_f_error = 0;
+                        quant::quantize_full_single(
+                            rotated_data.data(),
+                            centroid_.data(),
+                            padded_dim_,
+                            quantization_bits_,
+                            quantized_data.data(),
+                            f_add,
+                            f_rescale,
+                            unused_f_error,
+                            metric_type_
+                        );
+                        output.f_add_ex() = f_add;
+                        output.f_rescale_ex() = f_rescale;
+                        quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
+                            quantized_data.data(),
+                            output.ex_code(),
+                            padded_dim_,
+                            quantization_bits_
+                        );
+                    } catch (...) { failure.capture(); }
+                }
             }
+            failure.rethrow();
         }
         return;
     }
@@ -233,7 +257,8 @@ void QuantizedGraph<float>::save(const char* filename) const {
     }
     output.exceptions(std::ios::badbit | std::ios::failbit);
 
-    constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;  // "QGRABITQ"
+    // Native-endian numeric tag; little-endian files contain the bytes "QTIBARGQ".
+    constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;
     constexpr uint32_t kFormatVersion = 1;
     if (quantization_bits_ != 0) {
         output.write(reinterpret_cast<const char*>(&kFormatMagic), sizeof(kFormatMagic));
@@ -304,7 +329,8 @@ void QuantizedGraph<float>::load(const char* filename) {
         read_exact(&value, sizeof(value), field);
     };
 
-    constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;  // "QGRABITQ"
+    // Native-endian numeric tag; little-endian files contain the bytes "QTIBARGQ".
+    constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;
     constexpr uint32_t kFormatVersion = 1;
     uint64_t magic = 0;
     read_value(magic, "format marker");
@@ -370,7 +396,7 @@ void QuantizedGraph<float>::load(const char* filename) {
         throw std::runtime_error("Invalid QuantizedGraph payload size");
     }
 
-    loaded.initialize();
+    loaded.initialize(false);
 
     if (loaded.quantization_bits_ != 0) {
         loaded.centroid_.resize(loaded.padded_dim_);
@@ -421,12 +447,7 @@ void QuantizedGraph<float>::search_impl(
     const float* query, uint32_t k, uint32_t* results, float* dists, size_t ef
 ) {
     validate_search(query, k, results, dists, ef);
-    std::vector<float> rotated_query(padded_dim_);
-    std::vector<float> est_dist(degree_bound_);
-    std::vector<float> lut_float(padded_dim_ * 4);
-    BatchQuery<float> batch_query;
-    buffer::SearchBuffer<float> search_pool(ef);
-    buffer::SearchBuffer<float> result_pool(k);
+    detail::SearchScratch scratch(padded_dim_, degree_bound_, ef, k);
     thread_local VisitedSet visited;
     thread_local size_t visited_size = 0;
     if (visited_size != num_points_) {
@@ -434,19 +455,7 @@ void QuantizedGraph<float>::search_impl(
         visited_size = num_points_;
     }
     search_with_scratch_impl(
-        query,
-        k,
-        results,
-        dists,
-        rotated_query.data(),
-        est_dist.data(),
-        lut_float.data(),
-        batch_query,
-        search_pool,
-        result_pool,
-        visited,
-        kPidMax,
-        nullptr
+        query, k, results, dists, scratch.view(visited), kPidMax, nullptr
     );
 }
 
@@ -483,52 +492,26 @@ void QuantizedGraph<float>::search_batch_with_ef(
         return;
     }
 
-    struct SearchScratch {
-        std::vector<float> rotated_query;
-        std::vector<float> estimated_distances;
-        std::vector<float> lookup_table;
-        BatchQuery<float> batch_query;
-        buffer::SearchBuffer<float> search_pool;
-        buffer::SearchBuffer<float> result_pool;
-        VisitedSet visited;
-
-        SearchScratch(size_t padded_dim, size_t degree, size_t ef, size_t k, size_t points)
-            : rotated_query(padded_dim)
-            , estimated_distances(degree)
-            , lookup_table(padded_dim * 4)
-            , search_pool(ef)
-            , result_pool(k)
-            , visited(points, points / 10) {}
-    };
-
     const auto workers = static_cast<int>(std::min(
         {resolve_num_threads(num_threads),
          num_queries,
          static_cast<size_t>(std::numeric_limits<int>::max())}
     ));
-    std::atomic<bool> failed{false};
-    std::exception_ptr error;
-    const auto capture_error = [&] {
-#pragma omp critical(rabitq_symqg_search_error)
-        {
-            if (!error) {
-                error = std::current_exception();
-            }
-        }
-        failed.store(true, std::memory_order_relaxed);
-    };
+    index_detail::ParallelException failure;
 #pragma omp parallel num_threads(workers) if (workers > 1)
     {
         // Allocate and release scratch on its worker, retaining it across queries.
-        std::optional<SearchScratch> scratch;
+        std::optional<detail::SearchScratch> scratch;
+        VisitedSet visited;
         try {
-            scratch.emplace(padded_dim_, degree_bound_, ef, knn, num_points_);
-        } catch (...) { capture_error(); }
+            scratch.emplace(padded_dim_, degree_bound_, ef, knn);
+            visited.initialize(num_points_, num_points_ / 10);
+        } catch (...) { failure.capture(); }
 #pragma omp for schedule(dynamic)
         for (std::ptrdiff_t query_index = 0;
              query_index < static_cast<std::ptrdiff_t>(num_queries);
              ++query_index) {
-            if (failed.load(std::memory_order_relaxed)) {
+            if (failure.failed()) {
                 continue;
             }
             const size_t i = static_cast<size_t>(query_index);
@@ -539,22 +522,14 @@ void QuantizedGraph<float>::search_batch_with_ef(
                     knn,
                     results + i * knn,
                     dists + i * knn,
-                    local.rotated_query.data(),
-                    local.estimated_distances.data(),
-                    local.lookup_table.data(),
-                    local.batch_query,
-                    local.search_pool,
-                    local.result_pool,
-                    local.visited,
+                    local.view(visited),
                     kPidMax,
                     nullptr
                 );
-            } catch (...) { capture_error(); }
+            } catch (...) { failure.capture(); }
         }
     }
-    if (error) {
-        std::rethrow_exception(error);
-    }
+    failure.rethrow();
 }
 
 void QuantizedGraph<float>::validate_search(
@@ -585,7 +560,7 @@ float QuantizedGraph<float>::point_distance(
 
 // Scan a data row and store estimated neighbor distances. The caller scores the current
 // vertex from either its raw vector (vanilla QG) or its 4/8-bit code (qg-quant).
-inline void QuantizedGraph<float>::scan_neighbors(
+void QuantizedGraph<float>::scan_neighbors(
     const BatchQuery<float>& q_obj,
     PID data_id,
     float* est_dist,
@@ -655,20 +630,14 @@ void QuantizedGraph<float>::update_results(
     }
 }
 
-// initialize const offsets & data array
 void QuantizedGraph<float>::initialize_layout() {
     if (quantization_bits_ == 0) {
         batch_data_offset_ = checked_multiply(dim_, sizeof(float));
     } else {
-        const size_t code_bits = checked_multiply(padded_dim_, quantization_bits_);
-        batch_data_offset_ = checked_add(code_bits / 8, checked_multiply(sizeof(float), 2));
+        batch_data_offset_ = ExDataMap<float>::data_bytes(padded_dim_, quantization_bits_);
     }
 
-    const size_t binary_batch_bytes =
-        checked_multiply(padded_dim_, fastscan::kBatchSize) / 8;
-    const size_t factor_bytes =
-        checked_multiply(checked_multiply(sizeof(float), fastscan::kBatchSize), size_t{2});
-    const size_t batch_bytes = checked_add(binary_batch_bytes, factor_bytes);
+    const size_t batch_bytes = QGBatchDataMap<float>::data_bytes(padded_dim_);
     neighbor_offset_ = checked_add(
         batch_data_offset_,
         checked_multiply(batch_bytes, degree_bound_ / fastscan::kBatchSize)
@@ -677,8 +646,12 @@ void QuantizedGraph<float>::initialize_layout() {
         checked_add(neighbor_offset_, checked_multiply(degree_bound_, sizeof(PID)));
 }
 
-void QuantizedGraph<float>::initialize() {
-    rotator_.reset(choose_rotator<float>(dim_, rotator_type_, padded_dim_, seed_));
+void QuantizedGraph<float>::initialize(bool randomize_rotation) {
+    if (randomize_rotation) {
+        rotator_.reset(choose_rotator<float>(dim_, rotator_type_, padded_dim_, seed_));
+    } else {
+        rotator_ = rotator_impl::make_rotator_for_loading(dim_, rotator_type_, padded_dim_);
+    }
 
     assert(padded_dim_ % 32 == 0);
     assert(padded_dim_ >= dim_);
@@ -718,19 +691,9 @@ void QuantizedGraph<float>::reconstruct_quantized_vector(PID data_id, float* rec
         get_quantized_vector(data_id), padded_dim_, quantization_bits_
     );
     std::vector<uint8_t> quantized_data(padded_dim_);
-    if (quantization_bits_ == 8) {
-        std::copy(data.ex_code(), data.ex_code() + padded_dim_, quantized_data.begin());
-    } else {
-        for (size_t i = 0; i < padded_dim_; i += 16) {
-            uint64_t packed = 0;
-            std::memcpy(&packed, data.ex_code() + (i / 2), sizeof(packed));
-            for (size_t j = 0; j < 8; ++j) {
-                const uint8_t pair = static_cast<uint8_t>(packed >> (j * 8));
-                quantized_data[i + j] = pair & 0x0f;
-                quantized_data[i + 8 + j] = pair >> 4;
-            }
-        }
-    }
+    quant::rabitq_impl::ex_bits::unpacking_rabitqplus_code(
+        data.ex_code(), quantized_data.data(), padded_dim_, quantization_bits_
+    );
     quant::reconstruct_full_vec(
         quantized_data.data(),
         centroid_.data(),
@@ -742,121 +705,21 @@ void QuantizedGraph<float>::reconstruct_quantized_vector(PID data_id, float* rec
     );
 }
 
-// Construction sources come from owned raw rows or from the existing RaBitQ codes.
-// Reconstructed sources are already rotated; never pass them through prepare_query.
-const float* QuantizedGraph<float>::prepare_build_query(
-    PID id,
-    std::vector<float>& rotated,
-    std::optional<QuantizedQuery>& prepared,
-    const BuildCache* cache
-) const {
-    if (is_quantized()) {
-        if (cache != nullptr) {
-            const float* row = cache->rotated_vectors.data() + id * padded_dim_;
-            prepared.emplace(row, cache->queries[id]);
-            return row;
-        }
-        rotated.resize(padded_dim_);
-        reconstruct_quantized_vector(id, rotated.data());
-        prepared.emplace(rotated.data(), centroid_.data(), padded_dim_, metric_type_);
-        return rotated.data();
-    }
-    prepared.reset();
-    return get_vector(id);
-}
-
-// find candidate neighbors for cur_id, exclude the vertex itself
-void QuantizedGraph<float>::find_candidates(
+// Encode a logical neighbor-ID row, including physical storage for tail batches.
+void QuantizedGraph<float>::encode_neighbors(
     PID cur_id,
-    size_t search_ef,
-    std::vector<AnnCandidate<float>>& results,
-    VisitedSet& vis,
-    const std::vector<uint32_t>& degrees,
-    const BuildCache* cache
-) const {
-    std::vector<float> rotated_query(cache == nullptr ? padded_dim_ : 0);
-    std::optional<QuantizedQuery> quantized_query;
-    const float* query = prepare_build_query(cur_id, rotated_query, quantized_query, cache);
-    if (cache == nullptr && !is_quantized()) {
-        rotator_->rotate(query, rotated_query.data());
-    }
-    const float* rotated = cache == nullptr
-                               ? rotated_query.data()
-                               : cache->rotated_vectors.data() + cur_id * padded_dim_;
-    BatchQuery<float> q_obj(rotated, padded_dim_, metric_type_);
-
-    // insert entry point to initialize search buffer
-    buffer::SearchBuffer tmp_pool(search_ef);
-    tmp_pool.insert(this->entry_point_, std::numeric_limits<float>::max());
-
-    /* Current version of fast scan compute 32 distances */
-    std::vector<float> est_dist(degree_bound_);  // estimated distances
-    while (tmp_pool.has_next()) {
-        auto cur_candi = tmp_pool.pop();
-        if (vis.get(cur_candi)) {
-            continue;
-        }
-        vis.set(cur_candi);
-        auto cur_degree = degrees[cur_candi];
-        const float vertex_distance =
-            point_distance(query, quantized_query ? &*quantized_query : nullptr, cur_candi);
-        q_obj.set_g_add(vertex_distance);
-        scan_neighbors(q_obj, cur_candi, est_dist.data(), tmp_pool, vis, cur_degree);
-        if (cur_candi != cur_id) {
-            results.emplace_back(cur_candi, vertex_distance);
-        }
-    }
-}
-
-// based on new neighbor lists to update quantization code and factors
-void QuantizedGraph<float>::update_qg(
-    PID cur_id,
-    const std::vector<AnnCandidate<float>>& new_neighbors,
-    const BuildCache* cache,
-    std::vector<float>* scratch
+    const std::vector<PID>& new_neighbors,
+    const float* rotated_data,
+    const float* rotated_centroid
 ) {
     size_t cur_degree = new_neighbors.size();
 
     if (cur_degree == 0) {
         return;
     }
-    // copy neighbors
     auto neighbor_ptr = get_neighbors(cur_id);
     for (size_t i = 0; i < cur_degree; ++i) {
-        neighbor_ptr[i] = new_neighbors[i].id;
-    }
-
-    // rotated data
-    std::vector<float> local_scratch;
-    std::vector<float>& rotated_data = scratch == nullptr ? local_scratch : *scratch;
-    rotated_data.resize((cur_degree + 1) * padded_dim_);
-    float* rotated_centroid = rotated_data.data() + cur_degree * padded_dim_;
-    for (size_t i = 0; i < cur_degree; ++i) {
-        if (cache != nullptr) {
-            std::copy_n(
-                cache->rotated_vectors.data() + new_neighbors[i].id * padded_dim_,
-                padded_dim_,
-                rotated_data.data() + i * padded_dim_
-            );
-        } else if (quantization_bits_ == 0) {
-            const float* neighbor_vec = get_vector(new_neighbors[i].id);
-            this->rotator_->rotate(neighbor_vec, &rotated_data[i * padded_dim_]);
-        } else {
-            reconstruct_quantized_vector(
-                new_neighbors[i].id, &rotated_data[i * padded_dim_]
-            );
-        }
-    }
-    if (cache != nullptr) {
-        std::copy_n(
-            cache->rotated_vectors.data() + cur_id * padded_dim_,
-            padded_dim_,
-            rotated_centroid
-        );
-    } else if (quantization_bits_ == 0) {
-        this->rotator_->rotate(get_vector(cur_id), rotated_centroid);
-    } else {
-        reconstruct_quantized_vector(cur_id, rotated_centroid);
+        neighbor_ptr[i] = new_neighbors[i];
     }
 
     // quantize batches for current vertex
@@ -864,7 +727,7 @@ void QuantizedGraph<float>::update_qg(
     for (size_t i = 0; i < cur_degree; i += fastscan::kBatchSize) {
         const size_t batch_size = std::min(cur_degree - i, fastscan::kBatchSize);
         quant::quantize_qg_batch(
-            rotated_data.data() + (i * padded_dim_),
+            rotated_data + (i * padded_dim_),
             rotated_centroid,
             batch_size,
             padded_dim_,
@@ -903,22 +766,36 @@ void QuantizedGraph<float>::search_with_scratch(
     PID hint,
     const float* k1xsumq
 ) {
-    validate_search(query, knn, results, dists, ef_);
-    search_with_scratch_impl(
+    detail::search_with_workspace(
+        *this,
         query,
         knn,
         results,
         dists,
-        rotated_query_scratch,
-        est_dist_scratch,
-        lut_float_scratch,
-        batch_query,
-        search_pool,
-        result_pool,
-        visited,
+        {rotated_query_scratch,
+         est_dist_scratch,
+         lut_float_scratch,
+         batch_query,
+         search_pool,
+         result_pool,
+         visited},
         hint,
         k1xsumq
     );
+}
+
+void detail::search_with_workspace(
+    QuantizedGraph<float>& graph,
+    const float* query,
+    uint32_t knn,
+    uint32_t* results,
+    float* dists,
+    detail::SearchScratchView scratch,
+    PID hint,
+    const float* k1xsumq
+) {
+    graph.validate_search(query, knn, results, dists, graph.ef_);
+    graph.search_with_scratch_impl(query, knn, results, dists, scratch, hint, k1xsumq);
 }
 
 void QuantizedGraph<float>::search_with_scratch_impl(
@@ -926,67 +803,66 @@ void QuantizedGraph<float>::search_with_scratch_impl(
     uint32_t knn,
     uint32_t* __restrict__ results,
     float* __restrict__ dists,
-    float* __restrict__ rotated_query_scratch,
-    float* __restrict__ est_dist_scratch,
-    float* __restrict__ lut_float_scratch,
-    BatchQuery<float>& batch_query,
-    buffer::SearchBuffer<float>& search_pool,
-    buffer::SearchBuffer<float>& result_pool,
-    VisitedSet& visited,
+    detail::SearchScratchView scratch,
     PID hint,
     const float* k1xsumq
 ) {
-    if (rotated_query_scratch == nullptr || est_dist_scratch == nullptr ||
-        lut_float_scratch == nullptr) {
+    if (scratch.rotated_query == nullptr || scratch.estimated_distances == nullptr ||
+        scratch.lookup_table == nullptr) {
         throw std::invalid_argument("QuantizedGraph search buffers must not be null");
     }
     if (hint != kPidMax && hint >= num_points_) {
         throw std::invalid_argument("SymphonyQG search hint is outside the graph");
     }
-    if (!visited.initialized()) {
+    if (!scratch.visited.initialized()) {
         throw std::invalid_argument("SymphonyQG visited set must be initialized");
     }
 
-    rotator_->rotate(query, rotated_query_scratch);
+    rotator_->rotate(query, scratch.rotated_query);
     std::optional<QuantizedQuery> quantized_query;
     if (quantization_bits_ != 0) {
         quantized_query.emplace(
-            rotated_query_scratch, centroid_.data(), padded_dim_, metric_type_
+            scratch.rotated_query, centroid_.data(), padded_dim_, metric_type_
         );
     }
     const auto* quantized = quantized_query ? &*quantized_query : nullptr;
-    batch_query.reset(
-        rotated_query_scratch, padded_dim_, lut_float_scratch, metric_type_, k1xsumq
+    scratch.batch_query.reset(
+        scratch.rotated_query, padded_dim_, scratch.lookup_table, metric_type_, k1xsumq
     );
-    search_pool.clear();
-    result_pool.clear();
-    visited.clear();
+    scratch.search_pool.clear();
+    scratch.result_pool.clear();
+    scratch.visited.clear();
 
     if (hint != kPidMax && hint != entry_point_) {
-        search_pool.insert(hint, point_distance(query, quantized, hint));
+        scratch.search_pool.insert(hint, point_distance(query, quantized, hint));
     }
-    search_pool.insert(entry_point_, std::numeric_limits<float>::max());
+    scratch.search_pool.insert(entry_point_, std::numeric_limits<float>::max());
 
-    while (search_pool.has_next()) {
-        const PID current = search_pool.pop();
-        if (visited.get(current)) {
+    while (scratch.search_pool.has_next()) {
+        const PID current = scratch.search_pool.pop();
+        if (scratch.visited.get(current)) {
             continue;
         }
-        visited.set(current);
+        scratch.visited.set(current);
 
         const float vertex_distance = point_distance(query, quantized, current);
-        batch_query.set_g_add(vertex_distance);
+        scratch.batch_query.set_g_add(vertex_distance);
         scan_neighbors(
-            batch_query, current, est_dist_scratch, search_pool, visited, degree_bound_
+            scratch.batch_query,
+            current,
+            scratch.estimated_distances,
+            scratch.search_pool,
+            scratch.visited,
+            degree_bound_
         );
-        result_pool.insert(current, vertex_distance);
+        scratch.result_pool.insert(current, vertex_distance);
     }
 
-    update_results(result_pool, visited, query, quantized);
-    if (result_pool.size() != knn) {
+    update_results(scratch.result_pool, scratch.visited, query, quantized);
+    if (scratch.result_pool.size() != knn) {
         throw std::runtime_error("QuantizedGraph search could not produce k results");
     }
-    result_pool.copy_results(results, dists);
+    scratch.result_pool.copy_results(results, dists);
 }
 
 }  // namespace rabitqlib::symqg

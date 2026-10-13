@@ -1,5 +1,7 @@
 # IVF RaBitQ
 
+C++ callers include `rabitqlib/index/ivf/ivf.hpp` and link `rabitqlib::index`.
+
 [IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical
 clustering-based ANN method. This implementation stores RaBitQ codes and
 vector IDs, optionally retaining raw vectors for reranking, and uses
@@ -7,9 +9,59 @@ vector IDs, optionally retaining raw vectors for reranking, and uses
 batch of distances. Its actual memory, latency, and recall depend on the bit
 width, number of clusters, and `nprobe`.
 
-The algorithm includes two phases: indexing and querying.
+## Minimal workflow
 
-## Index Construction
+### Python
+
+The [complete Quick Start](../quick_start.md) is the runnable IVF example:
+train centroids, call `IvfIndex.build`, search, then save and reload the index.
+The update examples below reuse its built `index`.
+
+### C++
+
+Link `rabitqlib::index`. In this snippet, `data`, `centroids` and `queries` are
+row-major `std::vector<float>` buffers with original dimension `dim`;
+`cluster_ids` is a `std::vector<rabitqlib::PID>` with one centroid ID per data row.
+The example requests ten neighbors from five clusters, so supply at least ten
+points and five centroids.
+
+```cpp
+#include <vector>
+#include <rabitqlib/index/ivf/ivf.hpp>
+
+rabitqlib::ivf::IVF index(data.size() / dim, dim, centroids.size() / dim, 4);
+index.construct(data.data(), centroids.data(), cluster_ids.data(), false, 1);
+const size_t num_queries = queries.size() / dim;
+std::vector<rabitqlib::PID> ids(num_queries * 10);
+std::vector<float> distances(num_queries * 10);
+index.search_batch(queries.data(), num_queries, 10, 5, ids.data(), distances.data());
+index.save("ivf.index");
+```
+
+See [C++ integration](../cpp_integration.md) for build setup and
+[Index Construction](#index-construction) for loading `.fvecs` inputs.
+
+## Parameters and limits
+
+| Parameter | Contract |
+| --- | --- |
+| `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
+| `max_elements` | Python IVF build requires exactly this many rows; `add` grows storage automatically. C++ calls this constructor argument `num_points`. |
+| `num_clusters` | Must match the centroid count; every cluster ID must be in `[0, num_clusters)`. |
+| `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. |
+| `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
+| `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
+| `k`, `nprobe` | Positive result count and cluster probe count; Python requires `k <= max_elements`. |
+| `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
+
+Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
+to largest. Quantized distances are estimates. Unfilled slots use ID `2**32 - 1`
+and distance `+inf`; see [result handling](../quick_start.md#read-the-results).
+See the shared [input and concurrency contracts](usage.md).
+
+## Index construction
+
+See the shared [index count contract](usage.md#index-counts).
 
 Use [QGKMeans](../clustering.md#qgkmeans) to partition the input vectors (`.fvecs`).
 Build the C++ examples, then run `bin/qgkmeans` to save centroids and cluster IDs.
@@ -25,10 +77,19 @@ For example, split SIFT into 4,096 clusters using squared L2 distance:
     /data/sift/sift_clusterids_4096_l2.ivecs
 ```
 
-After files are prepared, you need to load them into memory:
+After files are prepared, load them into memory. The snippet below uses
+`const char*` paths `data_file`, `centroids_file`, and `cids_file`. Include the
+Eigen aliases and I/O helpers explicitly; `ivf.hpp` does not import them.
+
 ```c++
+#include <rabitqlib/core/detail/eigen.hpp>
+#include <rabitqlib/index/ivf/ivf.hpp>
+#include <rabitqlib/index/types.hpp>
+#include <rabitqlib/utils/io.hpp>
+
+using PID = rabitqlib::PID;
 using data_type = rabitqlib::RowMajorArray<float>;
-using gt_type = rabitqlib::RowMajorArray<uint32_t>;
+using gt_type = rabitqlib::RowMajorArray<PID>;
 
 data_type data;
 data_type centroids;
@@ -39,11 +100,13 @@ rabitqlib::load_vecs<float, data_type>(centroids_file, centroids);
 rabitqlib::load_vecs<PID, gt_type>(cids_file, cids);
 ```
 
+See the [complete indexing example](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
+for argument parsing and the surrounding program.
+
 Then initialize an IVF object with the number of data points, vector
 dimension, number of clusters, and total bits per dimension. The C++ index
 accepts total quantized bit widths from 1 through 9, or `total_bits=32`
-(Python `nbits=32`) to store raw float32 vectors for reranking. Raw storage
-and automatic FastScan precision selection are available starting with version 0.3.3.
+(Python `nbits=32`) to store raw float32 vectors for reranking.
 
 ```c++
 using index_type = rabitqlib::ivf::IVF;
@@ -56,8 +119,6 @@ index_type ivf(num_points, dim, k, total_bits);
 ```
 
 ### Centroid routing
-
-Configurable centroid routing requires 0.6.0 or newer.
 
 The optional final C++ constructor argument selects `InitializerType::Auto`,
 `Flat`, `FlatRaBitQ`, or `HNSW` from the `rabitqlib::ivf` namespace. Python accepts
@@ -95,12 +156,14 @@ buffer for fewer full-vector distance evaluations. Performance depends on
 cluster count, dimension, `nprobe`, and data distribution. Measure recall and
 latency on your workload, and use an explicit initializer to override `auto`.
 
-Existing constructor calls remain source-compatible. C++ consumers must rebuild
-against matching headers and the core library because the IVF object layout has
-changed. Newly built indexes with 5,000–59,999 clusters now use Flat RaBitQ routing. In particular, the 5,000–19,999 range changes
-from exact to approximate centroid selection. To reproduce the previous selection
-policy when rebuilding, explicitly choose `flat` below 20,000 clusters and `hnsw`
-otherwise. Loading an old index preserves its historical routing instead.
+The optional routing argument introduced in 0.6.0 preserves existing constructor
+call forms; this does not imply compatibility with all 0.7.0 C++ changes. See the
+[migration guide](../modular_migration.md) and rebuild with matching headers and libraries.
+
+Compared with releases before 0.6.0, `auto` changes routing for 5,000–59,999
+clusters. The 5,000–19,999 range changes from exact to approximate selection.
+To retain the earlier policy when rebuilding, choose `flat` below 20,000 clusters
+and `hnsw` otherwise. Loading an old index preserves its historical routing.
 
 Routing is fixed for an index and is also used by `add` when cluster IDs are
 omitted. `initializer_type()` (Python `initializer`) reports the resolved type,
@@ -108,6 +171,7 @@ including after loading; loading never re-runs the current `auto` policy for a
 new-format file.
 
 Finally, call the construct API:
+
 ```c++
 void IVF::construct(
     const float* data, 
@@ -118,72 +182,29 @@ void IVF::construct(
 );
 ```
 
-- **data**: Pointer to the raw data vectors.
-- **centroids**: Clustering centroids; tune `cluster_num` for the dataset and search budget.
-- **cluster_ids**: Array of length `data_num`; every entry must be in the range `[0, cluster_num)`.
-- **faster**: If true, enable fast implementations for RaBitQ (By default, it is set as `false` to pursue better accuracy.).
+- **data**: Vectors in the original input coordinates.
+- **centroids**: One centroid per configured cluster, in the original input coordinates.
+- **cluster_ids**: One ID per input vector, in `[0, num_clusters())`.
+- **faster**: Use a calibrated scaling factor instead of per-vector scale search; defaults to `false`. See [encoding paths](../rabitq/quantizer.md#implementations).
 - **num_threads**: Maximum number of OpenMP threads used to quantize clusters.
 
 For example:
+
 ```c++
 ivf.construct(data.data(), centroids.data(), cids.data(), true);
 ```
 
-During construction, we process clusters in parallel, rotate their centroids and
-vectors, and compute one-bit codes and factors. Quantized mode also computes
-`total_bits - 1` extra-bit codes and factors; raw mode stores the original
-float32 vectors instead. In raw mode, the index owns a copy of the input, so
-the original data can be released after construction.
-
-Construction reuses a rotation buffer of at most 32 vectors per worker. This
-temporary storage uses at most `workers * 32 * padded_dim * sizeof(float)` bytes,
-independently of cluster sizes.
-
-New indexes pad the rotated dimension to a multiple of 32 for every supported
-bit width, including raw mode (32). This applies to both rotator types.
-Extra-bit layouts retain full 64-coordinate blocks and store any final
-32-coordinate tail compactly.
-
-After construction, you can directly save the index file to disk:
-```c++
-ivf.save(output_index_file);
-```
-New files use the `RABQIDX1` magic, version 2, storage flags, an explicit
-padded dimension, and a uint32 initializer type (1 = Flat, 2 = Flat RaBitQ,
-3 = HNSW) before the index metadata. `Auto` is resolved before saving. Loading
-restores the routing type, storage mode, rotation state, and padded dimension.
-Raw files also contain the original vectors, so querying does not require an external dataset.
-
-Version-1 `RABQIDX1` files remain readable with their stored padding. Legacy
-unversioned quantized files and raw v1 files retain their original 64-dimension
-padding. All three historical formats infer routing with the original 20,000
-cluster threshold. HNSW routing still requires the accompanying `.hnsw` file.
-Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded
-legacy index writes the new header without changing its padded dimension or encoded data. Older library
-versions cannot read the new format.
-
-### Data Layout
-The main data layout for our IVF is organized as follows:
-```c++
-[batch data]    // 1-bit code and factors
-[ex_data]       // code for remaining bits, or original float32 vectors
-[ids]           // PID of vectors (organized by clusters)
-[cluster_lst]   // List of clusters' metadata in IVF
-```
-In raw mode, `ex_data` holds `4 * num_points * dim` bytes in cluster order,
-without padding or extra-bit factors. The one-bit filtering codes and factors
-are additional storage. `nbits()` (Python `nbits`) reports 32 in raw mode;
-the one-bit filtering code is not included in that value.
-
 ## Querying
-Currently, querying requires the index to be loaded in memory. If you want to use a previously saved index on the disk,  firstly load it into memory:
+
+To search a saved index, load it first:
 
 ```c++
 using index_type = rabitqlib::ivf::IVF;
 index_type ivf;
 ivf.load(index_file);
 ```
-Once the index is loaded, you can call the search function for queries:
+Search a constructed or loaded index with:
+
 ```c++
 void IVF::search(
     const float* __restrict__ query, 
@@ -220,14 +241,7 @@ The querying examples also default to automatic selection; Python's
 `--use-hacc` flag forces HACC, and the C++ example accepts an optional final
 `true` or `false` argument.
 
-During search, we rotate the query and select the `nprobe` closest centroids.
-FastScan filters candidates using one-bit codes, then reranking uses either the
-remaining quantized bits or the stored raw vectors. Raw reranking computes
-squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
-API is unchanged. Cluster selection and filtering remain approximate in both
-modes. Search returns the top `k` results after scanning the selected clusters.
-
-Starting with 0.5.2, C++ `search_batch` distributes multiple queries across workers.
+C++ `search_batch` distributes queries across workers.
 Input queries are contiguous row-major float32
 vectors with shape `(num_queries, dimension())`; output buffers have shape
 `(num_queries, k)`.
@@ -246,17 +260,13 @@ need separate output buffers, and must not overlap index updates.
 Python's existing `index.search(queries, k, nprobe, num_threads=4)` uses this
 batch path with the same output and precision rules.
 
-Python search releases the GIL. Concurrent searches may use independent
-`nprobe`, `high_accuracy`, and `num_threads` values. Conflicting updates raise
-`RuntimeError` immediately; see the
-[Python concurrency contract](../quick_start.md#threading-and-file-paths).
+Concurrent Python searches may use independent `nprobe`, `high_accuracy`, and
+`num_threads` values. See the [concurrency contract](usage.md#threading-and-file-paths).
 
-## Updating an Index
+## Updating an index
 
-Starting with 0.5.1, C++ `IVF` and Python `IvfIndex` support `add()` and `remove()`
-on a constructed or loaded index without the original dataset. HNSW provides
-its own [update APIs](hnsw.md#updating-an-index) starting with 0.5.2.
-IVF updates preserve the index file format.
+C++ `IVF` and Python `IvfIndex` support `add()` and `remove()` on a constructed
+or loaded index without the original dataset. Updates preserve the file format.
 
 ```c++
 void IVF::add(
@@ -271,13 +281,13 @@ size_t IVF::remove(const PID* ids_to_remove, size_t n);
 ```
 
 - **data**, **n**: `n` new vectors, quantized like `construct` does. Vector `i`
-  receives the PID `max_elements() + i`, using the count before the call. Existing
+  receives the PID `num_stored_points() + i`, using the count before the call. Existing
   IDs stay unchanged, and removed IDs are never reused.
 - **cluster_ids**: The cluster of each new vector, in `[0, cluster_num)`. When
   it is `nullptr`, vectors use the same centroid routing as queries. Routing uses
   the initializer selected at construction or restored from the index file.
 - **faster**, **num_threads**: Same as in `construct`.
-- **ids_to_remove**: PIDs to remove. Every PID must be below `max_elements()`; nothing is
+- **ids_to_remove**: PIDs to remove. Every PID must be below `num_stored_points()`; nothing is
   removed if one is not. `remove` returns how many were newly removed and can be
   repeated safely.
 
@@ -297,11 +307,10 @@ one-dimensional integer array or sequence with one valid cluster ID per vector;
 IDs and returns the number newly removed. Duplicate IDs count once. Python
 `num_threads` defaults to 1; `fast_quantization` defaults to `False`.
 
-The stored point count (`max_elements()` in C++, `index.max_elements` in Python)
-increases after `add()` and includes removed points. Rebuilding with C++
-`construct` or Python `build` expects that many rows. In C++, callers must prevent
-`add()` or `remove()` from overlapping with searches or other updates on the same
-index. Python detects these conflicts and raises `RuntimeError` immediately.
+After appending, rebuilding with `construct` or `build` requires
+`num_stored_points` rows, including removed records. Updates require exclusive
+access; see the
+[concurrency contract](usage.md#threading-and-file-paths).
 
 ### Cost of `add`
 
@@ -312,13 +321,9 @@ unchanged if it throws. Every call copies the whole storage, so:
 - Each call has a fixed cost that grows with the size of the whole index, on top of a
   cost per new vector. **Add many vectors per call rather than one at a time.**
 
-On an index of 1,000,000 vectors with 128 dimensions, 1,024 clusters and 1 bit
-(8 threads, portable build, Intel i7-12700KF), adding 1,000 vectors in one call took
-about 5 ms, and adding the same vectors one call each took about 3 s (2.8 s and 3.7 s
-in two runs). For that 33 MB file, a process that had just loaded it held about
-65 MB, and peaked at about 100 MB during one `add` of 1,000 vectors.
-
 There is no spare capacity: every `add` moves the data.
+Measure update latency and peak memory with your index size, bit width and batch
+size; serialized file size alone does not determine peak process memory.
 
 ### Recall after `add`
 
@@ -331,7 +336,7 @@ recall matters more than the cost of a rebuild.
 ### How removal is stored
 
 `remove` hides points from search but keeps their storage. Removed points still
-count in `max_elements()` and cannot be restored. Each nonempty call scans all
+count in `num_stored_points()` and cannot be restored. Each nonempty call scans all
 stored point IDs, so batch removals when possible.
 
 A removed point has its `f_add` value set to `+inf`. That value is the constant
@@ -351,3 +356,67 @@ reinterpreted. Release 0.5.0 also excludes removed points when reading its
 supported legacy formats. However, current saves always use `RABQIDX1` v2,
 including when resaving a loaded legacy index. Older releases cannot read these
 files, regardless of whether they contain removals.
+
+## Persistence
+
+Save a constructed index with:
+
+```c++
+ivf.save(output_index_file);
+```
+New files use the `RABQIDX1` magic, version 2, storage flags, an explicit
+padded dimension, and a uint32 initializer type (1 = Flat, 2 = Flat RaBitQ,
+3 = HNSW) before the index metadata. `Auto` is resolved before saving. Loading
+restores the routing type, storage mode, rotation state, and padded dimension.
+Raw files also contain the original vectors, so querying does not require an external dataset.
+
+Version-1 `RABQIDX1` files remain readable with their stored padding. Legacy
+unversioned quantized files and raw v1 files retain their original 64-dimension
+padding. All three historical formats infer routing with the original 20,000
+cluster threshold. HNSW routing still requires the accompanying `.hnsw` file.
+Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded
+legacy index writes the new header without changing its padded dimension or encoded data. Older library
+versions cannot read the new format.
+
+## Implementation details
+
+### Construction
+
+During construction, we process clusters in parallel, rotate their centroids and
+vectors, and compute one-bit codes and factors. Quantized mode also computes
+`total_bits - 1` extra-bit codes and factors; raw mode stores the original
+float32 vectors instead. In raw mode, the index owns a copy of the input, so
+the original data can be released after construction.
+
+Construction reuses a rotation buffer of at most 32 vectors per worker. This
+temporary storage uses at most `workers * 32 * padded_dim * sizeof(float)` bytes,
+independently of cluster sizes.
+
+New indexes pad the rotated dimension to a multiple of 32 for every supported
+bit width, including raw mode (32). This applies to both rotator types.
+Extra-bit layouts retain full 64-coordinate blocks and store any final
+32-coordinate tail compactly.
+
+### Data layout
+
+IVF stores the following data:
+
+```c++
+[batch data]    // 1-bit code and factors
+[ex_data]       // code for remaining bits, or original float32 vectors
+[ids]           // PID of vectors (organized by clusters)
+[cluster_lst]   // List of clusters' metadata in IVF
+```
+In raw mode, `ex_data` holds `4 * num_points * dim` bytes in cluster order,
+without padding or extra-bit factors. The one-bit filtering codes and factors
+are additional storage. `nbits()` (Python `nbits`) reports 32 in raw mode;
+the one-bit filtering code is not included in that value.
+
+### Search algorithm
+
+During search, we rotate the query and select the `nprobe` closest centroids.
+FastScan filters candidates using one-bit codes, then reranking uses either the
+remaining quantized bits or the stored raw vectors. Raw reranking computes
+squared L2 or `1 - dot(query, vector)` in the original coordinates; the search
+API is unchanged. Cluster selection and filtering remain approximate in both
+modes. Search returns the top `k` results after scanning the selected clusters.

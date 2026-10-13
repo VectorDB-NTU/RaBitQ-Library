@@ -227,7 +227,9 @@ static bool try_find_best_scale_by_interval_search(
     double t_start,
     double t_end,
     Evaluator evaluator,
-    double& best_t
+    double& best_t,
+    double* magnitudes = nullptr,
+    double* reciprocals = nullptr
 ) {
     if (dim == 0 || max_code == 0) {
         best_t = t_start;
@@ -241,9 +243,11 @@ static bool try_find_best_scale_by_interval_search(
     // Promote float inputs exactly once and cache 1/a_i for repeated candidate
     // evaluations. The thread-local buffers are reused across vectors; each
     // call overwrites its active prefix. Zero reciprocals are masked by evaluators.
-    auto& scratch = get_thread_local_rescale_scratch(dim);
-    auto& magnitudes = scratch.magnitudes;
-    auto& reciprocals = scratch.reciprocals;
+    if (magnitudes == nullptr) {
+        auto& scratch = get_thread_local_rescale_scratch(dim);
+        magnitudes = scratch.magnitudes.data();
+        reciprocals = scratch.reciprocals.data();
+    }
     for (size_t i = 0; i < dim; ++i) {
         magnitudes[i] = static_cast<double>(input[i]);
         reciprocals[i] = input[i] > 0 ? 1.0 / magnitudes[i] : 0;
@@ -270,9 +274,7 @@ static bool try_find_best_scale_by_interval_search(
         if (evaluations == kEvaluationBudget)
             return false;
         ++evaluations;
-        result.state = evaluator(
-            magnitudes.data(), reciprocals.data(), dim, max_code, t_start, t_end, t
-        );
+        result.state = evaluator(magnitudes, reciprocals, dim, max_code, t_start, t_end, t);
         // A valid evaluator must return a plateau containing the requested t.
         // Every t in that plateau produces the same codes and score.
         if (result.state.first > t || result.state.next <= t)

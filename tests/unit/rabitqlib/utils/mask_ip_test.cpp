@@ -7,7 +7,7 @@
 #include <cstring>
 #include <vector>
 
-#include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 

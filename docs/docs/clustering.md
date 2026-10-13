@@ -5,8 +5,7 @@ centroid means from the original float32 data, accumulate in float64, and requir
 no external clustering package. Choose the class explicitly; neither switches
 algorithms based on the cluster count.
 
-Both classes require RaBitQ Library 0.5.0 or newer; see
-[installation options](quick_start.md#install).
+For installation, see [Quick start](quick_start.md#install).
 
 ## Choose a method
 
@@ -36,6 +35,9 @@ final_obj = kmeans.final_obj
 `x` has shape `(n, d)` and is converted to a C-contiguous float32 array.
 
 ## C++
+
+Clustering belongs to `rabitqlib::index`, including the flat RaBitQ method.
+Link that target; a core-only installation does not include clustering headers.
 
 ```cpp
 #include <rabitqlib/clustering/rabitqkmeans.hpp>
@@ -77,7 +79,7 @@ Set Python keyword arguments or fields of the corresponding C++ parameter type:
 | --- | --- | --- |
 | `niter` | `25` | Maximum clustering iterations. |
 | `early_stop_threshold` | `0.0` | Stop from iteration 2 when the absolute relative objective change is at most this value; range `[0, 1]`. Zero stops only on an unchanged objective. |
-| `num_threads` | `0` | Use detected available logical CPUs; positive requests are capped at that count. See [threading](quick_start.md#threading-and-file-paths). |
+| `num_threads` | `0` | Use detected available logical CPUs; positive requests are capped at that count. See [threading](index/usage.md#threading-and-file-paths). |
 | `spherical` | `false` | Normalize centroids and assign by inner product; input must already be normalized. |
 | `seed` | `42` | Seed for centroid selection and rotation. |
 | `min_points_per_centroid` | `39` | Warn below this training-points-per-centroid ratio when verbose. |
@@ -166,11 +168,11 @@ possible winners in float64; ties select the smallest centroid index. Returned
 distances remain float32. Work is proportional to `n * k * d`; large coordinate
 offsets or near ties can require more refinement.
 
-## Compare with FAISS
+## Compare with Faiss
 
 The [comparison script](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/python/compare_with_faiss.py)
 compares both methods with FAISS and requires `faiss-cpu`. Defaults are one
-million 256-dimensional vectors, 4,000 centroids, and up to 25 iterations.
+million 500-dimensional vectors, 4,000 centroids, and up to 25 iterations.
 Load data with `--input data.npy`, or `--input data.bin --d D` for raw row-major
 float32 data. Choose a thread count within the available hardware limit.
 
@@ -180,8 +182,9 @@ python sample/python/compare_with_faiss.py --threads 48
 
 All three methods receive the same full dataset, iteration limit, cluster count,
 thread budget, and seed values; FAISS subsampling is disabled. This command runs
-four fits per method with rotating order. Different initializers mean identical
-seeds need not produce identical centroids.
+one fit per method with seed 42. Add `--repeats 4` for four fits per method with
+rotating order, or `--num-seeds N` to use consecutive seeds. Different initializers
+mean identical seeds need not produce identical centroids.
 
 Only `train()` is timed, including the library methods' default approximate
 final assignment. The script reports actual iterations, timing medians/ranges,

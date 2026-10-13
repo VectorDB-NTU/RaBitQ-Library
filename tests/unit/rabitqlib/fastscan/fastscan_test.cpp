@@ -11,15 +11,16 @@
 #include <stdexcept>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/fastscan/data_layout.hpp"
+#include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/detail/lut.hpp"
+#include "rabitqlib/fastscan/detail/simd.hpp"
+#include "rabitqlib/fastscan/encoder.hpp"
+#include "rabitqlib/fastscan/estimator.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
-#include "rabitqlib/index/estimator.hpp"
-#include "rabitqlib/index/lut.hpp"
-#include "rabitqlib/index/query.hpp"
-#include "rabitqlib/quantization/data_layout.hpp"
-#include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/simd/estimator_dispatch.hpp"
-#include "rabitqlib/simd/fastscan_dispatch.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/fastscan/query.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace rabitqlib::fastscan {
@@ -95,6 +96,74 @@ TEST(FastScanLutTest, EverySupportedBackendMatchesOrderedSubsetSumsExactly) {
         check_lut_subset_sums<float>(simd::pack_lut_avx512);
     }
 #endif
+}
+
+TEST(FastScanLutTest, ResetOwnsBytesAndReusesStorageWithoutRetainingScratch) {
+    constexpr size_t kDim = 64;
+    std::array<float, kDim> query{};
+    for (size_t i = 0; i < kDim; ++i)
+        query[i] = static_cast<float>(i % 17) - 8;
+    for (bool hacc : {false, true}) {
+        Lut<float> reused;
+        std::vector<uint8_t> expected;
+        const size_t bytes = kDim * 4 * (hacc ? 2 : 1);
+        {
+            std::array<float, kDim * 4> scratch{};
+            std::array<uint16_t, kDim * 4> hacc_scratch{};
+            reused.reset(query.data(), kDim, scratch.data(), hacc_scratch.data(), hacc);
+            expected.assign(reused.lut(), reused.lut() + bytes);
+            const auto* storage = reused.lut();
+            reused.reset(query.data(), kDim, scratch.data(), hacc_scratch.data(), hacc);
+            EXPECT_EQ(reused.lut(), storage);
+            scratch.fill(-1234);
+            hacc_scratch.fill(0xFFFF);
+        }
+        EXPECT_TRUE(std::equal(expected.begin(), expected.end(), reused.lut()));
+        const Lut<float> fresh(query.data(), kDim, hacc);
+        EXPECT_TRUE(std::equal(expected.begin(), expected.end(), fresh.lut()));
+        EXPECT_EQ(reused.delta(), fresh.delta());
+        EXPECT_EQ(reused.sum_vl(), fresh.sum_vl());
+    }
+}
+
+TEST(FastScanLutTest, RejectedResetPreservesOwnedBytesAndFactors) {
+    std::array<float, 64> query{};
+    query.fill(1);
+    std::array<float, 256> scratch{};
+    Lut<float> lut(query.data(), query.size());
+    const std::vector<uint8_t> bytes(lut.lut(), lut.lut() + 256);
+    const float delta = lut.delta(), sum = lut.sum_vl();
+    const auto* storage = lut.lut();
+    EXPECT_THROW(lut.reset(nullptr, 64, scratch.data()), std::invalid_argument);
+    EXPECT_THROW(lut.reset(query.data(), 64, nullptr), std::invalid_argument);
+    EXPECT_THROW(lut.reset(query.data(), 15, scratch.data()), std::invalid_argument);
+    EXPECT_THROW(
+        lut.reset(query.data(), 64, scratch.data(), nullptr, true), std::invalid_argument
+    );
+    const size_t oversized = std::numeric_limits<size_t>::max() & ~size_t{15};
+    EXPECT_THROW(lut.reset(query.data(), oversized, scratch.data()), std::length_error);
+    EXPECT_EQ(lut.lut(), storage);
+    EXPECT_TRUE(std::equal(bytes.begin(), bytes.end(), lut.lut()));
+    EXPECT_EQ(lut.delta(), delta);
+    EXPECT_EQ(lut.sum_vl(), sum);
+}
+
+TEST(BatchEstimatorTest, RejectedQueryResetPreservesMetricAndCorrections) {
+    std::array<float, 32> values{};
+    values.fill(1);
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        BatchQuery<float> query(values.data(), values.size(), metric);
+        const auto other_metric = metric == METRIC_L2 ? METRIC_IP : METRIC_L2;
+        try {
+            query.reset(values.data(), values.size(), nullptr, other_metric);
+            FAIL() << "Null scratch must be rejected";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(error.what(), "Lut::reset requires query and LUT scratch");
+        }
+        query.set_g_add(9);
+        EXPECT_EQ(query.g_add(), metric == METRIC_L2 ? 9 : 8);
+        EXPECT_EQ(query.k1xsumq(), -16.0F);
+    }
 }
 
 TEST(FastScanPackingTest, MatchesBitReferenceIncludingTailsAndUnalignedBuffers) {
@@ -469,6 +538,31 @@ TEST(BatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
         }
     }
 }
+
+#if defined(__x86_64__) || defined(_M_X64)
+TEST(BatchEstimatorTest, Avx512RejectsInvalidDimensionsBeforeReadingBuffers) {
+    if (!cpu::has_avx512_core()) {
+        GTEST_SKIP() << "AVX-512 is unavailable";
+    }
+    const std::array<float, 32> values{};
+    const SplitBatchQuery<float> split_query(values.data(), values.size(), 3);
+    const BatchQuery<float> query;
+    for (size_t dim : {0U, 15U, 17U}) {
+        for (bool hacc : {false, true}) {
+            EXPECT_THROW(
+                rabitqlib::simd::split_batch_estdist_avx512(
+                    nullptr, split_query, dim, nullptr, nullptr, nullptr, hacc
+                ),
+                std::invalid_argument
+            );
+        }
+        EXPECT_THROW(
+            rabitqlib::simd::qg_batch_estdist_avx512(nullptr, query, dim, nullptr),
+            std::invalid_argument
+        );
+    }
+}
+#endif
 
 TEST(BatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTailBatches) {
     using Estimator = decltype(&rabitqlib::simd::split_batch_estdist);

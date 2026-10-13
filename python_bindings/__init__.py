@@ -1,7 +1,7 @@
 """Python bindings for RaBitQLib indexes and clustering.
 
-This module re-exports symbols from the compiled `rabitqlib` extension
-so code can import using `from python_bindings import ...` if needed.
+The installed ``rabitqlib`` package loads its compiled ``._rabitqlib`` extension
+and adds the clustering wrappers. Import public classes from ``rabitqlib``.
 """
 
 from ._rabitqlib import (

@@ -15,23 +15,68 @@ factors estimate L2 distance or inner product.
 
 | Path | Responsibility |
 | --- | --- |
-| `include/rabitqlib/quantization/` | Encoding, packing, reconstruction, and byte layouts |
-| `include/rabitqlib/fastscan/` | FastScan interfaces and high-accuracy scanning |
+| `include/rabitqlib/core/api.hpp` | Stable float32 v1 API; code/factors separate, caller workspace, source compatibility |
+| `include/rabitqlib/core/` | Per-vector encoding, query/estimation, rotation and per-vector byte layouts |
+| `include/rabitqlib/fastscan/` | All 32-vector batch layouts, encoding adapters, packing, LUT/estimation and FastScan/HACC |
+| `include/rabitqlib/core/types.hpp`, `core/detail/eigen.hpp` | Numerical configuration/types and internal Eigen aliases, respectively |
+| `include/rabitqlib/index/types.hpp` | Point IDs and ANN candidate values; no Eigen dependency |
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
-| `include/rabitqlib/index/{query,estimator}.hpp` | Query state and distance estimation |
-| `include/rabitqlib/simd/`, `src/simd/` | Kernel declarations, implementations, and dispatch |
-| `src/index/` | Compiled SymphonyQG implementation, HNSW search kernels, and IVF candidate insertion |
+| `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
+| `src/core/` | Compiled stable core v1 API implementation |
+| `src/simd/` | Core kernels, dispatch, and the private shared resolver |
+| `src/fastscan/` | FastScan kernels, batch estimators, and paired backend selection |
+| `src/index/` | Compiled IVF/HNSW/SymphonyQG operations and private search kernels |
 | `src/utils/cpu_features.cpp` | Generic CPU feature detection |
-| `include/rabitqlib/utils/` | Rotation, allocation, buffers, I/O, and helpers |
+| `include/rabitqlib/utils/` | Shared allocation, I/O and numerical helpers; index buffers live in `index/detail/` |
 | `python_bindings/` | pybind11 extension and index wrappers |
 | `sample/cpp/`, `sample/python/` | Usage examples |
-| `tests/unit/`, `tests/integration/`, `tests/python/` | C++ and Python tests |
+| `tests/unit/`, `tests/python/` | C++ reference/unit tests and Python boundary/integration tests |
 | `docs/docs/` | MkDocs site sources |
 
 See [README.md](README.md) for usage, [DEVELOPMENT.md](DEVELOPMENT.md) for tool setup and
 [implementation recipes](DEVELOPMENT.md#implementation-recipes), and
 [tests/README.md](tests/README.md) for build and test commands.
+
+CMake exposes `rabitqlib::core`, `rabitqlib::fastscan` (depending on core), and
+`rabitqlib::index` (depending on FastScan). The old `rabitqlib::rabitqlib` target and
+forwarding header paths have been removed in the 0.7.0 breaking refactor.
+Optional Python bindings expose the build-tree MODULE alias
+`rabitqlib::python` and keep `import rabitqlib`. For pure core, disable both
+`RABITQ_BUILD_INDEX` and `RABITQ_BUILD_FASTSCAN`. Canonical core headers must not include
+FastScan or index headers; canonical FastScan headers must not include index headers.
+Install only enabled components and their required header dependencies. Do not restore
+umbrella targets/forwarders to bypass migration failures. Shared index scheduling belongs
+in `index/detail/parallel_for.hpp`; HNSW must not import IVF to access this utility.
+The former `defines.hpp` is removed: include metric, scalar-quantizer, Eigen or index
+types explicitly. Core must not expose ANN IDs/candidates or QG batch adapters.
+`BatchDataMap`, `QGBatchDataMap`, their encoders and batch packing/permutation belong
+to FastScan, including their uses from IVF, clustering and SymphonyQG. Core must not
+declare `fastscan::` functions/constants or embed these layouts. Generic unaligned
+value/array access lives in `utils/packed.hpp`. `exact_nn` belongs to
+`index/detail/exact_nn.hpp`.
+See [the migration contract](docs/docs/modular_migration.md).
+
+IVF/HNSW/SymphonyQG public index headers must not import encoding, scoring, rotator
+implementation, search scratch, Eigen, or hnswlib headers. Their non-template operations
+live in `src/index/{ivf,hnsw,qg}.cpp`;
+HNSW's per-ISA search template definitions live in `src/index/hnsw_search_impl.hpp`.
+Keep lightweight numerical values in `core/types.hpp` and IVF initializer choices in
+`index/ivf/types.hpp`. Preserve the explicit advanced `hnsw_quant.hpp` query-cache header.
+
+Core/FastScan support `RABITQ_USE_OPENMP=OFF`; ANN/Python require ON. The option defaults
+to ON and is exported to consumers. Optional numerical OpenMP use must include
+`utils/openmp.hpp` and guard both runtime calls and pragmas. Disabled builds use serial
+helpers and their installed package must neither find nor link OpenMP. The standalone
+core benchmark lives in `benchmarks/core/` and links only core.
+
+The v1 contract is documented in [Stable Core API](docs/docs/rabitq/core_api.md).
+Keep `tests/fixtures/core_api_v1/consumer.cpp` unchanged when extending v1; add tests
+instead of editing away compatibility failures. Changes to v1 names, signatures,
+aggregate fields, enum values, buffer/code semantics or allocation guarantees require
+an explicit API-major decision. The stable header must not expose Eigen, record maps,
+ANN or ISA-specific types. Keep the existing algorithm and exact fallback authoritative;
+workspace APIs must never silently fall back to heap allocation or spawn worker threads.
 
 ## Required working boundaries
 
@@ -112,13 +157,18 @@ Recommended:
 
 - Public/generic code calls centralized dispatch entry points. Keep ISA-specific translation units
   and their flags in `CMakeLists.txt` synchronized with feature predicates in
-  `src/simd/dispatch.cpp` and detection in `src/utils/cpu_features.cpp`, including HNSW source groups.
+  `src/simd/dispatch.cpp`, `src/fastscan/fastscan_dispatch.cpp`, `src/index/hnsw_dispatch.cpp` and detection in
+  `src/utils/cpu_features.cpp`, including HNSW source groups.
   ARM64 builds must exclude all x86 ISA source groups; ARM kernels use portable AArch64
   NEON intrinsics.
-- Use the shared resolver in `src/simd/dispatch.cpp` for cached selection, including HNSW.
+- Use the private shared resolver in `src/simd/dispatch_resolver.hpp` for cached selection.
+  Core dispatch lives in `src/simd/dispatch.cpp`; batch scoring dispatch lives in
+  `src/fastscan/fastscan_dispatch.cpp`; HNSW dispatch lives in
+  `src/index/hnsw_dispatch.cpp` so core never references index search symbols.
   Keep calculations in backend source files; see the dispatch coverage table in
   [DEVELOPMENT.md](DEVELOPMENT.md#dispatch-conventions-and-coverage).
-- Dispatch resolves function pointers during static initialization. Detection must use safe generic
+- Dispatch caches function pointers in thread-safe function-local statics so calls before `main()`
+  are safe regardless of translation-unit initialization order. Detection must use safe generic
   code; never execute a high-ISA kernel to find out whether the CPU supports it.
 - Semantic kernel changes must cover every implementation and a backend-independent reference
   test, including dimensions around vector-width/packing boundaries and supported bit widths.

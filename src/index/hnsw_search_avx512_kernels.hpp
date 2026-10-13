@@ -4,8 +4,8 @@
 #include <cstdint>
 
 #include "../simd/warmup_kernels.hpp"
-#include "rabitqlib/index/query.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/query.hpp"
 
 namespace rabitqlib::hnsw::detail {
 

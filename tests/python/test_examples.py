@@ -138,17 +138,27 @@ def test_query_timing_handles_unchanged_clock(kind, elapsed, monkeypatch, capsys
 
     # Wall-clock timestamps can be identical for a short search on Windows.
     monkeypatch.setattr(module, "time", lambda: 100.0, raising=False)
-    ticks = iter([100.0, 100.0 + elapsed])
+    ticks = iter([100.0, 100.0 + elapsed] * 2)
     monkeypatch.setattr(module, "perf_counter", lambda: next(ticks), raising=False)
     monkeypatch.setattr(module, "NPROBES" if kind == "ivf" else "EFS", [1])
     ids = np.array([[0], [1]], dtype=np.uint32)
-    index = SimpleNamespace(
-        dim=2, num_clusters=2, search=lambda *a, **kw: (ids, np.zeros((2, 1)))
-    )
+    queries = np.arange(6, dtype=np.float32).reshape(2, 3)[:, 1:]
+    assert not queries.flags.c_contiguous
+    searched = []
+
+    def search(prepared, *args, **kwargs):
+        assert prepared.flags.c_contiguous
+        np.testing.assert_array_equal(prepared, queries)
+        if searched:
+            assert prepared is searched[0]
+        searched.append(prepared)
+        return ids, np.zeros((2, 1))
+
+    index = SimpleNamespace(dim=2, num_clusters=2, search=search)
     index.search_batch = index.search
     index_name = {"ivf": "IvfIndex", "hnsw": "HnswIndex", "symqg": "SymqgIndex"}[kind]
     monkeypatch.setattr(module, index_name, SimpleNamespace(load=lambda path: index))
-    monkeypatch.setattr(module, "read_fvecs", lambda path: np.zeros((2, 2)))
+    monkeypatch.setattr(module, "read_fvecs", lambda path: queries)
     monkeypatch.setattr(module, "read_ivecs", lambda path: ids)
     module.main(
         SimpleNamespace(
@@ -156,12 +166,13 @@ def test_query_timing_handles_unchanged_clock(kind, elapsed, monkeypatch, capsys
             query_file="queries",
             gt_file="truth",
             topk=1,
-            test_rounds=1,
+            test_rounds=2,
             num_threads=1,
             metric="l2",
             use_hacc=None,
         )
     )
+    assert len(searched) == 2
     row = capsys.readouterr().out.splitlines()[-1].split()
     qps, recall = map(float, row[1:])
     if elapsed == 0:

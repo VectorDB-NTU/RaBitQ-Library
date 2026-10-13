@@ -18,9 +18,11 @@ This overview follows zvec commit
 Its [bundled dependency][dependency] includes local patches for lookup-table
 reuse and SIMD error handling; check the pinned version before adapting its code.
 
-To integrate RaBitQ-Library, start with the [quantizer](../rabitq/quantizer.md)
-and [estimator](../rabitq/estimator.md) guides. For a complete standalone index,
-see the [quick start](../quick_start.md).
+For a new per-vector integration, start with the
+[stable core API v1](../rabitq/core_api.md#minimal-example). For FastScan or existing
+record layouts like those used here, consult the advanced
+[quantizer](../rabitq/quantizer.md) and [estimator](../rabitq/estimator.md) references.
+For a complete standalone index, see the [quick start](../quick_start.md).
 
 [ivf-reformer]: https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/src/core/algorithm/ivf_rabitq/ivf_rabitq_reformer.cc
 [ivf-entity]: https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/src/core/algorithm/ivf_rabitq/ivf_rabitq_entity.cc

@@ -1,4 +1,4 @@
-#include "rabitqlib/utils/visited_set.hpp"
+#include "rabitqlib/index/detail/visited_set.hpp"
 
 #include <gtest/gtest.h>
 
@@ -7,9 +7,14 @@
 #include <cstdint>
 #include <random>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
-#include "rabitqlib/utils/hashset.hpp"
+#include "rabitqlib/index/detail/hashset.hpp"
+#include "rabitqlib/index/detail/visited_pool.hpp"
+#include "rabitqlib/index/detail/visited_set_epoch.hpp"
+#include "rabitqlib/index/detail/visited_set_hash.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace {
 
@@ -27,6 +32,20 @@ static_assert(
     std::is_same_v<HashBasedBooleanSet, HashBasedVisitedSet>,
     "HashBasedBooleanSet must remain available as a compatibility alias"
 );
+
+TEST(VisitedListPoolTest, TransfersOwnershipAndClearsReusedStorage) {
+    rabitqlib::VisitedListPool pool(1, 64);
+    auto visited = pool.get_free_vislist();
+    auto* storage = visited.get();
+    visited->set(7);
+    pool.release_vis_list(std::move(visited));
+    EXPECT_EQ(visited, nullptr);
+    auto reused = pool.get_free_vislist();
+    EXPECT_EQ(reused.get(), storage);
+    EXPECT_FALSE(reused->get(7));
+    auto another = pool.get_free_vislist();
+    EXPECT_NE(another.get(), reused.get());
+}
 
 template <typename Set>
 void expect_basic_visited_set_behavior() {

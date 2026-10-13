@@ -70,7 +70,9 @@ def test_flat_native_centroids_before_training_raise():
         _ = model.centroids
 
 
-@pytest.mark.parametrize("clusters", [1, 2, 16, 31, 32, 33, 65])
+# C++ owns the complete cluster-count/batch-tail matrix. Python retains the
+# single-cluster path, a partial second batch, both modes and mutable-parameter refit.
+@pytest.mark.parametrize("clusters", [1, 33])
 @pytest.mark.parametrize("spherical", [False, True])
 @pytest.mark.parametrize("exact", [False, True])
 def test_flat_train_refit_and_return_exact_selected_distances(

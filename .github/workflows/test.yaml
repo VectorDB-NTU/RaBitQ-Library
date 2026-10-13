@@ -254,6 +254,48 @@ jobs:
       - name: Test downstream consumer
         run: ctest --test-dir build-consumer --output-on-failure
 
+  core-consumer:
+    name: Core and FastScan consumers (${{ matrix.os }}, OpenMP ${{ matrix.openmp }})
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15, windows-2025-vs2026]
+        openmp: ["ON", "OFF"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Apple OpenMP
+        if: runner.os == 'macOS' && matrix.openmp == 'ON'
+        run: brew install libomp
+      - name: Test external core-only integrations (Linux)
+        if: runner.os == 'Linux'
+        run: >-
+          cmake -DRABITQ_SOURCE_DIR="$PWD"
+          -DWORK_DIR="$RUNNER_TEMP/rabitq-core"
+          -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -P tests/core_consumer/run.cmake
+      - name: Test external core-only integrations (macOS)
+        if: runner.os == 'macOS'
+        run: >-
+          cmake -DRABITQ_SOURCE_DIR="$PWD"
+          -DWORK_DIR="$RUNNER_TEMP/rabitq-core"
+          -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -DOpenMP_ROOT="$(brew --prefix)/opt/libomp"
+          -P tests/core_consumer/run.cmake
+      - name: Test external core-only integrations (Windows)
+        if: runner.os == 'Windows'
+        env:
+          CMAKE_GENERATOR: Visual Studio 18 2026
+          CMAKE_GENERATOR_PLATFORM: x64
+        run: >-
+          cmake "-DRABITQ_SOURCE_DIR=$PWD"
+          "-DWORK_DIR=$env:RUNNER_TEMP/rabitq-core"
+          -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -P tests/core_consumer/run.cmake
+
   linux-arm64:
     name: Native Linux ARM64 C++
     needs: changes

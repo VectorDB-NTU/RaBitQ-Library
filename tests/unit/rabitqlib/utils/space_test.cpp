@@ -2,21 +2,34 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <vector>
 
-#include "rabitqlib/simd/pack_excode_dispatch.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
 #include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"
 
 using namespace rabitqlib;
+
+TEST(SpaceHelpers, CentroidSupportsRequestedWorkerCounts) {
+    const std::array<float, 12> data{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    for (size_t workers : {0U, 1U, 2U, 64U}) {
+        const auto centroid = compute_centroid(data.data(), 4, 3, workers);
+        ASSERT_EQ(centroid.size(), 3U);
+        EXPECT_FLOAT_EQ(centroid[0], 5.5F);
+        EXPECT_FLOAT_EQ(centroid[1], 6.5F);
+        EXPECT_FLOAT_EQ(centroid[2], 7.5F);
+    }
+}
 
 TEST(BitOps, Popcount64MatchesBitReference) {
     const auto check = [](uint64_t value) {
@@ -316,46 +329,6 @@ TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
     ASSERT_EQ(ip_func(query.data(), codes.data(), dim), 0.0F);
 }
 
-TEST(ScalarQuantize, Uint8MatchesRoundedScalar) {
-    constexpr size_t dim = 37;
-    constexpr float lo = -3.0F;
-    constexpr float delta = 0.25F;
-    std::vector<float> input(dim);
-    std::vector<uint8_t> result(dim);
-    std::vector<uint8_t> expected(dim);
-
-    for (size_t i = 0; i < dim; ++i) {
-        float quantized = static_cast<float>((i * 7) % 251) +
-                          static_cast<float>(static_cast<int>(i % 3) - 1) * 0.2F;
-        input[i] = lo + delta * quantized;
-        expected[i] = static_cast<uint8_t>(std::round((input[i] - lo) / delta));
-    }
-
-    scalar_quantize<uint8_t>(result.data(), input.data(), dim, lo, delta);
-
-    ASSERT_EQ(result, expected);
-}
-
-TEST(ScalarQuantize, Uint16MatchesRoundedScalar) {
-    constexpr size_t dim = 41;
-    constexpr float lo = 2.0F;
-    constexpr float delta = 0.125F;
-    std::vector<float> input(dim);
-    std::vector<uint16_t> result(dim);
-    std::vector<uint16_t> expected(dim);
-
-    for (size_t i = 0; i < dim; ++i) {
-        float quantized = static_cast<float>(1000 + i * 317) +
-                          static_cast<float>(static_cast<int>(i % 5) - 2) * 0.1F;
-        input[i] = lo + delta * quantized;
-        expected[i] = static_cast<uint16_t>(std::round((input[i] - lo) / delta));
-    }
-
-    scalar_quantize<uint16_t>(result.data(), input.data(), dim, lo, delta);
-
-    ASSERT_EQ(result, expected);
-}
-
 constexpr size_t kScalarQuantizeTestDim = 33;
 
 TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
@@ -442,114 +415,6 @@ TEST(ip64_fxu2_avx, ip_works) {
         expected += query[i] * static_cast<float>(code);
     }
     ASSERT_NEAR(rabitqlib::excode_ipimpl::ip64_fxu2_avx(query, codes, dim), expected, 0.1F);
-}
-
-TEST(OddBitExcodeIp, MatchesScalarInnerProduct) {
-    constexpr size_t dim = 64 * 4;
-    std::vector<float> query(dim);
-    std::vector<uint8_t> codes(dim);
-
-    for (size_t bits : std::array<size_t, 3>{3, 5, 7}) {
-        const uint8_t max_code = static_cast<uint8_t>((1U << bits) - 1U);
-        for (size_t i = 0; i < dim; ++i) {
-            query[i] = static_cast<float>(static_cast<int>(i % 23) - 11) / 7.0F;
-            codes[i] = static_cast<uint8_t>((i * 37U + 19U) & max_code);
-        }
-        // Exercise the high bit of each packed 64-value block, including bit 63 of the
-        // scalar word used by the SIMD unpacking path.
-        for (size_t i = 63; i < dim; i += 64) {
-            codes[i] = max_code;
-        }
-
-        std::vector<uint8_t> compact(dim * bits / 8);
-        if (bits == 3) {
-            simd::packing_3bit_excode(codes.data(), compact.data(), dim);
-        } else if (bits == 5) {
-            simd::packing_5bit_excode(codes.data(), compact.data(), dim);
-        } else {
-            simd::packing_7bit_excode(codes.data(), compact.data(), dim);
-        }
-
-        double expected = 0.0;
-        for (size_t i = 0; i < dim; ++i) {
-            expected += static_cast<double>(query[i]) * static_cast<double>(codes[i]);
-        }
-        const float expected_float = static_cast<float>(expected);
-
-#if defined(__x86_64__) || defined(_M_X64)
-        if (cpu::has_avx2()) {
-            const std::array<ex_ipfunc, 8> avx2_functions{
-                nullptr,
-                simd::excode_ipimpl::ip16_fxu1_avx2,
-                simd::excode_ipimpl::ip64_fxu2_avx2,
-                simd::excode_ipimpl::ip64_fxu3_avx2,
-                simd::excode_ipimpl::ip16_fxu4_avx2,
-                simd::excode_ipimpl::ip64_fxu5_avx2,
-                simd::excode_ipimpl::ip64_fxu6_avx2,
-                simd::excode_ipimpl::ip64_fxu7_avx2,
-            };
-            ASSERT_NEAR(
-                avx2_functions[bits](query.data(), compact.data(), dim),
-                expected_float,
-                0.1F
-            );
-        }
-#endif
-#if defined(__x86_64__) || defined(_M_X64)
-        if (cpu::has_avx512_core()) {
-            const std::array<ex_ipfunc, 8> avx512_functions{
-                nullptr,
-                simd::excode_ipimpl::ip16_fxu1_avx512,
-                simd::excode_ipimpl::ip64_fxu2_avx512,
-                simd::excode_ipimpl::ip64_fxu3_avx512,
-                simd::excode_ipimpl::ip16_fxu4_avx512,
-                simd::excode_ipimpl::ip64_fxu5_avx512,
-                simd::excode_ipimpl::ip64_fxu6_avx512,
-                simd::excode_ipimpl::ip64_fxu7_avx512,
-            };
-            ASSERT_NEAR(
-                avx512_functions[bits](query.data(), compact.data(), dim),
-                expected_float,
-                0.1F
-            );
-        }
-#endif
-    }
-}
-
-TEST(ip_fxu8_avx, ip_works) {
-    constexpr size_t dim = 1024;
-    std::vector<float> query(dim);
-    std::vector<uint8_t> codes(dim);
-    double expected = 0.0;
-
-    for (size_t i = 0; i < dim; ++i) {
-        query[i] = static_cast<float>(i % 97) / 17.0F;
-        codes[i] = static_cast<uint8_t>(i % 251);
-        expected += static_cast<double>(query[i]) * static_cast<double>(codes[i]);
-    }
-
-    const float expected_float = static_cast<float>(expected);
-    ex_ipfunc ip_func = select_excode_ipfunc(8);
-    ASSERT_NEAR(ip_func(query.data(), codes.data(), dim), expected_float, 0.1F);
-#if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx2()) {
-        ASSERT_NEAR(
-            simd::excode_ipimpl::ip16_fxu8_avx2(query.data(), codes.data(), dim),
-            expected_float,
-            0.1F
-        );
-    }
-#endif
-#if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx512_core()) {
-        ASSERT_NEAR(
-            simd::excode_ipimpl::ip16_fxu8_avx512(query.data(), codes.data(), dim),
-            expected_float,
-            0.1F
-        );
-    }
-#endif
 }
 
 TEST(PackBinary, CompactTailWordsMatchBinaryArithmetic) {

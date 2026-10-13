@@ -1,6 +1,7 @@
 #include <cstddef>
+#include <cstdint>
 
-#include "rabitqlib/simd/matrix_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
 
 #define RABITQ_MATRIX_EIGEN_NAMESPACE rabitqlib_eigen_avx512
 #include "matrix_kernels.hpp"

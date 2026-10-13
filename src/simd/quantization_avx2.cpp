@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <limits>
 
-#include "rabitqlib/simd/quantization_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/quantization_dispatch.hpp"
 #include "rabitqlib/utils/bitops.hpp"
 #include "rescale_search.hpp"
 namespace rabitqlib::simd::detail {
@@ -161,6 +161,30 @@ double best_rescale_factor_avx2(
                end,
                detail::evaluate_scale_state_avx2,
                best_t
+           )
+               ? best_t
+               : -1;
+}
+double best_rescale_factor_with_workspace_avx2(
+    const float* magnitudes,
+    size_t dim,
+    int max_code,
+    double start,
+    double end,
+    double* promoted,
+    double* reciprocals
+) {
+    double best_t = 0;
+    return detail::try_find_best_scale_by_interval_search(
+               magnitudes,
+               dim,
+               max_code,
+               start,
+               end,
+               detail::evaluate_scale_state_avx2,
+               best_t,
+               promoted,
+               reciprocals
            )
                ? best_t
                : -1;

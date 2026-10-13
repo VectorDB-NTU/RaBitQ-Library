@@ -20,10 +20,10 @@
 #include <utility>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/simd/matrix_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
-#include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
@@ -304,15 +304,17 @@ class LloydKMeans : public Parameters {
         std::vector<size_t> cluster_sizes(k);
         std::vector<double> sums(centroids.size());
         const size_t update_workers = std::min(k, static_cast<size_t>(threads));
-        std::vector<std::vector<size_t>> update_point_bins(update_workers);
+        std::vector<UpdatePartition> update_partitions(update_workers);
         std::vector<size_t> update_worker_for_cluster(k);
         for (size_t worker = 0; worker < update_workers; ++worker) {
-            const size_t first_cluster = k * worker / update_workers;
-            const size_t last_cluster = k * (worker + 1) / update_workers;
-            for (size_t cluster = first_cluster; cluster < last_cluster; ++cluster) {
+            auto& partition = update_partitions[worker];
+            partition.first_cluster = k * worker / update_workers;
+            partition.last_cluster = k * (worker + 1) / update_workers;
+            for (size_t cluster = partition.first_cluster; cluster < partition.last_cluster;
+                 ++cluster) {
                 update_worker_for_cluster[cluster] = worker;
             }
-            update_point_bins[worker].reserve(n / update_workers);
+            partition.points.reserve(n / update_workers);
         }
         double previous_obj = std::numeric_limits<double>::infinity();
 
@@ -323,10 +325,8 @@ class LloydKMeans : public Parameters {
             previous_centroids.swap(centroids);
 
             const double obj = std::accumulate(distances.begin(), distances.end(), 0.0);
-            std::fill(sums.begin(), sums.end(), 0.0);
-            std::fill(cluster_sizes.begin(), cluster_sizes.end(), size_t{0});
             update_centroids(
-                x, n, sums, cluster_sizes, update_point_bins, update_worker_for_cluster
+                x, n, sums, cluster_sizes, update_partitions, update_worker_for_cluster
             );
             const auto [nsplit, shift] =
                 consolidate_centroids(x, n, sums, cluster_sizes, previous_centroids);
@@ -379,6 +379,12 @@ class LloydKMeans : public Parameters {
     double final_obj = 0.0;
 
    private:
+    struct UpdatePartition {
+        size_t first_cluster;
+        size_t last_cluster;  // Exclusive; also bounds the accumulators we clear.
+        std::vector<size_t> points;
+    };
+
     void validate_parameters() const {
         if (d == 0 || k == 0 || niter == 0) {
             throw std::invalid_argument(
@@ -429,27 +435,39 @@ class LloydKMeans : public Parameters {
         size_t n,
         std::vector<double>& sums,
         std::vector<size_t>& cluster_sizes,
-        std::vector<std::vector<size_t>>& point_bins,
+        std::vector<UpdatePartition>& partitions,
         const std::vector<size_t>& worker_for_cluster
     ) {
-        for (auto& bin : point_bins) {
-            bin.clear();
+        for (auto& partition : partitions) {
+            partition.points.clear();
         }
         // Keep point order within each cluster, preserving the original sums.
         for (size_t point = 0; point < n; ++point) {
-            point_bins[worker_for_cluster[assignments[point]]].push_back(point);
+            partitions[worker_for_cluster[assignments[point]]].points.push_back(point);
         }
         const uint32_t threads = effective_num_threads();
         static_cast<void>(threads);
 #pragma omp parallel for num_threads(threads) schedule(static)
         for (std::ptrdiff_t loop_worker = 0;
-             loop_worker < static_cast<std::ptrdiff_t>(point_bins.size());
+             loop_worker < static_cast<std::ptrdiff_t>(partitions.size());
              ++loop_worker) {
-            const size_t worker = static_cast<size_t>(loop_worker);
+            const auto& partition = partitions[static_cast<size_t>(loop_worker)];
+            // The same interval defines point ownership and accumulator clearing,
+            // including empty clusters, independently of the physical thread team.
+            const size_t first_cluster = partition.first_cluster;
+            const size_t last_cluster = partition.last_cluster;
+            std::fill_n(
+                sums.data() + first_cluster * d, (last_cluster - first_cluster) * d, 0.0
+            );
+            std::fill_n(
+                cluster_sizes.data() + first_cluster,
+                last_cluster - first_cluster,
+                size_t{0}
+            );
             simd::accumulate_cluster_sums(
                 x,
-                point_bins[worker].data(),
-                point_bins[worker].size(),
+                partition.points.data(),
+                partition.points.size(),
                 d,
                 assignments.data(),
                 sums.data(),
@@ -507,6 +525,16 @@ class LloydKMeans : public Parameters {
             return {0, shift};
         }
 
+        const auto replace_empty_centroid = [&](size_t cluster, size_t point) {
+            std::copy_n(x + point * d, d, centroids.data() + cluster * d);
+            if (spherical) {
+                normalize_centroid(centroids.data() + cluster * d);
+            }
+            --cluster_sizes[assignments[point]];
+            cluster_sizes[cluster] = 1;
+            shift += cluster_shift(cluster);
+        };
+
         // Reuse the distance buffer after recording the pre-update objective.
         // Keep populated means intact and give unused centroids poorly fitted
         // training points. Unlike coordinate perturbations, this also works at zero.
@@ -550,13 +578,7 @@ class LloydKMeans : public Parameters {
                 std::find(cluster_sizes.begin(), cluster_sizes.end(), size_t{0}) -
                 cluster_sizes.begin()
             );
-            std::copy_n(x + point * d, d, centroids.data() + cluster * d);
-            if (spherical) {
-                normalize_centroid(centroids.data() + cluster * d);
-            }
-            --cluster_sizes[assignments[point]];
-            cluster_sizes[cluster] = 1;
-            shift += cluster_shift(cluster);
+            replace_empty_centroid(cluster, point);
             return {1, shift};
         }
 
@@ -580,13 +602,7 @@ class LloydKMeans : public Parameters {
                 std::pop_heap(candidates.begin(), candidates.end(), less);
                 candidates.pop_back();
             } while (cluster_sizes[assignments[point]] <= 1);
-            std::copy_n(x + point * d, d, centroids.data() + cluster * d);
-            if (spherical) {
-                normalize_centroid(centroids.data() + cluster * d);
-            }
-            --cluster_sizes[assignments[point]];
-            cluster_sizes[cluster] = 1;
-            shift += cluster_shift(cluster);
+            replace_empty_centroid(cluster, point);
         }
         return {nsplit, shift};
     }

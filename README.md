@@ -29,6 +29,9 @@
 
 ## News
 
+- **v0.7.0:** Modular C++ components, stable core API v1, optional
+  OpenMP for numerical components, and unified index counts. This documentation
+  targets 0.7.0; see the [upgrade notes](docs/docs/releases/0.7.0.md).
 - **v0.6.0:** Concurrent Python index searches, configurable IVF centroid routing,
   32-coordinate padding, and Eigen 5.0.1. See the
   [upgrade notes](docs/docs/releases/0.6.0.md).
@@ -40,47 +43,22 @@
 ## Install
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.6.0"
+python -m pip install --upgrade "rabitqlib>=0.7.0"
 ```
 
 Wheels cover the platforms above. x86-64 requires AVX2/FMA and optionally uses
-AVX-512; ARM64 uses NEON. See [platform requirements and source installation](docs/docs/quick_start.md#requirements).
+AVX-512; ARM64 uses NEON. See [platform requirements and source installation](docs/docs/installation.md#requirements).
 
 ## Python quick start
 
-Build and search a small IVF index using synthetic data:
+Follow the [complete Python quick start](docs/docs/quick_start.md) to build and
+search an IVF index, interpret its results, and save/load it using synthetic data.
+Native [clustering](docs/docs/clustering.md) needs no external k-means package.
 
-```python
-import numpy as np
-from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
-
-rng = np.random.default_rng(42)
-data = rng.standard_normal((500, 64)).astype(np.float32)
-queries = rng.standard_normal((5, 64)).astype(np.float32)
-
-clustering = RaBitQKMeans(
-    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
-)
-clustering.train(data)
-
-index = IvfIndex(
-    dim=64,
-    max_elements=len(data),
-    num_clusters=5,
-    nbits=4,
-    metric="l2",
-)
-index.build(data, clustering.centroids, clustering.assignments)
-
-ids, distances = index.search(queries, k=10, nprobe=5)
-print(ids.shape, distances.shape)  # (5, 10) (5, 10)
-print(ids[0])
-```
-
-See the [quick start](docs/docs/quick_start.md) for index updates and
-[Python examples](sample/python/README.md) for all three indexes. Native
-[clustering](docs/docs/clustering.md) needs no external k-means package.
-See [threading and save/load paths](docs/docs/quick_start.md#threading-and-file-paths)
+Then see the [IVF](docs/docs/index/ivf.md), [HNSW](docs/docs/index/hnsw.md), and
+[SymphonyQG](docs/docs/index/qg.md) guides, or the
+[dataset-based Python examples](sample/python/README.md).
+See [threading and save/load paths](docs/docs/index/usage.md#threading-and-file-paths)
 for runtime conventions.
 
 ## Choose the right building block
@@ -95,6 +73,22 @@ for runtime conventions.
 IVF and HNSW support adding and removing vectors; HNSW also supports explicit
 capacity resizing. See their guides for update costs and file compatibility.
 The library supports L2 and inner product; normalize vectors for cosine search.
+
+C++ systems with their own indexes can link `rabitqlib::core` for encoding,
+single-vector estimation and rotation, or `rabitqlib::fastscan` for batch scoring.
+Configure `RABITQ_BUILD_INDEX=OFF` to omit ANN implementations; also disable
+`RABITQ_BUILD_FASTSCAN` for pure core. Set `RABITQ_USE_OPENMP=OFF` for core/FastScan
+without an OpenMP dependency; ANN builds retain OpenMP. `rabitqlib::index`
+provides indexes and clustering. The 0.7.0 refactor removes the former
+`rabitqlib::rabitqlib` target and forwarding headers; see the
+[migration guide](docs/docs/modular_migration.md). Optional Python bindings retain
+`import rabitqlib`.
+For a source-stable, storage-neutral interface with caller-backed workspace, use
+[`rabitqlib/core/api.hpp`](docs/docs/rabitq/core_api.md). Its v1 entry points make no heap
+allocations on valid calls and keep code and factors separate.
+See [modular integration](docs/docs/cpp_integration.md#core-only-c-integration), the
+[core example](sample/cpp/core/) and [FastScan example](sample/cpp/fastscan/).
+The [core benchmark](benchmarks/core/README.md) runs independently of ANN and Python.
 
 ## Why RaBitQ?
 
@@ -180,11 +174,10 @@ another integration example.
 ## C++ quick start
 
 Requires CMake 3.20+, a C++17 compiler with OpenMP, and an x86-64 CPU with
-AVX2/FMA or an ARM64 CPU. Build the library and examples:
+AVX2/FMA or an ARM64 CPU. First [get the 0.7.0 source](docs/docs/installation.md#get-the-source),
+then build the library and examples from the repository root:
 
 ```bash
-git clone https://github.com/VectorDB-NTU/RaBitQ-Library.git
-cd RaBitQ-Library
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 ```
@@ -194,13 +187,15 @@ other CPUs. See [platform-specific build instructions](tests/README.md#prerequis
 
 ### Use RaBitQ-Library in another C++ project
 
-Add the repository as a submodule at `third_party/rabitqlib`, pin a release or
-commit, and link its CMake target:
+The component targets below are introduced in 0.7.0. Use a matching checkout,
+as described in the [migration guide](docs/docs/modular_migration.md). Add that
+checkout as a submodule at `third_party/rabitqlib`, pin its revision, and link the
+component you need:
 
 ```cmake
 set(RABITQ_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/rabitqlib)
-target_link_libraries(my_program PRIVATE rabitqlib::rabitqlib)
+target_link_libraries(my_program PRIVATE rabitqlib::index)
 ```
 
 The target propagates C++17, OpenMP, and required public-header definitions.
@@ -208,14 +203,16 @@ Optimization and native-tuning options apply only to RaBitQ's own targets;
 configure your application's optimization flags separately. Explicit sanitizer
 builds propagate instrumentation and runtime linkage for header compatibility.
 
-The C++ API and ABI are evolving; update the pinned revision deliberately.
-For installed packages, use `find_package(rabitqlib CONFIG REQUIRED)` and the
-same target. Both approaches require OpenMP.
+The [core v1 API](docs/docs/rabitq/core_api.md) has a source-compatibility contract;
+other C++ interfaces may evolve. No cross-version C++ binary ABI is promised, so
+rebuild consumers when updating the library. For an installed ANN package, use
+`find_package(rabitqlib CONFIG REQUIRED COMPONENTS index)` and the same target.
+ANN requires OpenMP; core/FastScan can be built with `RABITQ_USE_OPENMP=OFF`.
 
-See [submodule setup and version pinning](docs/docs/quick_start.md#use-in-another-c-project),
-[C++ installation](docs/docs/quick_start.md#install-the-c-library), and the
+See [submodule setup and version pinning](docs/docs/cpp_integration.md#use-in-another-c-project),
+[C++ installation](docs/docs/cpp_integration.md#install-the-c-library), and the
 [build and test guide](tests/README.md) for complete workflows.
-Examples: [C++ indexes and quantization](docs/docs/quick_start.md#c-examples).
+Examples: [C++ indexes and quantization](docs/docs/cpp_integration.md#c-examples).
 Benchmarks: [FAISS clustering comparison](docs/docs/clustering.md#compare-with-faiss)
 and [GIST workflow](example.sh).
 

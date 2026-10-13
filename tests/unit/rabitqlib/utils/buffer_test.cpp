@@ -1,4 +1,4 @@
-#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
 
 #include <gtest/gtest.h>
 
@@ -6,7 +6,7 @@
 #include <limits>
 #include <stdexcept>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::buffer {
 namespace {

@@ -1,28 +1,22 @@
 # RaBitQ
 
-The RaBitQ algorithm is a drop-in replacement of binary quantization and (uniform) scalar quantization, with its [1-bit version](https://arxiv.org/abs/2405.12497) (released in May 2024) and [multi-bit version](https://doi.org/10.1145/3725413) (published at SIGMOD 2025), respectively.
+RaBitQ is an alternative to binary and uniform scalar quantization. Its
+[one-bit](https://arxiv.org/abs/2405.12497) and
+[multi-bit](https://doi.org/10.1145/3725413) variants encode each padded coordinate
+with a low-bit unsigned integer and store per-vector factors for distance estimation.
 
-<!-- It provides significantly better accuracy under the same space budget and is theoretically proven to be asymptotically optimal.  -->
+## Workflow
 
-<!-- For a given input data vector $\mathbf{x}$ and a bit budget $B$, the RaBitQ algorithm outputs a code vector $\mathbf{x}_u$ and a rescaling factor $\Delta_x$ such that we can estimate similarity metrics based on the code vector $\mathbf{x}_u$ and the rescaling factor $\Delta_x$ as accurately as possible. -->
+1. **Rotate.** Apply the same sampled transformation to data, centroids and queries.
+   See [Rotation](rotator.md).
+2. **Encode.** Quantize each rotated data vector relative to its centroid.
+   See [Quantization](quantizer.md).
+3. **Estimate.** Combine the codes, factors and rotated query to estimate squared
+   L2 or inner-product distance (`1 - dot`). See [Estimation](estimator.md).
 
-The key advantages of RaBitQ include
+For cosine search, normalize data and queries before rotation and use inner product.
+The probabilistic error intervals can guide [reranking](reranking.md), but do not
+make approximate search exact. Recall depends on the data and search settings.
 
-- **High Accuracy with Tiny Space** - RaBitQ provides the state-of-the-art estimates under diverse space budgets. Its smallest representation uses a one-bit code per padded dimension plus per-vector factors.
-- **Fast Distance Estimation** - The implementation uses bitwise operations and, for batched scans in IVF and SymphonyQG, [FastScan](https://arxiv.org/abs/1704.07355).
-- **Theoretical Error Bound** - RaBitQ provides an asymptotically optimal error bound for the estimation of distances and inner product. The error bound can be used for reliable ordering and [reranking](reranking.md).
-
-
-## Workflow 
-
-The RaBitQ algorithm includes two steps:
-
-1. **Random Rotation** - Sample a random rotation and apply it to all vectors (including the raw data vectors, the center vector and the raw query vectors). See [Rotator](rotator.md) for more details.
-
-2. **Quantization** - After the random rotation, the quantization algorithm quantizes a vector of floating-point numbers into a vector of low-bit unsigned integers. See [Quantizer](quantizer.md) for more details.
-
-
-After quantization, the library supports Euclidean distance and inner product
-using the code vector $\mathbf{x}_u$ and its factors. Cosine similarity is
-obtained by normalizing data and query vectors before using inner-product
-search. See [Estimator](estimator.md) for details.
+For integration into your own storage, start with the [stable core API](core_api.md).
+For a complete index, start with the [Quick start](../quick_start.md).

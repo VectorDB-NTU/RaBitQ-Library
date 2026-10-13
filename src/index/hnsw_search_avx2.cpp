@@ -1,10 +1,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 #include "hnsw_search_avx2_kernels.hpp"
-#include "rabitqlib/defines.hpp"
+#include "hnsw_search_impl.hpp"  // IWYU pragma: keep (backend template definitions)
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::hnsw::detail {
 
@@ -27,10 +29,10 @@ struct HnswAvx2Kernel {
     }
 };
 
-maxheap<std::pair<float, PID>> search_knn_avx2(
+std::vector<std::pair<float, PID>> search_knn_sorted_avx2(
     HierarchicalNSW& index, const float* rotated_query, size_t topk, size_t ef
 ) {
-    return index.search_knn_direct<HnswAvx2Kernel>(
+    return index.search_knn_sorted_direct<HnswAvx2Kernel>(
         rotated_query, topk, ef == 0 ? index.ef_ : ef
     );
 }

@@ -5,11 +5,11 @@
 
 namespace rabitqlib::fastscan {
 /**
- * @brief Change u16 lookup table to u8. Since we use more bits (higher accuracy)
- * to quantize data vector by rabitq+, we also needs to increase the accuracy of data in
- * lut.
- * We split the higher & lower 8 bits of a u16 into two sub luts.
- **/
+ * @brief Store a 16-bit query LUT as low/high byte planes for HACC.
+ * Input contains dim * 4 uint16_t entries; output needs dim * 8 bytes.
+ * The runtime-selected backend determines the byte-plane layout. Pair this
+ * dispatched producer with accumulate_hacc rather than assuming an ISA layout.
+ */
 void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 
 // Accumulate one batch into int32_t results. Throws if a result exceeds int32_t.

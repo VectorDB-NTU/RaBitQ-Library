@@ -4,8 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
-#include <random>
-#include <vector>
+#include <cstddef>
 
 namespace rabitq_test {
 

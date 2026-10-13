@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "rabitqlib/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 
@@ -113,8 +113,9 @@ void check_transpose(
 TEST(QueryPreparation, QuantizationMatchesHalfAwayRoundingAndTails) {
     check_quantization(simd::scalar_quantize_uint8_generic);
     check_quantization(simd::scalar_quantize_uint16_generic);
-    check_quantization(simd::scalar_quantize_uint8);
-    check_quantization(simd::scalar_quantize_uint16);
+    // Exercise the public templates as well as the kernels they dispatch to.
+    check_quantization(scalar_quantize<uint8_t, float>);
+    check_quantization(scalar_quantize<uint16_t, float>);
 #if defined(__aarch64__) || defined(_M_ARM64)
     if (cpu::has_neon()) {
         check_quantization(simd::scalar_quantize_uint8_neon);

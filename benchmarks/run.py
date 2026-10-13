@@ -55,7 +55,7 @@ def read_matrix(path, limit=None):
     matrix = np.memmap(path, dtype="<i4", mode="r", shape=(rows, dim + 1))
     if not np.all(matrix[:count, 0] == dim):
         raise ValueError(f"inconsistent vector dimensions in {path}")
-    return np.ascontiguousarray(matrix[:count, 1:]).copy(), rows
+    return np.array(matrix[:count, 1:], copy=True, order="C"), rows
 
 
 def load_vectors(path, limit=None):

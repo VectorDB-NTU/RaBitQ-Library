@@ -12,17 +12,18 @@
 #include <stdexcept>
 #include <vector>
 
-#include "rabitqlib/clustering/detail/kmeans.hpp"
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/clustering/detail/kmeans.hpp"  // IWYU pragma: export
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/visited_set.hpp"
+#include "rabitqlib/index/symqg/detail/search_scratch.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
-#include "rabitqlib/utils/buffer.hpp"
-#include "rabitqlib/utils/rotator.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
-#include "rabitqlib/utils/visited_set.hpp"
 
 namespace rabitqlib::qgkmeans {
 
@@ -61,6 +62,63 @@ struct QGKMeansParameters {
     uint32_t quantization_bits = 0;
 };
 
+namespace detail {
+
+// One training call owns the storage; the public assign adapter can instead
+// borrow caller storage for one batch. State is read-only while workers run.
+class QuerySumCache {
+    enum class State { Disabled, Pending, Ready };
+    State state_ = State::Disabled;
+    std::vector<float> storage_;
+    float* values_ = nullptr;
+
+   public:
+    QuerySumCache(size_t padded_dim, const QGKMeansParameters& parameters) {
+        if (padded_dim >= 1024 &&
+            (parameters.niter > 1 ||
+             parameters.final_assignment != FinalAssignmentMode::Exact)) {
+            state_ = State::Pending;
+        }
+    }
+
+    QuerySumCache(float* values, bool ready) : values_(values) {
+        if (values != nullptr) {
+            state_ = ready ? State::Ready : State::Pending;
+        }
+    }
+
+    QuerySumCache(const QuerySumCache&) = delete;
+    QuerySumCache& operator=(const QuerySumCache&) = delete;
+
+    // Called after centroid initialization releases its point permutation.
+    // Training keeps n and the input/rotation fixed throughout this lifetime.
+    void prepare(size_t n) {
+        if (state_ == State::Pending && values_ == nullptr) {
+            storage_.resize(n);
+            values_ = storage_.data();
+        }
+    }
+
+    [[nodiscard]] const float* cached(size_t i) const {
+        return state_ == State::Ready ? values_ + i : nullptr;
+    }
+
+    void store(size_t i, float value) const {
+        if (state_ == State::Pending) {
+            values_[i] = value;
+        }
+    }
+
+    // Commit only after every worker and the assignment's state update succeed.
+    void complete() {
+        if (state_ == State::Pending) {
+            state_ = State::Ready;
+        }
+    }
+};
+
+}  // namespace detail
+
 /**
  * Builds a SymphonyQG over a fixed number of centroids and assigns vectors to
  * them. The graph allocation and per-thread search scratch are reused between
@@ -68,23 +126,6 @@ struct QGKMeansParameters {
  */
 class QGAssigner {
     friend class detail::QGAssignment;
-
-   private:
-    struct ThreadScratch {
-        std::vector<float> rotated_query;
-        std::vector<float> estimated_distances;
-        std::vector<float> lookup_table;
-        BatchQuery<float> batch_query;
-        buffer::SearchBuffer<float> search_pool;
-        buffer::SearchBuffer<float> result_pool;
-
-        ThreadScratch(size_t padded_dim, size_t M, size_t ef_search)
-            : rotated_query(padded_dim)
-            , estimated_distances(M)
-            , lookup_table(padded_dim << 2)
-            , search_pool(ef_search)
-            , result_pool(1) {}
-    };
 
    public:
     QGAssigner(
@@ -117,9 +158,9 @@ class QGAssigner {
 
         scratch_.reserve(num_threads_);
         for (uint32_t thread = 0; thread < num_threads_; ++thread) {
-            scratch_.emplace_back(
-                std::make_unique<ThreadScratch>(graph_->padded_dim(), M_, ef_search_)
-            );
+            scratch_.emplace_back(std::make_unique<symqg::detail::SearchScratch>(
+                graph_->padded_dim(), M_, ef_search_, 1
+            ));
         }
     }
 
@@ -134,6 +175,21 @@ class QGAssigner {
         float* query_sums = nullptr,
         bool sums_ready = false
     ) {
+        detail::QuerySumCache cache(query_sums, sums_ready);
+        assign_with_cache(centroids, x, n, labels, distances, cache);
+    }
+
+    void clear_hints() { previous_labels_.clear(); }
+
+   private:
+    void assign_with_cache(
+        const float* centroids,
+        const float* x,
+        size_t n,
+        PID* labels,
+        float* distances,
+        detail::QuerySumCache& query_sums
+    ) {
         if (centroids == nullptr || x == nullptr || labels == nullptr ||
             distances == nullptr) {
             throw std::invalid_argument(
@@ -145,7 +201,6 @@ class QGAssigner {
             throw std::invalid_argument("QGAssigner input dimensions overflow ptrdiff_t");
         }
 
-        sums_ready = query_sums != nullptr && sums_ready;
         if (builder_) {
             builder_->reset(centroids);
         } else {
@@ -200,7 +255,7 @@ class QGAssigner {
                 continue;
             }
             try {
-                ThreadScratch& scratch = *scratch_[static_cast<size_t>(thread_id)];
+                auto& scratch = *scratch_[static_cast<size_t>(thread_id)];
                 // Keep visited storage with the worker, as in QuantizedGraph::search.
                 thread_local VisitedSet visited;
                 thread_local size_t visited_size = 0;
@@ -214,24 +269,17 @@ class QGAssigner {
                 }
                 const PID hint =
                     previous_labels_.size() == n ? previous_labels_[i] : kPidMax;
-                graph_->search_with_scratch(
+                symqg::detail::search_with_workspace(
+                    *graph_,
                     x + i * d_,
                     1,
                     labels + i,
                     distances + i,
-                    scratch.rotated_query.data(),
-                    scratch.estimated_distances.data(),
-                    scratch.lookup_table.data(),
-                    scratch.batch_query,
-                    scratch.search_pool,
-                    scratch.result_pool,
-                    visited,
+                    scratch.view(visited),
                     hint,
-                    sums_ready ? query_sums + i : nullptr
+                    query_sums.cached(i)
                 );
-                if (query_sums != nullptr && !sums_ready) {
-                    query_sums[i] = scratch.batch_query.k1xsumq();
-                }
+                query_sums.store(i, scratch.batch_query.k1xsumq());
                 if (graph_->is_quantized()) {
                     // Keep objectives and returned distances relative to the original
                     // centroids; graph search scores are quantized estimates.
@@ -250,11 +298,9 @@ class QGAssigner {
         }
 
         previous_labels_.assign(labels, labels + n);
+        query_sums.complete();
     }
 
-    void clear_hints() { previous_labels_.clear(); }
-
-   private:
     void validate_configuration() const {
         if (num_threads_ > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
             throw std::invalid_argument("QGAssigner num_threads must fit in an OpenMP int");
@@ -292,7 +338,7 @@ class QGAssigner {
     uint32_t seed_;
     std::unique_ptr<symqg::QuantizedGraph<float>> graph_;
     std::unique_ptr<symqg::QGBuilder> builder_;
-    std::vector<std::unique_ptr<ThreadScratch>> scratch_;
+    std::vector<std::unique_ptr<symqg::detail::SearchScratch>> scratch_;
     std::vector<PID> previous_labels_;
 };
 
@@ -307,9 +353,7 @@ class QGAssignment {
     MetricType metric_type_;
     bool quantized_;
     QGAssigner assigner_;
-    bool cache_query_sums_;
-    std::vector<float> query_sums_;
-    bool query_sums_ready_ = false;
+    QuerySumCache query_sums_;
 
    public:
     static constexpr const char* kName = "QGKMeans";
@@ -347,31 +391,15 @@ class QGAssignment {
               metric_type_,
               cp.quantization_bits
           )
-        // Inputs and the assigner's rotator are immutable for this training call.
-        , cache_query_sums_(
-              assigner_.graph_->padded_dim() >= 1024 &&
-              (cp.niter > 1 || cp.final_assignment != FinalAssignmentMode::Exact)
-          ) {}
+        , query_sums_(assigner_.graph_->padded_dim(), cp) {}
 
     void assign(const float* centroids, PID* labels, float* distances, bool final = false) {
-        if (cache_query_sums_ && query_sums_.empty()) {
-            // Allocate after centroid initialization releases its point permutation.
-            query_sums_.resize(n_);
-        }
+        query_sums_.prepare(n_);
         std::vector<PID> previous_labels;
         if (final && quantized_) {
             previous_labels.assign(labels, labels + n_);
         }
-        assigner_.assign(
-            centroids,
-            x_,
-            n_,
-            labels,
-            distances,
-            query_sums_.empty() ? nullptr : query_sums_.data(),
-            query_sums_ready_
-        );
-        query_sums_ready_ = true;
+        assigner_.assign_with_cache(centroids, x_, n_, labels, distances, query_sums_);
         if (previous_labels.empty()) {
             return;
         }

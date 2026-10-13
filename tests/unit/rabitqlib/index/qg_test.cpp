@@ -16,7 +16,6 @@
 #include <ios>
 #include <limits>
 #include <memory>
-#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -24,21 +23,25 @@
 #include <utility>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
-#include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/index/estimator.hpp"
-#include "rabitqlib/index/lut.hpp"
-#include "rabitqlib/index/query.hpp"
+#include "rabitqlib/core/data_layout.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/fastscan/data_layout.hpp"
+#include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/detail/lut.hpp"
+#include "rabitqlib/fastscan/encoder.hpp"
+#include "rabitqlib/fastscan/estimator.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
+#include "rabitqlib/index/detail/exact_nn.hpp"
+#include "rabitqlib/index/detail/visited_set.hpp"
 #include "rabitqlib/index/symqg/detail/pipnn.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
-#include "rabitqlib/quantization/data_layout.hpp"
-#include "rabitqlib/quantization/rabitq.hpp"
-#include "rabitqlib/simd/estimator_dispatch.hpp"
-#include "rabitqlib/utils/buffer.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
-#include "rabitqlib/utils/rotator.hpp"
 #include "rabitqlib/utils/space.hpp"
-#include "rabitqlib/utils/visited_set.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
@@ -47,14 +50,9 @@ struct QGConstructionTestAccess {
         graph.initialize();
     }
     static float build_distance(QGBuilder& builder, PID source_id, PID target_id) {
-        std::vector<float> reconstructed;
-        std::optional<QuantizedQuery> prepared;
-        const float* source = builder.qg_.prepare_build_query(
-            source_id, reconstructed, prepared, builder.build_cache()
-        );
-        return builder.qg_.point_distance(
-            source, prepared ? &*prepared : nullptr, target_id
-        );
+        QGBuilder::BuildQuery query(builder.qg_, builder.build_cache());
+        query.reset(source_id);
+        return query.distance_to(target_id);
     }
     static CandidateList probe_pruned_edges(
         QGBuilder& builder,
@@ -114,7 +112,7 @@ struct QGConstructionTestAccess {
         }
         builder.new_neighbors_[0] = current;
         builder.pruned_neighbors_[0] = pruned;
-        builder.graph_refine();
+        builder.complete_degrees();
         const auto& actual = builder.new_neighbors_[0];
         EXPECT_EQ(actual.size(), expected.size());
         for (size_t i = 0; i < std::min(actual.size(), expected.size()); ++i) {
@@ -130,13 +128,13 @@ struct QGConstructionTestAccess {
 
     static void disconnect(QuantizedGraph<float>& graph) {
         for (PID i = 0; i < 66; ++i) {
-            std::vector<AnnCandidate<float>> row;
+            std::vector<PID> row;
             for (PID j = (i / 33) * 33; j < (i / 33 + 1) * 33; ++j) {
                 if (i != j) {
-                    row.emplace_back(j, 0.0F);
+                    row.push_back(j);
                 }
             }
-            graph.update_qg(i, row);
+            update(graph, i, row);
         }
     }
 
@@ -214,18 +212,17 @@ struct QGConstructionTestAccess {
     static void retain_seed_scores(QGBuilder& builder) {
         auto& graph = builder.qg_;
         for (PID i = 0; i < builder.num_nodes_; ++i) {
-            std::vector<float> reconstructed;
-            std::optional<QuantizedQuery> prepared;
-            const float* source = graph.prepare_build_query(i, reconstructed, prepared);
+            QGBuilder::BuildQuery query(graph);
+            query.reset(i);
             for (size_t j = 0; j < builder.degrees_[i]; ++j) {
                 const PID id = graph.get_neighbors(i)[j];
-                builder.new_neighbors_[i].emplace_back(
-                    id, graph.point_distance(source, prepared ? &*prepared : nullptr, id)
-                );
+                builder.new_neighbors_[i].emplace_back(id, query.distance_to(id));
             }
         }
     }
-    static void search(QGBuilder& builder) { builder.search_new_neighbors(false); }
+    static void search(QGBuilder& builder) {
+        builder.search_new_neighbors(/*record_pruned=*/false);
+    }
     static auto encoded_neighbors(const QuantizedGraph<float>& graph, PID id) {
         return graph.get_neighbors(id);
     }
@@ -240,11 +237,20 @@ struct QGConstructionTestAccess {
         graph.copy_vectors(data, threads);
     }
     static void update(
-        QuantizedGraph<float>& graph,
-        PID source,
-        const std::vector<AnnCandidate<float>>& neighbors
+        QuantizedGraph<float>& graph, PID source, const std::vector<PID>& neighbors
     ) {
-        graph.update_qg(source, neighbors);
+        const size_t dim = graph.padded_dim_;
+        std::vector<float> rotated((neighbors.size() + 1) * dim);
+        QGBuilder::BuildQuery query(graph);
+        for (size_t i = 0; i < neighbors.size(); ++i) {
+            query.reset(neighbors[i]);
+            std::copy_n(query.rotated_query(), dim, rotated.data() + i * dim);
+        }
+        query.reset(source);
+        std::copy_n(query.rotated_query(), dim, rotated.data() + neighbors.size() * dim);
+        graph.encode_neighbors(
+            source, neighbors, rotated.data(), rotated.data() + neighbors.size() * dim
+        );
     }
     static void fill_batch_factors(QuantizedGraph<float>& graph, PID source, float value) {
         QGBatchDataMap<float> batch(graph.get_batch_data(source), graph.padded_dim_);
@@ -999,8 +1005,16 @@ TEST(QGConstructionTest, SupportsExplicitRandomInitialization) {
     builder.build();
     EXPECT_FLOAT_EQ(builder.avg_degree(), 32);
     EXPECT_FALSE(builder.check_dup());
+    graph.set_ef(64);
+    std::array<PID, 4> before{}, after{};
+    std::array<float, 4> before_distances{}, after_distances{};
+    graph.search(data.data(), 4, before.data(), before_distances.data());
     EXPECT_THROW(builder.build(0), std::invalid_argument);
     EXPECT_THROW(builder.build(1), std::invalid_argument);
+    // Rejected pass counts must not invalidate an already searchable graph.
+    graph.search(data.data(), 4, after.data(), after_distances.data());
+    EXPECT_EQ(before, after);
+    EXPECT_EQ(before_distances, after_distances);
     EXPECT_THROW(
         (QGBuilder(graph, 64, data.data(), 1, static_cast<QGInitialization>(255))),
         std::invalid_argument
@@ -1045,9 +1059,7 @@ TEST(QGConstructionTest, InitializesUnusedPartialBatchFactors) {
     QGConstructionTestAccess::fill_batch_factors(
         graph, 0, std::numeric_limits<float>::quiet_NaN()
     );
-    std::vector<AnnCandidate<float>> neighbors;
-    neighbors.emplace_back(1, 0.0F);
-    QGConstructionTestAccess::update(graph, 0, neighbors);
+    QGConstructionTestAccess::update(graph, 0, {1});
 
     const auto active = QGConstructionTestAccess::batch_factors(graph, 0, 0);
     EXPECT_TRUE(std::isfinite(active.first));

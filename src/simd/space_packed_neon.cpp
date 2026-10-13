@@ -4,8 +4,8 @@
 #include <cstdint>
 
 #include "hnsw_neon_kernels.hpp"
-#include "rabitqlib/simd/space_dispatch.hpp"
-#include "rabitqlib/simd/warmup_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
 
 namespace rabitqlib::simd {
 namespace {

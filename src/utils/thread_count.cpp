@@ -1,11 +1,10 @@
-#include <omp.h>
-
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <thread>
 #include <vector>
 
+#include "rabitqlib/utils/openmp.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
 #if defined(__linux__)
@@ -15,7 +14,7 @@
 namespace rabitqlib {
 
 size_t total_threads() {
-#if defined(_OPENMP) && _OPENMP >= 201511
+#if RABITQ_USE_OPENMP && defined(_OPENMP) && _OPENMP >= 201511
     if (omp_get_proc_bind() != omp_proc_bind_false && omp_get_num_places() > 0) {
         // The runtime may pin the caller to one place. Count its whole partition,
         // including overlapping places only once, rather than that single mask.
@@ -33,7 +32,7 @@ size_t total_threads() {
             return cpus.size();
         }
     }
-#elif defined(_OPENMP) && _OPENMP >= 201307
+#elif RABITQ_USE_OPENMP && defined(_OPENMP) && _OPENMP >= 201307
     if (omp_get_proc_bind() != omp_proc_bind_false) {
         // OpenMP 4.0 has binding but no place-partition query routines.
         const int count = omp_get_num_procs();

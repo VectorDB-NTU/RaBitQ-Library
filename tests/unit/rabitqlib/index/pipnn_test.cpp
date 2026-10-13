@@ -11,7 +11,9 @@
 #include <stdexcept>
 #include <vector>
 
-#include "rabitqlib/defines.hpp"
+#include "pipnn_internal.hpp"
+#include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::symqg::detail {

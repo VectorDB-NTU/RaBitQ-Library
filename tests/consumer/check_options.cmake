@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 include("${OPTIONS_FILE}")
 
 # Only public-header requirements may add compiler options. Sanitizer builds
-# intentionally propagate instrumentation to keep Eigen allocation consistent.
+# intentionally propagate instrumentation across the library/consumer boundary.
 # Catch optimization, architecture and warnings leaking through any level of
 # the target graph, including installed exports.
 set(required_options ${openmp_options})
@@ -23,6 +23,11 @@ endforeach()
 if(NOT "cxx_std_17" IN_LIST consumer_features)
     message(FATAL_ERROR "The package must propagate its C++17 requirement")
 endif()
+foreach(definition IN ITEMS EIGEN_MAX_ALIGN_BYTES=64 EIGEN_MAX_STATIC_ALIGN_BYTES=64)
+    if(NOT definition IN_LIST consumer_definitions)
+        message(FATAL_ERROR "Missing Eigen ABI definition: ${definition}")
+    endif()
+endforeach()
 if(expect_msvc)
     foreach(definition IN ITEMS __restrict__=__restrict EIGEN_DONT_VECTORIZE)
         if(NOT definition IN_LIST consumer_definitions)

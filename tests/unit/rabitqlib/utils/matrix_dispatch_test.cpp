@@ -1,4 +1,4 @@
-#include "rabitqlib/simd/matrix_dispatch.hpp"
+#include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
 
 #include <gtest/gtest.h>
 

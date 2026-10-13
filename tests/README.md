@@ -17,6 +17,9 @@ and rejection of truncated or unsupported formats.
 - Git and network access during the first configuration so CMake can download
   GoogleTest 1.14.0
 
+OpenMP is optional for core/FastScan tests: configure `RABITQ_BUILD_INDEX=OFF` and
+`RABITQ_USE_OPENMP=OFF`. ANN/Python testing retains the full prerequisites above.
+
 On Windows, install Visual Studio 2026 with the Desktop development with C++
 workload. Use MSVC for all C++ targets, including SIMD kernels.
 
@@ -194,13 +197,107 @@ and an installed sanitizer build. Native tuning retains its existing default
 native-compiled library portable. Consumers choose their own optimization
 flags, including for inline code in the public headers.
 
+## Core-only CMake package tests
+
+Configure with `RABITQ_BUILD_INDEX=OFF`, `RABITQ_BUILD_FASTSCAN=OFF` and
+`RABITQ_BUILD_TESTS=ON` to run core references without batch-scoring or index sources.
+Enable FastScan with indexes disabled to add the batch-scoring references. The full configuration
+continues to run all tests, including index, clustering, persistence and allocation failures.
+
+The external consumer runner copies its CMake project and the standalone core example
+to separate working directories, then tests both core and FastScan with
+`add_subdirectory`, local-source `FetchContent`, and relocated installed packages.
+It also runs each producer's reference tests (downloading the existing GoogleTest dependency). Pass absolute paths:
+
+```text
+cmake -DRABITQ_SOURCE_DIR=<checkout> -DWORK_DIR=<external-working-directory> -P tests/core_consumer/run.cmake
+```
+
+On macOS, also pass `-DOpenMP_ROOT=<OpenMP-prefix>`. On Windows, set
+`CMAKE_GENERATOR=Visual Studio 18 2026` and `CMAKE_GENERATOR_PLATFORM=x64` in the
+environment. The runner builds Release with two jobs and disables native tuning.
+It compiles module headers with higher-module headers deliberately made unavailable,
+checks that retired targets and disabled component headers are absent, and compiles every
+installed first-party header independently. It checks actual compilation
+units with generators supporting compilation databases,
+and both archive and executable symbols when a non-MSVC `nm` is available. It also
+checks that core-only Python, indexes without FastScan, and missing required
+FastScan/index components fail configuration.
+CI runs this workflow on Linux x86-64, Linux ARM64, macOS ARM64 and Windows x86-64.
+
+Core and FastScan consumption must also work from a full installation; the standalone
+`sample/cpp/core` and `sample/cpp/fastscan` projects test their respective targets. The original
+`tests/consumer` exercises `rabitqlib::index` and checks that HNSW headers compile with
+the IVF initializer header deliberately unavailable and index value types compile with
+Eigen deliberately unavailable. Numerical consumers forbid the removed `defines.hpp`.
+All FastScan batch layout/encoding coverage lives under `unit/rabitqlib/fastscan/`;
+index ID and nearest-neighbor helper coverage lives under `unit/rabitqlib/index/`.
+`CoreModuleBoundary` also rejects format-specific declarations/constants in core and
+numerical utilities, complementing include-path and symbol checks.
+Frozen persistence fixture tooling
+still targets its pinned historical release and is not migrated to current targets.
+
+## Stable core API conformance and allocations
+
+Run the external consumer workflow with `-DRABITQ_USE_OPENMP=OFF` to additionally
+forbid OpenMP package discovery, poison `omp.h` in consumer include paths and check
+for runtime symbols/compiler flags. The default ON workflow is also retained. Both
+variants compile and execute the installed standalone core benchmark smoke tests.
+CI covers both choices on its existing platform matrix; local results do not imply
+that remote jobs have already passed.
+
+The normal suite includes `CoreApi.*`, the frozen `CoreApiV1Consumer`, and separate
+`core_api_no_alloc_dispatch` / `core_api_no_alloc_scalar` processes. The latter force
+and count cold-call encoding, layout conversion, query preparation and estimation;
+Linux additionally wraps malloc/calloc/realloc/aligned allocation. The scalar process
+substitutes CPU predicates so the exact event heap cannot be skipped by SIMD success.
+
+The external module runner also builds the unchanged v1 consumer for each integration
+method. Its stable header is tested with Eigen and record-layout headers deliberately
+unavailable. The suite is independent of ANN targets and remains enabled in pure core.
+See [the fixture policy](fixtures/core_api_v1/README.md).
+
 ## Test structure
 
 - `unit/`: C++ index, quantization, FastScan, and utility tests
-- `integration/`: packing compatibility tests
 - `common/`: shared C++ test utilities
 - `python/`: Python binding tests and persistence fixtures
 - `consumer/`: installed CMake package test
 
-CMake discovers `*_test.cpp` under `unit/` and `integration/`. Python and
+CMake discovers `*_test.cpp` under `unit/`. Python and
 consumer tests run separately using the commands above.
+
+## Coverage ownership and test size
+
+C++ reference tests own exhaustive bit-width, SIMD, packing, rounding and algorithm
+boundary matrices. Python tests own NumPy conversions, argument/default forwarding,
+returned arrays, GIL/access guards and representative end-to-end index operations.
+Keep a Python construction/search/persistence case for every exported storage width and
+both metrics, but do not cross every width with every original dimension and initializer.
+
+`test_portable_indexes.py` separates supported storage from representative padded-domain
+boundaries. IVF mutation/batching/routing matrices use sign-only, extra-bit and raw-vector
+storage; full width coverage remains in the corresponding C++ reference tests. The
+SymphonyQG batch test checks both Python names on one built index per storage/metric pair,
+including strided/empty queries and bitwise distance equality.
+
+Do not trim frozen compatibility fixtures, independent numerical oracles, failure
+injection or concurrency tests just because their inputs resemble another test's inputs.
+Preserve public wrapper calls when consolidating lower-level tests; a backend-only test
+does not validate wrapper dispatch. Parameter combinations should correspond to a distinct
+branch or regression, not multiply unrelated axes by default. Keep the existing CI entry
+points and platform-specific checks.
+
+## Initialization and construction-failure regressions
+
+`CoreStaticInitialization` calls the stable core API from a namespace-scope
+initializer before `main()`. It also runs in the external numerical consumer
+workflow. `ModulesStaticInitialization` covers the enabled FastScan/index dispatch
+entry points in the same setting.
+
+`construction_failure_test` isolates allocation replacement from the normal suite.
+It checks OpenMP construction errors with one/four requested threads and, on Linux,
+wraps C allocations to sweep HNSW constructor failures and verify ownership. Run
+these under ASan/UBSan as well as Release; do not disable allocator-mismatch checking.
+`compact_codes_failure_test` covers cold scratch allocation and growth failures in
+serial and OpenMP encoding, including the public FastScan batch entry points.

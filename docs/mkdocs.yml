@@ -8,19 +8,25 @@ copyright: Copyright &copy; VectorDB Group, Nanyang Technological University
 
 nav:
   - Home: index.md
-  - Quick Start: quick_start.md
-  - Release Notes:
+  - Quick start: quick_start.md
+  - Installation: installation.md
+  - C++ Integration: cpp_integration.md
+  - Release notes:
+      - "0.7.0": releases/0.7.0.md
       - "0.6.0": releases/0.6.0.md
   - RaBitQ:
       - Overview: rabitq/rabitq.md
       - Rotation: rabitq/rotator.md
       - Quantization: rabitq/quantizer.md
+      - Stable core API: rabitq/core_api.md
+      - Modular migration: modular_migration.md
       - Estimation: rabitq/estimator.md
       - Reranking: rabitq/reranking.md
       - Kernels:
-          - Compact Code Storage: compact_code.md
-          - Inner Product: kernel_ip.md
-  - Vector Search:
+          - Compact code storage: compact_code.md
+          - Inner product: kernel_ip.md
+  - Vector search:
+      - Shared contracts: index/usage.md
       - IVF RaBitQ: index/ivf.md
       - HNSW RaBitQ: index/hnsw.md
       - SymphonyQG: index/qg.md
@@ -29,28 +35,29 @@ nav:
   - Clustering: clustering.md
   - Benchmarks:
       - Overview: benchmarks/bench.md
-      - IVF Indexes: benchmarks/ivf.md
-      - Graph Indexes: benchmarks/graphs.md
+      - IVF indexes: benchmarks/ivf.md
+      - Graph indexes: benchmarks/graphs.md
       - K-means: benchmarks/kmeans.md
 
 theme:
   name: material
   language: en
+  font: false
   icon:
     logo: material/vector-polygon
     repo: fontawesome/brands/github
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: deep purple
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: deep purple
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode

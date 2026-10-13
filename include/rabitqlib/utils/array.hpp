@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <fstream>
 #include <limits>
@@ -108,18 +109,40 @@ class Array {
         , dims_{std::move(other.dims_)}
         , allocator_{std::move(other.allocator_)} {}
 
-    Array& operator=(Array&& other) noexcept {
+    // Unequal, non-propagating allocators require allocation and may throw.
+    // NOLINTBEGIN(performance-noexcept-move-constructor)
+    Array& operator=(Array&& other) noexcept(
+        std::is_nothrow_move_assignable_v<Dims> &&
+        (atraits::propagate_on_container_move_assignment::value
+             ? std::is_nothrow_move_assignable_v<Alloc>
+             : atraits::is_always_equal::value)
+    ) {
+        if (this == &other) {
+            return *this;
+        }
+        if constexpr (!atraits::propagate_on_container_move_assignment::value && !atraits::is_always_equal::value) {
+            if (allocator_ != other.allocator_ && other.pointer_ != nullptr) {
+                // Allocate with the destination's allocator before releasing either
+                // array. Unequal, non-propagating allocators cannot transfer storage.
+                Array replacement(other.dims_, allocator_);
+                std::copy_n(other.pointer_, other.size(), replacement.pointer_);
+                *this = std::move(replacement);
+                other.destroy();
+                return *this;
+            }
+        }
         if (pointer_ != nullptr) {
             destroy();
         }
-
         if constexpr (atraits::propagate_on_container_move_assignment::value) {
             allocator_ = std::move(other.allocator_);
         }
-        dims_ = std::exchange(other.dims_, Dims());
+        dims_ = std::move(other.dims_);
         pointer_ = std::exchange(other.pointer_, nullptr);
         return *this;
     }
+
+    // NOLINTEND(performance-noexcept-move-constructor)
 
     [[nodiscard]] pointer data() { return pointer_; }
     [[nodiscard]] const_pointer data() const { return pointer_; }

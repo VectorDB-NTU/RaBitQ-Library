@@ -63,5 +63,5 @@ def test_symqg_construct():
     ],
 )
 def test_invalid_metric_raises(cls, args):
-    with pytest.raises(Exception, match="[Uu]nsupported metric|[Ii]nvalid"):
+    with pytest.raises(ValueError, match=r"^Unsupported metric\. Use 'l2' or 'ip'\.$"):
         cls(*args, metric="cosine")

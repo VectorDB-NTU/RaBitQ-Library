@@ -10,7 +10,8 @@
 #include <stdexcept>
 #include <string>
 
-#include "rabitqlib/defines.hpp"
+#include "rabitqlib/core/detail/eigen.hpp"
+#include "rabitqlib/utils/path.hpp"
 
 namespace rabitqlib {
 namespace {

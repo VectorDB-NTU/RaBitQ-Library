@@ -32,7 +32,7 @@ inline float warmup_ip_x0_q(
     float delta,
     float vl,
     size_t padded_dim,
-    [[maybe_unused]] size_t _b_query = 0  // not used
+    [[maybe_unused]] size_t unused_query_bits = 0  // not used
 ) {
     auto num_blk = padded_dim / 64;
     const auto* it_data = reinterpret_cast<const uint8_t*>(data);
@@ -73,8 +73,8 @@ inline float warmup_ip_x0_q(
     const uint64_t* query,
     float delta,
     float vl,
-    size_t _padded_dim = 0,  // not used
-    size_t _b_query = 0      // not used
+    size_t unused_padded_dim = 0,  // not used
+    size_t unused_query_bits = 0   // not used
 ) {
     return rabitqlib::warmup_ip_x0_q<b_query>(data, query, delta, vl, padded_dim);
 }
