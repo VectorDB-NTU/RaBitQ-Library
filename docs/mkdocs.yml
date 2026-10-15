@@ -1,5 +1,5 @@
 site_name: RaBitQ Library
-site_description: Compact, accurate vector quantization and approximate nearest-neighbor search
+site_description: Compact quantization and accurate vector search for C++ and Python
 site_url: https://vectordb-ntu.github.io/RaBitQ-Library/
 repo_url: https://github.com/VectorDB-NTU/RaBitQ-Library
 repo_name: VectorDB-NTU/RaBitQ-Library
