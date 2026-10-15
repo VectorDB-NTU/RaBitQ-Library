@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Compact, accurate vector quantization and approximate nearest-neighbor search">
+        <meta name="description" content="Compact quantization and accurate vector search for C++ and Python">
       
       
       
@@ -318,32 +318,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#new-in-070" class="md-nav__link">
+  <a href="#start-here" class="md-nav__link">
     <span class="md-ellipsis">
       
-        New in 0.7.0
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#start-with-python" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Start with Python
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#c-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        C++ components
+        Start here
       
     </span>
   </a>
@@ -362,10 +340,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-rabitq" class="md-nav__link">
+  <a href="#explore-further" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why RaBitQ?
+        Explore further
       
     </span>
   </a>
@@ -373,21 +351,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#used-across-the-vector-search-ecosystem" class="md-nav__link">
+  <a href="#research-papers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Used across the vector-search ecosystem
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#citation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Citation
+        Research papers
       
     </span>
   </a>
@@ -1505,32 +1472,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#new-in-070" class="md-nav__link">
+  <a href="#start-here" class="md-nav__link">
     <span class="md-ellipsis">
       
-        New in 0.7.0
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#start-with-python" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Start with Python
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#c-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        C++ components
+        Start here
       
     </span>
   </a>
@@ -1549,10 +1494,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-rabitq" class="md-nav__link">
+  <a href="#explore-further" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Why RaBitQ?
+        Explore further
       
     </span>
   </a>
@@ -1560,21 +1505,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#used-across-the-vector-search-ecosystem" class="md-nav__link">
+  <a href="#research-papers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Used across the vector-search ecosystem
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#citation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Citation
+        Research papers
       
     </span>
   </a>
@@ -1611,56 +1545,29 @@
 <div class="hero">
 <p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
 <h1 id="compact-vector-search-with-rabitq">Compact vectors.<br>Accurate search.<a class="headerlink" href="#compact-vector-search-with-rabitq" title="Permanent link">&para;</a></h1>
-<p class="hero-description">Vector quantization and approximate nearest-neighbor
-search. Start with a quantizer, or build with complete IVF, HNSW, and SymphonyQG indexes.</p>
+<p class="hero-description">A C++17 and Python library for vector search,
+from compact quantization to complete indexes.</p>
 <div class="hero-actions">
-<p><a class="md-button md-button--primary" href="quick_start/">Get started</a>
-<a href="cpp_integration/">Explore C++ integration &rarr;</a></p>
+<p><a class="md-button md-button--primary" href="quick_start/">Get started with Python</a>
+<a href="cpp_integration/">Use C++ &rarr;</a></p>
 </div>
-<p class="hero-platforms">Linux x86-64 &amp; ARM64 · Windows x86-64 · macOS ARM64</p>
 </div>
+<h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
 <div class="feature-grid">
   <div class="feature-card">
-    <h2>Compact by design</h2>
-    <p>Use RaBitQ as an alternative to binary or scalar quantization, with
-    useful estimates from a one-bit code per padded dimension plus a small
-    set of per-vector factors.</p>
+    <h3><a href="quick_start/">Python quick start &rarr;</a></h3>
+    <p>Install the package, build an IVF index, search it, and save it.</p>
   </div>
   <div class="feature-card">
-    <h2>Fast on modern CPUs</h2>
-    <p>Use AVX2/AVX-512 kernels on x86-64 and NEON on ARM64. IVF and
-    SymphonyQG use FastScan for batched distance estimation.</p>
+    <h3><a href="cpp_integration/">C++ integration &rarr;</a></h3>
+    <p>Choose core, FastScan, or index components for your application.</p>
   </div>
   <div class="feature-card">
-    <h2>Ready for vector search</h2>
-    <p>Choose IVF, HNSW, or SymphonyQG to balance memory, indexing cost,
-    latency, and recall for your workload.</p>
+    <h3><a href="rabitq/rabitq/">How RaBitQ works &rarr;</a></h3>
+    <p>Understand rotation, compact codes, and distance estimation.</p>
   </div>
 </div>
 
-<h2 id="new-in-070">New in 0.7.0<a class="headerlink" href="#new-in-070" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Modular C++ integration:</strong> Link core, FastScan, or indexes independently.</li>
-<li><strong>Stable core API v1:</strong> Encode and estimate distances with caller-owned buffers
-  and workspace, with no heap allocation on valid calls.</li>
-<li><strong>Optional OpenMP:</strong> Build core and FastScan without an OpenMP dependency.</li>
-<li><strong>Unified index counts:</strong> Distinguish capacity, stored records, and live points
-  consistently in C++ and Python.</li>
-</ul>
-<p>This documentation describes 0.7.0. Read the
-<a href="releases/0.7.0/">0.7.0 upgrade notes</a> before updating an existing application.</p>
-<h2 id="start-with-python">Start with Python<a class="headerlink" href="#start-with-python" title="Permanent link">&para;</a></h2>
-<p>See <a href="quick_start/#install">installation options</a> for supported platforms and source builds.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.7.0"</span>
-</code></pre></div>
-<p>The <a href="quick_start/">complete quick start</a> builds and searches an IVF index with
-synthetic data, explains the results, and demonstrates save/load. No external
-dataset or clustering package is needed.</p>
-<p><a class="md-button md-button--primary" href="quick_start/#build-and-search-an-ivf-index">Start the Python example</a></p>
-<h2 id="c-components">C++ components<a class="headerlink" href="#c-components" title="Permanent link">&para;</a></h2>
-<p>The <a href="modular_migration/">0.7.0 component model</a> provides independent core and
-FastScan targets alongside the index library, plus a <a href="rabitq/core_api/">stable core v1 API</a>.
-Use a matching source checkout or 0.7.0 installation for these interfaces.</p>
 <h2 id="choose-an-index">Choose an index<a class="headerlink" href="#choose-an-index" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1668,70 +1575,40 @@ Use a matching source checkout or 0.7.0 installation for these interfaces.</p>
 <th>Index</th>
 <th>Best fit</th>
 <th>Typical relative memory</th>
-<th>Main search control</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><a href="index/ivf/">IVF RaBitQ</a></td>
-<td>Large datasets and predictable memory use</td>
+<td>Large datasets and predictable storage</td>
 <td>Lowest</td>
-<td>Number of probed clusters</td>
 </tr>
 <tr>
 <td><a href="index/hnsw/">HNSW RaBitQ</a></td>
 <td>General-purpose graph search</td>
 <td>Moderate</td>
-<td>Search candidate list size</td>
 </tr>
 <tr>
 <td><a href="index/qg/">SymphonyQG</a></td>
 <td>Latency-focused graph search</td>
 <td>Highest</td>
-<td>Search window size</td>
 </tr>
 </tbody>
 </table>
-<p>IVF stores quantized vectors by default, or retains original float32 vectors
-for reranking with <code>nbits=32</code>. HNSW searches quantized
-vectors instead of accessing raw vectors during search. SymphonyQG uses additional memory and multiple codes per vector to
-optimize its access pattern.</p>
-<p>These are typical relative profiles, not fixed guarantees. Actual memory,
-latency, and recall depend on vector dimension, quantization width, graph
-degree, and search parameters.
-See <a href="index/usage/#estimate-storage">memory estimates</a> for the main storage costs,
-including SymphonyQG's copies of neighbor codes.</p>
-<h2 id="why-rabitq">Why RaBitQ?<a class="headerlink" href="#why-rabitq" title="Permanent link">&para;</a></h2>
-<p>RaBitQ combines compact codes with distance estimates and probabilistic error
-intervals. The <a href="rabitq/rabitq/">algorithm overview</a> explains the rotation,
-encoding and scoring workflow; the <a href="benchmarks/bench/">benchmarks</a> report
-measured memory, recall and throughput for specific configurations.</p>
-<p>The library supports squared L2 and inner-product distance (<code>1 - dot</code>). For cosine
-search, normalize data and queries before using inner product.</p>
-<h2 id="used-across-the-vector-search-ecosystem">Used across the vector-search ecosystem<a class="headerlink" href="#used-across-the-vector-search-ecosystem" title="Permanent link">&para;</a></h2>
-<p><a href="https://github.com/neuml/txtai">txtai</a> uses <code>rabitqlib</code> directly as an ANN
-backend with IVF and HNSW modes. See its
-<a href="https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq">RaBitQ configuration</a>.</p>
-<p>RaBitQ has been adopted by projects including
-<a href="https://github.com/milvus-io/milvus">Milvus</a>,
-<a href="https://github.com/facebookresearch/faiss">Faiss</a>,
-<a href="https://github.com/antgroup/vsag">VSAG</a>,
-<a href="https://github.com/tensorchord/VectorChord">VectorChord</a>,
-<a href="https://www.volcengine.com/docs/6465/1553583">Volcengine OpenSearch</a>,
-<a href="https://github.com/cockroachdb/cockroach">CockroachDB</a>,
-<a href="https://github.com/elastic/elasticsearch">Elasticsearch</a>,
-<a href="https://github.com/apache/lucene">Lucene</a>,
-<a href="https://turbopuffer.com/blog/ann-v3">turbopuffer</a>, and
-<a href="https://github.com/alibaba/zvec">Zvec</a>.</p>
-<h2 id="citation">Citation<a class="headerlink" href="#citation" title="Permanent link">&para;</a></h2>
-<p>If RaBitQ helps your research or system, please cite:</p>
-<blockquote>
-<p>Jianyang Gao, Yutong Gou, Yuexuan Xu, Yongyi Yang, Cheng Long, and Raymond
-Chi-Wing Wong. “Practical and Asymptotically Optimal Quantization of
-High-Dimensional Vectors in Euclidean Space for Approximate Nearest Neighbor
-Search.” <em>Proceedings of the ACM on Management of Data</em> 3, 3, Article 202
-(June 2025), 26 pages. <a href="https://doi.org/10.1145/3725413">https://doi.org/10.1145/3725413</a>.</p>
-</blockquote>
+<p>Memory, latency, and recall depend on the dataset and search settings. See the
+<a href="index/usage/#estimate-storage">index usage guide</a> for storage estimates and the
+<a href="benchmarks/bench/">benchmarks</a> for measured workloads.</p>
+<h2 id="explore-further">Explore further<a class="headerlink" href="#explore-further" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="rabitq/rabitq/">Algorithm overview</a> for the rotation, encoding, and scoring workflow.</li>
+<li><a href="releases/0.7.0/">RaBitQ Library 0.7.0 release notes</a> for new APIs and upgrade guidance.</li>
+</ul>
+<h2 id="research-papers">Research papers<a class="headerlink" href="#research-papers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://doi.org/10.1145/3654970">1-bit RaBitQ</a> · 2024 · Quantization with a theoretical error bound.</li>
+<li><a href="https://doi.org/10.1145/3709730">SymphonyQG</a> · 2025 · Quantization and graph search.</li>
+<li><a href="https://doi.org/10.1145/3725413">Multi-bit RaBitQ</a> · 2025 · Higher-bit quantization.</li>
+</ul>
 
 
 
