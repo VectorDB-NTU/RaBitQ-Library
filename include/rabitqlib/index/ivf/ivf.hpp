@@ -30,17 +30,25 @@ class Initializer;
 
 class IVF {
    private:
+    friend struct IvfTestAccess;
+
     using ByteStorage =
         std::vector<std::byte, memory::AlignedAllocator<std::byte, 64, true>>;
     using FloatStorage = std::vector<float, memory::AlignedAllocator<float, 64, true>>;
     using IdStorage = std::vector<PID, memory::AlignedAllocator<PID, 64, true>>;
 
+    // One cluster's owned storage. Independent of every other cluster's, so growing
+    // one cluster never reallocates or copies another's.
+    struct ClusterStorage {
+        ByteStorage batch;  // 1-bit code and factors
+        ByteStorage ex;     // extra-bit codes and packed factors
+        FloatStorage raw;   // original vectors for raw reranking
+        IdStorage ids;
+    };
+
     InitializerType initializer_type_ = InitializerType::Auto;
-    std::unique_ptr<Initializer> initializer_;  // initializer for candidate clusters
-    ByteStorage batch_storage_;                 // 1-bit code and factors
-    ByteStorage ex_storage_;                    // extra-bit codes and packed factors
-    FloatStorage raw_storage_;                  // original vectors for raw reranking
-    IdStorage id_storage_;                      // point IDs organized by cluster
+    std::unique_ptr<Initializer> initializer_;       // initializer for candidate clusters
+    std::vector<ClusterStorage> cluster_storage_;    // one entry per cluster
     size_t max_elements_ = 0;  // Logical capacity; construct fills it, add grows it.
     size_t num_removed_ = 0;   // Recovered from removal markers when loading.
     size_t dim_ = 0;
@@ -70,36 +78,10 @@ class IVF {
     // True if `n` points cannot be addressed by the storage size computations
     [[nodiscard]] bool exceeds_storage(size_t n) const;
 
-    [[nodiscard]] size_t ids_bytes() const { return sizeof(PID) * max_elements_; }
-
-    // get num of bytes used for 1-bit code and corresponding factors
-    [[nodiscard]] size_t batch_data_bytes(const std::vector<size_t>& cluster_sizes) const;
+    // get num of bytes used for one cluster's 1-bit code and corresponding factors
+    [[nodiscard]] size_t cluster_batch_bytes(size_t cluster_size) const;
 
     [[nodiscard]] inline size_t rerank_vector_bytes() const;
-
-    [[nodiscard]] inline size_t ex_data_bytes() const;
-
-    [[nodiscard]] char* batch_data() {
-        return reinterpret_cast<char*>(batch_storage_.data());
-    }
-
-    [[nodiscard]] const char* batch_data() const {
-        return reinterpret_cast<const char*>(batch_storage_.data());
-    }
-
-    [[nodiscard]] char* ex_data() {
-        return raw_reranking_ ? reinterpret_cast<char*>(raw_storage_.data())
-                              : reinterpret_cast<char*>(ex_storage_.data());
-    }
-
-    [[nodiscard]] const char* ex_data() const {
-        return raw_reranking_ ? reinterpret_cast<const char*>(raw_storage_.data())
-                              : reinterpret_cast<const char*>(ex_storage_.data());
-    }
-
-    [[nodiscard]] PID* ids() { return id_storage_.data(); }
-
-    [[nodiscard]] const PID* ids() const { return id_storage_.data(); }
 
     void allocate_memory(const std::vector<size_t>&);
 
