@@ -21,4 +21,10 @@ if(RABITQ_BUILD_INDEX)
         "${CMAKE_CURRENT_BINARY_DIR}/sidecar-smoke" 128 64 2)
     set_tests_properties(SidecarHotpathPrepare PROPERTIES FIXTURES_SETUP sidecar_hotpath)
     set_tests_properties(SidecarHotpathLoad PROPERTIES FIXTURES_REQUIRED sidecar_hotpath)
+
+    rabitq_hotpath_target(ivf_add index)
+    add_test(NAME IvfAddHotpathSingle COMMAND rabitq_ivf_add_hotpaths
+        "${CMAKE_CURRENT_BINARY_DIR}/ivf-add-smoke-single" 64 8 256 16 1 single)
+    add_test(NAME IvfAddHotpathRouted COMMAND rabitq_ivf_add_hotpaths
+        "${CMAKE_CURRENT_BINARY_DIR}/ivf-add-smoke-routed" 64 8 256 16 1 routed)
 endif()
