@@ -1,0 +1,18 @@
+{
+  "source_tag": "main",
+  "source_commit": "64fc943e0e92fa7e18eec1477050b23342a976f8",
+  "writer": "one-off generator matching tests/fixtures/persistence/generate.cpp's IVF cases, run against the unmodified IVF class immediately before the per-cluster-storage refactor (not committed to the repo; see README.md in this directory)",
+  "producer": "Linux x86-64, g++, one thread, native optimization OFF",
+  "byte_order": "little",
+  "size_t_bytes": 8,
+  "sha256": {
+    "pre-ivf-per-cluster-storage/ivf32_ip.expected": "e0d953927d08b619c75b9424a032f136d32d3756d3fde4bf8c6abe0b7b743a28",
+    "pre-ivf-per-cluster-storage/ivf32_ip.index": "db6b66acf40caa4063c2d788bd37e4ae129865cfa6e6d32fd19afc846541ea2d",
+    "pre-ivf-per-cluster-storage/ivf32_l2.expected": "a9ba0430f4c8a517168aa1ff75bad72d7f6089161561412a75976fc970400f9c",
+    "pre-ivf-per-cluster-storage/ivf32_l2.index": "3bdfadfe289d6c0b474096fff990157ca76df0c8b27478ff6c32fcb1fc81a940",
+    "pre-ivf-per-cluster-storage/ivf4_ip.expected": "81a81577f76e75bb4faefbfe559176e5b0846dadd04332d6a9913eb13dfaaf40",
+    "pre-ivf-per-cluster-storage/ivf4_ip.index": "7fc3ab1b52848e5c9c014d62bf7fdedc731c2beed6e491edf58dd63efb462a3b",
+    "pre-ivf-per-cluster-storage/ivf4_l2.expected": "7bbd23134af0cdd4adc794df103bd1eb2aba0d362be3f12d3019e02a3d8d3165",
+    "pre-ivf-per-cluster-storage/ivf4_l2.index": "9966c3bddc306d2d2d062d4a696750adde3daa8e7c086add0fa2411669c488cf"
+  }
+}

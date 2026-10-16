@@ -42,7 +42,7 @@ if(RABITQ_BUILD_INDEX)
 endif()
 set_source_files_properties(unit/rabitqlib/index/historical_persistence_test.cpp
     PROPERTIES COMPILE_DEFINITIONS
-    "RABITQ_TEST_FIXTURE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence/v0.5.2\"")
+    "RABITQ_TEST_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence\"")
 rabitq_configure_target(rabitq_tests)
 
 # Link google test and rabitqlib headers

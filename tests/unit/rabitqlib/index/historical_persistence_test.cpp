@@ -18,11 +18,23 @@
 
 namespace rabitqlib {
 namespace {
-class HistoricalPersistenceTest : public ::testing::TestWithParam<std::string> {};
+// padded_dim is the historical/fixed padding rule the fixture set was written
+// under (v0.5.2 always padded to a 64-coordinate multiple; sets generated under
+// the current writer store and report their own actual padded_dim instead).
+struct HistoricalFixtureCase {
+    std::string directory;  // subdirectory under RABITQ_TEST_FIXTURE_ROOT
+    std::string name;
+    size_t padded_dim;
+};
+
+class HistoricalPersistenceTest
+    : public ::testing::TestWithParam<HistoricalFixtureCase> {};
 
 TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFailedLoad) {
-    const std::filesystem::path directory(RABITQ_TEST_FIXTURE_DIR);
-    const auto name = GetParam();
+    const std::filesystem::path directory =
+        std::filesystem::path(RABITQ_TEST_FIXTURE_ROOT) / GetParam().directory;
+    const auto name = GetParam().name;
+    const auto expected_padded_dim = GetParam().padded_dim;
     const auto path = (directory / (name + ".index")).string();
     std::ifstream expected(directory / (name + ".expected"));
     ASSERT_TRUE(expected.is_open());
@@ -80,7 +92,7 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     if (name.find("ivf") == 0) {
         ivf::IVF index;
         exercise(index, [&] {
-            EXPECT_EQ(index.padded_dim(), 128U);
+            EXPECT_EQ(index.padded_dim(), expected_padded_dim);
             EXPECT_EQ(index.initializer_type(), ivf::InitializerType::Flat);
             index.search_batch(queries.data(), nq, k, 1, ids.data(), distances.data());
         });
@@ -99,7 +111,7 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     } else {
         symqg::QuantizedGraph<float> index;
         exercise(index, [&] {
-            EXPECT_EQ(index.padded_dim(), 128U);
+            EXPECT_EQ(index.padded_dim(), expected_padded_dim);
             index.set_ef(64);
             index.search_batch(queries.data(), nq, k, ids.data(), distances.data(), 1);
         });
@@ -110,20 +122,37 @@ INSTANTIATE_TEST_SUITE_P(
     V052,
     HistoricalPersistenceTest,
     ::testing::Values(
-        "ivf4_l2",
-        "ivf4_ip",
-        "ivf32_l2",
-        "ivf32_ip",
-        "hnsw4_l2",
-        "hnsw4_ip",
-        "qg0_l2",
-        "qg0_ip",
-        "qg4_l2",
-        "qg4_ip",
-        "qg8_l2",
-        "qg8_ip"
+        HistoricalFixtureCase{"v0.5.2", "ivf4_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "ivf4_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "ivf32_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "ivf32_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "hnsw4_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "hnsw4_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg0_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg0_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg4_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg4_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg8_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg8_ip", 128}
     ),
-    [](const auto& info) { return info.param; }
+    [](const auto& info) { return info.param.name; }
+);
+
+// Pinned to the IVF implementation immediately before the per-cluster-storage
+// refactor (see tests/fixtures/persistence/pre-ivf-per-cluster-storage/README.md),
+// not a distant historical release: proves this specific change didn't move the
+// on-disk format it reads or writes. kDim=65 rounds up to a 96 padded_dim under
+// the current (32-multiple) padding rule, unlike v0.5.2's fixed 128.
+INSTANTIATE_TEST_SUITE_P(
+    PreIvfPerClusterStorage,
+    HistoricalPersistenceTest,
+    ::testing::Values(
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_l2", 96},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_ip", 96},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_l2", 96},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_ip", 96}
+    ),
+    [](const auto& info) { return info.param.name; }
 );
 }  // namespace
 }  // namespace rabitqlib
