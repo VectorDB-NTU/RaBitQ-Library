@@ -28,6 +28,13 @@
 #include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::ivf {
+
+// Must live directly in rabitqlib::ivf, not in the anonymous namespace below:
+// the `friend struct IvfTestAccess;` in ivf.hpp looks it up from there.
+struct IvfTestAccess {
+    static Cluster cluster_view(const IVF& index, size_t i) { return index.clusters_[i]; }
+};
+
 namespace {
 
 TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
@@ -643,6 +650,50 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
     }
     std::remove(base_path.c_str());
     std::remove(path.c_str());
+}
+
+TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
+    // Cluster sizes 0, 1, 32, 97: an initially-empty cluster, one with a single
+    // point, one that exactly fills a FastScan batch, and one with a partial tail.
+    constexpr size_t kOld = 130;
+    const auto points = random_rows(kOld, 741);
+    const auto centroids = random_rows(kDynClusters, 742);
+    std::vector<PID> assigned(kOld, 3);
+    assigned[0] = 1;
+    std::fill(assigned.begin() + 1, assigned.begin() + 33, PID{2});
+
+    IVF index(kOld, kDynDim, kDynClusters, 4, METRIC_L2);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+
+    std::vector<Cluster> before;
+    before.reserve(kDynClusters);
+    for (size_t i = 0; i < kDynClusters; ++i) {
+        before.push_back(IvfTestAccess::cluster_view(index, i));
+    }
+
+    // Route every new point to cluster 0 (the initially-empty one) explicitly.
+    constexpr size_t kNew = 5;
+    const auto extra = random_rows(kNew, 743);
+    const std::vector<PID> new_cluster_ids(kNew, 0);
+    index.add(extra.data(), kNew, new_cluster_ids.data(), false, 1);
+
+    for (size_t i = 0; i < kDynClusters; ++i) {
+        SCOPED_TRACE(::testing::Message() << "cluster=" << i);
+        const Cluster after = IvfTestAccess::cluster_view(index, i);
+        if (i == 0) {
+            EXPECT_EQ(after.num(), before[i].num() + kNew);
+            EXPECT_NE(after.batch_data(), before[i].batch_data());
+            EXPECT_NE(after.ex_data(), before[i].ex_data());
+            EXPECT_NE(after.ids(), before[i].ids());
+        } else {
+            // No reallocation and no copy: the untouched cluster's storage, not
+            // just its contents, is exactly what it was before add() ran.
+            EXPECT_EQ(after.num(), before[i].num());
+            EXPECT_EQ(after.batch_data(), before[i].batch_data());
+            EXPECT_EQ(after.ex_data(), before[i].ex_data());
+            EXPECT_EQ(after.ids(), before[i].ids());
+        }
+    }
 }
 
 TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAndTails) {
