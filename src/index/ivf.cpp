@@ -389,18 +389,60 @@ void IVF::add(
     const size_t rerank_bytes = rerank_vector_bytes();
     const PID first_pid = static_cast<PID>(max_elements_);
 
-    /* Stage every touched cluster's grown storage on the side, so the index is
-       unchanged on failure and no untouched cluster is ever copied. */
+    // True if this cluster's own storage already has enough spare capacity for
+    // new_sizes[i] -- in which case extend_cluster can write directly into that
+    // spare region (no allocation, no copy of the unchanged prefix) instead of
+    // building a separate staged buffer. Growing within capacity never
+    // reallocates and never moves the old data std::vector::capacity() already
+    // confirmed is there, so clusters_[i] (read by extend_cluster as the "old"
+    // view) stays valid throughout; nothing becomes observable until the commit
+    // loop below bumps each vector's size, which, since capacity already
+    // covers it, cannot reallocate or throw either.
+    const auto fits_in_place = [&](size_t i) {
+        const ClusterStorage& cs = cluster_storage_[i];
+        if (cs.batch.capacity() < cluster_batch_bytes(new_sizes[i]) ||
+            cs.ids.capacity() < new_sizes[i]) {
+            return false;
+        }
+        if (raw_reranking_) {
+            return cs.raw.capacity() >= new_sizes[i] * dim_;
+        }
+        if (rerank_bytes > 0) {
+            return cs.ex.capacity() >= new_sizes[i] * rerank_bytes;
+        }
+        return true;
+    };
+
+    /* Clusters that outgrow their current capacity are staged on the side, so
+       the index is unchanged on failure. Growing the staged buffer past what
+       this call strictly needs means a later add() to the same cluster is
+       more likely to fit in place instead of staging again. Clusters that
+       already have room, and untouched clusters, are never staged or copied
+       at all. */
+    std::vector<bool> in_place(num_clusters_, false);
     std::vector<std::optional<ClusterStorage>> staged(num_clusters_);
     for (size_t i : touched) {
-        ClusterStorage cs;
-        cs.batch = ByteStorage(cluster_batch_bytes(new_sizes[i]));
-        if (raw_reranking_) {
-            cs.raw = FloatStorage(new_sizes[i] * dim_);
-        } else if (rerank_bytes > 0) {
-            cs.ex = ByteStorage(new_sizes[i] * rerank_bytes);
+        if (fits_in_place(i)) {
+            in_place[i] = true;
+            continue;
         }
-        cs.ids = IdStorage(new_sizes[i]);
+        const ClusterStorage& old_cs = cluster_storage_[i];
+        ClusterStorage cs;
+        const size_t want_batch = cluster_batch_bytes(new_sizes[i]);
+        cs.batch.reserve(std::max(want_batch, old_cs.batch.capacity() * 2));
+        cs.batch.resize(want_batch);
+        const size_t want_ids = new_sizes[i];
+        cs.ids.reserve(std::max(want_ids, old_cs.ids.capacity() * 2));
+        cs.ids.resize(want_ids);
+        if (raw_reranking_) {
+            const size_t want_raw = new_sizes[i] * dim_;
+            cs.raw.reserve(std::max(want_raw, old_cs.raw.capacity() * 2));
+            cs.raw.resize(want_raw);
+        } else if (rerank_bytes > 0) {
+            const size_t want_ex = new_sizes[i] * rerank_bytes;
+            cs.ex.reserve(std::max(want_ex, old_cs.ex.capacity() * 2));
+            cs.ex.resize(want_ex);
+        }
         staged[i] = std::move(cs);
     }
 
@@ -411,27 +453,61 @@ void IVF::add(
          ++index) {
         const size_t i = touched[static_cast<size_t>(index)];
         try {
-            ClusterStorage& cs = *staged[i];
+            char* batch_ptr;
+            char* rerank_ptr;
+            PID* ids_ptr;
+            if (in_place[i]) {
+                // Grow this cluster's own storage before writing into it. resize()
+                // growing value-initializes (zero-fills) only the newly added
+                // elements -- the existing prefix is untouched -- and, since
+                // capacity was already confirmed sufficient, cannot reallocate or
+                // throw. Doing this before extend_cluster writes is essential:
+                // doing it after would re-zero exactly what was just written.
+                ClusterStorage& cs = cluster_storage_[i];
+                cs.batch.resize(cluster_batch_bytes(new_sizes[i]));
+                cs.ids.resize(new_sizes[i]);
+                if (raw_reranking_) {
+                    cs.raw.resize(new_sizes[i] * dim_);
+                } else if (rerank_bytes > 0) {
+                    cs.ex.resize(new_sizes[i] * rerank_bytes);
+                }
+                batch_ptr = reinterpret_cast<char*>(cs.batch.data());
+                rerank_ptr = rerank_bytes > 0
+                                 ? (raw_reranking_ ? reinterpret_cast<char*>(cs.raw.data())
+                                                    : reinterpret_cast<char*>(cs.ex.data()))
+                                 : nullptr;
+                ids_ptr = cs.ids.data();
+            } else {
+                ClusterStorage& cs = *staged[i];
+                batch_ptr = reinterpret_cast<char*>(cs.batch.data());
+                rerank_ptr = rerank_bytes > 0
+                                 ? (raw_reranking_ ? reinterpret_cast<char*>(cs.raw.data())
+                                                    : reinterpret_cast<char*>(cs.ex.data()))
+                                 : nullptr;
+                ids_ptr = cs.ids.data();
+            }
             extend_cluster(
                 clusters_[i],
                 rows_of[i],
                 data,
                 initializer_->centroid(static_cast<PID>(i)),
                 first_pid,
-                reinterpret_cast<char*>(cs.batch.data()),
-                rerank_bytes > 0 ? (raw_reranking_ ? reinterpret_cast<char*>(cs.raw.data())
-                                                    : reinterpret_cast<char*>(cs.ex.data()))
-                                 : nullptr,
-                cs.ids.data(),
+                batch_ptr,
+                rerank_ptr,
+                ids_ptr,
                 config
             );
         } catch (...) { failure.capture(); }
     }
     failure.rethrow();
 
-    /* Commit. Untouched clusters are never staged, so they are unaffected by this. */
+    /* Commit. Untouched clusters are never staged or resized, so they are
+       unaffected by this. In-place clusters were already grown and written
+       above; only staged (reallocated) clusters still need moving in. */
     for (size_t i : touched) {
-        cluster_storage_[i] = std::move(*staged[i]);
+        if (!in_place[i]) {
+            cluster_storage_[i] = std::move(*staged[i]);
+        }
     }
     max_elements_ = new_num_points;
     clusters_.clear();

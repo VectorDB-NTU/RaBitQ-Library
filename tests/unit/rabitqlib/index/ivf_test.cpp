@@ -696,6 +696,37 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
     }
 }
 
+TEST(IvfAddTest, SecondSmallAddToTheSameClusterReusesCapacityInPlace) {
+    // The first add to a freshly-constructed cluster must reallocate (capacity
+    // starts exact-fit), but it over-allocates for future growth; a second small
+    // add to the same cluster should then need no allocation at all.
+    constexpr size_t kOld = 40;
+    const auto points = random_rows(kOld + 2, 851);
+    const auto centroids = random_rows(kDynClusters, 852);
+    const std::vector<PID> assigned(kOld, 0);
+
+    IVF index(kOld, kDynDim, kDynClusters, 4, METRIC_L2);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+
+    const Cluster before_first = IvfTestAccess::cluster_view(index, 0);
+    const PID route_to_zero = 0;
+    index.add(points.data() + (kOld * kDynDim), 1, &route_to_zero, false, 1);
+    const Cluster after_first = IvfTestAccess::cluster_view(index, 0);
+    EXPECT_NE(after_first.batch_data(), before_first.batch_data());
+    EXPECT_EQ(after_first.num(), kOld + 1);
+
+    index.add(points.data() + ((kOld + 1) * kDynDim), 1, &route_to_zero, false, 1);
+    const Cluster after_second = IvfTestAccess::cluster_view(index, 0);
+    EXPECT_EQ(after_second.num(), kOld + 2);
+    EXPECT_EQ(after_second.batch_data(), after_first.batch_data());
+    EXPECT_EQ(after_second.ex_data(), after_first.ex_data());
+    EXPECT_EQ(after_second.ids(), after_first.ids());
+    // Byte-identical correctness of repeated small adds (not just this pointer
+    // behavior) is already covered by
+    // IvfAddTest.EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes's
+    // "chunked" case, which exercises this same in-place-reuse path.
+}
+
 TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAndTails) {
     // Cluster sizes 0, 1, 32, 97 cover empty rows and multiple physical tail batches.
     constexpr size_t kCount = 130;
