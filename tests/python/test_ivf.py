@@ -602,6 +602,41 @@ def test_add_chunks_match_a_single_add(tmp_path):
     assert a.read_bytes() == b.read_bytes()
 
 
+@pytest.mark.parametrize("nbits", [1, 4, 32])
+def test_reserved_adds_match_a_single_add(tmp_path, nbits):
+    idx, old, new, assigned = _dynamic_index(nbits=nbits)
+    base = tmp_path / "base.index"
+    idx.save(str(base))
+    whole = IvfIndex.load(str(base))
+    whole.add(new, assigned)
+    parts = IvfIndex.load(str(base))
+    for cluster in range(parts.num_clusters):
+        parts.reserve(cluster, len(old) + len(new))
+    for chunk in np.array_split(np.arange(len(new)), [1, 33, 34, 90]):
+        parts.add(new[chunk], assigned[chunk])
+    a, b = tmp_path / "a.index", tmp_path / "b.index"
+    whole.save(str(a))
+    parts.save(str(b))
+    assert a.read_bytes() == b.read_bytes()
+
+
+def test_reserve_rejects_invalid_arguments():
+    idx, old, _, _ = _dynamic_index()
+    for bad in (-1, 3, 2**32):
+        with pytest.raises(ValueError, match="cluster_id"):
+            idx.reserve(bad, 10)
+    with pytest.raises(ValueError, match="num_points"):
+        idx.reserve(0, -1)
+    with pytest.raises(ValueError, match="supported ID range"):
+        idx.reserve(0, 2**40)
+    idx.reserve(0, 0)
+    assert idx.max_elements == len(old)
+
+    unbuilt = IvfIndex(65, 4, 1, 4)
+    with pytest.raises(RuntimeError, match="built or loaded"):
+        unbuilt.reserve(0, 1)
+
+
 def test_add_accepts_fast_quantization_and_other_dtypes():
     idx, _, new, _ = _dynamic_index()
     idx.add(new[:10].astype(np.float64), fast_quantization=True)
