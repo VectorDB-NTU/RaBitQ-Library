@@ -1,8 +1,4 @@
-// Does IVF::add() cost scale with the whole index, or with the points actually
-// added? Builds a base index once, saves it, then times one add() call from a
-// freshly loaded (so deterministic) copy per repetition -- never reusing a
-// grown index across repetitions, so every repetition starts from the same
-// base_n-point state and the hash of the result is comparable across them.
+// Times one IVF::add() per repetition, each on a freshly loaded copy of the base index.
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -42,16 +38,12 @@ void run(int argc, char** argv) {
     const auto base_data = bench::values(bench::product(base_n, dim), 42);
     const auto add_data = bench::values(bench::product(add_n, dim), 91);
     const auto centroids = bench::values(bench::product(clusters, dim), 7);
-    // Round-robin: arbitrary but deterministic, and every cluster gets some
-    // points. Quality of the clustering is irrelevant to a storage-cost benchmark.
+    // Round-robin assignment; clustering quality is irrelevant to storage cost.
     std::vector<rabitqlib::PID> base_assigned(base_n);
     for (size_t i = 0; i < base_n; ++i) {
         base_assigned[i] = static_cast<rabitqlib::PID>(i % clusters);
     }
-    // "single": every new point goes to cluster 0 explicitly, the case that
-    // isolates one touched cluster. "routed": cluster_ids is null, so add()
-    // does its own nearest-centroid routing, the representative case where
-    // points land across many clusters.
+    // "single" sends every new point to cluster 0; "routed" lets add() pick the nearest.
     const std::vector<rabitqlib::PID> single_ids(add_n, rabitqlib::PID{0});
     const rabitqlib::PID* add_cluster_ids = mode == "single" ? single_ids.data() : nullptr;
 

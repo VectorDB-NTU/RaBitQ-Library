@@ -37,18 +37,45 @@ class IVF {
     using FloatStorage = std::vector<float, memory::AlignedAllocator<float, 64, true>>;
     using IdStorage = std::vector<PID, memory::AlignedAllocator<PID, 64, true>>;
 
-    // One cluster's owned storage. Independent of every other cluster's, so growing
-    // one cluster never reallocates or copies another's.
-    struct ClusterStorage {
-        ByteStorage batch;  // 1-bit code and factors
-        ByteStorage ex;     // extra-bit codes and packed factors
-        FloatStorage raw;   // original vectors for raw reranking
-        IdStorage ids;
+    // One cluster's own storage, independent of every other cluster's.
+    class ClusterStorage {
+       public:
+        explicit ClusterStorage(bool raw_reranking) : raw_reranking_(raw_reranking) {}
+
+        ByteStorage batch_storage;  // 1-bit code and factors
+        ByteStorage ex_storage;     // extra-bit codes and packed factors
+        FloatStorage raw_storage;   // original vectors for raw reranking
+        IdStorage id_storage;       // point IDs of this cluster
+
+        [[nodiscard]] char* batch_data() {
+            return reinterpret_cast<char*>(batch_storage.data());
+        }
+
+        [[nodiscard]] const char* batch_data() const {
+            return reinterpret_cast<const char*>(batch_storage.data());
+        }
+
+        [[nodiscard]] char* ex_data() {
+            return raw_reranking_ ? reinterpret_cast<char*>(raw_storage.data())
+                                  : reinterpret_cast<char*>(ex_storage.data());
+        }
+
+        [[nodiscard]] const char* ex_data() const {
+            return raw_reranking_ ? reinterpret_cast<const char*>(raw_storage.data())
+                                  : reinterpret_cast<const char*>(ex_storage.data());
+        }
+
+        [[nodiscard]] PID* ids() { return id_storage.data(); }
+
+        [[nodiscard]] const PID* ids() const { return id_storage.data(); }
+
+       private:
+        bool raw_reranking_;  // raw vectors replace extra-bit codes
     };
 
     InitializerType initializer_type_ = InitializerType::Auto;
-    std::unique_ptr<Initializer> initializer_;       // initializer for candidate clusters
-    std::vector<ClusterStorage> cluster_storage_;    // one entry per cluster
+    std::unique_ptr<Initializer> initializer_;     // initializer for candidate clusters
+    std::vector<ClusterStorage> cluster_storage_;  // one entry per cluster
     size_t max_elements_ = 0;  // Logical capacity; construct fills it, add grows it.
     size_t num_removed_ = 0;   // Recovered from removal markers when loading.
     size_t dim_ = 0;
@@ -72,16 +99,29 @@ class IVF {
     quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, float*, const quant::RabitqConfig&);
 
     void
-    extend_cluster(const Cluster&, const std::vector<PID>&, const float*, const float*, PID, char*, char*, PID*, const quant::RabitqConfig&)
+    extend_cluster(const Cluster&, const std::vector<PID>&, const float*, const float*, PID, char*, char*, PID*, char*, const quant::RabitqConfig&)
         const;
 
     // True if `n` points cannot be addressed by the storage size computations
     [[nodiscard]] bool exceeds_storage(size_t n) const;
 
-    // get num of bytes used for one cluster's 1-bit code and corresponding factors
-    [[nodiscard]] size_t cluster_batch_bytes(size_t cluster_size) const;
+    [[nodiscard]] static size_t ids_bytes(size_t cluster_size) {
+        return sizeof(PID) * cluster_size;
+    }
+
+    // get num of bytes used for 1-bit code and corresponding factors
+    [[nodiscard]] size_t batch_data_bytes(size_t cluster_size) const;
 
     [[nodiscard]] inline size_t rerank_vector_bytes() const;
+
+    [[nodiscard]] inline size_t ex_data_bytes(size_t cluster_size) const;
+
+    // Size every buffer of a cluster's storage for `n` points
+    void resize_storage(ClusterStorage& cs, size_t n) const;
+
+    void reserve_storage(ClusterStorage& cs, size_t n) const;
+
+    [[nodiscard]] bool has_capacity(const ClusterStorage& cs, size_t n) const;
 
     void allocate_memory(const std::vector<size_t>&);
 
@@ -148,9 +188,11 @@ class IVF {
      * data the centroids were trained on. Point `i` of `data` receives PID
      * `num_stored_points() + i`. The index is unchanged if this throws.
      *
-     * The grown index is built next to the old one, so a call needs memory for both and
-     * takes time proportional to the whole index, not just to `n`: prefer a few large
-     * calls to many small ones. `construct` expects `max_elements()` rows afterwards.
+     * Only clusters that receive points are touched. Each one is rebuilt next to its old
+     * storage, so a call needs extra memory for, and takes time proportional to, those
+     * clusters plus `n`; prefer a few large calls to many small ones. A cluster with
+     * enough capacity from `reserve` grows in place instead. `construct` expects
+     * `max_elements()` rows afterwards.
      * Not safe to call while another thread searches, adds or removes.
      *
      * @param data New points (n * dim)
@@ -168,6 +210,20 @@ class IVF {
         bool faster = false,
         size_t num_threads = std::numeric_limits<size_t>::max()
     );
+
+    /**
+     * @brief Preallocate room for a cluster to hold `num_points` points.
+     *
+     * Later `add` calls grow the cluster in place, without copying it, until it holds more
+     * than `num_points`. Does nothing if the cluster already has that capacity. Reserved
+     * capacity is not saved: a loaded index has none. The index is unchanged if this
+     * throws. Not safe to call while another thread searches, adds or removes.
+     *
+     * @param cluster_id Cluster to grow
+     * @param num_points Total number of points the cluster can hold, including its
+     * current ones
+     */
+    void reserve(PID cluster_id, size_t num_points);
 
     /**
      * @brief Exclude points from all later search results.

@@ -13,6 +13,7 @@
 #include <ios>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <random>
@@ -29,10 +30,19 @@
 
 namespace rabitqlib::ivf {
 
-// Must live directly in rabitqlib::ivf, not in the anonymous namespace below:
-// the `friend struct IvfTestAccess;` in ivf.hpp looks it up from there.
+// Outside the anonymous namespace so it matches the friend declaration in ivf.hpp.
 struct IvfTestAccess {
     static Cluster cluster_view(const IVF& index, size_t i) { return index.clusters_[i]; }
+
+    static bool has_spare_capacity(const IVF& index, size_t i) {
+        const auto& cs = index.cluster_storage_[i];
+        return cs.batch_storage.capacity() > cs.batch_storage.size() ||
+               cs.ex_storage.capacity() > cs.ex_storage.size() ||
+               cs.raw_storage.capacity() > cs.raw_storage.size() ||
+               cs.id_storage.capacity() > cs.id_storage.size();
+    }
+
+    static std::unique_ptr<Rotator<float>>& rotator(IVF& index) { return index.rotator_; }
 };
 
 namespace {
@@ -642,6 +652,30 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
             ASSERT_EQ(done, kNew);
             EXPECT_TRUE(saved_bytes(chunked, path) == expected) << "chunked";
 
+            // Even clusters are reserved and grow in place; odd ones are rebuilt each time.
+            IVF reserved;
+            reserved.load(base_path.c_str());
+            std::vector<size_t> final_sizes(kDynClusters, 0);
+            for (PID cluster : assigned) {
+                ++final_sizes[cluster];
+            }
+            for (size_t i = 0; i < kDynClusters; i += 2) {
+                reserved.reserve(static_cast<PID>(i), final_sizes[i]);
+            }
+            const Cluster reserved_view = IvfTestAccess::cluster_view(reserved, 0);
+            done = 0;
+            for (size_t chunk : std::array<size_t, 6>{1, 31, 32, 7, 1, kNew - 72}) {
+                reserved.add(
+                    extra + (done * kDynDim), chunk, assigned.data() + kOld + done, false, 1
+                );
+                done += chunk;
+            }
+            EXPECT_TRUE(saved_bytes(reserved, path) == expected) << "reserved";
+            EXPECT_EQ(
+                IvfTestAccess::cluster_view(reserved, 0).batch_data(),
+                reserved_view.batch_data()
+            );
+
             IVF threaded;
             threaded.load(base_path.c_str());
             threaded.add(extra, kNew, nullptr, false, 4);
@@ -653,8 +687,7 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
 }
 
 TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
-    // Cluster sizes 0, 1, 32, 97: an initially-empty cluster, one with a single
-    // point, one that exactly fills a FastScan batch, and one with a partial tail.
+    // Cluster sizes 0, 1, 32, 97 cover empty, single, full-batch and tail clusters.
     constexpr size_t kOld = 130;
     const auto points = random_rows(kOld, 741);
     const auto centroids = random_rows(kDynClusters, 742);
@@ -682,12 +715,8 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
         const Cluster after = IvfTestAccess::cluster_view(index, i);
         if (i == 0) {
             EXPECT_EQ(after.num(), before[i].num() + kNew);
-            EXPECT_NE(after.batch_data(), before[i].batch_data());
-            EXPECT_NE(after.ex_data(), before[i].ex_data());
-            EXPECT_NE(after.ids(), before[i].ids());
         } else {
-            // No reallocation and no copy: the untouched cluster's storage, not
-            // just its contents, is exactly what it was before add() ran.
+            // Untouched clusters keep their storage: no reallocation and no copy.
             EXPECT_EQ(after.num(), before[i].num());
             EXPECT_EQ(after.batch_data(), before[i].batch_data());
             EXPECT_EQ(after.ex_data(), before[i].ex_data());
@@ -696,35 +725,183 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
     }
 }
 
-TEST(IvfAddTest, SecondSmallAddToTheSameClusterReusesCapacityInPlace) {
-    // The first add to a freshly-constructed cluster must reallocate (capacity
-    // starts exact-fit), but it over-allocates for future growth; a second small
-    // add to the same cluster should then need no allocation at all.
+TEST(IvfAddTest, UnreservedClustersGrowToExactlyTheirNewSize) {
     constexpr size_t kOld = 40;
-    const auto points = random_rows(kOld + 2, 851);
+    const auto points = random_rows(kOld + 1, 851);
     const auto centroids = random_rows(kDynClusters, 852);
     const std::vector<PID> assigned(kOld, 0);
 
-    IVF index(kOld, kDynDim, kDynClusters, 4, METRIC_L2);
-    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    for (size_t bits : {1UL, 4UL, 32UL}) {
+        SCOPED_TRACE(::testing::Message() << "bits=" << bits);
+        IVF index(kOld, kDynDim, kDynClusters, bits, METRIC_L2);
+        index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        const PID route_to_zero = 0;
+        index.add(points.data() + (kOld * kDynDim), 1, &route_to_zero, false, 1);
+        EXPECT_EQ(IvfTestAccess::cluster_view(index, 0).num(), kOld + 1);
+        EXPECT_FALSE(IvfTestAccess::has_spare_capacity(index, 0));
+    }
+}
 
-    const Cluster before_first = IvfTestAccess::cluster_view(index, 0);
+TEST(IvfReserveTest, ReservedClusterGrowsInPlaceUntilItsCapacityIsUsed) {
+    constexpr size_t kOld = 40;
+    constexpr size_t kReserved = kOld + 2;
+    const auto points = random_rows(kReserved + 1, 861);
+    const auto centroids = random_rows(kDynClusters, 862);
+    const std::vector<PID> assigned(kOld, 0);
     const PID route_to_zero = 0;
-    index.add(points.data() + (kOld * kDynDim), 1, &route_to_zero, false, 1);
-    const Cluster after_first = IvfTestAccess::cluster_view(index, 0);
-    EXPECT_NE(after_first.batch_data(), before_first.batch_data());
-    EXPECT_EQ(after_first.num(), kOld + 1);
 
-    index.add(points.data() + ((kOld + 1) * kDynDim), 1, &route_to_zero, false, 1);
-    const Cluster after_second = IvfTestAccess::cluster_view(index, 0);
-    EXPECT_EQ(after_second.num(), kOld + 2);
-    EXPECT_EQ(after_second.batch_data(), after_first.batch_data());
-    EXPECT_EQ(after_second.ex_data(), after_first.ex_data());
-    EXPECT_EQ(after_second.ids(), after_first.ids());
-    // Byte-identical correctness of repeated small adds (not just this pointer
-    // behavior) is already covered by
-    // IvfAddTest.EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes's
-    // "chunked" case, which exercises this same in-place-reuse path.
+    for (size_t bits : {1UL, 4UL, 32UL}) {
+        SCOPED_TRACE(::testing::Message() << "bits=" << bits);
+        IVF index(kOld, kDynDim, kDynClusters, bits, METRIC_L2);
+        index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        index.reserve(0, kReserved);
+        const Cluster reserved = IvfTestAccess::cluster_view(index, 0);
+        EXPECT_EQ(reserved.num(), kOld);
+
+        for (size_t row = kOld; row < kReserved; ++row) {
+            index.add(points.data() + (row * kDynDim), 1, &route_to_zero, false, 1);
+            const Cluster grown = IvfTestAccess::cluster_view(index, 0);
+            EXPECT_EQ(grown.num(), row + 1);
+            EXPECT_EQ(grown.batch_data(), reserved.batch_data());
+            EXPECT_EQ(grown.ex_data(), reserved.ex_data());
+            EXPECT_EQ(grown.ids(), reserved.ids());
+        }
+
+        // The old storage is alive while its replacement is allocated, so they differ.
+        index.add(points.data() + (kReserved * kDynDim), 1, &route_to_zero, false, 1);
+        EXPECT_NE(
+            IvfTestAccess::cluster_view(index, 0).batch_data(), reserved.batch_data()
+        );
+        EXPECT_FALSE(IvfTestAccess::has_spare_capacity(index, 0));
+    }
+}
+
+TEST(IvfReserveTest, RejectsBadInputAndLeavesSavedBytesUnchanged) {
+    constexpr size_t kOld = 40;
+    const auto points = random_rows(kOld, 871);
+    const auto centroids = random_rows(kDynClusters, 872);
+    const std::vector<PID> assigned(kOld, 0);
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_reserve.index";
+    const auto expect_message = [](const auto& call, const char* message) {
+        try {
+            call();
+            ADD_FAILURE() << "expected: " << message;
+        } catch (const std::exception& error) { EXPECT_STREQ(error.what(), message); }
+    };
+
+    IVF unbuilt(kOld, kDynDim, kDynClusters, 4);
+    EXPECT_THROW(unbuilt.reserve(0, 1), std::logic_error);
+    expect_message(
+        [&] { unbuilt.reserve(0, 1); },
+        "IVF index must be constructed or loaded before reserve"
+    );
+
+    IVF index(kOld, kDynDim, kDynClusters, 4);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const std::string expected = saved_bytes(index, path);
+    const Cluster constructed = IvfTestAccess::cluster_view(index, 0);
+
+    EXPECT_THROW(index.reserve(static_cast<PID>(kDynClusters), 1), std::invalid_argument);
+    expect_message(
+        [&] { index.reserve(static_cast<PID>(kDynClusters), 1); },
+        "Cluster ID is out of range"
+    );
+    EXPECT_THROW(
+        index.reserve(0, buffer::kSearchBufferMaxPointCount + 1), std::invalid_argument
+    );
+    expect_message(
+        [&] { index.reserve(0, buffer::kSearchBufferMaxPointCount + 1); },
+        "IVF point count exceeds the supported ID range"
+    );
+
+    // Asking for less than the cluster already holds does nothing.
+    index.reserve(0, kOld / 2);
+    EXPECT_EQ(IvfTestAccess::cluster_view(index, 0).batch_data(), constructed.batch_data());
+    EXPECT_FALSE(IvfTestAccess::has_spare_capacity(index, 0));
+
+    // Spare capacity changes neither the file nor what a loaded index holds.
+    index.reserve(0, kOld * 2);
+    index.reserve(1, kOld);
+    EXPECT_TRUE(IvfTestAccess::has_spare_capacity(index, 0));
+    EXPECT_TRUE(saved_bytes(index, path) == expected);
+    IVF loaded;
+    loaded.load(path.c_str());
+    for (size_t i = 0; i < kDynClusters; ++i) {
+        EXPECT_FALSE(IvfTestAccess::has_spare_capacity(loaded, i));
+    }
+    std::remove(path.c_str());
+}
+
+// Delegates to a real rotator, but the call numbered `fail_at` throws.
+class FailingRotator : public Rotator<float> {
+   public:
+    FailingRotator(std::unique_ptr<Rotator<float>> inner, size_t fail_at)
+        : Rotator<float>(0, inner->size()), inner_(std::move(inner)), fail_at_(fail_at) {}
+
+    void rotate(const float* src, float* dst) const override {
+        if (calls_++ == fail_at_) {
+            throw std::runtime_error("injected rotation failure");
+        }
+        inner_->rotate(src, dst);
+    }
+    void load(std::ifstream& input) override { inner_->load(input); }
+    void save(std::ofstream& output) const override { inner_->save(output); }
+    void load(const char* data) override { inner_->load(data); }
+    void save(char* data) const override { inner_->save(data); }
+    [[nodiscard]] size_t dump_bytes() const override { return inner_->dump_bytes(); }
+
+    std::unique_ptr<Rotator<float>> release() { return std::move(inner_); }
+
+   private:
+    std::unique_ptr<Rotator<float>> inner_;
+    size_t fail_at_;
+    mutable size_t calls_ = 0;
+};
+
+TEST(IvfAddTest, FailedAddLeavesClustersGrowingInPlaceUnchanged) {
+    // Cluster 0 has a partial tail batch and grows in place; cluster 1 fails afterwards.
+    constexpr size_t kOld = 70;
+    constexpr size_t kInPlace = 3;
+    const auto points = random_rows(kOld + 6, 881);
+    const auto centroids = random_rows(kDynClusters, 882);
+    std::vector<PID> assigned(kOld, 1);
+    std::fill(assigned.begin(), assigned.begin() + 40, PID{0});
+    const std::array<PID, 6> new_clusters{0, 0, 0, 1, 1, 1};
+    const float* extra = points.data() + (kOld * kDynDim);
+    const std::string base_path = ::testing::TempDir() + "rabitq_ivf_add_fail_base.index";
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_add_fail.index";
+
+    for (size_t bits : {1UL, 4UL, 32UL}) {
+        SCOPED_TRACE(::testing::Message() << "bits=" << bits);
+        IVF index(kOld, kDynDim, kDynClusters, bits, METRIC_L2);
+        index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        index.save(base_path.c_str());
+        index.reserve(0, 64);
+        const std::string expected = saved_bytes(index, path);
+        const Cluster before = IvfTestAccess::cluster_view(index, 0);
+
+        auto& rotator = IvfTestAccess::rotator(index);
+        rotator = std::make_unique<FailingRotator>(std::move(rotator), kInPlace);
+        EXPECT_THROW(
+            index.add(extra, new_clusters.size(), new_clusters.data(), false, 1),
+            std::runtime_error
+        );
+        rotator = static_cast<FailingRotator&>(*rotator).release();
+
+        EXPECT_EQ(index.max_elements(), kOld);
+        EXPECT_EQ(IvfTestAccess::cluster_view(index, 0).num(), before.num());
+        EXPECT_EQ(IvfTestAccess::cluster_view(index, 0).batch_data(), before.batch_data());
+        EXPECT_TRUE(saved_bytes(index, path) == expected);
+
+        // Retrying matches an index that never saw the failure.
+        index.add(extra, new_clusters.size(), new_clusters.data(), false, 1);
+        IVF reference;
+        reference.load(base_path.c_str());
+        reference.add(extra, new_clusters.size(), new_clusters.data(), false, 1);
+        EXPECT_TRUE(saved_bytes(index, path) == saved_bytes(reference, path));
+    }
+    std::remove(base_path.c_str());
+    std::remove(path.c_str());
 }
 
 TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAndTails) {
