@@ -1,18 +1,18 @@
 {
   "source_tag": "main",
   "source_commit": "64fc943e0e92fa7e18eec1477050b23342a976f8",
-  "writer": "one-off generator matching tests/fixtures/persistence/generate.cpp's IVF cases, run against the unmodified IVF class immediately before the per-cluster-storage refactor (not committed to the repo; see README.md in this directory)",
-  "producer": "Linux x86-64, g++, one thread, native optimization OFF",
+  "writer": "tests/fixtures/persistence/pre-ivf-per-cluster-storage/generate.cpp",
+  "producer": "Linux x86-64, g++ 14.3.0, Release, one thread, native optimization OFF",
   "byte_order": "little",
   "size_t_bytes": 8,
   "sha256": {
-    "pre-ivf-per-cluster-storage/ivf32_ip.expected": "e0d953927d08b619c75b9424a032f136d32d3756d3fde4bf8c6abe0b7b743a28",
-    "pre-ivf-per-cluster-storage/ivf32_ip.index": "db6b66acf40caa4063c2d788bd37e4ae129865cfa6e6d32fd19afc846541ea2d",
-    "pre-ivf-per-cluster-storage/ivf32_l2.expected": "a9ba0430f4c8a517168aa1ff75bad72d7f6089161561412a75976fc970400f9c",
-    "pre-ivf-per-cluster-storage/ivf32_l2.index": "3bdfadfe289d6c0b474096fff990157ca76df0c8b27478ff6c32fcb1fc81a940",
-    "pre-ivf-per-cluster-storage/ivf4_ip.expected": "81a81577f76e75bb4faefbfe559176e5b0846dadd04332d6a9913eb13dfaaf40",
-    "pre-ivf-per-cluster-storage/ivf4_ip.index": "7fc3ab1b52848e5c9c014d62bf7fdedc731c2beed6e491edf58dd63efb462a3b",
-    "pre-ivf-per-cluster-storage/ivf4_l2.expected": "7bbd23134af0cdd4adc794df103bd1eb2aba0d362be3f12d3019e02a3d8d3165",
-    "pre-ivf-per-cluster-storage/ivf4_l2.index": "9966c3bddc306d2d2d062d4a696750adde3daa8e7c086add0fa2411669c488cf"
+    "pre-ivf-per-cluster-storage/ivf32_ip.expected": "3ecb6604dce2108556e5e48130d4e9902d7ef7f0ef81aba39a3caa40b62230fe",
+    "pre-ivf-per-cluster-storage/ivf32_ip.index": "e7c2850ce9b09b4a660e85b3aafe03854d206cb2659801e5ef4752f295415805",
+    "pre-ivf-per-cluster-storage/ivf32_l2.expected": "7843685eadb19c6023df353aa6602e56f5042e4d0c6c2b1ac6019949b7459734",
+    "pre-ivf-per-cluster-storage/ivf32_l2.index": "4b0f98a898edf9cf157d226c51ba74a313d5fb5c055dc5663e14ce3a631f121b",
+    "pre-ivf-per-cluster-storage/ivf4_ip.expected": "2107393b9f53a79d5b07b29771d069b7bedffb1608f105913ff95899dc27f0e0",
+    "pre-ivf-per-cluster-storage/ivf4_ip.index": "928f4440a375f2cbdb5d7f524b3b52b33e6b9dc176dd7b86dbbaef7a6aa091c6",
+    "pre-ivf-per-cluster-storage/ivf4_l2.expected": "7de95886d52dfbb5300890f920256fd7927eae2a4528223753e6f44f76a3e20d",
+    "pre-ivf-per-cluster-storage/ivf4_l2.index": "eb73f9066fef993a5f7e833641adb8bddb1e95cdc04addb2261a8e10bec0c41f"
   }
 }

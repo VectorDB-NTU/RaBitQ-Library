@@ -1,17 +1,37 @@
-# IVF snapshot immediately before the per-cluster-storage refactor
+# IVF fixtures from before per-cluster storage
 
-These four files were written by `rabitqlib::ivf::IVF::save()` on `main` at commit
-`64fc943e0e92fa7e18eec1477050b23342a976f8`, before `ivf.hpp`/`src/index/ivf.cpp` were changed
-to give each cluster its own independently-growable storage instead of one combined buffer
-across all clusters. Unlike `../v0.5.2/`, which proves format stability across a historical
-release, this snapshot proves this specific refactor didn't change a single byte of the format
-it reads or writes: it is pinned to the implementation immediately prior to that change, not a
-distant past release.
+These files were written by `main` at commit
+`64fc943e0e92fa7e18eec1477050b23342a976f8`, the last commit where IVF kept every
+cluster in one shared buffer, using [generate.cpp](generate.cpp).
+[manifest.json](manifest.json) records the producer and SHA-256 hashes.
+Keep these files unchanged; tests never regenerate them with the current writer.
 
-Generated with the same construction as `../generate.cpp`'s IVF cases (`kCount=33`,
-`kDim=65`, `kQueries=3`, `kTopK=5`, the same LCG-seeded deterministic data, one cluster, point 0
-removed after construction), covering `ivf4`/`ivf32` x `l2`/`ip`. The one-off generator used to
-produce them was not committed — it is a near-identical copy of `../generate.cpp` restricted to
-the IVF cases and updated to this repository's current (post-0.7.0-refactor) include paths, run
-once and discarded; `manifest.json` in this directory records the producer and SHA-256 hashes of
-every file, the same way `../manifest.json` does for `v0.5.2`.
+The four cases cover four-bit and raw-vector (`nbits=32`) IVF for L2 and inner
+product. Each index holds 130 points in 65 original dimensions (96 padded) across
+four clusters of 0, 1, 32 and 97 points, so the file has an empty cluster, a
+single-point cluster, a full FastScan batch and a partial tail batch. Point 0 is
+removed. The `.expected` files hold reference results of a search that probes
+every cluster.
+
+The tests load each file, compare search results, and require that saving it
+again reproduces the original bytes. Because the clusters differ in size, a
+reader or writer that orders the batch data, extra-bit data and IDs differently
+from the shared-buffer layout fails these checks.
+
+## Deliberate regeneration
+
+Build the generator only against an isolated copy of the pinned commit:
+
+```bash
+mkdir -p build/fixtures/pre-ivf-per-cluster-storage
+git archive 64fc943 | tar -x -C build/fixtures/pre-ivf-per-cluster-storage
+cmake -S tests/fixtures/persistence/pre-ivf-per-cluster-storage \
+  -B build/fixtures/pre-ivf-generator \
+  -DRABITQ_HISTORICAL_SOURCE="$PWD/build/fixtures/pre-ivf-per-cluster-storage" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/fixtures/pre-ivf-generator --target generate_fixtures
+```
+
+Run `generate_fixtures` with a new output directory. Rotation is seeded from
+`random_device`, so the bytes differ on every run; each index and its `.expected`
+file form a fixed pair. Record new hashes in the manifest before adopting them.

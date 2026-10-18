@@ -5,6 +5,9 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <iterator>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -18,17 +21,26 @@
 
 namespace rabitqlib {
 namespace {
-// padded_dim is the historical/fixed padding rule the fixture set was written
-// under (v0.5.2 always padded to a 64-coordinate multiple; sets generated under
-// the current writer store and report their own actual padded_dim instead).
+std::string read_bytes(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+// padded_dim follows the padding rule of the writer that produced the fixture set.
 struct HistoricalFixtureCase {
     std::string directory;  // subdirectory under RABITQ_TEST_FIXTURE_ROOT
     std::string name;
     size_t padded_dim;
+    size_t count = 33;
+    size_t ivf_nprobe = 1;
+    bool resave_identical = false;  // the current writer must reproduce the file
 };
 
-class HistoricalPersistenceTest
-    : public ::testing::TestWithParam<HistoricalFixtureCase> {};
+void PrintTo(const HistoricalFixtureCase& value, std::ostream* output) {
+    *output << value.directory << '/' << value.name;
+}
+
+class HistoricalPersistenceTest : public ::testing::TestWithParam<HistoricalFixtureCase> {};
 
 TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFailedLoad) {
     const std::filesystem::path directory =
@@ -40,7 +52,7 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     ASSERT_TRUE(expected.is_open());
     size_t count = 0, dim = 0, nq = 0, k = 0;
     expected >> count >> dim >> nq >> k;
-    ASSERT_EQ(count, 33U);
+    ASSERT_EQ(count, GetParam().count);
     ASSERT_EQ(dim, 65U);
     ASSERT_EQ(nq, 3U);
     ASSERT_EQ(k, 5U);
@@ -78,6 +90,9 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         search();
         compare();
         index.save(output.string().c_str());
+        if (GetParam().resave_identical) {
+            EXPECT_TRUE(read_bytes(output) == read_bytes(path));
+        }
         index.load(output.string().c_str());
         check_counts();
         search();
@@ -94,7 +109,9 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         exercise(index, [&] {
             EXPECT_EQ(index.padded_dim(), expected_padded_dim);
             EXPECT_EQ(index.initializer_type(), ivf::InitializerType::Flat);
-            index.search_batch(queries.data(), nq, k, 1, ids.data(), distances.data());
+            index.search_batch(
+                queries.data(), nq, k, GetParam().ivf_nprobe, ids.data(), distances.data()
+            );
         });
     } else if (name.find("hnsw") == 0) {
         hnsw::HierarchicalNSW index;
@@ -138,19 +155,15 @@ INSTANTIATE_TEST_SUITE_P(
     [](const auto& info) { return info.param.name; }
 );
 
-// Pinned to the IVF implementation immediately before the per-cluster-storage
-// refactor (see tests/fixtures/persistence/pre-ivf-per-cluster-storage/README.md),
-// not a distant historical release: proves this specific change didn't move the
-// on-disk format it reads or writes. kDim=65 rounds up to a 96 padded_dim under
-// the current (32-multiple) padding rule, unlike v0.5.2's fixed 128.
+// Four uneven IVF clusters written before per-cluster storage; dim 65 pads to 96.
 INSTANTIATE_TEST_SUITE_P(
     PreIvfPerClusterStorage,
     HistoricalPersistenceTest,
     ::testing::Values(
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_l2", 96},
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_ip", 96},
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_l2", 96},
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_ip", 96}
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_l2", 96, 130, 4, true},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_ip", 96, 130, 4, true},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_l2", 96, 130, 4, true},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_ip", 96, 130, 4, true}
     ),
     [](const auto& info) { return info.param.name; }
 );
