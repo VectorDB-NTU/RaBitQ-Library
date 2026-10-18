@@ -278,6 +278,8 @@ void IVF::add(
 );
 
 size_t IVF::remove(const PID* ids_to_remove, size_t n);
+
+void IVF::reserve(PID cluster_id, size_t num_points);
 ```
 
 - **data**, **n**: `n` new vectors, quantized like `construct` does. Vector `i`
@@ -290,6 +292,9 @@ size_t IVF::remove(const PID* ids_to_remove, size_t n);
 - **ids_to_remove**: PIDs to remove. Every PID must be below `num_stored_points()`; nothing is
   removed if one is not. `remove` returns how many were newly removed and can be
   repeated safely.
+- **cluster_id**, **num_points**: `reserve` preallocates room for cluster `cluster_id`
+  to hold `num_points` vectors in total, counting the ones it already holds. It does
+  nothing if the cluster already has that room. See [Cost of `add`](#cost-of-add).
 
 In Python:
 
@@ -298,6 +303,7 @@ new_ids = index.add(vectors, num_threads=1, fast_quantization=False)
 # To choose clusters explicitly, use this instead of the call above:
 # new_ids = index.add(vectors, cluster_ids=labels)
 removed = index.remove(new_ids[:10])
+index.reserve(cluster_id, num_points)
 ```
 
 Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float32.
@@ -314,14 +320,21 @@ access; see the
 
 ### Cost of `add`
 
-`add` builds the grown index next to the old one and swaps it in, so the index is
-unchanged if it throws. Every call copies the whole storage, so:
+Each cluster has its own storage, and `add` only touches the clusters that receive
+new vectors. Each of those is rebuilt next to its old storage and swapped in, so the
+index is unchanged if `add` throws. As a result:
 
-- It needs memory for both copies while it runs.
-- Each call has a fixed cost that grows with the size of the whole index, on top of a
-  cost per new vector. **Add many vectors per call rather than one at a time.**
+- A call needs extra memory for the clusters it touches while it runs.
+- Each call costs time proportional to the sizes of the touched clusters, on top of a
+  cost per new vector. Routed vectors usually touch most clusters, so a call can
+  still copy most of the index. **Add many vectors per call rather than one at a
+  time.**
 
-There is no spare capacity: every `add` moves the data.
+A rebuilt cluster gets exactly the room it needs. To grow a cluster without
+copying it, call `reserve` first: later `add` calls then write into the reserved
+room in place until the cluster outgrows it. The reserved room is memory the index
+holds but does not use yet. It is not saved, so a loaded index has none.
+
 Measure update latency and peak memory with your index size, bit width and batch
 size; serialized file size alone does not determine peak process memory.
 

@@ -102,7 +102,7 @@ construction, updates, and file I/O. The following contract applies to
 | Operation on the same index | Concurrent access |
 | --- | --- |
 | `search`, `search_batch`, `save`, and property reads | May run together |
-| `build`, `add`, `remove`, and `resize`, where available | Require exclusive access |
+| `build`, `add`, `remove`, `reserve`, and `resize`, where available | Require exclusive access |
 
 A conflicting call immediately raises
 `RuntimeError("Index is busy: conflicting operation in progress")`.
