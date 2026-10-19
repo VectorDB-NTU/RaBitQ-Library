@@ -5,6 +5,9 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <iterator>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -18,17 +21,38 @@
 
 namespace rabitqlib {
 namespace {
-class HistoricalPersistenceTest : public ::testing::TestWithParam<std::string> {};
+std::string read_bytes(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+// padded_dim follows the padding rule of the writer that produced the fixture set.
+struct HistoricalFixtureCase {
+    std::string directory;  // subdirectory under RABITQ_TEST_FIXTURE_ROOT
+    std::string name;
+    size_t padded_dim;
+    size_t count = 33;
+    size_t ivf_nprobe = 1;
+    bool resave_identical = false;  // the current writer must reproduce the file
+};
+
+void PrintTo(const HistoricalFixtureCase& value, std::ostream* output) {
+    *output << value.directory << '/' << value.name;
+}
+
+class HistoricalPersistenceTest : public ::testing::TestWithParam<HistoricalFixtureCase> {};
 
 TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFailedLoad) {
-    const std::filesystem::path directory(RABITQ_TEST_FIXTURE_DIR);
-    const auto name = GetParam();
+    const std::filesystem::path directory =
+        std::filesystem::path(RABITQ_TEST_FIXTURE_ROOT) / GetParam().directory;
+    const auto name = GetParam().name;
+    const auto expected_padded_dim = GetParam().padded_dim;
     const auto path = (directory / (name + ".index")).string();
     std::ifstream expected(directory / (name + ".expected"));
     ASSERT_TRUE(expected.is_open());
     size_t count = 0, dim = 0, nq = 0, k = 0;
     expected >> count >> dim >> nq >> k;
-    ASSERT_EQ(count, 33U);
+    ASSERT_EQ(count, GetParam().count);
     ASSERT_EQ(dim, 65U);
     ASSERT_EQ(nq, 3U);
     ASSERT_EQ(k, 5U);
@@ -39,8 +63,8 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     for (size_t i = 0; i < ids.size(); ++i)
         expected >> reference_ids[i] >> reference_distances[i];
     ASSERT_TRUE(expected.good());
-    const auto output =
-        std::filesystem::temp_directory_path() / ("rabitq_historical_" + name);
+    const auto output = std::filesystem::temp_directory_path() /
+                        ("rabitq_historical_" + GetParam().directory + "_" + name);
     const auto compare = [&] {
         EXPECT_EQ(ids, reference_ids);
         for (size_t i = 0; i < ids.size(); ++i) {
@@ -66,6 +90,9 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         search();
         compare();
         index.save(output.string().c_str());
+        if (GetParam().resave_identical) {
+            EXPECT_TRUE(read_bytes(output) == read_bytes(path));
+        }
         index.load(output.string().c_str());
         check_counts();
         search();
@@ -80,9 +107,11 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     if (name.find("ivf") == 0) {
         ivf::IVF index;
         exercise(index, [&] {
-            EXPECT_EQ(index.padded_dim(), 128U);
+            EXPECT_EQ(index.padded_dim(), expected_padded_dim);
             EXPECT_EQ(index.initializer_type(), ivf::InitializerType::Flat);
-            index.search_batch(queries.data(), nq, k, 1, ids.data(), distances.data());
+            index.search_batch(
+                queries.data(), nq, k, GetParam().ivf_nprobe, ids.data(), distances.data()
+            );
         });
     } else if (name.find("hnsw") == 0) {
         hnsw::HierarchicalNSW index;
@@ -99,7 +128,7 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     } else {
         symqg::QuantizedGraph<float> index;
         exercise(index, [&] {
-            EXPECT_EQ(index.padded_dim(), 128U);
+            EXPECT_EQ(index.padded_dim(), expected_padded_dim);
             index.set_ef(64);
             index.search_batch(queries.data(), nq, k, ids.data(), distances.data(), 1);
         });
@@ -110,20 +139,31 @@ INSTANTIATE_TEST_SUITE_P(
     V052,
     HistoricalPersistenceTest,
     ::testing::Values(
-        "ivf4_l2",
-        "ivf4_ip",
-        "ivf32_l2",
-        "ivf32_ip",
-        "hnsw4_l2",
-        "hnsw4_ip",
-        "qg0_l2",
-        "qg0_ip",
-        "qg4_l2",
-        "qg4_ip",
-        "qg8_l2",
-        "qg8_ip"
+        HistoricalFixtureCase{"v0.5.2", "ivf4_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "ivf4_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "ivf32_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "ivf32_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "hnsw4_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "hnsw4_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg0_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg0_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg4_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg4_ip", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg8_l2", 128},
+        HistoricalFixtureCase{"v0.5.2", "qg8_ip", 128}
     ),
-    [](const auto& info) { return info.param; }
+    [](const auto& info) { return info.param.name; }
+);
+
+// Four uneven IVF clusters written before per-cluster storage; dim 65 pads to 96.
+INSTANTIATE_TEST_SUITE_P(
+    PreIvfPerClusterStorage,
+    HistoricalPersistenceTest,
+    ::testing::Values(
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_l2", 96, 130, 4, true},
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_l2", 96, 130, 4, true}
+    ),
+    [](const auto& info) { return info.param.name; }
 );
 }  // namespace
 }  // namespace rabitqlib

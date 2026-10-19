@@ -164,6 +164,23 @@ class IvfIndex {
         return ids;
     }
 
+    void reserve(int64_t cluster_id, int64_t num_points) {
+        const auto operation = access_.write();
+        if (!built_) {
+            throw std::runtime_error("IvfIndex must be built or loaded before reserve");
+        }
+        if (cluster_id < 0 || static_cast<uint64_t>(cluster_id) >= index_->num_clusters()) {
+            throw std::invalid_argument("cluster_id must be in [0, num_clusters)");
+        }
+        if (num_points < 0) {
+            throw std::invalid_argument("num_points must be non-negative");
+        }
+        py::gil_scoped_release release;
+        index_->reserve(
+            static_cast<rabitqlib::PID>(cluster_id), static_cast<size_t>(num_points)
+        );
+    }
+
     size_t remove(py::handle ids) {
         const auto operation = access_.write();
         auto ids_array = ensure_1d_integer_array(ids, "ids");
@@ -347,7 +364,16 @@ void register_ivf(py::module_& m) {
             "Append vectors without the original data and return their ids. Vectors "
             "are quantized against the existing centroids, which do not move. Without "
             "cluster_ids each vector goes to its nearest centroid. Each call copies "
-            "the whole index, so add many vectors per call rather than one at a time."
+            "every cluster it adds to, unless reserve left room for the new vectors, "
+            "so add many vectors per call rather than one at a time."
+        )
+        .def(
+            "reserve",
+            &IvfIndex::reserve,
+            py::arg("cluster_id"),
+            py::arg("num_points"),
+            "Preallocate room for a cluster to hold num_points vectors, so later adds "
+            "to it do not copy it. Reserved room is not saved."
         )
         .def(
             "remove",

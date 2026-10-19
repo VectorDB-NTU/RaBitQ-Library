@@ -1,0 +1,14 @@
+{
+  "source_tag": "main",
+  "source_commit": "64fc943e0e92fa7e18eec1477050b23342a976f8",
+  "writer": "tests/fixtures/persistence/pre-ivf-per-cluster-storage/generate.cpp",
+  "producer": "Linux x86-64, g++ 14.3.0, Release, one thread, native optimization OFF",
+  "byte_order": "little",
+  "size_t_bytes": 8,
+  "sha256": {
+    "pre-ivf-per-cluster-storage/ivf32_l2.expected": "7843685eadb19c6023df353aa6602e56f5042e4d0c6c2b1ac6019949b7459734",
+    "pre-ivf-per-cluster-storage/ivf32_l2.index": "4b0f98a898edf9cf157d226c51ba74a313d5fb5c055dc5663e14ce3a631f121b",
+    "pre-ivf-per-cluster-storage/ivf4_l2.expected": "7de95886d52dfbb5300890f920256fd7927eae2a4528223753e6f44f76a3e20d",
+    "pre-ivf-per-cluster-storage/ivf4_l2.index": "eb73f9066fef993a5f7e833641adb8bddb1e95cdc04addb2261a8e10bec0c41f"
+  }
+}

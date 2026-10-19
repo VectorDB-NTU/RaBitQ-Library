@@ -52,13 +52,9 @@ bool IVF::exceeds_storage(size_t n) const {
            n > max_size / batch_bytes || (rerank_bytes != 0 && n > max_size / rerank_bytes);
 }
 
-size_t IVF::batch_data_bytes(const std::vector<size_t>& cluster_sizes) const {
-    assert(cluster_sizes.size() == num_clusters_);
-    size_t total_blocks = 0;
-    for (auto size : cluster_sizes) {
-        total_blocks += div_round_up(size, fastscan::kBatchSize);
-    }
-    return total_blocks * BatchDataMap<float>::data_bytes(padded_dim_);
+size_t IVF::batch_data_bytes(size_t cluster_size) const {
+    return div_round_up(cluster_size, fastscan::kBatchSize) *
+           BatchDataMap<float>::data_bytes(padded_dim_);
 }
 
 // Keep the original inlining intent inside this translation unit, especially the
@@ -68,24 +64,55 @@ inline size_t IVF::rerank_vector_bytes() const {
                           : ExDataMap<float>::data_bytes(padded_dim_, ex_bits_);
 }
 
-inline size_t IVF::ex_data_bytes() const { return rerank_vector_bytes() * max_elements_; }
+inline size_t IVF::ex_data_bytes(size_t cluster_size) const {
+    return rerank_vector_bytes() * cluster_size;
+}
+
+void IVF::resize_storage(ClusterStorage& cs, size_t n) const {
+    cs.batch_storage.resize(batch_data_bytes(n));
+    if (rerank_vector_bytes() > 0) {
+        if (raw_reranking_) {
+            cs.raw_storage.resize(n * dim_);
+        } else {
+            cs.ex_storage.resize(ex_data_bytes(n));
+        }
+    }
+    cs.id_storage.resize(n);
+}
+
+void IVF::reserve_storage(ClusterStorage& cs, size_t n) const {
+    cs.batch_storage.reserve(batch_data_bytes(n));
+    if (rerank_vector_bytes() > 0) {
+        if (raw_reranking_) {
+            cs.raw_storage.reserve(n * dim_);
+        } else {
+            cs.ex_storage.reserve(ex_data_bytes(n));
+        }
+    }
+    cs.id_storage.reserve(n);
+}
+
+bool IVF::has_capacity(const ClusterStorage& cs, size_t n) const {
+    if (cs.batch_storage.capacity() < batch_data_bytes(n) || cs.id_storage.capacity() < n) {
+        return false;
+    }
+    if (rerank_vector_bytes() == 0) {
+        return true;
+    }
+    return raw_reranking_ ? cs.raw_storage.capacity() >= n * dim_
+                          : cs.ex_storage.capacity() >= ex_data_bytes(n);
+}
 
 void IVF::free_memory() {
     initializer_.reset();
-    ByteStorage().swap(batch_storage_);
-    ByteStorage().swap(ex_storage_);
-    FloatStorage().swap(raw_storage_);
-    IdStorage().swap(id_storage_);
+    std::vector<ClusterStorage>().swap(cluster_storage_);
 }
 
 void IVF::swap(IVF& other) noexcept {
     using std::swap;
     swap(initializer_type_, other.initializer_type_);
     swap(initializer_, other.initializer_);
-    swap(batch_storage_, other.batch_storage_);
-    swap(ex_storage_, other.ex_storage_);
-    swap(raw_storage_, other.raw_storage_);
-    swap(id_storage_, other.id_storage_);
+    swap(cluster_storage_, other.cluster_storage_);
     swap(max_elements_, other.max_elements_);
     swap(num_removed_, other.num_removed_);
     swap(dim_, other.dim_);
@@ -250,42 +277,25 @@ void IVF::allocate_memory(const std::vector<size_t>& cluster_sizes) {
         this->initializer_ =
             std::make_unique<HNSWInitializer>(padded_dim_, num_clusters_, metric_type_);
     }
-    batch_storage_ = ByteStorage(batch_data_bytes(cluster_sizes));
-    if (rerank_vector_bytes() > 0) {
-        if (raw_reranking_) {
-            raw_storage_ = FloatStorage(max_elements_ * dim_);
-        } else {
-            ex_storage_ = ByteStorage(ex_data_bytes());
-        }
+    cluster_storage_.assign(num_clusters_, ClusterStorage(raw_reranking_));
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        resize_storage(cluster_storage_[i], cluster_sizes[i]);
     }
-    id_storage_ = IdStorage(max_elements_);
 
     this->ip_func_ = select_excode_ipfunc(ex_bits_);
 }
 
 /**
- * @brief Initialize the cluster list by finding each cluster's storage offsets.
+ * @brief Initialize the cluster list from each cluster's own independent storage.
  */
 void IVF::init_clusters(const std::vector<size_t>& cluster_sizes) {
     this->clusters_.reserve(num_clusters_);
-    size_t added_vectors = 0;
-    size_t added_batches = 0;
     for (size_t i = 0; i < num_clusters_; ++i) {
-        // find data location for current cluster
-        size_t num = cluster_sizes[i];
-        size_t num_batches = div_round_up(num, fastscan::kBatchSize);
-
-        char* current_batch_data =
-            batch_data() + (BatchDataMap<float>::data_bytes(padded_dim_) * added_batches);
-        char* current_ex_data = rerank_vector_bytes() > 0
-                                    ? ex_data() + (added_vectors * rerank_vector_bytes())
-                                    : nullptr;
-        PID* cluster_ids = ids() + added_vectors;
-
-        this->clusters_.emplace_back(num, current_batch_data, current_ex_data, cluster_ids);
-
-        added_vectors += num;
-        added_batches += num_batches;
+        ClusterStorage& cs = cluster_storage_[i];
+        char* current_ex_data = rerank_vector_bytes() > 0 ? cs.ex_data() : nullptr;
+        this->clusters_.emplace_back(
+            cluster_sizes[i], cs.batch_data(), current_ex_data, cs.ids()
+        );
     }
 }
 
@@ -344,8 +354,7 @@ void IVF::add(
     const float* data, size_t n, const PID* cluster_ids, bool faster, size_t num_threads
 ) {
     if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || batch_storage_.empty() ||
-        id_storage_.size() != max_elements_) {
+        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
         throw std::logic_error("IVF index must be constructed or loaded before add");
     }
     if (n == 0) {
@@ -391,33 +400,12 @@ void IVF::add(
         rows_of[assigned[i]].push_back(static_cast<PID>(i));
     }
     std::vector<size_t> new_sizes(num_clusters_);
+    std::vector<size_t> touched;
     for (size_t i = 0; i < num_clusters_; ++i) {
         new_sizes[i] = clusters_[i].num() + rows_of[i].size();
-    }
-
-    /* Build the grown storage on the side so the index is unchanged on failure */
-    ByteStorage new_batch(batch_data_bytes(new_sizes));
-    ByteStorage new_ex;
-    FloatStorage new_raw;
-    const size_t rerank_bytes = rerank_vector_bytes();
-    if (raw_reranking_) {
-        new_raw = FloatStorage(new_num_points * dim_);
-    } else if (rerank_bytes > 0) {
-        new_ex = ByteStorage(new_num_points * rerank_bytes);
-    }
-    IdStorage new_ids(new_num_points);
-    char* new_rerank = raw_reranking_ ? reinterpret_cast<char*>(new_raw.data())
-                                      : reinterpret_cast<char*>(new_ex.data());
-
-    std::vector<size_t> batch_offset(num_clusters_);
-    std::vector<size_t> vector_offset(num_clusters_);
-    size_t added_batches = 0;
-    size_t added_vectors = 0;
-    for (size_t i = 0; i < num_clusters_; ++i) {
-        batch_offset[i] = added_batches;
-        vector_offset[i] = added_vectors;
-        added_batches += div_round_up(new_sizes[i], fastscan::kBatchSize);
-        added_vectors += new_sizes[i];
+        if (!rows_of[i].empty()) {
+            touched.push_back(i);
+        }
     }
 
     quant::RabitqConfig config;
@@ -425,35 +413,80 @@ void IVF::add(
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
+    const size_t rerank_bytes = rerank_vector_bytes();
     const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
     const PID first_pid = static_cast<PID>(max_elements_);
+
+    /* Rebuild clusters without reserved capacity on the side; the rest grow in place */
+    std::vector<std::optional<ClusterStorage>> staged(touched.size());
+    std::vector<ByteStorage> tails(touched.size());  // repacked tails of in-place clusters
+    for (size_t t = 0; t < touched.size(); ++t) {
+        const size_t i = touched[t];
+        if (has_capacity(cluster_storage_[i], new_sizes[i])) {
+            const size_t full_batches = clusters_[i].num() / fastscan::kBatchSize;
+            tails[t].resize(batch_data_bytes(new_sizes[i]) - (full_batches * batch_bytes));
+        } else {
+            staged[t].emplace(raw_reranking_);
+            resize_storage(*staged[t], new_sizes[i]);
+        }
+    }
+    // Growing within capacity cannot reallocate or throw, so old cluster views stay valid
+    for (size_t t = 0; t < touched.size(); ++t) {
+        if (!staged[t]) {
+            resize_storage(cluster_storage_[touched[t]], new_sizes[touched[t]]);
+        }
+    }
+
     // An exception must not leave an OpenMP region, so keep the first one and rethrow it.
     index_detail::ParallelException failure;
 #pragma omp parallel for schedule(dynamic) num_threads(resolve_num_threads(num_threads))
-    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_clusters_);
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(touched.size());
          ++index) {
-        const size_t i = static_cast<size_t>(index);
+        const auto t = static_cast<size_t>(index);
+        const size_t i = touched[t];
         try {
+            ClusterStorage& cs = staged[t] ? *staged[t] : cluster_storage_[i];
+            const size_t full_batches = clusters_[i].num() / fastscan::kBatchSize;
+            char* tail = staged[t] ? cs.batch_data() + (full_batches * batch_bytes)
+                                   : reinterpret_cast<char*>(tails[t].data());
             extend_cluster(
                 clusters_[i],
                 rows_of[i],
                 data,
                 initializer_->centroid(static_cast<PID>(i)),
                 first_pid,
-                reinterpret_cast<char*>(new_batch.data()) + (batch_offset[i] * batch_bytes),
-                rerank_bytes > 0 ? new_rerank + (vector_offset[i] * rerank_bytes) : nullptr,
-                new_ids.data() + vector_offset[i],
+                cs.batch_data(),
+                rerank_bytes > 0 ? cs.ex_data() : nullptr,
+                cs.ids(),
+                tail,
                 config
             );
         } catch (...) { failure.capture(); }
     }
-    failure.rethrow();
+    if (failure.failed()) {
+        // In-place clusters were only written past their old size; shrinking drops that
+        for (size_t t = 0; t < touched.size(); ++t) {
+            if (!staged[t]) {
+                resize_storage(cluster_storage_[touched[t]], clusters_[touched[t]].num());
+            }
+        }
+        failure.rethrow();
+    }
 
-    /* Commit. Rebuilding the cluster list reuses its capacity, so it cannot throw. */
-    batch_storage_.swap(new_batch);
-    ex_storage_.swap(new_ex);
-    raw_storage_.swap(new_raw);
-    id_storage_.swap(new_ids);
+    /* Commit. Nothing below can throw. */
+    for (size_t t = 0; t < touched.size(); ++t) {
+        const size_t i = touched[t];
+        if (staged[t]) {
+            cluster_storage_[i] = std::move(*staged[t]);
+        } else {
+            const size_t full_batches = clusters_[i].num() / fastscan::kBatchSize;
+            std::copy_n(
+                tails[t].data(),
+                tails[t].size(),
+                cluster_storage_[i].batch_storage.data() + (full_batches * batch_bytes)
+            );
+        }
+    }
     max_elements_ = new_num_points;
     clusters_.clear();
     init_clusters(new_sizes);
@@ -462,9 +495,10 @@ void IVF::add(
 /**
  * @brief Copy one cluster into its grown storage and append new points to it.
  *
- * Full batches, rerank data and IDs are copied unchanged. The old partial tail batch is
- * unpacked and repacked together with the new points, so the result is byte-identical to
- * quantizing the same points in the same order in one construct call.
+ * Full batches, rerank data and IDs are copied unchanged, unless they are already in place.
+ * The old partial tail batch is unpacked and repacked together with the new points into
+ * `tail_dst`, so the result is byte-identical to quantizing the same points in the same
+ * order in one construct call.
  */
 void IVF::extend_cluster(
     const Cluster& old_cluster,
@@ -475,28 +509,28 @@ void IVF::extend_cluster(
     char* batch_dst,
     char* rerank_dst,
     PID* ids_dst,
+    char* tail_dst,
     const quant::RabitqConfig& config
 ) const {
+    assert(!rows.empty());  // add() only extends clusters that receive new points
     const size_t old_num = old_cluster.num();
     const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
     const size_t rerank_bytes = rerank_vector_bytes();
     const size_t cols = padded_dim_ / 8;
 
-    if (rows.empty()) {
-        const size_t old_batches = div_round_up(old_num, fastscan::kBatchSize);
-        std::copy_n(old_cluster.batch_data(), old_batches * batch_bytes, batch_dst);
-        std::copy_n(old_cluster.ex_data(), old_num * rerank_bytes, rerank_dst);
-        std::copy_n(old_cluster.ids(), old_num, ids_dst);
-        return;
-    }
-
     const size_t full_batches = old_num / fastscan::kBatchSize;
     const size_t kept = old_num - (full_batches * fastscan::kBatchSize);
     const size_t tail_num = kept + rows.size();
 
-    std::copy_n(old_cluster.batch_data(), full_batches * batch_bytes, batch_dst);
-    std::copy_n(old_cluster.ex_data(), old_num * rerank_bytes, rerank_dst);
-    std::copy_n(old_cluster.ids(), old_num, ids_dst);
+    if (batch_dst != old_cluster.batch_data()) {
+        std::copy_n(old_cluster.batch_data(), full_batches * batch_bytes, batch_dst);
+    }
+    if (rerank_dst != old_cluster.ex_data()) {
+        std::copy_n(old_cluster.ex_data(), old_num * rerank_bytes, rerank_dst);
+    }
+    if (ids_dst != old_cluster.ids()) {
+        std::copy_n(old_cluster.ids(), old_num, ids_dst);
+    }
 
     /* Codes and factors of every point in the tail, old points first */
     std::vector<uint8_t> codes(tail_num * cols);
@@ -546,7 +580,7 @@ void IVF::extend_cluster(
     }
 
     /* Repack the tail into batches */
-    char* batch = batch_dst + (full_batches * batch_bytes);
+    char* batch = tail_dst;
     for (size_t start = 0; start < tail_num; start += fastscan::kBatchSize) {
         const size_t count = std::min(fastscan::kBatchSize, tail_num - start);
         BatchDataMap<float> cur_batch(batch, padded_dim_);
@@ -562,10 +596,49 @@ void IVF::extend_cluster(
     }
 }
 
+void IVF::reserve(PID cluster_id, size_t num_points) {
+    if (!ready_ || clusters_.size() != num_clusters_ ||
+        cluster_storage_.size() != num_clusters_) {
+        throw std::logic_error("IVF index must be constructed or loaded before reserve");
+    }
+    if (cluster_id >= num_clusters_) {
+        throw std::invalid_argument("Cluster ID is out of range");
+    }
+    if (num_points > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("IVF point count exceeds the supported ID range");
+    }
+    if (exceeds_storage(num_points)) {
+        throw std::invalid_argument("IVF configuration exceeds addressable storage");
+    }
+    ClusterStorage& cs = cluster_storage_[cluster_id];
+    if (has_capacity(cs, num_points)) {
+        return;
+    }
+
+    const Cluster& old_cluster = clusters_[cluster_id];
+    const size_t num = old_cluster.num();
+    ClusterStorage grown(raw_reranking_);
+    reserve_storage(grown, num_points);
+    resize_storage(grown, num);
+    std::copy_n(old_cluster.batch_data(), batch_data_bytes(num), grown.batch_data());
+    if (rerank_vector_bytes() > 0) {
+        std::copy_n(old_cluster.ex_data(), ex_data_bytes(num), grown.ex_data());
+    }
+    std::copy_n(old_cluster.ids(), num, grown.ids());
+    std::vector<size_t> cluster_sizes(num_clusters_);
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        cluster_sizes[i] = clusters_[i].num();
+    }
+
+    /* Commit. Rebuilding the cluster list reuses its capacity, so it cannot throw. */
+    cs = std::move(grown);
+    clusters_.clear();
+    init_clusters(cluster_sizes);
+}
+
 size_t IVF::remove(const PID* ids_to_remove, size_t n) {
     if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || batch_storage_.empty() ||
-        id_storage_.size() != max_elements_) {
+        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
         throw std::logic_error("IVF index must be constructed or loaded before remove");
     }
     if (n == 0) {
@@ -612,8 +685,7 @@ size_t IVF::remove(const PID* ids_to_remove, size_t n) {
 
 void IVF::save(const char* filename) const {
     if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || batch_storage_.empty() ||
-        id_storage_.size() != max_elements_) {
+        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
         throw std::logic_error("Cannot save an unconstructed IVF index");
     }
     if (filename == nullptr || filename[0] == '\0') {
@@ -658,17 +730,28 @@ void IVF::save(const char* filename) const {
     /* Save rotator */
     this->rotator_->save(output);
 
-    /* Save data */
+    /* Save data: all batch data, then all ex data, then all IDs, each in cluster order */
     this->initializer_->save(output, filename);
-    output.write(
-        batch_data(), static_cast<std::streamsize>(batch_data_bytes(cluster_sizes))
-    );
-    if (ex_data_bytes() != 0) {
-        output.write(ex_data(), static_cast<std::streamsize>(ex_data_bytes()));
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        output.write(
+            cluster_storage_[i].batch_data(),
+            static_cast<std::streamsize>(batch_data_bytes(cluster_sizes[i]))
+        );
     }
-    output.write(
-        reinterpret_cast<const char*>(ids()), static_cast<std::streamsize>(ids_bytes())
-    );
+    if (rerank_vector_bytes() != 0) {
+        for (size_t i = 0; i < num_clusters_; ++i) {
+            output.write(
+                cluster_storage_[i].ex_data(),
+                static_cast<std::streamsize>(ex_data_bytes(cluster_sizes[i]))
+            );
+        }
+    }
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        output.write(
+            reinterpret_cast<const char*>(cluster_storage_[i].ids()),
+            static_cast<std::streamsize>(ids_bytes(cluster_sizes[i]))
+        );
+    }
 
     output.close();
 }
@@ -813,24 +896,34 @@ void IVF::load(const char* filename) {
     /* Load rotator */
     loaded.rotator_->load(input);
 
-    /* Load data */
+    /* Load data: all batch data, then all ex data, then all IDs, each in cluster order */
     loaded.allocate_memory(cluster_sizes);
     loaded.initializer_->load(input, filename);
-    input.read(
-        loaded.batch_data(),
-        static_cast<std::streamsize>(loaded.batch_data_bytes(cluster_sizes))
-    );
-    if (loaded.ex_data_bytes() != 0) {
-        input.read(loaded.ex_data(), static_cast<std::streamsize>(loaded.ex_data_bytes()));
+    for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+        input.read(
+            loaded.cluster_storage_[i].batch_data(),
+            static_cast<std::streamsize>(loaded.batch_data_bytes(cluster_sizes[i]))
+        );
     }
-    input.read(
-        reinterpret_cast<char*>(loaded.ids()),
-        static_cast<std::streamsize>(loaded.ids_bytes())
-    );
-    for (size_t i = 0; i < loaded.max_elements_; ++i) {
-        if (loaded.ids()[i] >= loaded.max_elements_ ||
-            loaded.ids()[i] >= buffer::kSearchBufferCheckedMask) {
-            throw std::runtime_error("Invalid point ID in IVF index file");
+    if (loaded.rerank_vector_bytes() != 0) {
+        for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+            input.read(
+                loaded.cluster_storage_[i].ex_data(),
+                static_cast<std::streamsize>(loaded.ex_data_bytes(cluster_sizes[i]))
+            );
+        }
+    }
+    for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+        input.read(
+            reinterpret_cast<char*>(loaded.cluster_storage_[i].ids()),
+            static_cast<std::streamsize>(ids_bytes(cluster_sizes[i]))
+        );
+    }
+    for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+        for (PID id : loaded.cluster_storage_[i].id_storage) {
+            if (id >= loaded.max_elements_ || id >= buffer::kSearchBufferCheckedMask) {
+                throw std::runtime_error("Invalid point ID in IVF index file");
+            }
         }
     }
 
@@ -993,8 +1086,7 @@ inline void IVF::validate_search(
     const float* query, size_t k, size_t nprobe, const PID* results
 ) const {
     if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || batch_storage_.empty() ||
-        id_storage_.size() != max_elements_) {
+        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
         throw std::logic_error("IVF index must be constructed or loaded before search");
     }
     if (query == nullptr) {
