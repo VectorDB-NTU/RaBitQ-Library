@@ -2106,6 +2106,8 @@ or loaded index without the original dataset. Updates preserve the file format.<
 <a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">);</span>
 <a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>
 <a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">IVF::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">ids_to_remove</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="kt">void</span><span class="w"> </span><span class="nf">IVF::reserve</span><span class="p">(</span><span class="n">PID</span><span class="w"> </span><span class="n">cluster_id</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">);</span>
 </code></pre></div>
 <ul>
 <li><strong>data</strong>, <strong>n</strong>: <code>n</code> new vectors, quantized like <code>construct</code> does. Vector <code>i</code>
@@ -2118,12 +2120,16 @@ or loaded index without the original dataset. Updates preserve the file format.<
 <li><strong>ids_to_remove</strong>: PIDs to remove. Every PID must be below <code>num_stored_points()</code>; nothing is
   removed if one is not. <code>remove</code> returns how many were newly removed and can be
   repeated safely.</li>
+<li><strong>cluster_id</strong>, <strong>num_points</strong>: <code>reserve</code> preallocates room for cluster <code>cluster_id</code>
+  to hold <code>num_points</code> vectors in total, counting the ones it already holds. It does
+  nothing if the cluster already has that room. See <a href="#cost-of-add">Cost of <code>add</code></a>.</li>
 </ul>
 <p>In Python:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">fast_quantization</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># To choose clusters explicitly, use this instead of the call above:</span>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1"># new_ids = index.add(vectors, cluster_ids=labels)</span>
 <a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="n">index</span><span class="o">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">cluster_id</span><span class="p">,</span> <span class="n">num_points</span><span class="p">)</span>
 </code></pre></div>
 <p>Python <code>vectors</code> has shape <code>(n, index.dim)</code> and is converted to contiguous float32.
 <code>add()</code> returns a uint32 array of the new IDs. Optional <code>cluster_ids</code> must be a
@@ -2136,15 +2142,21 @@ IDs and returns the number newly removed. Duplicate IDs count once. Python
 access; see the
 <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <h3 id="cost-of-add">Cost of <code>add</code><a class="headerlink" href="#cost-of-add" title="Permanent link">&para;</a></h3>
-<p><code>add</code> builds the grown index next to the old one and swaps it in, so the index is
-unchanged if it throws. Every call copies the whole storage, so:</p>
+<p>Each cluster has its own storage, and <code>add</code> only touches the clusters that receive
+new vectors. Each of those is rebuilt next to its old storage and swapped in, so the
+index is unchanged if <code>add</code> throws. As a result:</p>
 <ul>
-<li>It needs memory for both copies while it runs.</li>
-<li>Each call has a fixed cost that grows with the size of the whole index, on top of a
-  cost per new vector. <strong>Add many vectors per call rather than one at a time.</strong></li>
+<li>A call needs extra memory for the clusters it touches while it runs.</li>
+<li>Each call costs time proportional to the sizes of the touched clusters, on top of a
+  cost per new vector. Routed vectors usually touch most clusters, so a call can
+  still copy most of the index. <strong>Add many vectors per call rather than one at a
+  time.</strong></li>
 </ul>
-<p>There is no spare capacity: every <code>add</code> moves the data.
-Measure update latency and peak memory with your index size, bit width and batch
+<p>A rebuilt cluster gets exactly the room it needs. To grow a cluster without
+copying it, call <code>reserve</code> first: later <code>add</code> calls then write into the reserved
+room in place until the cluster outgrows it. The reserved room is memory the index
+holds but does not use yet. It is not saved, so a loaded index has none.</p>
+<p>Measure update latency and peak memory with your index size, bit width and batch
 size; serialized file size alone does not determine peak process memory.</p>
 <h3 id="recall-after-add">Recall after <code>add</code><a class="headerlink" href="#recall-after-add" title="Permanent link">&para;</a></h3>
 <p>The centroids and the rotation are fixed when the index is constructed, so
