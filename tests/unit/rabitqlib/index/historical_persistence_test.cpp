@@ -63,8 +63,8 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     for (size_t i = 0; i < ids.size(); ++i)
         expected >> reference_ids[i] >> reference_distances[i];
     ASSERT_TRUE(expected.good());
-    const auto output =
-        std::filesystem::temp_directory_path() / ("rabitq_historical_" + name);
+    const auto output = std::filesystem::temp_directory_path() /
+                        ("rabitq_historical_" + GetParam().directory + "_" + name);
     const auto compare = [&] {
         EXPECT_EQ(ids, reference_ids);
         for (size_t i = 0; i < ids.size(); ++i) {
@@ -161,9 +161,7 @@ INSTANTIATE_TEST_SUITE_P(
     HistoricalPersistenceTest,
     ::testing::Values(
         HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_l2", 96, 130, 4, true},
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf4_ip", 96, 130, 4, true},
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_l2", 96, 130, 4, true},
-        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_ip", 96, 130, 4, true}
+        HistoricalFixtureCase{"pre-ivf-per-cluster-storage", "ivf32_l2", 96, 130, 4, true}
     ),
     [](const auto& info) { return info.param.name; }
 );

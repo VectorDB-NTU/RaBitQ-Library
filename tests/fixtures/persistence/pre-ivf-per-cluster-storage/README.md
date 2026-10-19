@@ -6,8 +6,8 @@ cluster in one shared buffer, using [generate.cpp](generate.cpp).
 [manifest.json](manifest.json) records the producer and SHA-256 hashes.
 Keep these files unchanged; tests never regenerate them with the current writer.
 
-The four cases cover four-bit and raw-vector (`nbits=32`) IVF for L2 and inner
-product. Each index holds 130 points in 65 original dimensions (96 padded) across
+The two cases cover four-bit and raw-vector (`nbits=32`) IVF for L2.
+Each index holds 130 points in 65 original dimensions (96 padded) across
 four clusters of 0, 1, 32 and 97 points, so the file has an empty cluster, a
 single-point cluster, a full FastScan batch and a partial tail batch. Point 0 is
 removed. The `.expected` files hold reference results of a search that probes
