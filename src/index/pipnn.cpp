@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <mutex>
 #include <numeric>
 #include <random>
@@ -28,6 +29,7 @@ namespace rabitqlib::symqg::detail {
 
 namespace pipnn_impl {
 constexpr size_t kTileSize = 2048;
+constexpr size_t kMinTileSize = 64;
 constexpr size_t kHashBits = 12;
 constexpr size_t kLocalDegree = 2;
 constexpr float kAlpha = 1.1F;
@@ -180,6 +182,33 @@ void pairwise(Workspace& work, size_t size, size_t dim, MetricType metric) {
     );
 }
 
+void select_local_neighbors(const Bucket& ids, Workspace& work) {
+    static_assert(kLocalDegree == 2);
+    work.candidates.assign(
+        ids.size() * kLocalDegree, {std::numeric_limits<float>::infinity(), kPidMax}
+    );
+    const auto keep_nearest = [&](size_t row, float distance, PID target) {
+        auto* best = work.candidates.data() + row * kLocalDegree;
+        const std::pair<float, PID> candidate(distance, target);
+        if (candidate < best[1]) {
+            best[1] = candidate;
+            if (best[1] < best[0]) {
+                std::swap(best[0], best[1]);
+            }
+        }
+    };
+    // Both metrics are symmetric. Read each stored pair once, contiguously,
+    // instead of gathering the upper half through a strided column walk.
+    for (size_t i = 1; i < ids.size(); ++i) {
+        const float* distances = work.distances + i * ids.size();
+        for (size_t j = 0; j < i; ++j) {
+            const float distance = distances[j];
+            keep_nearest(i, distance, ids[j]);
+            keep_nearest(j, distance, ids[i]);
+        }
+    }
+}
+
 std::vector<Bucket> partition(
     const float* data,
     size_t dim,
@@ -189,6 +218,15 @@ std::vector<Bucket> partition(
     ScratchPool& scratch
 ) {
     const auto& ids = job.ids;
+    // Small root partitions need enough tiles to occupy the requested team.
+    // Deeper levels already distribute independent buckets across workers.
+    const size_t tile_size =
+        job.depth == 0
+            ? std::min(
+                  kTileSize,
+                  round_up_to_multiple(div_round_up(ids.size(), threads), kMinTileSize)
+              )
+            : kTileSize;
     const size_t leader_count = std::min(
         ids.size(), std::clamp<size_t>(job.depth == 0 ? 512 : ids.size() / 200, 3, 512)
     );
@@ -210,7 +248,10 @@ std::vector<Bucket> partition(
     simd::row_norms(leader_data.data(), leader_norms.data(), leader_count, dim);
     std::vector<PID> assignments(ids.size() * fanout);
     const auto assign_tile = [&](size_t begin, Workspace& work) {
-        const size_t count = std::min(kTileSize, ids.size() - begin);
+        // Both callers run inside a PiPNN OpenMP task, including one-thread teams.
+        // Keep Eigen within that worker without changing the caller's thread budget.
+        omp_set_num_threads(1);
+        const size_t count = std::min(tile_size, ids.size() - begin);
         RowMajorMatrixMap<float> points(
             work.points, static_cast<Eigen::Index>(count), static_cast<Eigen::Index>(dim)
         );
@@ -251,13 +292,13 @@ std::vector<Bucket> partition(
     if (job.depth == 0) {
         {
             index_detail::ParallelException failure;
-#pragma omp parallel num_threads(threads)
+#pragma omp parallel num_threads(std::min(threads, div_round_up(ids.size(), tile_size)))
             {
                 auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
 #pragma omp for schedule(static)
                 for (std::ptrdiff_t offset = 0;
                      offset < static_cast<std::ptrdiff_t>(ids.size());
-                     offset += static_cast<std::ptrdiff_t>(kTileSize)) {
+                     offset += static_cast<std::ptrdiff_t>(tile_size)) {
                     if (failure.failed()) {
                         continue;
                     }
@@ -273,7 +314,7 @@ std::vector<Bucket> partition(
         // Already inside the bucket-level team. Eigen must see that team rather
         // than a serialized nested region when deciding its own parallelism.
         auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
-        for (size_t begin = 0; begin < ids.size(); begin += kTileSize) {
+        for (size_t begin = 0; begin < ids.size(); begin += tile_size) {
             assign_tile(begin, work);
         }
     }
@@ -367,7 +408,7 @@ std::vector<Bucket> cluster(
         } else {
             {
                 index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(threads) schedule(dynamic)
+#pragma omp parallel for num_threads(std::min(threads, active.size())) schedule(dynamic)
                 for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(active.size());
                      ++i) {
                     if (failure.failed()) {
@@ -424,17 +465,22 @@ InitialGraph build_initial_graph(
         projections.data()[i] = normal(random);
     }
     RowMajorMatrix<float> sketches(count, kHashBits);
+    const size_t sketch_tile = std::min(
+        kTileSize, round_up_to_multiple(div_round_up(count, threads), kMinTileSize)
+    );
     {
         index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(threads) schedule(static)
+#pragma omp parallel for num_threads(std::min(threads, div_round_up(count, sketch_tile))) \
+    schedule(static)
         for (std::ptrdiff_t offset = 0; offset < static_cast<std::ptrdiff_t>(count);
-             offset += static_cast<std::ptrdiff_t>(kTileSize)) {
+             offset += static_cast<std::ptrdiff_t>(sketch_tile)) {
             if (failure.failed()) {
                 continue;
             }
             try {
                 const size_t begin = static_cast<size_t>(offset);
-                const size_t rows = std::min(kTileSize, count - begin);
+                const size_t rows = std::min(sketch_tile, count - begin);
+                omp_set_num_threads(1);
                 simd::matrix_product(
                     data + begin * dim,
                     projections.data(),
@@ -450,7 +496,7 @@ InitialGraph build_initial_graph(
     CandidateTable table(count, degree * 5 / 2);
     {
         index_detail::ParallelException failure;
-#pragma omp parallel num_threads(threads)
+#pragma omp parallel num_threads(std::min(threads, leaves.size()))
         {
             auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
 #pragma omp for schedule(dynamic)
@@ -468,25 +514,14 @@ InitialGraph build_initial_graph(
                     }
                     gather(data, dim, ids, work);
                     pairwise(work, ids.size(), dim, metric);
+                    select_local_neighbors(ids, work);
+                    const size_t keep = std::min(kLocalDegree, ids.size() - 1);
+                    // Retain the original point order and (distance, ID) tie order
+                    // when publishing forward and reverse proposals.
                     for (size_t i = 0; i < ids.size(); ++i) {
-                        work.candidates.clear();
-                        for (size_t j = 0; j < ids.size(); ++j) {
-                            if (i != j) {
-                                work.candidates.emplace_back(
-                                    work.distances
-                                        [std::max(i, j) * ids.size() + std::min(i, j)],
-                                    ids[j]
-                                );
-                            }
-                        }
-                        const size_t keep = std::min(kLocalDegree, work.candidates.size());
-                        std::partial_sort(
-                            work.candidates.begin(),
-                            work.candidates.begin() + static_cast<ptrdiff_t>(keep),
-                            work.candidates.end()
-                        );
                         for (size_t j = 0; j < keep; ++j) {
-                            const auto [distance, target] = work.candidates[j];
+                            const auto [distance, target] =
+                                work.candidates[i * kLocalDegree + j];
                             table.merge(ids[i], target, distance, sketches);
                             table.merge(target, ids[i], distance, sketches);
                         }

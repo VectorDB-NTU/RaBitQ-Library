@@ -34,6 +34,9 @@ struct ScratchPool {
 
 void gather(const float*, size_t, const Bucket&, Workspace&);
 void pairwise(Workspace&, size_t, size_t, MetricType);
+// After pairwise(), write two sorted (distance, ID) candidates per local row.
+// Excludes self; a missing second neighbor retains kPidMax.
+void select_local_neighbors(const Bucket&, Workspace&);
 std::vector<Bucket> cluster(const float*, size_t, size_t, MetricType, size_t, ScratchPool&);
 
 }  // namespace rabitqlib::symqg::detail::pipnn_impl

@@ -59,6 +59,24 @@ void check_quantization(void (*quantize)(T*, const float*, size_t, float, float)
 }
 
 template <typename T>
+void check_zero_range(void (*quantize)(T*, const float*, size_t, float, float)) {
+    for (float lo : {0.0F, -3.25F, 7.5F}) {
+        for (float delta : {0.0F, -0.0F}) {
+            for (size_t dim :
+                 {0U, 1U, 3U, 4U, 7U, 8U, 9U, 15U, 16U, 17U, 31U, 32U, 33U, 65U, 256U}) {
+                SCOPED_TRACE(::testing::Message() << lo << "/" << delta << "/" << dim);
+                std::vector<float> input(dim + 2, lo);
+                // Offset both buffers to cover unaligned SIMD accesses and tails.
+                std::vector<T> actual(dim + 2, 99), expected(dim + 2, 0);
+                expected.front() = expected.back() = 99;
+                quantize(actual.data() + 1, input.data() + 1, dim, lo, delta);
+                EXPECT_EQ(actual, expected);
+            }
+        }
+    }
+}
+
+template <typename T>
 void check_transpose(
     void (*transpose)(const T*, uint64_t*, size_t, size_t), bool blocked512
 ) {
@@ -130,6 +148,32 @@ TEST(QueryPreparation, QuantizationMatchesHalfAwayRoundingAndTails) {
     if (cpu::has_avx512_core()) {
         check_quantization(simd::scalar_quantize_uint8_avx512);
         check_quantization(simd::scalar_quantize_uint16_avx512);
+    }
+#endif
+}
+
+TEST(QueryPreparation, ZeroRangeQuantizationMatchesAcrossBackendsAndTails) {
+    check_zero_range(simd::scalar_quantize_uint8_generic);
+    check_zero_range(simd::scalar_quantize_uint16_generic);
+    check_zero_range(scalar_quantize<uint8_t, float>);
+    check_zero_range(scalar_quantize<uint16_t, float>);
+    check_zero_range(scalar_quantize<uint32_t, float>);
+    check_zero_range(scalar_impl::scalar_quantize_normal<uint8_t>);
+    check_zero_range(scalar_impl::scalar_quantize_normal<uint16_t>);
+#if defined(__aarch64__) || defined(_M_ARM64)
+    if (cpu::has_neon()) {
+        check_zero_range(simd::scalar_quantize_uint8_neon);
+        check_zero_range(simd::scalar_quantize_uint16_neon);
+    }
+#endif
+#if defined(__x86_64__) || defined(_M_X64)
+    if (cpu::has_avx2()) {
+        check_zero_range(simd::scalar_quantize_uint8_avx2);
+        check_zero_range(simd::scalar_quantize_uint16_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        check_zero_range(simd::scalar_quantize_uint8_avx512);
+        check_zero_range(simd::scalar_quantize_uint16_avx512);
     }
 #endif
 }

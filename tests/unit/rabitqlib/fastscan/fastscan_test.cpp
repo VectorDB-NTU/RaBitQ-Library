@@ -126,6 +126,32 @@ TEST(FastScanLutTest, ResetOwnsBytesAndReusesStorageWithoutRetainingScratch) {
     }
 }
 
+TEST(FastScanLutTest, ZeroQueryClearsCodesInStandardAndHighAccuracyModes) {
+    for (size_t dim : {32U, 64U, 96U}) {
+        for (bool hacc : {false, true}) {
+            SCOPED_TRACE(::testing::Message() << dim << "/" << hacc);
+            std::vector<float> query(dim, 1.0F), scratch(dim * 4);
+            std::vector<uint16_t> hacc_scratch(dim * 4);
+            Lut<float> lut(query.data(), dim, hacc);
+            const size_t bytes = dim * 4 * (hacc ? 2 : 1);
+            ASSERT_TRUE(std::any_of(lut.lut(), lut.lut() + bytes, [](uint8_t value) {
+                return value != 0;
+            }));
+            std::fill(query.begin(), query.end(), 0.0F);
+            lut.reset(query.data(), dim, scratch.data(), hacc_scratch.data(), hacc);
+            EXPECT_EQ(lut.delta(), 0.0F);
+            EXPECT_EQ(lut.sum_vl(), 0.0F);
+            EXPECT_TRUE(std::all_of(lut.lut(), lut.lut() + bytes, [](uint8_t value) {
+                return value == 0;
+            }));
+            const Lut<float> fresh(query.data(), dim, hacc);
+            EXPECT_EQ(fresh.delta(), 0.0F);
+            EXPECT_EQ(fresh.sum_vl(), 0.0F);
+            EXPECT_TRUE(std::equal(lut.lut(), lut.lut() + bytes, fresh.lut()));
+        }
+    }
+}
+
 TEST(FastScanLutTest, RejectedResetPreservesOwnedBytesAndFactors) {
     std::array<float, 64> query{};
     query.fill(1);

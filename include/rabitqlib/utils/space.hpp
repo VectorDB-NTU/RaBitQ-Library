@@ -37,6 +37,10 @@ void scalar_quantize_normal(
     float lo,
     float delta
 ) {
+    if (delta == 0.0F) {
+        std::fill_n(result, dim, T{0});
+        return;
+    }
     float one_over_delta = 1.0F / delta;
 
     ConstRowMajorArrayMap<float> v0(vec0, 1, static_cast<long>(dim));
@@ -188,6 +192,7 @@ inline void data_range(const T* __restrict__ vec0, size_t dim, T& lo, T& hi) {
     hi = v0.maxCoeff();
 }
 
+// A constant range (delta == 0) is represented by zero codes.
 template <typename T, typename TD>
 void scalar_quantize(
     T* __restrict__ result, const TD* __restrict__ vec0, size_t dim, TD lo, TD delta
