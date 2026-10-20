@@ -951,13 +951,17 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     }
     std::vector<std::vector<std::pair<float, PID>>> results(num_queries);
     rabitqlib::index_detail::parallel_for(
-        0, num_queries, num_threads, [&](size_t idx, size_t /*threadId*/) {
+        0,
+        num_queries,
+        num_threads,
+        [&](size_t idx, size_t /*threadId*/) {
             std::vector<float> rotated_query(padded_dim_);
             this->rotator_->rotate(queries + (idx * dim_), rotated_query.data());
             results[idx] = detail::search_knn_sorted(
                 *this, rotated_query.data(), k, std::max(ef_search, k)
             );
-        }
+        },
+        /*reuse_workers=*/true
     );
     return results;
 }

@@ -8,7 +8,9 @@
 #include <cstddef>
 #include <limits>
 #include <numeric>
+#include <random>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "pipnn_internal.hpp"
@@ -96,6 +98,55 @@ TEST(PipnnTest, LocalSeedRetainsNearestNeighborsAndValidIds) {
     }
 }
 
+TEST(PipnnTest, LocalNeighborsMatchExactReferenceAndGlobalIdTies) {
+    constexpr size_t kDim = 65;
+    std::mt19937 generator(719);
+    std::uniform_int_distribution<int> coordinate(-8, 8);
+    for (size_t count : {2U, 3U, 17U, 65U, 1024U}) {
+        std::vector<float> data(count * kDim);
+        pipnn_impl::Bucket ids(count);
+        std::iota(ids.begin(), ids.end(), PID{0});
+        std::shuffle(ids.begin(), ids.end(), generator);
+        pipnn_impl::ScratchPool scratch(count, kDim, 1);
+        auto work = scratch.worker(0);
+        for (bool ties : {false, true}) {
+            std::generate(data.begin(), data.end(), [&] {
+                return ties ? 1.0F : static_cast<float>(coordinate(generator));
+            });
+            for (auto metric : {METRIC_L2, METRIC_IP}) {
+                SCOPED_TRACE(::testing::Message() << count << "/" << ties << "/" << metric);
+                pipnn_impl::gather(data.data(), kDim, ids, work);
+                pipnn_impl::pairwise(work, count, kDim, metric);
+                pipnn_impl::select_local_neighbors(ids, work);
+                ASSERT_EQ(work.candidates.size(), 2 * count);
+                for (size_t i = 0; i < count; ++i) {
+                    std::vector<std::pair<float, PID>> reference;
+                    reference.reserve(count - 1);
+                    for (PID target = 0; target < count; ++target) {
+                        if (target == ids[i]) {
+                            continue;
+                        }
+                        double distance = 0;
+                        for (size_t d = 0; d < kDim; ++d) {
+                            const double a = data[ids[i] * kDim + d];
+                            const double b = data[target * kDim + d];
+                            distance += metric == METRIC_L2 ? (a - b) * (a - b) : -a * b;
+                        }
+                        reference.emplace_back(static_cast<float>(distance), target);
+                    }
+                    std::sort(reference.begin(), reference.end());
+                    for (size_t j = 0; j < std::min(size_t{2}, reference.size()); ++j) {
+                        EXPECT_EQ(work.candidates[2 * i + j], reference[j]);
+                    }
+                    if (count == 2) {
+                        EXPECT_EQ(work.candidates[2 * i + 1].second, kPidMax);
+                    }
+                }
+            }
+        }
+    }
+}
+
 TEST(PipnnTest, OverlappingPartitionsTerminateForDuplicateVectors) {
     constexpr size_t kCount = 1100, kDim = 7;
     std::vector<float> data(kCount * kDim, 0.5F);
@@ -153,6 +204,34 @@ TEST(PipnnTest, RootTileTailAndRecursiveBucketsCoverDuplicateInputs) {
         for (size_t membership : memberships) {
             EXPECT_GE(membership, 1U);
             EXPECT_LE(membership, 30U);
+        }
+    }
+}
+
+TEST(PipnnTest, AdaptiveRootTilesPreservePartitionsAcrossThreadCounts) {
+    constexpr size_t kDim = 65;
+    std::mt19937 generator(817);
+    // Integer coordinates keep these dot products exact on every SIMD backend.
+    std::uniform_int_distribution<int> uniform(-8, 8);
+    // Exercise partial tiles on either side of the original 2048-row boundary.
+    for (size_t count : {1025U, 2049U, 4097U}) {
+        std::vector<float> data(count * kDim);
+        std::generate(data.begin(), data.end(), [&] {
+            return static_cast<float>(uniform(generator));
+        });
+        for (auto metric : {METRIC_L2, METRIC_IP}) {
+            pipnn_impl::ScratchPool serial_scratch(count, kDim, 1);
+            const auto expected =
+                pipnn_impl::cluster(data.data(), count, kDim, metric, 1, serial_scratch);
+            for (size_t threads : {2U, 4U}) {
+                SCOPED_TRACE(
+                    ::testing::Message() << count << "/" << metric << "/" << threads
+                );
+                pipnn_impl::ScratchPool scratch(count, kDim, threads);
+                const auto actual =
+                    pipnn_impl::cluster(data.data(), count, kDim, metric, threads, scratch);
+                EXPECT_EQ(actual, expected);
+            }
         }
     }
 }

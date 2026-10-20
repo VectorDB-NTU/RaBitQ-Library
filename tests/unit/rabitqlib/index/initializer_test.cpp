@@ -12,6 +12,7 @@
 #include <fstream>
 #include <future>
 #include <ios>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -147,6 +148,35 @@ TEST(HNSWInitializerTest, RoutesByInnerProductWithoutTakingSquareRoot) {
     EXPECT_FLOAT_EQ(candidates[0].distance, -99.0F);
 }
 
+TEST(HNSWInitializerTest, ParallelInsertionPreservesRandomLevelDraws) {
+    constexpr size_t kDim = 17;
+    constexpr size_t kCount = 2048;
+    constexpr size_t kSeed = 100;
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
+    std::vector<float> centroids(kCount * kDim);
+    for (auto& value : centroids) {
+        value = distribution(rng);
+    }
+    CentroidL2Space space(kDim);
+    hnswlib::HierarchicalNSW<float> reference(&space, 1, 16, 100, kSeed);
+    std::vector<int> expected_levels(kCount);
+    for (auto& level : expected_levels) {
+        level = reference.getRandomLevel(reference.mult_);
+    }
+    for (size_t threads : {1U, 4U, 8U}) {
+        SCOPED_TRACE(threads);
+        hnswlib::HierarchicalNSW<float> graph(&space, kCount, 16, 100, kSeed);
+        index_detail::parallel_for(0, kCount, threads, [&](size_t row, size_t) {
+            graph.addPoint(centroids.data() + row * kDim, row);
+        });
+        EXPECT_EQ(graph.cur_element_count.load(), kCount);
+        // Registration assigns internal IDs and draws their levels in the same order.
+        EXPECT_EQ(graph.element_levels_, expected_levels);
+        EXPECT_EQ(graph.level_generator_, reference.level_generator_);
+    }
+}
+
 TEST(HNSWInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 1024;
@@ -203,37 +233,88 @@ TEST(HNSWInitializerTest, ReloadsInnerProductGraphForRouting) {
     std::remove((path + ".hnsw").c_str());
 }
 
-TEST(HNSWInitializerTest, ConcurrentSearchesKeepRoutingStateSynchronized) {
+TEST(HNSWInitializerTest, PerCallSearchWindowsPreserveDefaultAndLegacyResults) {
     constexpr size_t kDim = 17;
-    constexpr size_t kCount = 32;
-    std::vector<float> centroids(kCount * kDim, 0.0F);
-    for (size_t label = 0; label < kCount; ++label) {
-        centroids[label * kDim] = static_cast<float>(label);
+    constexpr size_t kCount = 1024;
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
+    std::vector<float> centroids(kCount * kDim);
+    for (auto& value : centroids) {
+        value = distribution(rng);
     }
-    HNSWInitializer initializer(kDim, kCount);
-    initializer.add_vectors(centroids.data(), 4);
+    CentroidL2Space space(kDim);
+    hnswlib::HierarchicalNSW<float> graph(&space, kCount, 16, 100);
+    for (size_t i = 0; i < kCount; ++i) {
+        graph.addPoint(centroids.data() + i * kDim, i);
+    }
+    struct EvenLabels : hnswlib::BaseFilterFunctor {
+        bool operator()(hnswlib::labeltype label) override { return label % 2 == 0; }
+    } even_labels;
     std::array<float, kDim> query{};
-    query[0] = 15.0F;
-    std::atomic<bool> invalid_result{false};
-    std::vector<std::thread> threads;
-    for (size_t worker = 0; worker < 4; ++worker) {
-        threads.emplace_back([&, worker] {
-            for (size_t iteration = 0; iteration < 25; ++iteration) {
-                const size_t nprobe = 1 + (worker + iteration) % 4;
-                std::vector<AnnCandidate<float>> candidates(nprobe);
-                initializer.centroids_distances(query.data(), nprobe, candidates);
-                for (const auto& candidate : candidates) {
-                    if (candidate.id >= kCount || !std::isfinite(candidate.distance)) {
-                        invalid_result = true;
+    for (auto* filter :
+         {static_cast<hnswlib::BaseFilterFunctor*>(nullptr),
+          static_cast<hnswlib::BaseFilterFunctor*>(&even_labels)}) {
+        for (size_t ef : {1U, 64U, 768U, 1000U}) {
+            graph.setEf(ef);
+            auto expected = graph.searchKnn(query.data(), 10, filter);
+            graph.setEf(11);
+            auto actual = graph.searchKnnWithEf(query.data(), 10, ef, filter);
+            EXPECT_EQ(graph.ef_, 11U);
+            ASSERT_EQ(actual.size(), expected.size());
+            while (!expected.empty()) {
+                EXPECT_EQ(actual.top(), expected.top());
+                actual.pop();
+                expected.pop();
+            }
+        }
+    }
+}
+
+TEST(HNSWInitializerTest, ConcurrentSearchesMatchSerialWithDifferentWindows) {
+    constexpr size_t kDim = 17;
+    constexpr size_t kCount = 1024;
+    const std::array<size_t, 4> probes{1, 16, 400, 500};
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
+    std::vector<float> centroids(kCount * kDim);
+    for (auto& value : centroids) {
+        value = distribution(rng);
+    }
+    for (const auto metric : {METRIC_L2, METRIC_IP}) {
+        HNSWInitializer initializer(kDim, kCount, metric);
+        initializer.add_vectors(centroids.data(), 1);
+        std::array<std::vector<AnnCandidate<float>>, 4> expected;
+        for (size_t i = 0; i < probes.size(); ++i) {
+            expected[i].resize(probes[i]);
+            initializer.centroids_distances(
+                centroids.data() + i * kDim, probes[i], expected[i]
+            );
+        }
+        std::atomic<bool> invalid_result{false};
+        std::vector<std::thread> threads;
+        threads.reserve(4);
+        for (size_t worker = 0; worker < 4; ++worker) {
+            threads.emplace_back([&, worker] {
+                for (size_t iteration = 0; iteration < 8; ++iteration) {
+                    const size_t test = (worker + iteration) % probes.size();
+                    std::vector<AnnCandidate<float>> candidates(probes[test]);
+                    initializer.centroids_distances(
+                        centroids.data() + test * kDim, probes[test], candidates
+                    );
+                    for (size_t i = 0; i < candidates.size(); ++i) {
+                        if (candidates[i].id != expected[test][i].id ||
+                            candidates[i].distance != expected[test][i].distance) {
+                            invalid_result = true;
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        EXPECT_FALSE(invalid_result);
     }
-    for (auto& thread : threads) {
-        thread.join();
-    }
-    EXPECT_FALSE(invalid_result);
 }
 
 TEST(ParallelForTest, JoinsWorkersBeforeRethrowingFunctionException) {

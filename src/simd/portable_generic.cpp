@@ -135,6 +135,10 @@ float excode_ip(const float* query, const uint8_t* compact, size_t dim) {
 
 template <typename T>
 void quantize(T* result, const float* data, size_t dim, float lo, float delta) {
+    if (delta == 0.0F) {
+        std::fill_n(result, dim, T{0});
+        return;
+    }
     const float reciprocal = 1.0F / delta;
     for (size_t i = 0; i < dim; ++i) {
         result[i] = static_cast<T>(std::round((data[i] - lo) * reciprocal));

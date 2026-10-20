@@ -13,7 +13,13 @@
 
 namespace rabitqlib::index_detail {
 template <class Function>
-inline void parallel_for(size_t start, size_t end, size_t num_threads, Function fn) {
+inline void parallel_for(
+    size_t start,
+    size_t end,
+    size_t num_threads,
+    Function fn,
+    [[maybe_unused]] bool reuse_workers = false
+) {
     if (start >= end) {
         return;
     }
@@ -25,9 +31,12 @@ inline void parallel_for(size_t start, size_t end, size_t num_threads, Function 
         }
     } else {
 #if defined(_OPENMP) && _OPENMP >= 201307
-        if (omp_get_proc_bind() != omp_proc_bind_false) {
-            // Native threads inherit only the caller's place. Let OpenMP honor
-            // the configured placement of the whole team when binding is enabled.
+        if ((reuse_workers && omp_get_level() == 0) ||
+            omp_get_proc_bind() != omp_proc_bind_false) {
+            // Independent query batches can reuse workers; graph insertion keeps
+            // its existing scheduling. Binding requires OpenMP placement because
+            // native threads inherit only the caller's place. Keep unbound nested
+            // calls on the existing native-thread path.
             std::vector<std::exception_ptr> errors(num_threads);
 #pragma omp parallel for num_threads(num_threads) schedule(dynamic)
             for (size_t id = start; id < end; ++id) {

@@ -1158,6 +1158,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
     tableint addPoint(const void *data_point, labeltype label, int level) {
         tableint cur_c = 0;
+        int curlevel = 0;
         {
             // Checking if the element with the same label already exists
             // if so, updating it *instead* of creating a new element.
@@ -1187,10 +1188,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             cur_c = cur_element_count;
             cur_element_count++;
             label_lookup_[label] = cur_c;
+            // RaBitQ: the shared generator must advance under the registration lock.
+            curlevel = getRandomLevel(mult_);
         }
 
         std::unique_lock <std::mutex> lock_el(link_list_locks_[cur_c]);
-        int curlevel = getRandomLevel(mult_);
         if (level > 0)
             curlevel = level;
 
@@ -1198,10 +1200,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
         std::unique_lock <std::mutex> templock(global);
         int maxlevelcopy = maxlevel_;
-        if (curlevel <= maxlevelcopy)
-            templock.unlock();
         tableint currObj = enterpoint_node_;
         tableint enterpoint_copy = enterpoint_node_;
+        if (curlevel <= maxlevelcopy)
+            templock.unlock();
 
         memset(data_level0_memory_ + cur_c * size_data_per_element_ + offsetLevel0_, 0, size_data_per_element_);
 
@@ -1275,6 +1277,13 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
     std::priority_queue<std::pair<dist_t, labeltype >>
     searchKnn(const void *query_data, size_t k, BaseFilterFunctor* isIdAllowed = nullptr) const {
+        return searchKnnWithEf(query_data, k, ef_, isIdAllowed);
+    }
+
+
+    // RaBitQ extension: concurrent searches can choose ef without changing shared state.
+    std::priority_queue<std::pair<dist_t, labeltype >>
+    searchKnnWithEf(const void *query_data, size_t k, size_t ef, BaseFilterFunctor* isIdAllowed = nullptr) const {
         std::priority_queue<std::pair<dist_t, labeltype >> result;
         if (cur_element_count == 0) return result;
 
@@ -1312,10 +1321,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
         if (bare_bone_search) {
             top_candidates = searchBaseLayerST<true>(
-                    currObj, query_data, std::max(ef_, k), isIdAllowed);
+                    currObj, query_data, std::max(ef, k), isIdAllowed);
         } else {
             top_candidates = searchBaseLayerST<false>(
-                    currObj, query_data, std::max(ef_, k), isIdAllowed);
+                    currObj, query_data, std::max(ef, k), isIdAllowed);
         }
 
         while (top_candidates.size() > k) {

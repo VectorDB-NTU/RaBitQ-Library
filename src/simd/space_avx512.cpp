@@ -1,5 +1,6 @@
 #include <immintrin.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -44,6 +45,10 @@ float l2norm_sqr_avx512(const float* a, size_t dim) {
 void scalar_quantize_uint8_avx512(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
+    if (delta == 0.0F) {
+        std::fill_n(result, dim, uint8_t{0});
+        return;
+    }
     size_t mul16 = dim - (dim & 0b1111);
     size_t i = 0;
     float one_over_delta = 1.0F / delta;
@@ -63,6 +68,10 @@ void scalar_quantize_uint8_avx512(
 void scalar_quantize_uint16_avx512(
     uint16_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
+    if (delta == 0.0F) {
+        std::fill_n(result, dim, uint16_t{0});
+        return;
+    }
     size_t mul16 = dim - (dim & 0b1111);
     size_t i = 0;
     float one_over_delta = 1.0F / delta;

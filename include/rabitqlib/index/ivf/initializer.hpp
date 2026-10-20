@@ -7,7 +7,6 @@
 #include <fstream>
 #include <ios>
 #include <memory>
-#include <mutex>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -192,7 +191,6 @@ class HNSWInitializer : public Initializer {
     hnswlib::SpaceInterface<float>* space_;
     MetricType metric_type_;
     std::vector<hnswlib::tableint> label_to_internal_;
-    mutable std::mutex search_mutex_;
 
     void rebuild_label_lookup() {
         if (alg_hnsw_->cur_element_count != num_cluster_) {
@@ -253,10 +251,8 @@ class HNSWInitializer : public Initializer {
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
-        std::lock_guard<std::mutex> lock(search_mutex_);
-        alg_hnsw_->setEf(std::max(size_t{768}, 2 * nprobe));
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-            alg_hnsw_->searchKnn(query, nprobe);
+            alg_hnsw_->searchKnnWithEf(query, nprobe, std::max(size_t{768}, 2 * nprobe));
         if (result.size() != nprobe) {
             throw std::runtime_error("HNSW centroid graph returned too few candidates");
         }

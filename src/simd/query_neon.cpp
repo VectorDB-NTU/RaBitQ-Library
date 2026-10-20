@@ -30,6 +30,10 @@ inline uint32x4_t quantize4(const float* data, float32x4_t lo, float32x4_t recip
 void scalar_quantize_uint8_neon(
     uint8_t* result, const float* data, size_t dim, float lo, float delta
 ) {
+    if (delta == 0.0F) {
+        std::fill_n(result, dim, uint8_t{0});
+        return;
+    }
     const float reciprocal = 1.0F / delta;
     const float32x4_t low = vdupq_n_f32(lo), scale = vdupq_n_f32(reciprocal);
     size_t i = 0;
@@ -48,6 +52,10 @@ void scalar_quantize_uint8_neon(
 void scalar_quantize_uint16_neon(
     uint16_t* result, const float* data, size_t dim, float lo, float delta
 ) {
+    if (delta == 0.0F) {
+        std::fill_n(result, dim, uint16_t{0});
+        return;
+    }
     const float reciprocal = 1.0F / delta;
     const float32x4_t low = vdupq_n_f32(lo), scale = vdupq_n_f32(reciprocal);
     size_t i = 0;

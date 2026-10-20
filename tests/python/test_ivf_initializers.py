@@ -1,11 +1,57 @@
 """Explicit centroid routing, persistence, and legacy initializer inference."""
 
 import struct
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import pytest
 from rabitqlib import IvfIndex
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("threads", [1, 4, 8])
+def test_hnsw_parallel_build_routes_and_reloads(tmp_path, metric, threads):
+    count, dim = 1024, 65
+    data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
+    data /= np.linalg.norm(data, axis=1, keepdims=True)
+    index = IvfIndex(dim, count, count, 4, metric, initializer="hnsw")
+    index.build(data, data, np.arange(count, dtype=np.uint32), num_threads=threads)
+    labels = np.array([0, 17, 511, 1023], dtype=np.uint32)
+    queries = data[labels]
+    expected = index.search(queries, 1, 8, num_threads=threads)
+    np.testing.assert_array_equal(expected[0][:, 0], labels)
+    assert np.isfinite(expected[1]).all()
+    path = tmp_path / "parallel-build.index"
+    index.save(str(path))
+    loaded = IvfIndex.load(str(path))
+    for actual, reference in zip(
+        loaded.search(queries, 1, 8, num_threads=threads), expected
+    ):
+        np.testing.assert_array_equal(actual, reference)
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_hnsw_concurrent_routing_windows_match_serial(tmp_path, metric):
+    count, dim = 1024, 64
+    rng = np.random.default_rng(42)
+    data = rng.standard_normal((count, dim)).astype(np.float32)
+    queries = rng.standard_normal((4, dim)).astype(np.float32)
+    index = IvfIndex(dim, count, count, 1, metric, initializer="hnsw")
+    index.build(data, data, np.arange(count, dtype=np.uint32), num_threads=1)
+    probes = (1, 16, 400, 500)
+    expected = [index.search(queries, 5, probe, num_threads=1) for probe in probes]
+    path = tmp_path / "concurrent.index"
+    index.save(str(path))
+    for current in (index, IvfIndex.load(str(path))):
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [
+                pool.submit(current.search, queries, 5, probes[i % 4], num_threads=2)
+                for i in range(12)
+            ]
+            for i, future in enumerate(futures):
+                for actual, reference in zip(future.result(), expected[i % 4]):
+                    np.testing.assert_array_equal(actual, reference)
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])

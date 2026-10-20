@@ -138,3 +138,91 @@ TEST(ThreadCount, ParallelForVisitsEachItemOnceWithBoundedWorkerIds) {
         }
     }
 }
+
+TEST(ThreadCount, TopLevelParallelForReusesWorkersOnlyWhenRequested) {
+#if defined(_OPENMP) && _OPENMP >= 201307
+    if (rabitqlib::resolve_num_threads(2) < 2) {
+        GTEST_SKIP() << "Requires two available workers";
+    }
+    const int max_threads = omp_get_max_threads();
+    const int max_levels = omp_get_max_active_levels();
+    std::vector<int> levels(17, -1);
+    rabitqlib::index_detail::parallel_for(0, levels.size(), 2, [&](size_t i, size_t) {
+        levels[i] = omp_get_level();
+    });
+    const int build_level = omp_get_proc_bind() == omp_proc_bind_false ? 0 : 1;
+    for (int level : levels) {
+        EXPECT_EQ(level, build_level);
+    }
+    for (size_t repeat = 0; repeat < 3; ++repeat) {
+        rabitqlib::index_detail::parallel_for(
+            0,
+            levels.size(),
+            2,
+            [&](size_t i, size_t) { levels[i] = omp_get_level(); },
+            true
+        );
+        for (int level : levels) {
+            EXPECT_EQ(level, 1);
+        }
+    }
+    rabitqlib::index_detail::parallel_for(
+        0,
+        levels.size(),
+        1,
+        [&](size_t i, size_t worker) {
+            EXPECT_EQ(worker, 0U);
+            levels[i] = omp_get_level();
+        },
+        true
+    );
+    for (int level : levels) {
+        EXPECT_EQ(level, 0);
+    }
+    EXPECT_THROW(
+        rabitqlib::index_detail::parallel_for(
+            0,
+            levels.size(),
+            2,
+            [](size_t, size_t) { throw std::runtime_error("failed"); },
+            true
+        ),
+        std::runtime_error
+    );
+    EXPECT_EQ(omp_get_max_threads(), max_threads);
+    EXPECT_EQ(omp_get_max_active_levels(), max_levels);
+#else
+    GTEST_SKIP() << "Runtime worker reuse requires OpenMP 4.0";
+#endif
+}
+
+TEST(ThreadCount, NestedParallelForPreservesBindingAndWorkerIds) {
+#if defined(_OPENMP) && _OPENMP >= 201307
+    if (rabitqlib::resolve_num_threads(2) < 2) {
+        GTEST_SKIP() << "Requires two available workers";
+    }
+    const bool bound = omp_get_proc_bind() != omp_proc_bind_false;
+    std::vector<int> levels(17, -1);
+    std::vector<size_t> workers(levels.size(), 2);
+#pragma omp parallel num_threads(2)
+    {
+#pragma omp single
+        rabitqlib::index_detail::parallel_for(
+            0,
+            levels.size(),
+            2,
+            [&](size_t i, size_t worker) {
+                levels[i] = omp_get_level();
+                workers[i] = worker;
+            },
+            true
+        );
+    }
+    for (size_t i = 0; i < levels.size(); ++i) {
+        EXPECT_EQ(levels[i], bound ? 2 : 0);
+        EXPECT_LT(workers[i], 2U);
+    }
+#else
+    GTEST_SKIP() << "OpenMP binding requires OpenMP 4.0";
+#endif
+}
