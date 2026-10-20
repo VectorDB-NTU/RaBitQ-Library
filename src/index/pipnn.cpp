@@ -67,10 +67,9 @@ class CandidateTable {
             return;
         }
         auto* pos = std::lower_bound(
-            row,
-            row + size,
-            hash,
-            [](const Candidate& candidate, uint16_t key) { return candidate.hash < key; }
+            row, row + size, hash, [](const Candidate& candidate, uint16_t key) {
+                return candidate.hash < key;
+            }
         );
         const size_t slot = static_cast<size_t>(pos - row);
         if (slot < size && pos->hash == hash) {
@@ -154,10 +153,12 @@ struct BucketJob {
 
 ScratchPool::ScratchPool(size_t count, size_t dim, size_t threads)
     : point_size(std::min(count, kTileSize) * dim)
-    , distance_size(std::max(
-          std::min(count, kTileSize) * std::min(count, size_t{512}),
-          std::min(count, kLeafSize) * std::min(count, kLeafSize)
-      ))
+    , distance_size(
+          std::max(
+              std::min(count, kTileSize) * std::min(count, size_t{512}),
+              std::min(count, kLeafSize) * std::min(count, kLeafSize)
+          )
+      )
     , stride(point_size + distance_size + std::min(count, kTileSize))
     // Preserve uninitialized allocation and worker first-touch placement.
     , storage(new float[threads * stride]) {}
@@ -329,7 +330,10 @@ std::vector<Bucket> cluster(
                     small = Bucket();
                 } else if (child.size() <= kLeafSize) {
                     finished[i].push_back(std::move(child));
-                } else if (job.depth >= 4 || (job.depth >= 2 && child.size() * 5 > job.ids.size() * 4)) {
+                } else if (
+                    job.depth >= 4 ||
+                    (job.depth >= 2 && child.size() * 5 > job.ids.size() * 4)
+                ) {
                     // Duplicates must not cause unbounded recursion/replication.
                     std::mt19937 random(job.seed + static_cast<uint32_t>(j));
                     std::shuffle(child.begin(), child.end(), random);

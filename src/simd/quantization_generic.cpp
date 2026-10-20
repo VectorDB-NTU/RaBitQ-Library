@@ -6,8 +6,9 @@
 namespace rabitqlib::simd {
 // Request the existing scalar event sweep; it certifies ambiguous SIMD searches.
 double best_rescale_factor_generic(const float*, size_t, int, double, double) { return -1; }
-double
-best_rescale_factor_with_workspace_generic(const float*, size_t, int, double, double, double*, double*) {
+double best_rescale_factor_with_workspace_generic(
+    const float*, size_t, int, double, double, double*, double*
+) {
     return -1;
 }
 namespace detail {

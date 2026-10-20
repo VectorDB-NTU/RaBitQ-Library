@@ -254,7 +254,8 @@ class LloydKMeans : public Parameters {
         );
         bool in_range = true;
         bool finite = true;
-#pragma omp parallel for num_threads(threads) reduction(&& : finite, in_range) schedule(static)
+#pragma omp parallel for num_threads(threads) reduction(&& : finite, in_range) \
+    schedule(static)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n * d);
              ++loop_index) {
             const size_t i = static_cast<size_t>(loop_index);
@@ -330,8 +331,9 @@ class LloydKMeans : public Parameters {
             );
             const auto [nsplit, shift] =
                 consolidate_centroids(x, n, sums, cluster_sizes, previous_centroids);
-            iteration_stats.push_back(KMeansIterationStats{
-                iteration + 1, obj, shift, nsplit});
+            iteration_stats.push_back(
+                KMeansIterationStats{iteration + 1, obj, shift, nsplit}
+            );
 
             if (verbose) {
                 std::cout << Assignment::kName << " iteration " << iteration + 1 << "/"

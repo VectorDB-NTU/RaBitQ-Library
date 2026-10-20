@@ -301,8 +301,10 @@ static bool try_find_best_scale_by_interval_search(
         if (!have_best || result.score_lower > best.score_upper) {
             best = result;
             have_best = true;
-        } else if (result.score_upper >= best.score_lower &&
-                   result.state.squared_norm != best.state.squared_norm) {
+        } else if (
+            result.score_upper >= best.score_lower &&
+            result.state.squared_norm != best.state.squared_norm
+        ) {
             // The event sweep resolves numerically indistinguishable winners
             // with its existing arithmetic and tie order.
             return false;

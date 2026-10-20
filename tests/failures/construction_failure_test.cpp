@@ -27,10 +27,12 @@ std::array<void*, 4096> live{};
 size_t live_count = 0;
 
 bool should_fail() {
+    // OpenMP initialization may allocate through this hook. Do not re-enter the
+    // runtime unless parallel failure injection is actually enabled.
 #if _OPENMP >= 200805
-    const bool in_region = omp_get_level() > 0;
+    const bool in_region = fail_parallel && omp_get_level() > 0;
 #else
-    const bool in_region = omp_in_parallel() != 0;
+    const bool in_region = fail_parallel && omp_in_parallel() != 0;
 #endif
     if (fail_constructor || (fail_parallel && in_region)) {
         if (remaining.fetch_sub(1) == 0) {

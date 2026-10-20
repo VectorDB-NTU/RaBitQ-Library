@@ -38,7 +38,8 @@ class IndexAccess {
        public:
         Guard(IndexAccess& access, bool writing) : access_(access), writing_(writing) {
             if (access.writing_ || (writing && access.readers_ != 0)) {
-                throw std::runtime_error("Index is busy: conflicting operation in progress"
+                throw std::runtime_error(
+                    "Index is busy: conflicting operation in progress"
                 );
             }
             if (writing) {

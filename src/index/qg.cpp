@@ -124,7 +124,9 @@ QuantizedGraph<float>::QuantizedGraph(
     , degree_bound_(max_deg)
     , dim_(dim)
     , padded_dim_(dim)
-    , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>)
+    , raw_dist_func_(
+          (metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
+      )
     , metric_type_(metric_type)
     , rotator_type_(rotator_type)
     , quantization_bits_(quantization_bits)
@@ -667,8 +669,9 @@ void QuantizedGraph<float>::initialize(bool randomize_rotation) {
     }
 }
 
-float QuantizedGraph<float>::quantized_distance(const QuantizedQuery& query, PID data_id)
-    const {
+float QuantizedGraph<float>::quantized_distance(
+    const QuantizedQuery& query, PID data_id
+) const {
     ConstExDataMap<float> data(
         get_quantized_vector(data_id), padded_dim_, quantization_bits_
     );
@@ -685,8 +688,9 @@ float QuantizedGraph<float>::quantized_distance(const QuantizedQuery& query, PID
     );
 }
 
-void QuantizedGraph<float>::reconstruct_quantized_vector(PID data_id, float* reconstructed)
-    const {
+void QuantizedGraph<float>::reconstruct_quantized_vector(
+    PID data_id, float* reconstructed
+) const {
     ConstExDataMap<float> data(
         get_quantized_vector(data_id), padded_dim_, quantization_bits_
     );

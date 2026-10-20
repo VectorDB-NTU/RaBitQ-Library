@@ -35,15 +35,17 @@ class HnswIndex {
         const std::string& metric = "l2",
         size_t random_seed = 100
     )
-        : index_(std::make_unique<rabitqlib::hnsw::HierarchicalNSW>(
-              max_elements,
-              dim,
-              nbits,
-              M,
-              ef_construction,
-              random_seed,
-              metric_from_string(metric)
-          )) {}
+        : index_(
+              std::make_unique<rabitqlib::hnsw::HierarchicalNSW>(
+                  max_elements,
+                  dim,
+                  nbits,
+                  M,
+                  ef_construction,
+                  random_seed,
+                  metric_from_string(metric)
+              )
+          ) {}
 
     void build(
         py::handle data,

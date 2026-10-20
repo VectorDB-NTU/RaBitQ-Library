@@ -112,10 +112,7 @@ TEST(ThreadCount, ParallelForVisitsEachItemOnceWithBoundedWorkerIds) {
             visited.store(0);
         }
         rabitqlib::index_detail::parallel_for(
-            0,
-            count,
-            requested,
-            [&](size_t i, size_t worker) {
+            0, count, requested, [&](size_t i, size_t worker) {
                 EXPECT_LT(worker, requested == 1 ? 1U : available);
                 visits[i].fetch_add(1);
             }
@@ -125,10 +122,7 @@ TEST(ThreadCount, ParallelForVisitsEachItemOnceWithBoundedWorkerIds) {
         }
         size_t calls = 0;
         rabitqlib::index_detail::parallel_for(
-            7,
-            8,
-            requested,
-            [&](size_t i, size_t worker) {
+            7, 8, requested, [&](size_t i, size_t worker) {
                 EXPECT_EQ(i, 7U);
                 EXPECT_EQ(worker, 0U);
                 ++calls;
@@ -137,10 +131,7 @@ TEST(ThreadCount, ParallelForVisitsEachItemOnceWithBoundedWorkerIds) {
         EXPECT_EQ(calls, 1U);
         for (size_t start : {0U, 5U}) {
             rabitqlib::index_detail::parallel_for(
-                start,
-                start,
-                requested,
-                [](size_t, size_t) {
+                start, start, requested, [](size_t, size_t) {
                     ADD_FAILURE() << "An empty range must not invoke the callback";
                 }
             );

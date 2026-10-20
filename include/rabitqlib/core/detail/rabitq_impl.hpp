@@ -672,8 +672,8 @@ inline void ex_bits_code_with_factor_with_scratch(
 
     // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
     const T normalized_error =
-        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1
-        ) /
+        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
+         1) /
         (dim - 1);
     T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
 
@@ -1003,8 +1003,8 @@ inline void code_factors(
     // Cauchy-Schwarz guarantees this value is nonnegative. Clamp small negative
     // round-off errors for collinear residual/code vectors before taking the square root.
     const T normalized_error =
-        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1
-        ) /
+        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
+         1) /
         (dim - 1);
     T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
 

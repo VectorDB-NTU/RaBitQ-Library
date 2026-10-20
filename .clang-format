@@ -16,6 +16,8 @@ AllowShortLambdasOnASingleLine: All
 AllowShortLoopsOnASingleLine: false
 BinPackArguments: false
 BinPackParameters: false
+# Preserve the existing initializer-list closing-brace layout on LLVM 23.
+BreakBeforeCloseBracketBracedList: false
 BreakConstructorInitializers: BeforeComma
 ColumnLimit: 92
 CompactNamespaces: false

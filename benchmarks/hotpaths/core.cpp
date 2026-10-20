@@ -60,8 +60,8 @@ void run(int argc, char** argv) {
                 const double delta = static_cast<double>(data[row * dim + d]) - centroid[d];
                 reference += delta * delta;
             }
-            if (!(std::abs(distances[row] - reference) <= 2e-6 * static_cast<double>(dim)
-                )) {
+            if (!(std::abs(distances[row] - reference) <=
+                  2e-6 * static_cast<double>(dim))) {
                 throw std::runtime_error("L2 differs from float64 reference");
             }
         }

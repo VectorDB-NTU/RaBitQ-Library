@@ -335,6 +335,11 @@ TEST(SplitBatchQueryAllocation, ReusesCapacityAcrossQueriesModesAndDimensions) {
 }
 
 TEST(SplitBatchQueryAllocation, InitialPreparationAndGrowthFailurePreserveState) {
+#if RABITQ_USE_OPENMP
+    // The allocation hook queries OpenMP. Initialize its runtime before enabling
+    // injection so runtime startup allocations cannot re-enter initialization.
+    (void)omp_get_max_threads();
+#endif
     std::vector<float> values(128, 0.5F), next(128, 0.25F), scratch(128 * 4);
     std::vector<uint16_t> hacc_scratch(128 * 4);
     for (bool prepared : {false, true}) {

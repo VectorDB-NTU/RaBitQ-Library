@@ -50,7 +50,8 @@ int cluster_file(int argc, char** argv) {
     }
     const std::string metric = argc == 6 ? argv[5] : "l2";
     if (metric != "l2" && metric != "ip") {
-        throw std::invalid_argument("metric must be l2 or ip; ip requires normalized input"
+        throw std::invalid_argument(
+            "metric must be l2 or ip; ip requires normalized input"
         );
     }
 

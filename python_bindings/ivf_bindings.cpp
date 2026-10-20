@@ -94,7 +94,8 @@ class IvfIndex {
             throw std::invalid_argument("data dimension does not match index dim");
         }
         if (static_cast<size_t>(data_array.shape(0)) != index_->max_elements()) {
-            throw std::invalid_argument("number of data rows must match index max_elements"
+            throw std::invalid_argument(
+                "number of data rows must match index max_elements"
             );
         }
         if (static_cast<size_t>(centroids_array.shape(1)) != index_->dimension()) {

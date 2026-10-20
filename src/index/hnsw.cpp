@@ -67,7 +67,9 @@ HierarchicalNSW::HierarchicalNSW(
     , label_op_locks_(kMaxLabelOperationLock)
     , link_list_locks_(max_elements)
     , element_levels_(max_elements)
-    , raw_dist_func_((metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>) {
+    , raw_dist_func_(
+          (metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
+      ) {
     static_assert(
         buffer::kSearchBufferMaxPointCount <= kRemovedMask,
         "cluster IDs must leave the removal bit free"
@@ -78,9 +80,11 @@ HierarchicalNSW::HierarchicalNSW(
     }
     max_elements_ = max_elements;
     dim_ = dim;
-    rotator_.reset(choose_rotator<float>(
-        dim, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 32)
-    ));
+    rotator_.reset(
+        choose_rotator<float>(
+            dim, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 32)
+        )
+    );
     padded_dim_ = rotator_->size();
     /* check size */
     assert(padded_dim_ % 32 == 0);
@@ -537,7 +541,8 @@ void HierarchicalNSW::construct(
         const size_t centroids_bytes = num_clusters_ * padded_dim_ * sizeof(float);
         centroids_memory_.reset(memory::huge_page_allocate<char>(centroids_bytes));
         if (centroids_memory_ == nullptr) {
-            throw std::runtime_error("Not enough memory: HNSW failed to allocate centroids"
+            throw std::runtime_error(
+                "Not enough memory: HNSW failed to allocate centroids"
             );
         }
 
@@ -555,10 +560,7 @@ void HierarchicalNSW::construct(
 
         construction_data_ = data;
         rabitqlib::index_detail::parallel_for(
-            0,
-            num_points,
-            num_threads,
-            [&](size_t idx, size_t /*threadId*/) {
+            0, num_points, num_threads, [&](size_t idx, size_t /*threadId*/) {
                 add_point(idx, cluster_ids[idx], config);
             }
         );
@@ -949,10 +951,7 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     }
     std::vector<std::vector<std::pair<float, PID>>> results(num_queries);
     rabitqlib::index_detail::parallel_for(
-        0,
-        num_queries,
-        num_threads,
-        [&](size_t idx, size_t /*threadId*/) {
+        0, num_queries, num_threads, [&](size_t idx, size_t /*threadId*/) {
             std::vector<float> rotated_query(padded_dim_);
             this->rotator_->rotate(queries + (idx * dim_), rotated_query.data());
             results[idx] = detail::search_knn_sorted(
@@ -1052,8 +1051,9 @@ void HierarchicalNSW::reconstruct_rotated(PID id, float* out) const {
 
 // Only `query` is reconstructed; `target` is scored from its codes, as QGBuilder
 // does. Callers hold `query` fixed across a loop, so it is prepared once.
-float HierarchicalNSW::get_quant_dist(PID target, PID query, detail::QuantQuery& cached)
-    const {
+float HierarchicalNSW::get_quant_dist(
+    PID target, PID query, detail::QuantQuery& cached
+) const {
     if (cached.id != query || !cached.prepared.has_value()) {
         cached.rotated.resize(padded_dim_);
         reconstruct_rotated(query, cached.rotated.data());
@@ -1370,9 +1370,9 @@ std::vector<PID> HierarchicalNSW::add(
     for (size_t i = 0; i < n; ++i) {
         char* raw = nullptr;
         if (levels[i] > 0) {
-            raw =
-                static_cast<char*>(std::calloc(1, (size_links_per_element_ * levels[i]) + 1)
-                );
+            raw = static_cast<char*>(
+                std::calloc(1, (size_links_per_element_ * levels[i]) + 1)
+            );
             if (raw == nullptr) {
                 throw std::runtime_error(
                     "Not enough memory: HNSW add failed to allocate a link list"

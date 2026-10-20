@@ -21,9 +21,11 @@
 int main() {
     try {
         constexpr size_t kDim = 65, kCount = 49, kExBits = 3;
-        std::unique_ptr<rabitqlib::Rotator<float>> rotator(rabitqlib::choose_rotator<float>(
-            kDim, rabitqlib::RotatorType::FhtKacRotator, 0, 42
-        ));
+        std::unique_ptr<rabitqlib::Rotator<float>> rotator(
+            rabitqlib::choose_rotator<float>(
+                kDim, rabitqlib::RotatorType::FhtKacRotator, 0, 42
+            )
+        );
         const size_t padded_dim = rotator->size();
         std::vector<float> vector(kDim), query(kDim), original_centroid(kDim);
         std::vector<float> rotated_data(kCount * padded_dim), rotated_query(padded_dim);

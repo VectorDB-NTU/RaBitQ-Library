@@ -69,8 +69,16 @@ void search_with_workspace(
 template <>
 class QuantizedGraph<float> {
     friend class QGBuilder;
-    friend void detail::
-        search_with_workspace(QuantizedGraph<float>&, const float*, uint32_t, uint32_t*, float*, detail::SearchScratchView, PID, const float*);
+    friend void detail::search_with_workspace(
+        QuantizedGraph<float>&,
+        const float*,
+        uint32_t,
+        uint32_t*,
+        float*,
+        detail::SearchScratchView,
+        PID,
+        const float*
+    );
     friend struct QGConstructionTestAccess;
 
    private:
@@ -145,13 +153,21 @@ class QuantizedGraph<float> {
         return get_row_data(data_id);
     }
 
-    void validate_search(const float*, uint32_t, const uint32_t*, const float*, size_t)
-        const;
+    void validate_search(
+        const float*, uint32_t, const uint32_t*, const float*, size_t
+    ) const;
 
     void search_impl(const float*, uint32_t, uint32_t*, float*, size_t);
 
-    void
-    search_with_scratch_impl(const float*, uint32_t, uint32_t*, float*, detail::SearchScratchView, PID, const float*);
+    void search_with_scratch_impl(
+        const float*,
+        uint32_t,
+        uint32_t*,
+        float*,
+        detail::SearchScratchView,
+        PID,
+        const float*
+    );
 
     float point_distance(const float*, const QuantizedQuery*, PID) const;
 
@@ -173,7 +189,8 @@ class QuantizedGraph<float> {
         );
     }
 
-    [[nodiscard]] rabitqlib::detail::ConstPackedArrayView<PID> get_neighbors(PID data_id
+    [[nodiscard]] rabitqlib::detail::ConstPackedArrayView<PID> get_neighbors(
+        PID data_id
     ) const {
         return rabitqlib::detail::ConstPackedArrayView<PID>(
             get_row_data(data_id) + neighbor_offset_
@@ -189,8 +206,9 @@ class QuantizedGraph<float> {
         const float* rotated_centroid
     );
 
-    void
-    update_results(buffer::SearchBuffer<float>&, VisitedSet&, const float*, const QuantizedQuery*);
+    void update_results(
+        buffer::SearchBuffer<float>&, VisitedSet&, const float*, const QuantizedQuery*
+    );
 
     void scan_neighbors(
         const BatchQuery<float>&,
@@ -324,7 +342,7 @@ class QuantizedGraph<float> {
 };
 
 // Preserve C++17 deduction for callers that omit the float template argument.
-QuantizedGraph()->QuantizedGraph<float>;
+QuantizedGraph() -> QuantizedGraph<float>;
 QuantizedGraph(
     size_t,
     size_t,
@@ -333,7 +351,6 @@ QuantizedGraph(
     RotatorType = RotatorType::FhtKacRotator,
     size_t = 0,
     uint32_t = std::random_device{}()
-)
-    ->QuantizedGraph<float>;
+) -> QuantizedGraph<float>;
 
 }  // namespace rabitqlib::symqg

@@ -104,13 +104,15 @@ class AlignedAllocator {
     template <typename U>
     constexpr explicit AlignedAllocator(const ReboundAllocator<U>&) noexcept {}
 
-    friend constexpr bool
-    operator==(const AlignedAllocator&, const AlignedAllocator&) noexcept {
+    friend constexpr bool operator==(
+        const AlignedAllocator&, const AlignedAllocator&
+    ) noexcept {
         return true;
     }
 
-    friend constexpr bool
-    operator!=(const AlignedAllocator&, const AlignedAllocator&) noexcept {
+    friend constexpr bool operator!=(
+        const AlignedAllocator&, const AlignedAllocator&
+    ) noexcept {
         return false;
     }
 

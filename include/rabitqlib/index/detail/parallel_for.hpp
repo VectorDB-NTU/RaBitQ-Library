@@ -76,7 +76,8 @@ inline void parallel_for(size_t start, size_t end, size_t num_threads, Function 
                         try {
                             fn(id, thread_id);
                         } catch (...) {
-                            std::unique_lock<std::mutex> last_except_lock(last_except_mutex
+                            std::unique_lock<std::mutex> last_except_lock(
+                                last_except_mutex
                             );
                             last_exception = std::current_exception();
                             /*

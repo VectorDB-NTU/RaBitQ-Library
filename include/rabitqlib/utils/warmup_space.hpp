@@ -66,15 +66,3 @@ inline float warmup_ip_x0_q(
 }
 
 }  // namespace rabitqlib
-
-template <uint32_t b_query, uint32_t padded_dim>
-inline float warmup_ip_x0_q(
-    const uint64_t* data,
-    const uint64_t* query,
-    float delta,
-    float vl,
-    size_t unused_padded_dim = 0,  // not used
-    size_t unused_query_bits = 0   // not used
-) {
-    return rabitqlib::warmup_ip_x0_q<b_query>(data, query, delta, vl, padded_dim);
-}
