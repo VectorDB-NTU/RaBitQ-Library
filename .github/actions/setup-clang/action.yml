@@ -1,0 +1,20 @@
+name: Set up Clang 23
+description: Install the pinned compiler, analysis, formatting and OpenMP tools on Ubuntu.
+runs:
+  using: composite
+  steps:
+    - name: Install LLVM 23 tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        # shellcheck source=/dev/null
+        source /etc/os-release
+        curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
+          | sudo tee /usr/share/keyrings/apt.llvm.org.asc >/dev/null
+        echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.asc] https://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-23 main" \
+          | sudo tee /etc/apt/sources.list.d/llvm-23.list >/dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y clang-23 clang-format-23 clang-tidy-23 libomp-23-dev cmake ninja-build
+        clang++-23 --version
+        clang-format-23 --version
+        clang-tidy-23 --version

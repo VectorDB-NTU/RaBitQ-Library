@@ -185,14 +185,15 @@ TEST_P(RabitqRescaleBackendTest, MatchesExhaustiveObjectiveAndCanonicalThreshold
                 std::vector<double> promoted(dim + 2, -123.0);
                 std::vector<double> reciprocals(dim + 2, -123.0);
                 EXPECT_EQ(
-                    workspace_search(
-                    )(magnitudes.data(),
-                      dim,
-                      max_code,
-                      start,
-                      end,
-                      promoted.data() + 1,
-                      reciprocals.data() + 1),
+                    workspace_search()(
+                        magnitudes.data(),
+                        dim,
+                        max_code,
+                        start,
+                        end,
+                        promoted.data() + 1,
+                        reciprocals.data() + 1
+                    ),
                     t
                 );
                 EXPECT_EQ(promoted.front(), -123.0);

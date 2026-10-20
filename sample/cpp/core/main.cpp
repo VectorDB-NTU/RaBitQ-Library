@@ -25,9 +25,11 @@ int main() {
         }
 
         // Data, centroid and query must use the same rotation and padded domain.
-        std::unique_ptr<rabitqlib::Rotator<float>> rotator(rabitqlib::choose_rotator<float>(
-            kDim, rabitqlib::RotatorType::FhtKacRotator, 0, 42
-        ));
+        std::unique_ptr<rabitqlib::Rotator<float>> rotator(
+            rabitqlib::choose_rotator<float>(
+                kDim, rabitqlib::RotatorType::FhtKacRotator, 0, 42
+            )
+        );
         const size_t padded_dim = rotator->size();
         std::vector<float> rotated_vector(padded_dim), rotated_query(padded_dim);
         std::vector<float> centroid(padded_dim, 0.0F);
@@ -35,7 +37,8 @@ int main() {
         rotator->rotate(query.data(), rotated_query.data());
 
         std::vector<char> bin(rabitqlib::BinDataMap<float>::data_bytes(padded_dim));
-        std::vector<char> extra(rabitqlib::ExDataMap<float>::data_bytes(padded_dim, kExBits)
+        std::vector<char> extra(
+            rabitqlib::ExDataMap<float>::data_bytes(padded_dim, kExBits)
         );
         const rabitqlib::quant::RabitqConfig config;
         rabitqlib::quant::quantize_split_single(

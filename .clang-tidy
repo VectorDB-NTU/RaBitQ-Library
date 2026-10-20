@@ -23,9 +23,14 @@ Checks: >
   readability-inconsistent-declaration-parameter-name,
   readability-misleading-indentation,
   readability-redundant-control-flow,
+  -performance-enum-size,
+  -portability-avoid-pragma-once,
+  -portability-no-assembler,
   -portability-simd-intrinsics,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
+# LLVM 23's new wildcard matches must not change enum ABI, replace the project's
+# pragma-once convention, or reject the CPU detector's required inline assembly.
 # Keep the established checks blocking. Naming starts as warnings while existing
 # internal/parameter names are migrated; do not bulk-fix public interfaces.
 WarningsAsErrors: "*,-readability-identifier-naming"

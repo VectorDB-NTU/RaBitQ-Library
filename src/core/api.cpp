@@ -159,10 +159,15 @@ class ScratchStorage {
     float* zero;
 
     explicit ScratchStorage(rabitq_impl::ScratchAllocator& allocator)
-        : scratch{allocator.array<float>(), allocator.array<float>(),
-                  allocator.array<float>(), allocator.array<int>(),
-                  allocator.array<int>(), allocator.array<double>(),
-                  allocator.array<double>(), allocator.resource()}
+        : scratch{
+              allocator.array<float>(),
+              allocator.array<float>(),
+              allocator.array<float>(),
+              allocator.array<int>(),
+              allocator.array<int>(),
+              allocator.array<double>(),
+              allocator.array<double>(),
+              allocator.resource()}
         , codes(allocator.array<uint16_t>())
         , extra(allocator.array<uint8_t>())
         , zero(allocator.array<float>()) {}
@@ -179,7 +184,8 @@ void read_codes(const Parameters& p, CodeView input, ScratchStorage& s) {
         for (size_t i = 0; i < p.dim; ++i) {
             s.codes[i] = read_u16(bytes + 2 * i);
             if (s.codes[i] > maximum) {
-                throw std::invalid_argument("Unpacked code exceeds the configured bit width"
+                throw std::invalid_argument(
+                    "Unpacked code exceeds the configured bit width"
                 );
             }
         }
@@ -366,7 +372,8 @@ float QueryState::compute_checked(
         for (size_t i = 0; i < p.dim; ++i) {
             const uint16_t value = read_u16(bytes + 2 * i);
             if (value > maximum) {
-                throw std::invalid_argument("Unpacked code exceeds the configured bit width"
+                throw std::invalid_argument(
+                    "Unpacked code exceeds the configured bit width"
                 );
             }
             ip += query.query_[i] * static_cast<float>(value);

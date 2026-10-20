@@ -22,7 +22,8 @@ fi | while IFS= read -r -d '' file; do
         ../* | */../* | */..)
             continue
             ;;
-        include/rabitqlib/third/*)
+        include/rabitqlib/third/* | tests/fixtures/core_api_v1/consumer.cpp)
+            # The v1 consumer is frozen compatibility evidence, not maintained source.
             continue
             ;;
     esac

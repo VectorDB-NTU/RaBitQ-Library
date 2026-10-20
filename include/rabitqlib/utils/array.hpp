@@ -120,7 +120,10 @@ class Array {
         if (this == &other) {
             return *this;
         }
-        if constexpr (!atraits::propagate_on_container_move_assignment::value && !atraits::is_always_equal::value) {
+        if constexpr (
+            !atraits::propagate_on_container_move_assignment::value &&
+            !atraits::is_always_equal::value
+        ) {
             if (allocator_ != other.allocator_ && other.pointer_ != nullptr) {
                 // Allocate with the destination's allocator before releasing either
                 // array. Unequal, non-propagating allocators cannot transfer storage.

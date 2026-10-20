@@ -7,13 +7,33 @@ Run commands from the repository root in your activated
 the [source-build prerequisites](CONTRIBUTING.md#setup-for-code-changes).
 Refresh APT package lists with `sudo apt-get update` before installing tools.
 
+## Compiler and tool versions
+
+Library builds require C++17; the LLVM 23 development tools below do not impose a
+Clang 23 minimum on downstream users. CMake respects the caller's compiler choice.
+OpenMP is required for ANN indexes and Python bindings, and optional for core/FastScan.
+
+Linux CI explicitly builds and tests with Clang 23, including installed consumers
+and OpenMP ON/OFF numerical builds, alongside the existing GCC jobs. Native ARM64,
+AppleClang and MSVC checks remain separate. Older GCC/Clang minimum versions have
+not yet been established by a dedicated compatibility matrix.
+
+Formatting and static analysis use LLVM 23 as the shared local/CI baseline. Keep
+this major version fixed rather than following unversioned distribution defaults.
+The LLVM APT release branch supplies updated builds within that major version;
+CI prints the exact tool versions, rather than promising a fixed patch build.
+Upgrading them requires reviewing format differences and diagnostics together with
+the scripts and CI configuration. The Ubuntu CI setup lives in
+[setup-clang](.github/actions/setup-clang/action.yml).
+
 ## C++ formatting
 
 RaBitQ uses the repository's `.clang-format` configuration and clang-format
-15. Install that version on Ubuntu or Debian with:
+23. After enabling the [LLVM 23 package repository](https://apt.llvm.org/)
+for your distribution, install that version on Ubuntu or Debian with:
 
 ```bash
-sudo apt-get install clang-format-15
+sudo apt-get install clang-format-23
 ```
 
 Format all project-maintained C and C++ files:
@@ -28,14 +48,15 @@ Verify formatting without changing files:
 ./scripts/check-format.sh
 ```
 
-The scripts intentionally exclude vendored code in `include/rabitqlib/third/`.
+The scripts intentionally exclude vendored code in `include/rabitqlib/third/`
+and the frozen compatibility fixture `tests/fixtures/core_api_v1/consumer.cpp`.
 To use a nonstandard executable name, set `CLANG_FORMAT`; it must still identify
-itself as clang-format 15. On macOS, use Bash 4+ on PATH for the shell wrappers.
-Apple SDKs newer than clang-tidy 15 may require a matching newer analyzer; set
+itself as clang-format 23. On macOS, use Bash 4+ on PATH for the shell wrappers.
+Apple SDKs newer than clang-tidy 23 may require a matching newer analyzer; set
 `RUN_CLANG_TIDY` to its runner and report that version separately from the Linux
-clang-tidy 15 baseline.
+clang-tidy 23 baseline.
 
-clangd embeds its own formatter, so use clangd 15 in editors such as VS Code
+clangd embeds its own formatter, so use clangd 23 in editors such as VS Code
 if format-on-save must exactly match CI. If another clangd version is required,
 disable format-on-save and run the repository scripts before submitting.
 
@@ -56,7 +77,7 @@ performance checks. Install the pinned analyzer and the dependencies needed to
 configure the core library and Python bindings:
 
 ```bash
-sudo apt-get install clang-tidy-15 libomp-15-dev cmake ninja-build
+sudo apt-get install clang-23 clang-tidy-23 libomp-23-dev cmake ninja-build
 python -m pip install "numpy>=1.23" "pybind11>=2.12"
 ```
 
@@ -66,18 +87,20 @@ and run the check with the same compiler used by CMake:
 ```bash
 export pybind11_DIR="$(python -m pybind11 --cmakedir)"
 cmake -S . -B build-tidy -G Ninja \
-    -DCMAKE_CXX_COMPILER=c++ \
+    -DCMAKE_CXX_COMPILER=clang++-23 \
     -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
     -DRABITQ_BUILD_SAMPLES=OFF \
     -DRABITQ_BUILD_TESTS=OFF \
     -DRABITQ_BUILD_PYTHON_BINDINGS=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -Dpybind11_DIR="$pybind11_DIR"
-CXX=c++ ./scripts/check-tidy.sh build-tidy
+CXX=clang++-23 ./scripts/check-tidy.sh build-tidy
 ```
 
 Use a fresh build directory when changing compilers. `CMAKE_CXX_COMPILER`
-selects the compiler explicitly; `CXX=c++` on the check command must match it.
+selects the compiler explicitly; `CXX` on the check command must match it.
+Other supported compilers can still build the library; this command selects the
+development analysis baseline only.
 
 The wrapper supplies clang-tidy with that compiler's standard-library include
 paths and reports diagnostics only for first-party files. Vendored Eigen and
@@ -97,33 +120,26 @@ was focused or complete.
 
 The optional include dependency check uses clang-tidy's
 `misc-include-cleaner` to report missing and unused includes. Run it locally when
-reviewing include changes. On Ubuntu, install unversioned distribution packages:
+reviewing include changes. Use LLVM 23 to match the script's default analyzer
+and the shared development baseline. After enabling
+[LLVM's APT repository](https://apt.llvm.org/) for your distribution, install
+the matching compiler, analysis and OpenMP packages:
 
 ```bash
 sudo apt-get update
-sudo apt-get install clang-tidy clang libomp-dev cmake ninja-build
-```
-
-Clang-tidy 17 or newer is required. On older distributions such as Ubuntu 22.04,
-use [LLVM's APT repository](https://apt.llvm.org/) to install a newer release.
-For example, install LLVM 22 and its matching analysis and OpenMP packages:
-
-```bash
-wget https://apt.llvm.org/llvm.sh
-sudo bash llvm.sh 22
-sudo apt-get install clang-tidy-22 libomp-22-dev cmake ninja-build
-export CLANG_TIDY=clang-tidy-22
-export CXX=clang++-22
+sudo apt-get install clang-23 clang-tidy-23 libomp-23-dev cmake ninja-build
+export CLANG_TIDY=clang-tidy-23
+export CXX=clang++-23
 ```
 
 Configure and run the same check locally (use a fresh build directory when
 changing compilers). Clang needs its matching OpenMP development package;
-for the LLVM 22 example above, that is `libomp-22-dev`. An older installed
-`libomp-dev` alone may not be found by Clang 22:
+for LLVM 23, that is `libomp-23-dev`. An older installed
+`libomp-dev` alone may not be found by Clang 23:
 
 ```bash
 cmake -S . -B build-includes -G Ninja \
-  -DCMAKE_CXX_COMPILER="${CXX:-clang++}" \
+  -DCMAKE_CXX_COMPILER="${CXX:-clang++-23}" \
   -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
   -Dpybind11_DIR="$(python -m pybind11 --cmakedir)" \
   -DRABITQ_BUILD_SAMPLES=ON \
@@ -175,7 +191,7 @@ run this example from the repository root using the
 existing project Python environment:
 
 ```bash
-CXX=c++ python - <<'PY'
+CXX=clang++-23 python - <<'PY'
 import json
 from pathlib import Path
 import subprocess
@@ -201,7 +217,7 @@ translation units that include it directly or transitively, covering affected
 template instantiations and ISA variants. Configure any required test/sample
 targets first if they are absent from the database. Do not analyze a header as
 a standalone translation unit. If the consumer set is unclear, run the full
-check. Replace `CXX=c++` in the example if you configured with another compiler.
+check. Replace `CXX=clang++-23` in the example if you configured with another compiler.
 The wrapper's success message covers only the selected database entries in this
 mode; it does not mean the full pre-merge check passed.
 

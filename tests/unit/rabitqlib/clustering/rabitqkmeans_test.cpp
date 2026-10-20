@@ -438,11 +438,11 @@ TEST(RaBitQKMeansTest, TrainsAtMaximumDimension) {
         ASSERT_EQ(model.assignments.size(), kPoints);
         ASSERT_EQ(model.distances.size(), kPoints);
         EXPECT_EQ(data, original);
-        EXPECT_TRUE(std::all_of(
-            model.centroids.begin(),
-            model.centroids.end(),
-            [](float value) { return std::isfinite(value); }
-        ));
+        EXPECT_TRUE(
+            std::all_of(model.centroids.begin(), model.centroids.end(), [](float value) {
+                return std::isfinite(value);
+            })
+        );
         double objective = 0;
         for (size_t point = 0; point < kPoints; ++point) {
             ASSERT_LT(model.assignments[point], kClusters);

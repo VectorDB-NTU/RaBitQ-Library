@@ -95,12 +95,28 @@ class IVF {
     static constexpr uint64_t kFormatMagic = 0x3158444951424152ULL;  // "RABQIDX1"
     static constexpr uint32_t kFormatVersion = 2;
 
-    void
-    quantize_cluster(Cluster&, const std::vector<PID>&, const float*, const float*, float*, float*, const quant::RabitqConfig&);
+    void quantize_cluster(
+        Cluster&,
+        const std::vector<PID>&,
+        const float*,
+        const float*,
+        float*,
+        float*,
+        const quant::RabitqConfig&
+    );
 
-    void
-    extend_cluster(const Cluster&, const std::vector<PID>&, const float*, const float*, PID, char*, char*, PID*, char*, const quant::RabitqConfig&)
-        const;
+    void extend_cluster(
+        const Cluster&,
+        const std::vector<PID>&,
+        const float*,
+        const float*,
+        PID,
+        char*,
+        char*,
+        PID*,
+        char*,
+        const quant::RabitqConfig&
+    ) const;
 
     // True if `n` points cannot be addressed by the storage size computations
     [[nodiscard]] bool exceeds_storage(size_t n) const;
@@ -131,13 +147,24 @@ class IVF {
 
     void swap(IVF& other) noexcept;
 
-    inline void
-    search_cluster(const Cluster&, const SplitBatchQuery<float>&, buffer::SearchBuffer<float>&, bool, const float*)
-        const;
+    inline void search_cluster(
+        const Cluster&,
+        const SplitBatchQuery<float>&,
+        buffer::SearchBuffer<float>&,
+        bool,
+        const float*
+    ) const;
 
-    inline void
-    scan_one_batch(const char* batch_data, const char* ex_data, const PID* ids, const SplitBatchQuery<float>& q_obj, buffer::SearchBuffer<float>& knns, size_t num_points, bool, const float*)
-        const;
+    inline void scan_one_batch(
+        const char* batch_data,
+        const char* ex_data,
+        const PID* ids,
+        const SplitBatchQuery<float>& q_obj,
+        buffer::SearchBuffer<float>& knns,
+        size_t num_points,
+        bool,
+        const float*
+    ) const;
 
     inline void validate_search(const float*, size_t, size_t, const PID*) const;
 
@@ -254,8 +281,9 @@ class IVF {
         float* distances = nullptr
     ) const;
 
-    void search(const float* query, size_t k, size_t nprobe, PID* results, bool use_hacc)
-        const;
+    void search(
+        const float* query, size_t k, size_t nprobe, PID* results, bool use_hacc
+    ) const;
 
     void search(
         const float* query,

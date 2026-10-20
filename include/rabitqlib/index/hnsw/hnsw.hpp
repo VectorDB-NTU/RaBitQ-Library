@@ -299,8 +299,8 @@ class HierarchicalNSW {
 
     using EstimateRecord = rabitqlib::detail::DistanceEstimate;
 
-    float (*raw_dist_func_
-    )(const float* __restrict__, const float* __restrict__, size_t){nullptr};
+    float (*raw_dist_func_)(const float* __restrict__, const float* __restrict__, size_t){
+        nullptr};
 
     void set_ef(size_t ef) { ef_ = ef; }
 
@@ -401,13 +401,14 @@ class HierarchicalNSW {
 
     // ANN Search
     template <class Kernel>
-    void
-    get_bin_est_direct(std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&);
+    void get_bin_est_direct(
+        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
+    );
 
     template <class Kernel>
-    void
-    get_full_est_direct(std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&)
-        const;
+    void get_full_est_direct(
+        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
+    ) const;
 
     template <class Kernel>
     std::vector<std::pair<float, PID>> search_knn_sorted_direct(
@@ -450,10 +451,12 @@ class HierarchicalNSW {
     void reconstruct_rotated(PID, float*) const;
     float get_quant_dist(PID target, PID query, detail::QuantQuery&) const;
     void add_point_quant(PID, int, LinkStorage&, detail::QuantQuery&);
-    maxheap<std::pair<float, PID>>
-    search_base_layer_quant(PID, PID, int, detail::QuantQuery&);
-    PID
-    mutually_connect_quant(PID, maxheap<std::pair<float, PID>>&, int, detail::QuantQuery&);
+    maxheap<std::pair<float, PID>> search_base_layer_quant(
+        PID, PID, int, detail::QuantQuery&
+    );
+    PID mutually_connect_quant(
+        PID, maxheap<std::pair<float, PID>>&, int, detail::QuantQuery&
+    );
 };
 
 struct EstimateRecord {

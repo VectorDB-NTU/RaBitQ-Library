@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
-export CLANG_TIDY="${CLANG_TIDY:-clang-tidy}"
+export CLANG_TIDY="${CLANG_TIDY:-clang-tidy-23}"
 include_build="$(realpath "${1:-build-includes}")"
 export include_build
 export include_root="$repo_root"

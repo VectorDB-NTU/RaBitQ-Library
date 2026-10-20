@@ -122,7 +122,8 @@ static RescaleSearchState evaluate_scale_state_avx2(
     if (fi[fk] != std::numeric_limits<size_t>::max())
         s.first = std::max(
             s.first,
-            static_cast<double>(quantized_code_at_scale(magnitudes[fi[fk]], scale, max_code)
+            static_cast<double>(
+                quantized_code_at_scale(magnitudes[fi[fk]], scale, max_code)
             ) / magnitudes[fi[fk]]
         );
     if (ni[nk] != std::numeric_limits<size_t>::max())

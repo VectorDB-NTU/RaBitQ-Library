@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <gtest/internal/gtest-port.h>
+#include <omp.h>
 
 #include <array>
 #include <atomic>
@@ -75,6 +76,9 @@ struct Fixture {
     std::array<PID, kCapacity> clusters{};
 
     Fixture() {
+        // Runtime/tool startup allocations are not index allocations and must
+        // happen before the global new hook starts injecting failures.
+        (void)omp_get_max_threads();
         std::mt19937 generator(42);
         std::uniform_real_distribution<float> distribution(-1, 1);
         for (auto& value : data) {

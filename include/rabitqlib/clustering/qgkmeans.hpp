@@ -158,9 +158,11 @@ class QGAssigner {
 
         scratch_.reserve(num_threads_);
         for (uint32_t thread = 0; thread < num_threads_; ++thread) {
-            scratch_.emplace_back(std::make_unique<symqg::detail::SearchScratch>(
-                graph_->padded_dim(), M_, ef_search_, 1
-            ));
+            scratch_.emplace_back(
+                std::make_unique<symqg::detail::SearchScratch>(
+                    graph_->padded_dim(), M_, ef_search_, 1
+                )
+            );
         }
     }
 

@@ -32,7 +32,7 @@ class Rotator {
 
    public:
     explicit Rotator() = default;
-    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim){};
+    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim) {};
     virtual ~Rotator() = default;
     virtual void rotate(const T* src, T* dst) const = 0;
     virtual void load(std::ifstream&) = 0;
@@ -93,8 +93,9 @@ class MatrixRotator : public Rotator<T> {
         : MatrixRotator(dim, padded_dim, AllocateOnly{}) {
         RowMajorMatrix<T> rand = random_gaussian_matrix<T>(padded_dim, padded_dim);
         Eigen::HouseholderQR<RowMajorMatrix<T>> qr(rand);
-        RowMajorMatrix<T> q_inv = qr.householderQ().transpose(
-        );  // The inverse of an orthogonal matrix is its transpose.
+        RowMajorMatrix<T> q_inv =
+            qr.householderQ()
+                .transpose();  // The inverse of an orthogonal matrix is its transpose.
 
         // the random matrix only need the first dim rows, since we just pad zeros for
         // the vector to be rotated to padded dimension

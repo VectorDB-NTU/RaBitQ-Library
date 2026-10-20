@@ -382,10 +382,7 @@ void IVF::add(
         }
     } else {
         rabitqlib::index_detail::parallel_for(
-            0,
-            n,
-            num_threads,
-            [&](size_t row, size_t /*thread_id*/) {
+            0, n, num_threads, [&](size_t row, size_t /*thread_id*/) {
                 std::vector<float> rotated(padded_dim_);
                 std::vector<AnnCandidate<float>> nearest(1);
                 rotator_->rotate(data + (row * dim_), rotated.data());

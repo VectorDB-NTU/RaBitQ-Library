@@ -5,7 +5,7 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 readonly repo_root
 readonly build_dir="${1:-$repo_root/build}"
-readonly tidy_runner="${RUN_CLANG_TIDY:-run-clang-tidy-15}"
+readonly tidy_runner="${RUN_CLANG_TIDY:-run-clang-tidy-23}"
 readonly compiler="${CXX:-c++}"
 
 if [[ ! -f "$build_dir/compile_commands.json" ]]; then
@@ -15,7 +15,7 @@ if [[ ! -f "$build_dir/compile_commands.json" ]]; then
 fi
 
 if ! command -v "$tidy_runner" >/dev/null 2>&1; then
-    echo "error: $tidy_runner was not found; install clang-tidy 15" >&2
+    echo "error: $tidy_runner was not found; install clang-tidy 23" >&2
     exit 1
 fi
 

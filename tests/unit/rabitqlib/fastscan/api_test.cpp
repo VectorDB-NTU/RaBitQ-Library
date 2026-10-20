@@ -514,7 +514,8 @@ TEST(FastScanApi, DoubleEncodingQueryAndScoringWithNonzeroCentroid) {
                 );
                 EXPECT_EQ(reset_split.delta(), split.delta());
                 EXPECT_EQ(reset_split.kbxsumq(), split.kbxsumq());
-                EXPECT_TRUE(std::equal(split.lut(), split.lut() + bytes, reset_split.lut())
+                EXPECT_TRUE(
+                    std::equal(split.lut(), split.lut() + bytes, reset_split.lut())
                 );
             }
         }
@@ -569,11 +570,13 @@ TEST(FastScanApi, DoubleLutMatchesIndependentSubsetSumQuantization) {
         const Lut<double> zero(query.data(), kDim, hacc);
         EXPECT_EQ(zero.delta(), 0);
         EXPECT_EQ(zero.sum_vl(), 0);
-        EXPECT_TRUE(std::all_of(
-            zero.lut(),
-            zero.lut() + kDim * 4 * (hacc ? 2 : 1),
-            [](uint8_t value) { return value == 0; }
-        ));
+        EXPECT_TRUE(
+            std::all_of(
+                zero.lut(), zero.lut() + kDim * 4 * (hacc ? 2 : 1), [](uint8_t value) {
+                    return value == 0;
+                }
+            )
+        );
     }
 }
 

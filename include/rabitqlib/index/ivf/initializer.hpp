@@ -52,8 +52,9 @@ class Initializer {
     virtual ~Initializer() = 0;
     [[nodiscard]] virtual const float* centroid(PID) const = 0;
     virtual void add_vectors(const float*, size_t) = 0;
-    virtual void
-    centroids_distances(const float*, size_t, std::vector<AnnCandidate<float>>&) const = 0;
+    virtual void centroids_distances(
+        const float*, size_t, std::vector<AnnCandidate<float>>&
+    ) const = 0;
     virtual void load(std::ifstream&, const char*) = 0;
     virtual void save(std::ofstream&, const char*) const = 0;
 };
@@ -195,7 +196,8 @@ class HNSWInitializer : public Initializer {
 
     void rebuild_label_lookup() {
         if (alg_hnsw_->cur_element_count != num_cluster_) {
-            throw std::runtime_error("HNSW centroid count does not match IVF cluster count"
+            throw std::runtime_error(
+                "HNSW centroid count does not match IVF cluster count"
             );
         }
         std::vector<hnswlib::tableint> label_to_internal(num_cluster_);
@@ -235,10 +237,7 @@ class HNSWInitializer : public Initializer {
         size_t start = 0;
         size_t rows = num_cluster_;
         rabitqlib::index_detail::parallel_for(
-            start,
-            rows,
-            num_threads,
-            [&](size_t row, size_t /*thread_id*/) {
+            start, rows, num_threads, [&](size_t row, size_t /*thread_id*/) {
                 alg_hnsw_->addPoint(cent + (row * dim_), row);
             }
         );

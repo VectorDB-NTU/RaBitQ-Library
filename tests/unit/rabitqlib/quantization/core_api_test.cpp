@@ -450,8 +450,9 @@ TEST(CoreApi, ScoringRetainsBufferAndNumericalChecks) {
     constexpr size_t dim = 64;
     std::array<float, dim> values{};
     std::array<uint8_t, dim * 2> codes{}, extra{};
-    float (*volatile compute_pointer
-    )(const api::QueryState&, api::CodeView, const api::Factors&) = &api::compute;
+    float (*volatile compute_pointer)(
+        const api::QueryState&, api::CodeView, const api::Factors&
+    ) = &api::compute;
     alignas(float) std::array<uint8_t, sizeof(float) * dim + 1> misaligned{};
     const auto* bad_alignment = reinterpret_cast<const float*>(misaligned.data() + 1);
     EXPECT_THROW(

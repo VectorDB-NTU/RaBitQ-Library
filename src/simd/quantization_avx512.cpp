@@ -102,18 +102,20 @@ static RescaleSearchState evaluate_scale_state_avx512(
     double f = _mm512_reduce_max_pd(vfirst), n = _mm512_reduce_min_pd(vnext);
     // At least one lane equals each reduced extremum. Select its first set bit;
     // tied boundary ratios describe the same event scale.
-    unsigned fk = bitops::countr_zero32(static_cast<unsigned>(
-                 _mm512_cmp_pd_mask(vfirst, _mm512_set1_pd(f), _CMP_EQ_OQ)
-             )),
-             nk = bitops::countr_zero32(static_cast<unsigned>(
-                 _mm512_cmp_pd_mask(vnext, _mm512_set1_pd(n), _CMP_EQ_OQ)
-             ));
+    unsigned
+        fk = bitops::countr_zero32(
+            static_cast<unsigned>(_mm512_cmp_pd_mask(vfirst, _mm512_set1_pd(f), _CMP_EQ_OQ))
+        ),
+        nk = bitops::countr_zero32(
+            static_cast<unsigned>(_mm512_cmp_pd_mask(vnext, _mm512_set1_pd(n), _CMP_EQ_OQ))
+        );
     // Reciprocal products selected the coordinates; division now recovers the
     // exact heap event scales, clipped to the configured search interval.
     if (fi[fk] != std::numeric_limits<size_t>::max())
         s.first = std::max(
             s.first,
-            static_cast<double>(quantized_code_at_scale(magnitudes[fi[fk]], scale, max_code)
+            static_cast<double>(
+                quantized_code_at_scale(magnitudes[fi[fk]], scale, max_code)
             ) / magnitudes[fi[fk]]
         );
     if (ni[nk] != std::numeric_limits<size_t>::max())
