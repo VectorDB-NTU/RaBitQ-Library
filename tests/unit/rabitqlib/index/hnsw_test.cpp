@@ -987,6 +987,39 @@ std::vector<char> saved_bytes(const HierarchicalNSW& index, const std::string& p
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+TEST(HnswConstructionTest, SeedReproducesRotationCodesAndSerialSearch) {
+    constexpr size_t kCount = 65;
+    AddFixture fixture(kCount, 47);
+    const std::string path = ::testing::TempDir() + "rabitq_hnsw_seed.index";
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        std::vector<char> expected_bytes;
+        Results expected_results;
+        for (size_t seed : {42U, 42U, 43U}) {
+            HierarchicalNSW index(kCount, AddFixture::kDim, 4, 8, 32, seed, metric);
+            index.construct(
+                1,
+                fixture.centroid.data(),
+                kCount,
+                fixture.data.data(),
+                fixture.cluster_ids.data(),
+                1
+            );
+            const auto bytes = saved_bytes(index, path);
+            const auto results = index.search(fixture.data.data(), 5, 10, kCount, 1);
+            if (expected_bytes.empty()) {
+                expected_bytes = bytes;
+                expected_results = results;
+            } else if (seed == 42) {
+                EXPECT_EQ(bytes, expected_bytes);
+                EXPECT_EQ(results, expected_results);
+            } else {
+                EXPECT_NE(bytes, expected_bytes);
+            }
+        }
+    }
+    std::remove(path.c_str());
+}
+
 TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
     constexpr size_t kCount = 120;
     constexpr size_t kQueries = 8;

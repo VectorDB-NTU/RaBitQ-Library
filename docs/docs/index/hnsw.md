@@ -63,6 +63,11 @@ see [C++ integration](../cpp_integration.md).
 | `metric`, `random_seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. |
 | `k`, `ef` | Positive result count and search window. Python requires `k <= max_elements`; omitted/zero `ef` uses `max(k, 10)`, and positive `ef` is raised to at least `k`. |
 
+`random_seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
+With identical inputs and parameters, single-threaded construction is reproducible
+within the same build environment. Parallel insertion order and different toolchains
+or SIMD backends can still change results. Loading restores the saved rotation.
+
 Results use squared L2 or `1 - dot` estimates, ordered from smallest to largest.
 Python fills missing results with ID `2**32 - 1` and distance `+inf`; C++ returns
 only the available pairs. See [result handling](../quick_start.md#read-the-results)
