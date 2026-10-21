@@ -95,6 +95,40 @@ jobs:
           done
           shellcheck "${files[@]}"
 
+  benchmark-smoke:
+    name: Benchmark build and smoke
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.benchmarks == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+          python -m pip install "numpy>=1.23" "pybind11>=2.12"
+      - name: Configure benchmark targets only
+        run: >-
+          cmake -S . -B build-benchmarks -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DRABITQ_BUILD_BENCHMARKS=ON
+          -DRABITQ_BUILD_TESTS=OFF
+          -DRABITQ_BUILD_SAMPLES=OFF
+          -DRABITQ_BUILD_PYTHON_BINDINGS=ON
+          -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+          -DPython_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"
+          -Dpybind11_DIR="$(python -m pybind11 --cmakedir)"
+      - name: Compile benchmarks and dependencies
+        run: cmake --build build-benchmarks --parallel 2
+      - name: Run bounded benchmark smoke tests
+        run: ctest --test-dir build-benchmarks --output-on-failure --no-tests=error --timeout 60
+
   ubuntu:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}

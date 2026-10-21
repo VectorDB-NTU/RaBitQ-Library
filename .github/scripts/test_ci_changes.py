@@ -8,6 +8,39 @@ from ci_changes import GROUPS, classify, detect
 
 
 class ChangeSelectionTest(unittest.TestCase):
+    def test_benchmark_and_workflow_self_coverage(self):
+        cases = {
+            ".github/workflows/test.yaml": {
+                "cpp",
+                "cpp_format",
+                "cpp_tidy",
+                "shell",
+                "python_quality",
+                "benchmarks",
+            },
+            "benchmarks/core/main.cpp": {"benchmarks", "cpp_format"},
+            "benchmarks/core/CMakeLists.txt": {"benchmarks"},
+            "benchmarks/hotpaths/fastscan.cpp": {"benchmarks", "cpp_format"},
+            "benchmarks/hotpaths/common.hpp": {"benchmarks", "cpp_format"},
+            "benchmarks/hotpaths/ids.py": {"benchmarks", "python_quality"},
+            "benchmarks/hotpaths/compare.py": {"benchmarks", "python_quality"},
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(classify([path]), expected)
+        for path in (
+            "include/rabitqlib/core/api.hpp",
+            "src/core/api.cpp",
+            "python_bindings/bindings_common.hpp",
+            "pyproject.toml",
+            "CMakeLists.txt",
+            "cmake/rabitqOpenMP.cmake",
+        ):
+            with self.subTest(dependency=path):
+                self.assertIn("benchmarks", classify([path]))
+        self.assertEqual(classify(["benchmarks/core/README.md"]), set())
+        self.assertEqual(classify(["benchmarks/new_kernel.cpp"]), set(GROUPS))
+
     def test_docs_only_skip_builds(self):
         self.assertEqual(
             classify(
@@ -48,6 +81,7 @@ class ChangeSelectionTest(unittest.TestCase):
         self.assertEqual(
             classify(support + ["src/core/api.cpp"]),
             {
+                "benchmarks",
                 "cpp",
                 "cpp_format",
                 "cpp_tidy",
@@ -64,7 +98,14 @@ class ChangeSelectionTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(
                     classify([path]),
-                    {"cpp", "cpp_format", "cpp_tidy", "python_build", "wheels"},
+                    {
+                        "cpp",
+                        "cpp_format",
+                        "cpp_tidy",
+                        "python_build",
+                        "wheels",
+                        "benchmarks",
+                    },
                 )
 
     def test_language_specific_changes(self):
@@ -73,13 +114,23 @@ class ChangeSelectionTest(unittest.TestCase):
             "tests/dispatch/fastscan_no_simd_test.cpp": {"cpp", "cpp_format"},
             "sample/cpp/ivf_rabitq_querying.cpp": {"cpp", "cpp_format"},
             "python_bindings/ivf_bindings.cpp": {
+                "benchmarks",
                 "cpp_format",
                 "cpp_tidy",
                 "python_build",
                 "wheels",
             },
-            "python_bindings/__init__.py": {"python_quality", "python_build", "wheels"},
-            "python_bindings/licenses/LLVM-OpenMP.txt": {"python_build", "wheels"},
+            "python_bindings/__init__.py": {
+                "python_quality",
+                "python_build",
+                "wheels",
+                "benchmarks",
+            },
+            "python_bindings/licenses/LLVM-OpenMP.txt": {
+                "python_build",
+                "wheels",
+                "benchmarks",
+            },
             "tests/python/test_cpp_clustering_examples.py": {"cpp", "python_quality"},
             "tests/python/conftest.py": {
                 "cpp",
@@ -115,7 +166,14 @@ class ChangeSelectionTest(unittest.TestCase):
             "scripts/check-includes.sh": {"shell"},
             ".clang-format": {"cpp_format"},
             ".clang-tidy": {"cpp_tidy"},
-            ".github/workflows/test.yaml": {"cpp", "cpp_format", "cpp_tidy"},
+            ".github/workflows/test.yaml": {
+                "cpp",
+                "cpp_format",
+                "cpp_tidy",
+                "python_quality",
+                "shell",
+                "benchmarks",
+            },
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
@@ -124,12 +182,13 @@ class ChangeSelectionTest(unittest.TestCase):
     def test_build_configuration_selects_affected_checks(self):
         self.assertEqual(
             classify(["pyproject.toml"]),
-            {"python_quality", "python_build", "wheels"},
+            {"python_quality", "python_build", "wheels", "benchmarks"},
         )
         for path in ("CMakeLists.txt", "cmake/RaBitQLibConfig.cmake.in"):
             with self.subTest(path=path):
                 self.assertEqual(
-                    classify([path]), {"cpp", "cpp_tidy", "python_build", "wheels"}
+                    classify([path]),
+                    {"cpp", "cpp_tidy", "python_build", "wheels", "benchmarks"},
                 )
 
     def test_mixed_changes_and_renamed_source(self):
@@ -237,6 +296,7 @@ class ChangeSelectionTest(unittest.TestCase):
             (["python_bindings/__init__.py"], set(GROUPS)),
             (["scripts/build-macos-openmp.sh"], set(GROUPS)),
             (["scripts/check-tidy.sh"], set(GROUPS)),
+            (["benchmarks/core/main.cpp"], set(GROUPS)),
             (["CMakeLists.txt"], set(GROUPS)),
             (["pyproject.toml"], set(GROUPS)),
             (["unknown-build-input"], set(GROUPS)),

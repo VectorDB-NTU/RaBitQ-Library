@@ -12,6 +12,8 @@ only the affected job groups:
 | --- | --- |
 | Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
 | Issue forms/configuration and CODEOWNERS | No C++/Python builds |
+| `benchmarks/core/`, `benchmarks/hotpaths/` code/build files | Ubuntu benchmark build and bounded smoke tests; C++ formatting or Python lint as applicable, without the wheel/platform matrix for benchmark-only edits |
+| `.github/workflows/test.yaml` | C++ checks, ShellCheck, Python quality (including summary-job tests), and benchmark smoke |
 | `benchmarks/plot_homepage.py` | Python lint, including the plotting script; no index or wheel builds |
 | `sample/run_cpp.sh`, `sample/run_python.sh` | ShellCheck, including these runners |
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
@@ -51,6 +53,20 @@ example, routing plus `scripts/check-python.sh` runs Python quality and ShellChe
 routing plus library code, build configuration, wheel-related inputs or unknown
 paths keeps the full selection. PR routing checks remain broad. An untagged version on `main` still forces full C++ and Python CI,
 even for a subsequent docs-only commit, before automatic publishing can proceed.
+
+## Benchmark smoke coverage
+
+`Benchmark build and smoke` uses one Ubuntu runner with benchmarks enabled,
+ordinary unit tests and samples disabled, native optimization disabled, and Python
+bindings enabled for the ID-conversion helper. It builds the targets and runs
+only their registered small CTest cases, with a 60-second per-test timeout.
+No dataset download, timing threshold, or performance comparison is run.
+
+The job also runs for shared library sources/headers, root/CMake build settings,
+Python bindings/package configuration, and changes to the Test workflow. Other
+unrecognized benchmark paths retain conservative full selection. The hot-path
+Python scripts are included in Python lint. This is Linux build/functionality
+coverage, not a performance result or proof of every SIMD backend executing.
 
 ## Matrix summary checks
 

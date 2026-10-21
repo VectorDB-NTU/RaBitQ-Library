@@ -56,8 +56,8 @@ For comparisons, retain all raw repetitions and record CPU model, compiler/versi
 build flags, affinity/SMT policy, OS and dataset parameters beside the CSV. Keep these
 fixed and alternate baseline/candidate runs; compare quality before claiming a speedup.
 Linux users can pin the executable with `taskset -c <cpu>`. The program reports available
-ISA features, not a trace of every selected kernel. CI only smoke-tests functionality;
-shared CI timing is not a performance gate.
+ISA features, not a trace of every selected kernel. The Ubuntu CI `Benchmark build and smoke` job compiles these targets and runs
+the registered small cases. Shared CI timing is not a performance gate.
 
 ## Scoring-call overhead
 

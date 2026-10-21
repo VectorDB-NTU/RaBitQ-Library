@@ -17,6 +17,8 @@ No additional production dependencies are introduced. Core/FastScan benchmarks s
 OpenMP OFF. Python benchmarks use the existing Python/NumPy/pybind11 environment and
 are available only with `RABITQ_BUILD_PYTHON_BINDINGS=ON`. The helper module is not installed
 in the package. `ctest` smoke tests verify functionality, never shared-host speed thresholds.
+The CI `Benchmark build and smoke` job builds these targets on Ubuntu, including
+the Python helper, and runs the registered small cases without external datasets.
 
 ## Build and run
 
