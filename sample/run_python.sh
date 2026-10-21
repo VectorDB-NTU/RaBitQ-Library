@@ -1,3 +1,9 @@
+#!/usr/bin/env bash
+
+# Resolve data, build, and example paths from the repository root.
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd -- "$repo_root" || exit 1
+
 # compiling
 python -m pip install .
 
@@ -9,7 +15,7 @@ fi
 tar -xzvf ./data/gist/gist.tar.gz -C ./data
 
 # indexing and querying for symqg
-python  ./sample/python/symqg_indexing.py --max-degree 32 --ef-construction 400 ./data/gist/gist_base.fvecs ./data/gist/symqg_32.index 
+python  ./sample/python/symqg_indexing.py --max-degree 32 --ef-construction 400 ./data/gist/gist_base.fvecs ./data/gist/symqg_32.index
 
 python  ./sample/python/symqg_querying.py ./data/gist/symqg_32.index ./data/gist/gist_query.fvecs ./data/gist/gist_groundtruth.ivecs
 

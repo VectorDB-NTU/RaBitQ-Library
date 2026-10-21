@@ -69,7 +69,7 @@ clusters for the C++ indexing examples:
 
 File mode uses exact final assignment and the default training parameters.
 Append `ip` for spherical clustering of normalized input; the default is `l2`.
-`example.sh` runs the C++ clustering and indexing workflow without Python.
+`sample/run_cpp.sh` runs the C++ clustering and indexing workflow without Python.
 
 ## Parameters and input
 

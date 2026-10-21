@@ -31,7 +31,7 @@ ctest --test-dir build-hotpaths -R 'Hotpath' --output-on-failure
 Set both `RABITQ_BUILD_INDEX=OFF` and `RABITQ_BUILD_FASTSCAN=OFF` for pure core.
 For the Python helper, additionally enable bindings and select your existing interpreter
 with `Python_EXECUTABLE` and its `pybind11_DIR`, as described in
-[development setup](../../DEVELOPMENT.md). Multi-configuration generators need
+[development setup](../../docs/development.md). Multi-configuration generators need
 `--config Release`, `ctest -C Release`, and the `Release/` executable subdirectory.
 
 Examples (from the repository root):

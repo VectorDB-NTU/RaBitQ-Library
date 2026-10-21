@@ -1,3 +1,9 @@
+#!/usr/bin/env bash
+
+# Resolve data, build, and example paths from the repository root.
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd -- "$repo_root" || exit 1
+
 # compiling
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel

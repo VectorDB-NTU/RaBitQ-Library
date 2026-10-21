@@ -1,6 +1,6 @@
 # Maintainer reference
 
-For your first contribution, see [Contributing to RaBitQ](CONTRIBUTING.md).
+For your first contribution, see [Contributing to RaBitQ](../CONTRIBUTING.md).
 This reference describes CI routing and release maintenance.
 
 ## Checks selected by changed files
@@ -23,7 +23,7 @@ only the affected job groups:
 | `pyproject.toml` | Python lint, builds, and wheels; no C++ checks |
 | Shell scripts | ShellCheck and any check driven by the changed script |
 
-See [CI coverage](tests/README.md#ci-coverage) for full-suite versus smoke-test
+See [CI coverage](../tests/README.md#ci-coverage) for full-suite versus smoke-test
 ownership, dedicated FAISS comparisons, and emulated SIMD checks.
 
 The optional include-cleaner report is available through
