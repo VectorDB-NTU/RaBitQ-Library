@@ -31,8 +31,10 @@ nav:
       - HNSW RaBitQ: index/hnsw.md
       - SymphonyQG: index/qg.md
   - Integrations:
+      - txtai: integrations/txtai.md
       - Zvec: integrations/zvec.md
   - Clustering: clustering.md
+  - Papers and citations: papers.md
   - Benchmarks:
       - Overview: benchmarks/bench.md
       - IVF indexes: benchmarks/ivf.md

@@ -20,7 +20,7 @@ and rejection of truncated or unsupported formats.
 Linux CI additionally selects Clang 23 explicitly for portable builds, full C++
 tests, installed consumers, and core/FastScan integrations with OpenMP ON/OFF.
 This is a tested development toolchain, not a new minimum compiler requirement;
-see [compiler and tool versions](../DEVELOPMENT.md#compiler-and-tool-versions).
+see [compiler and tool versions](../docs/development.md#compiler-and-tool-versions).
 
 OpenMP is optional for core/FastScan tests: configure `RABITQ_BUILD_INDEX=OFF` and
 `RABITQ_USE_OPENMP=OFF`. ANN/Python testing retains the full prerequisites above.

@@ -32,3 +32,12 @@ python benchmarks/reproduce.py --benchmarks ivf --datasets gist1m
 python benchmarks/reproduce.py --datasets dbpedia --methods qgkmeans
 python benchmarks/reproduce.py --dry-run
 ```
+
+## Homepage figures
+
+Run `python benchmarks/plot_homepage.py` to regenerate the GIST1M homepage figure in
+both README.md and the documentation homepage from the committed query and indexing CSVs. This performs
+no new measurements. It uses three fixed configurations on GIST1M,
+selects the fastest measured setting reaching Recall@10 >= 90% without
+interpolation, and preserves the historical measurement scope. The benchmark overview records
+the actual recall and selected parameter for each bar.

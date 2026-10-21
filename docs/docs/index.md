@@ -39,25 +39,35 @@ from compact quantization to complete indexes.</p>
   </div>
 </div>
 
-## Choose an index
+## Choose your index
 
-| Index | Best fit | Typical relative memory |
-| --- | --- | --- |
-| [IVF RaBitQ](index/ivf.md) | Large datasets and predictable storage | Lowest |
-| [HNSW RaBitQ](index/hnsw.md) | General-purpose graph search | Moderate |
-| [SymphonyQG](index/qg.md) | Latency-focused graph search | Highest |
+Explore search throughput, recall, and storage for three quantized configurations.
 
-Memory, latency, and recall depend on the dataset and search settings. See the
-[index usage guide](index/usage.md#estimate-storage) for storage estimates and the
-[benchmarks](benchmarks/bench.md) for measured workloads.
+<!-- homepage-results:start -->
+
+**GIST1M**
+
+1,000,000 vectors · 960 dimensions · L2
+
+![GIST1M: QPS at Recall@10 ≥ 90%, serialized index size](benchmarks/figures/homepage-gist1m.svg)
+<!-- homepage-results:end -->
+
+QPS uses the fastest measured setting reaching **Recall@10 ≥ 90%**;
+actual recall and storage budgets differ.
+[Detailed results, settings, and measurement conditions](benchmarks/bench.md#homepage-selection).
+
+## Built with RaBitQ-Library
+
+- [txtai](integrations/txtai.md) uses the Python IVF and HNSW indexes as an
+  embedding-search backend. See how to select the backend and its search settings.
+- [zvec](integrations/zvec.md) uses core quantization in its IVF-RaBitQ and
+  HNSW-RaBitQ implementations, with FastScan batch scoring in IVF. See the
+  integration walkthrough for storage, scoring, and platform boundaries.
+
+These are direct library integrations, with versioned downstream source links.
 
 ## Explore further
 
 - [Algorithm overview](rabitq/rabitq.md) for the rotation, encoding, and scoring workflow.
 - [RaBitQ Library 0.7.0 release notes](releases/0.7.0.md) for new APIs and upgrade guidance.
-
-## Research papers
-
-- [1-bit RaBitQ](https://doi.org/10.1145/3654970) · 2024 · Quantization with a theoretical error bound.
-- [SymphonyQG](https://doi.org/10.1145/3709730) · 2025 · Quantization and graph search.
-- [Multi-bit RaBitQ](https://doi.org/10.1145/3725413) · 2025 · Higher-bit quantization.
+- [Papers and citations](papers.md) for the original RaBitQ method, its multi-bit extension, and SymphonyQG.

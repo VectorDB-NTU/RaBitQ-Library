@@ -52,7 +52,7 @@ indexing and querying workflows:
 - [Core quantization and distance estimation](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/core/main.cpp)
 
 The core example is built as the `core_example` CMake target. For the GIST benchmark workflow, see
-[`example.sh`](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/example.sh).
+[`sample/run_cpp.sh`](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/run_cpp.sh).
 
 ## Use in another C++ project
 

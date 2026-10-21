@@ -141,7 +141,7 @@ class ChangeSelectionTest(unittest.TestCase):
             ".github/scripts/test_ci_changes.py",
             ".github/workflows/changes.yml",
             ".github/workflows/test.yaml",
-            "MAINTAINING.md",
+            "docs/maintaining.md",
         ]
         changed = "\0".join(paths) + "\0"
         with patch("ci_changes.git", side_effect=["merge-base", changed]):

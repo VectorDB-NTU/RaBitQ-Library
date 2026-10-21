@@ -34,8 +34,8 @@ factors estimate L2 distance or inner product.
 | `tests/unit/`, `tests/python/` | C++ reference/unit tests and Python boundary/integration tests |
 | `docs/docs/` | MkDocs site sources |
 
-See [README.md](README.md) for usage, [DEVELOPMENT.md](DEVELOPMENT.md) for tool setup and
-[implementation recipes](DEVELOPMENT.md#implementation-recipes), and
+See [README.md](README.md) for usage, [docs/development.md](docs/development.md) for tool setup and
+[implementation recipes](docs/development.md#implementation-recipes), and
 [tests/README.md](tests/README.md) for build and test commands.
 
 CMake exposes `rabitqlib::core`, `rabitqlib::fastscan` (depending on core), and
@@ -100,7 +100,7 @@ workspace APIs must never silently fall back to heap allocation or spawn worker 
 Run the smallest relevant check first, then broaden for shared contracts and regression risk.
 Apply all matching rows; these are conditional requirements, not a checklist for every edit.
 Run tests in the foreground. Use the existing project interpreter wherever commands say `python`.
-Tool versions and installation instructions are maintained in [DEVELOPMENT.md](DEVELOPMENT.md).
+Tool versions and installation instructions are maintained in [docs/development.md](docs/development.md).
 
 | Change | Required verification |
 | --- | --- |
@@ -121,7 +121,7 @@ If a required tool, dependency, or supported CPU is unavailable, report the bloc
 still needed; do not silently skip it or replace the user's environment.
 When a check fails, determine whether the change caused it. Fix introduced failures; report
 unrelated baseline failures without expanding scope. Preserve user edits when comparing baselines.
-For focused static analysis, use the recipe in [DEVELOPMENT.md](DEVELOPMENT.md#focused-static-analysis).
+For focused static analysis, use the recipe in [docs/development.md](docs/development.md#focused-static-analysis).
 
 Behavior changes require focused regression coverage. Python-visible core changes normally need
 both an underlying C++ test and a Python boundary test; Python-only changes need Python coverage.
@@ -166,7 +166,7 @@ Recommended:
   `src/fastscan/fastscan_dispatch.cpp`; HNSW dispatch lives in
   `src/index/hnsw_dispatch.cpp` so core never references index search symbols.
   Keep calculations in backend source files; see the dispatch coverage table in
-  [DEVELOPMENT.md](DEVELOPMENT.md#dispatch-conventions-and-coverage).
+  [docs/development.md](docs/development.md#dispatch-conventions-and-coverage).
 - Dispatch caches function pointers in thread-safe function-local statics so calls before `main()`
   are safe regardless of translation-unit initialization order. Detection must use safe generic
   code; never execute a high-ISA kernel to find out whether the CPU supports it.

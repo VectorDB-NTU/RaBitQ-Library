@@ -179,3 +179,30 @@ reuses saved indexes; export runs no experiments. `--dry-run` previews commands;
 
 [Query CSV](figures/qps-recall-points.csv) · [Indexing CSV](figures/indexing.csv) ·
 [K-means CSV](figures/kmeans.csv)
+
+## Homepage selection
+
+The homepage shows IVF/HNSW at 5 total bits (one sign bit plus four extra bits)
+and SymphonyQG at 4 bits. For each GIST1M configuration, the QPS bar selects
+the fastest measured setting with Recall@10 >= 90%, without interpolation.
+Actual recall and total storage differ; this is neither an exact-recall nor an
+equal-memory comparison. The tables below identify the selected CSV rows.
+
+<!-- homepage-selection:start -->
+
+### GIST1M
+
+| Configuration | Measured Recall@10 | Selected search setting |
+| --- | ---: | --- |
+| IVF · 5-bit | 92.85% | `nprobe=128` |
+| HNSW · 5-bit | 92.56% | `ef=512` |
+| SymphonyQG · 4-bit | 90.69% | `ef=512` |
+
+<!-- homepage-selection:end -->
+
+The figures use the 0.7.0 measurements described above, with one search thread
+and one query per call. Each setting has one timing pass. QPS includes Python
+call overhead after warm-up and excludes loading. Index size is serialized
+storage including sidecars, not resident or peak RAM.
+See [IVF results](ivf.md) and [graph results](graphs.md) for full curves,
+construction costs, and additional precision/storage configurations.

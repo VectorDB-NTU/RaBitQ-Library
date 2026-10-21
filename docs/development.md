@@ -1,10 +1,10 @@
 # Development reference
 
-Start with [Contributing to RaBitQ](CONTRIBUTING.md) for setup and your first PR.
+Start with [Contributing to RaBitQ](../CONTRIBUTING.md) for setup and your first PR.
 This reference covers tool configuration and changes to library internals.
 Run commands from the repository root in your activated
-[project environment](CONTRIBUTING.md#python-environment), after installing
-the [source-build prerequisites](CONTRIBUTING.md#setup-for-code-changes).
+[project environment](../CONTRIBUTING.md#python-environment), after installing
+the [source-build prerequisites](../CONTRIBUTING.md#setup-for-code-changes).
 Refresh APT package lists with `sudo apt-get update` before installing tools.
 
 ## Compiler and tool versions
@@ -24,7 +24,7 @@ The LLVM APT release branch supplies updated builds within that major version;
 CI prints the exact tool versions, rather than promising a fixed patch build.
 Upgrading them requires reviewing format differences and diagnostics together with
 the scripts and CI configuration. The Ubuntu CI setup lives in
-[setup-clang](.github/actions/setup-clang/action.yml).
+[setup-clang](../.github/actions/setup-clang/action.yml).
 
 ## C++ formatting
 
@@ -156,7 +156,7 @@ tests and benchmarks. Disable optional targets above for a smaller check; skippe
 files are listed explicitly. Installed-package consumers and the historical fixture
 generator have separate build configurations and must be checked in those contexts.
 The historical generator requires the pinned release headers described in
-[its README](tests/fixtures/persistence/README.md).
+[its README](../tests/fixtures/persistence/README.md).
 
 Headers are checked as main files with `-x c++-header`, preserving `#pragma once`
 for mutually including headers. Include Cleaner does not report findings in included
@@ -354,7 +354,7 @@ must happen in generic code first.
   their function name alone does not specify the LUT format. Estimator templates require
   explicit accumulator arguments so new call sites must make this choice deliberately.
   Never bypass public dimension checks, unsupported-CPU errors or initialization safety.
-- Keep performance regression workloads in [component hot-path benchmarks](benchmarks/hotpaths/README.md).
+- Keep performance regression workloads in [component hot-path benchmarks](../benchmarks/hotpaths/README.md).
   Validate numerical results first, then inspect generated code and alternate comparable
   baseline/candidate runs. Keep failed experiments and quality results. Fusion, inlining,
   scratch reuse and dispatch changes need measurements across relevant vector sizes;
@@ -405,7 +405,7 @@ Core must not depend on FastScan scoring or index headers, objects or symbols. F
 must not depend on indexes. The canonical headers are under `core/`, `fastscan/` and
 `index/{ivf,hnsw,symqg}/`. Old `quantization/`, `utils/rotator.hpp` and generic
 `index/{query,lut,estimator}.hpp` forwarders have been removed. Migrate consumers to
-their owning module; see the [migration guide](docs/docs/modular_migration.md).
+their owning module; see the [migration guide](../docs/docs/modular_migration.md).
 Core-only installs exclude FastScan/index/clustering headers and vendored hnswlib.
 Installed detail headers support templates and are not public APIs. Internal-only
 non-template dispatch declarations stay in `src/`.
@@ -440,12 +440,12 @@ ANN still requires it. Guard optional numerical OpenMP calls/pragmas with the ex
 functions. Test both configurations, including installed consumers. Python is a MODULE extension with an optional
 build-tree alias; it is not a C++ link library or a C++ package component.
 Validate these boundaries with the
-[external-consumer checks](tests/README.md#core-only-cmake-package-tests).
+[external-consumer checks](../tests/README.md#core-only-cmake-package-tests).
 
 ### Stable core API changes
 
 `core/api.hpp` is the source-stable float32 v1 boundary; the implementation is
-`src/core/api.cpp`. See [its contract](docs/docs/rabitq/core_api.md). Keep the frozen
+`src/core/api.cpp`. See [its contract](../docs/docs/rabitq/core_api.md). Keep the frozen
 consumer, API unit tests and both `core_api_no_alloc_*` processes in the validation
 matrix. The scalar allocation process forces cached dispatch onto the exact event
 fallback. Do not replace that fallback with an approximate winner to avoid allocations.
