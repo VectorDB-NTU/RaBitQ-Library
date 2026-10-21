@@ -68,6 +68,29 @@ def test_fast_quantization_builds(base_data, clusters):
     assert idx.is_built
 
 
+def test_seed_reproduces_serial_build_and_search(tmp_path):
+    rng = np.random.default_rng(47)
+    data = rng.standard_normal((65, 65), dtype=np.float32)
+    queries = rng.standard_normal((5, 65), dtype=np.float32)
+    centroids = data[:2].copy()
+    clusters = (np.arange(len(data)) % 2).astype(np.uint32)
+    snapshots = []
+    results = []
+    for run, seed in enumerate((42, 42, 43)):
+        index = HnswIndex(
+            65, len(data), M=8, ef_construction=32, nbits=4, random_seed=seed
+        )
+        index.build(data, centroids, clusters, num_threads=1)
+        path = tmp_path / f"seed-{run}.index"
+        index.save(str(path))
+        snapshots.append(path.read_bytes())
+        results.append(index.search(queries, k=5, ef=65, num_threads=1))
+    assert snapshots[0] == snapshots[1]
+    assert snapshots[0] != snapshots[2]
+    for actual, expected in zip(results[1], results[0], strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
 def test_parallel_build_preserves_self_retrieval(base_data, clusters):
     # Keep every neighbor so insertion-order-dependent pruning cannot isolate a
     # point. This checks parallel construction, not sparse-graph recall.

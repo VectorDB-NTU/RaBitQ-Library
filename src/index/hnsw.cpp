@@ -82,7 +82,10 @@ HierarchicalNSW::HierarchicalNSW(
     dim_ = dim;
     rotator_.reset(
         choose_rotator<float>(
-            dim, RotatorType::FhtKacRotator, round_up_to_multiple(dim_, 32)
+            dim,
+            RotatorType::FhtKacRotator,
+            round_up_to_multiple(dim_, 32),
+            static_cast<uint32_t>(random_seed)
         )
     );
     padded_dim_ = rotator_->size();

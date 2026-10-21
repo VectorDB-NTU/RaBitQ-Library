@@ -46,6 +46,8 @@ class HierarchicalNSW {
    public:
     explicit HierarchicalNSW();
     // dim is the original input dimension; total_bits includes the sign bit.
+    // random_seed controls graph levels and (through its low 32 bits) rotation.
+    // Parallel insertion order can still vary with thread scheduling.
     explicit HierarchicalNSW(
         size_t max_elements,
         size_t dim,
