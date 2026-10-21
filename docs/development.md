@@ -2,6 +2,8 @@
 
 Start with [Contributing to RaBitQ](../.github/CONTRIBUTING.md) for setup and your first PR.
 This reference covers tool configuration and changes to library internals.
+For multi-step agent work, use the optional [task workflow and templates](agent-workflow/README.md)
+for goals, execution records, handoffs, and independent review.
 Run commands from the repository root in your activated
 [project environment](../.github/CONTRIBUTING.md#python-environment), after installing
 the [source-build prerequisites](../.github/CONTRIBUTING.md#setup-for-code-changes).
