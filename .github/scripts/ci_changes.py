@@ -14,6 +14,7 @@ GROUPS = (
     "python_build",
     "shell",
     "wheels",
+    "benchmarks",
 )
 
 CPP_SUFFIXES = (".c", ".cc", ".cpp", ".h", ".hpp")
@@ -49,7 +50,13 @@ def classify(paths):
             ".editorconfig",
         ):
             return set(GROUPS)
-        if path == "benchmarks/plot_homepage.py":
+        if path.startswith(("benchmarks/core/", "benchmarks/hotpaths/")):
+            selected.add("benchmarks")
+            if path.endswith(CPP_SUFFIXES):
+                selected.add("cpp_format")
+            elif path.endswith(".py"):
+                selected.add("python_quality")
+        elif path == "benchmarks/plot_homepage.py":
             selected.add("python_quality")
         elif path in (
             "sample/run_cpp.sh",
@@ -67,13 +74,22 @@ def classify(paths):
             # Frozen compatibility fixture; excluded from clang-format by design.
             selected.add("cpp")
         elif path == "pyproject.toml":
-            selected.update(("python_quality", "python_build", "wheels"))
+            selected.update(("python_quality", "python_build", "wheels", "benchmarks"))
         elif path == "CMakeLists.txt" or path.startswith("cmake/"):
-            selected.update(("cpp", "cpp_tidy", "python_build", "wheels"))
+            selected.update(("cpp", "cpp_tidy", "python_build", "wheels", "benchmarks"))
         elif path.startswith(("include/", "src/")):
-            selected.update(("cpp", "cpp_format", "cpp_tidy", "python_build", "wheels"))
+            selected.update(
+                (
+                    "cpp",
+                    "cpp_format",
+                    "cpp_tidy",
+                    "python_build",
+                    "wheels",
+                    "benchmarks",
+                )
+            )
         elif path.startswith("python_bindings/"):
-            selected.update(("python_build", "wheels"))
+            selected.update(("python_build", "wheels", "benchmarks"))
             if path.endswith(".py"):
                 selected.add("python_quality")
             elif path.endswith(CPP_SUFFIXES):
@@ -108,7 +124,16 @@ def classify(paths):
         elif path.startswith(".github/scripts/"):
             selected.add("python_quality")
         elif path == ".github/workflows/test.yaml":
-            selected.update(("cpp", "cpp_format", "cpp_tidy"))
+            selected.update(
+                (
+                    "cpp",
+                    "cpp_format",
+                    "cpp_tidy",
+                    "shell",
+                    "python_quality",
+                    "benchmarks",
+                )
+            )
         elif path == ".github/workflows/python.yml":
             selected.update(("python_quality", "python_build"))
         elif path == ".github/workflows/release.yml":

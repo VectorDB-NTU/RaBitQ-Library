@@ -234,8 +234,8 @@ To apply Python formatting and safe automatic lint fixes before running the
 check:
 
 ```bash
-ruff check --fix python_bindings sample/python tests/python benchmarks/plot_homepage.py
-ruff format python_bindings sample/python tests/python benchmarks/plot_homepage.py
+ruff check --fix python_bindings sample/python tests/python benchmarks/hotpaths benchmarks/plot_homepage.py
+ruff format python_bindings sample/python tests/python benchmarks/hotpaths benchmarks/plot_homepage.py
 ```
 
 ## Shell scripts

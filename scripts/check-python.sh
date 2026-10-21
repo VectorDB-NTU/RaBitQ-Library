@@ -18,7 +18,7 @@ if [[ "$($ruff --version)" != "ruff 0.16.1" ]]; then
 fi
 
 cd "$repo_root"
-paths=(python_bindings sample/python tests/python)
+paths=(python_bindings sample/python tests/python benchmarks/hotpaths)
 if [[ -f benchmarks/plot_homepage.py ]]; then
     paths+=(benchmarks/plot_homepage.py)
 fi
