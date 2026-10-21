@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -392,19 +393,32 @@ void IVF::add(
         );
     }
 
-    std::vector<std::vector<PID>> rows_of(num_clusters_);
-    for (size_t i = 0; i < n; ++i) {
-        rows_of[assigned[i]].push_back(static_cast<PID>(i));
-    }
-    std::vector<size_t> new_sizes(num_clusters_);
-    std::vector<size_t> touched;
-    for (size_t i = 0; i < num_clusters_; ++i) {
-        new_sizes[i] = clusters_[i].num() + rows_of[i].size();
-        if (!rows_of[i].empty()) {
-            touched.push_back(i);
+    struct ClusterAddition {
+        PID cluster_id;
+        std::vector<PID> rows;
+        size_t new_size;
+        std::optional<ClusterStorage> staged{};
+        ByteStorage tail{};  // Repacked tail for in-place growth.
+    };
+    std::vector<ClusterAddition> additions;
+    {
+        // Group only incoming rows, preserving their order within each cluster.
+        // A small append must not allocate or scan num_clusters_ entries.
+        std::unordered_map<PID, size_t> positions;
+        for (size_t i = 0; i < n; ++i) {
+            const auto [position, inserted] =
+                positions.try_emplace(assigned[i], additions.size());
+            if (inserted) {
+                additions.push_back({assigned[i], {}, clusters_[assigned[i]].num()});
+            }
+            auto& addition = additions[position->second];
+            addition.rows.push_back(static_cast<PID>(i));
+            ++addition.new_size;
         }
     }
 
+    const size_t workers = std::min(resolve_num_threads(num_threads), additions.size());
+    static_cast<void>(workers);  // Consumed by the OpenMP clause below.
     quant::RabitqConfig config;
     if (faster) {
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
@@ -415,42 +429,43 @@ void IVF::add(
     const PID first_pid = static_cast<PID>(max_elements_);
 
     /* Rebuild clusters without reserved capacity on the side; the rest grow in place */
-    std::vector<std::optional<ClusterStorage>> staged(touched.size());
-    std::vector<ByteStorage> tails(touched.size());  // repacked tails of in-place clusters
-    for (size_t t = 0; t < touched.size(); ++t) {
-        const size_t i = touched[t];
-        if (has_capacity(cluster_storage_[i], new_sizes[i])) {
-            const size_t full_batches = clusters_[i].num() / fastscan::kBatchSize;
-            tails[t].resize(batch_data_bytes(new_sizes[i]) - (full_batches * batch_bytes));
+    for (auto& addition : additions) {
+        const PID cluster_id = addition.cluster_id;
+        if (has_capacity(cluster_storage_[cluster_id], addition.new_size)) {
+            const size_t full_batches = clusters_[cluster_id].num() / fastscan::kBatchSize;
+            addition.tail.resize(
+                batch_data_bytes(addition.new_size) - (full_batches * batch_bytes)
+            );
         } else {
-            staged[t].emplace(raw_reranking_);
-            resize_storage(*staged[t], new_sizes[i]);
+            addition.staged.emplace(raw_reranking_);
+            resize_storage(*addition.staged, addition.new_size);
         }
     }
     // Growing within capacity cannot reallocate or throw, so old cluster views stay valid
-    for (size_t t = 0; t < touched.size(); ++t) {
-        if (!staged[t]) {
-            resize_storage(cluster_storage_[touched[t]], new_sizes[touched[t]]);
+    for (const auto& addition : additions) {
+        if (!addition.staged) {
+            resize_storage(cluster_storage_[addition.cluster_id], addition.new_size);
         }
     }
 
     // An exception must not leave an OpenMP region, so keep the first one and rethrow it.
     index_detail::ParallelException failure;
-#pragma omp parallel for schedule(dynamic) num_threads(resolve_num_threads(num_threads))
-    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(touched.size());
+#pragma omp parallel for schedule(dynamic) num_threads(workers)
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(additions.size());
          ++index) {
-        const auto t = static_cast<size_t>(index);
-        const size_t i = touched[t];
+        auto& addition = additions[static_cast<size_t>(index)];
+        const PID cluster_id = addition.cluster_id;
         try {
-            ClusterStorage& cs = staged[t] ? *staged[t] : cluster_storage_[i];
-            const size_t full_batches = clusters_[i].num() / fastscan::kBatchSize;
-            char* tail = staged[t] ? cs.batch_data() + (full_batches * batch_bytes)
-                                   : reinterpret_cast<char*>(tails[t].data());
+            ClusterStorage& cs =
+                addition.staged ? *addition.staged : cluster_storage_[cluster_id];
+            const size_t full_batches = clusters_[cluster_id].num() / fastscan::kBatchSize;
+            char* tail = addition.staged ? cs.batch_data() + (full_batches * batch_bytes)
+                                         : reinterpret_cast<char*>(addition.tail.data());
             extend_cluster(
-                clusters_[i],
-                rows_of[i],
+                clusters_[cluster_id],
+                addition.rows,
                 data,
-                initializer_->centroid(static_cast<PID>(i)),
+                initializer_->centroid(cluster_id),
                 first_pid,
                 cs.batch_data(),
                 rerank_bytes > 0 ? cs.ex_data() : nullptr,
@@ -462,31 +477,37 @@ void IVF::add(
     }
     if (failure.failed()) {
         // In-place clusters were only written past their old size; shrinking drops that
-        for (size_t t = 0; t < touched.size(); ++t) {
-            if (!staged[t]) {
-                resize_storage(cluster_storage_[touched[t]], clusters_[touched[t]].num());
+        for (const auto& addition : additions) {
+            if (!addition.staged) {
+                const PID cluster_id = addition.cluster_id;
+                resize_storage(cluster_storage_[cluster_id], clusters_[cluster_id].num());
             }
         }
         failure.rethrow();
     }
 
     /* Commit. Nothing below can throw. */
-    for (size_t t = 0; t < touched.size(); ++t) {
-        const size_t i = touched[t];
-        if (staged[t]) {
-            cluster_storage_[i] = std::move(*staged[t]);
+    for (auto& addition : additions) {
+        const PID cluster_id = addition.cluster_id;
+        auto& cs = cluster_storage_[cluster_id];
+        if (addition.staged) {
+            cs = std::move(*addition.staged);
         } else {
-            const size_t full_batches = clusters_[i].num() / fastscan::kBatchSize;
+            const size_t full_batches = clusters_[cluster_id].num() / fastscan::kBatchSize;
             std::copy_n(
-                tails[t].data(),
-                tails[t].size(),
-                cluster_storage_[i].batch_storage.data() + (full_batches * batch_bytes)
+                addition.tail.data(),
+                addition.tail.size(),
+                cs.batch_storage.data() + (full_batches * batch_bytes)
             );
         }
+        clusters_[cluster_id].reset(
+            addition.new_size,
+            cs.batch_data(),
+            rerank_bytes > 0 ? cs.ex_data() : nullptr,
+            cs.ids()
+        );
     }
     max_elements_ = new_num_points;
-    clusters_.clear();
-    init_clusters(new_sizes);
 }
 
 /**

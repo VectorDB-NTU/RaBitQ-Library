@@ -725,6 +725,49 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
     }
 }
 
+TEST(IvfAddTest, SparseInterleavedClustersPreserveRowOrderAndMatchRebuild) {
+    constexpr size_t kOld = 3, kCount = 9, kClusters = 257;
+    const auto points = random_rows(kCount, 744);
+    const auto centroids = random_rows(kClusters, 745);
+    const std::array<PID, kCount> assigned{0, 128, 256, 256, 0, 256, 128, 0, 256};
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_sparse_add.index";
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {1U, 4U, 32U}) {
+            IVF index(kOld, kDynDim, kClusters, bits, metric);
+            index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+            index.reserve(256, 32);
+            const Cluster reserved = IvfTestAccess::cluster_view(index, 256);
+            index.add(
+                points.data() + kOld * kDynDim,
+                kCount - kOld,
+                assigned.data() + kOld,
+                false,
+                4
+            );
+            EXPECT_EQ(IvfTestAccess::cluster_view(index, 256).ids(), reserved.ids());
+            for (size_t i = 0; i < kClusters; ++i) {
+                std::vector<PID> expected;
+                for (size_t row = 0; row < kCount; ++row) {
+                    if (assigned[row] == i) {
+                        expected.push_back(static_cast<PID>(row));
+                    }
+                }
+                const Cluster cluster = IvfTestAccess::cluster_view(index, i);
+                ASSERT_EQ(cluster.num(), expected.size());
+                for (size_t row = 0; row < expected.size(); ++row) {
+                    EXPECT_EQ(cluster.ids()[row], expected[row]);
+                }
+            }
+            const auto expected = saved_bytes(index, path);
+            IVF rebuilt;
+            rebuilt.load(path.c_str());
+            rebuilt.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+            EXPECT_EQ(saved_bytes(rebuilt, path), expected);
+        }
+    }
+    std::remove(path.c_str());
+}
+
 TEST(IvfAddTest, UnreservedClustersGrowToExactlyTheirNewSize) {
     constexpr size_t kOld = 40;
     const auto points = random_rows(kOld + 1, 851);
