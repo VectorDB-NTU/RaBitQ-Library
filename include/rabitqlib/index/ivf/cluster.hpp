@@ -9,10 +9,20 @@ namespace rabitqlib::ivf {
 // Non-owning view of one IVF cluster's codes, reranking data and point IDs.
 class Cluster {
    private:
+    friend class IVF;
+
     size_t num_;                  // Num of vectors in this cluster
     char* batch_data_ = nullptr;  // RaBitQ code and factors
     char* ex_data_ = nullptr;     // Extra-bit codes/factors or original float32 vectors
     PID* ids_ = nullptr;          // PID of vectors
+
+    // The owning index refreshes only views whose storage or count changed.
+    void reset(size_t num, char* batch_data, char* ex_data, PID* ids) noexcept {
+        num_ = num;
+        batch_data_ = batch_data;
+        ex_data_ = ex_data;
+        ids_ = ids;
+    }
 
    public:
     explicit Cluster(size_t, char*, char*, PID*);
