@@ -11,6 +11,10 @@ only the affected job groups:
 | Changes | Checks |
 | --- | --- |
 | Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
+| Issue forms/configuration and CODEOWNERS | No C++/Python builds |
+| `benchmarks/plot_homepage.py` | Python lint, including the plotting script; no index or wheel builds |
+| `sample/run_cpp.sh`, `sample/run_python.sh` | ShellCheck, including these runners |
+| `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
 | C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
 | Compiled Python bindings | C++ formatting and clang-tidy, plus Python builds and wheel tests |
@@ -30,7 +34,10 @@ The optional include-cleaner report is available through
 `./scripts/check-includes.sh` and no longer runs on every C++ change. Shared
 headers still trigger broad regression suites; CI does not infer
 individual test dependencies from C++ function changes. Unknown paths run all
-checks. Pushes compare the complete pushed range; pull requests compare against
+checks. Retired example paths are recognized when deleted: `example.sh` and
+`example_py.sh` select ShellCheck; `python/ivf.py` and `python/utils/io.py` select
+Python example checks and wheels. Other unrecognized paths keep the full fallback.
+Pushes compare the complete pushed range; pull requests compare against
 their base. Renames and deletions are included. Relevant jobs also run if
 change detection fails, so a detection error cannot silently waive a check.
 

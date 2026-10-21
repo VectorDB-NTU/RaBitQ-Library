@@ -24,6 +24,41 @@ class ChangeSelectionTest(unittest.TestCase):
             set(),
         )
 
+    def test_known_support_paths_do_not_select_unrelated_builds(self):
+        cases = {
+            ".github/ISSUE_TEMPLATE/config.yml": set(),
+            ".github/ISSUE_TEMPLATE/bug_report.yml": set(),
+            ".github/CODEOWNERS": set(),
+            "benchmarks/plot_homepage.py": {"python_quality"},
+            "sample/run_cpp.sh": {"shell"},
+            "sample/run_python.sh": {"shell"},
+            "example.sh": {"shell"},  # Deleted paths still occur in a push diff.
+            "example_py.sh": {"shell"},
+            "python/ivf.py": {"python_quality", "python_build", "wheels"},
+            "python/utils/io.py": {"python_quality", "python_build", "wheels"},
+            "tests/core_consumer/run.cmake": {"cpp"},
+            "tests/fixtures/core_api_v1/consumer.cpp": {"cpp"},
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(classify([path]), expected)
+
+    def test_support_paths_do_not_mask_source_or_unknown_changes(self):
+        support = [".github/ISSUE_TEMPLATE/config.yml", "benchmarks/plot_homepage.py"]
+        self.assertEqual(
+            classify(support + ["src/core/api.cpp"]),
+            {
+                "cpp",
+                "cpp_format",
+                "cpp_tidy",
+                "python_build",
+                "python_quality",
+                "wheels",
+            },
+        )
+        self.assertEqual(classify(support + ["unknown-build-input"]), set(GROUPS))
+        self.assertEqual(classify(["benchmarks/new_kernel.cpp"]), set(GROUPS))
+
     def test_shared_code_runs_cpp_and_python(self):
         for path in ("include/rabitqlib/index/ivf/ivf.hpp", "src/simd/dispatch.cpp"):
             with self.subTest(path=path):

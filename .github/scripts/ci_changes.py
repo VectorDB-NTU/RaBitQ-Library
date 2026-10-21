@@ -35,7 +35,12 @@ def classify(paths):
     for path in paths:
         if path.startswith("docs/") or path.endswith(".md"):
             continue
-        if path in (".github/workflows/docs.yml", ".github/release.yml", "LICENSE"):
+        if path.startswith(".github/ISSUE_TEMPLATE/") or path in (
+            ".github/workflows/docs.yml",
+            ".github/release.yml",
+            ".github/CODEOWNERS",
+            "LICENSE",
+        ):
             continue
         if path in (
             ".github/workflows/changes.yml",
@@ -44,7 +49,24 @@ def classify(paths):
             ".editorconfig",
         ):
             return set(GROUPS)
-        if path == "pyproject.toml":
+        if path == "benchmarks/plot_homepage.py":
+            selected.add("python_quality")
+        elif path in (
+            "sample/run_cpp.sh",
+            "sample/run_python.sh",
+            "example.sh",
+            "example_py.sh",
+        ):
+            # These orchestration examples are linted, not used to build CI artifacts.
+            # Keep retired names for deletions in the complete push/PR diff.
+            selected.add("shell")
+        elif path in ("python/ivf.py", "python/utils/io.py"):
+            # Retired example locations; deletions still need example coverage.
+            selected.update(("python_quality", "python_build", "wheels"))
+        elif path.startswith("tests/fixtures/core_api_v1/"):
+            # Frozen compatibility fixture; excluded from clang-format by design.
+            selected.add("cpp")
+        elif path == "pyproject.toml":
             selected.update(("python_quality", "python_build", "wheels"))
         elif path == "CMakeLists.txt" or path.startswith("cmake/"):
             selected.update(("cpp", "cpp_tidy", "python_build", "wheels"))
@@ -64,6 +86,7 @@ def classify(paths):
                     "tests/dispatch/",
                     "tests/common/",
                     "tests/consumer/",
+                    "tests/core_consumer/",
                     "sample/cpp/",
                 )
             )
