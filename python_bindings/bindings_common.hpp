@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -97,6 +98,19 @@ inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_2d_array
     }
     if (array.ndim() != 2) {
         throw std::invalid_argument(std::string(name) + " must be a 2D NumPy array");
+    }
+    // C-contiguous NumPy views may start at an unaligned byte offset. Native
+    // scalar accesses require alignof(T), independently of SIMD load alignment.
+    if (reinterpret_cast<std::uintptr_t>(array.data()) % alignof(T) != 0) {
+        py::array_t<T, py::array::c_style | py::array::forcecast> aligned(
+            {array.shape(0), array.shape(1)}
+        );
+        if (array.size() != 0) {
+            std::memcpy(
+                aligned.mutable_data(), array.data(), static_cast<size_t>(array.nbytes())
+            );
+        }
+        return aligned;
     }
     return array;
 }
