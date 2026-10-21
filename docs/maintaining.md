@@ -70,17 +70,23 @@ coverage, not a performance result or proof of every SIMD backend executing.
 
 ## Matrix summary checks
 
-`Clang validation` and `Core and FastScan validation` provide stable check names
-for the corresponding matrices. They run even when a dependency fails or is
+`Clang validation`, `Core and FastScan validation`, and `Python validation`
+provide stable check names for the corresponding matrices. `Python validation`
+covers the Linux Python 3.11/3.14 source-install matrix; Windows Python and wheel
+checks retain their separate gates. They run even when a dependency fails or is
 skipped. A successful matrix passes. A skipped matrix passes only when change
-detection succeeded and explicitly selected no C++ checks; failure, cancellation,
+detection succeeded and explicitly selected no checks for that matrix
+(`cpp` or `python_build`); failure, cancellation,
 or an unexpected skip fails the summary. If detection fails, the existing
 fallback runs the matrix and its success is required.
 
 After these checks have appeared and been validated on GitHub, add their exact
 names to main's required status checks. Workflow definitions do not update branch
 protection automatically. Keep existing protections until that transition is
-complete; these summaries do not cover unrelated jobs.
+complete; these summaries do not cover unrelated jobs. Once `Python validation`
+is verified, replace the individual required `Python 3.11` and `Python 3.14`
+contexts with it: a skipped matrix does not emit those expanded names, which
+otherwise leaves documentation-only PRs waiting indefinitely.
 
 ## Publishing a release
 
