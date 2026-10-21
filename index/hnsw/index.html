@@ -2041,6 +2041,10 @@ see <a href="../../cpp_integration/">C++ integration</a>.</p>
 </tr>
 </tbody>
 </table>
+<p><code>random_seed</code> controls graph levels and the FHT/Kac rotation (using its low 32 bits).
+With identical inputs and parameters, single-threaded construction is reproducible
+within the same build environment. Parallel insertion order and different toolchains
+or SIMD backends can still change results. Loading restores the saved rotation.</p>
 <p>Results use squared L2 or <code>1 - dot</code> estimates, ordered from smallest to largest.
 Python fills missing results with ID <code>2**32 - 1</code> and distance <code>+inf</code>; C++ returns
 only the available pairs. See <a href="../../quick_start/#read-the-results">result handling</a>
