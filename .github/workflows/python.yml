@@ -78,6 +78,25 @@ jobs:
           tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
 
+  python-result:
+    name: Python validation
+    needs: [changes, python-build]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require selected Python versions
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          PYTHON_SELECTED: ${{ needs.changes.outputs.python_build }}
+          MATRIX_RESULT: ${{ needs.python-build.result }}
+        run: |
+          if [ "$CHANGES_RESULT" = success ] && [ "$PYTHON_SELECTED" = false ]; then
+            test "$MATRIX_RESULT" = skipped || test "$MATRIX_RESULT" = success
+          else
+            test "$MATRIX_RESULT" = success
+          fi
+
   python-windows:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_build == 'true') }}

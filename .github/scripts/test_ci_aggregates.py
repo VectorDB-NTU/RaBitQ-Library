@@ -7,16 +7,29 @@ import textwrap
 import unittest
 from pathlib import Path
 
-WORKFLOW = Path(__file__).resolve().parents[1] / "workflows" / "test.yaml"
+WORKFLOWS = Path(__file__).resolve().parents[1] / "workflows"
 
 
 class MatrixSummaryTest(unittest.TestCase):
     def test_matrix_verdicts_and_dependencies(self):
-        workflow = WORKFLOW.read_text()
-        for job, dependency in (
-            ("clang-result", "clang"),
-            ("core-consumer-result", "core-consumer"),
+        for filename, job, dependency, output, selection_var in (
+            ("test.yaml", "clang-result", "clang", "cpp", "CPP_SELECTED"),
+            (
+                "test.yaml",
+                "core-consumer-result",
+                "core-consumer",
+                "cpp",
+                "CPP_SELECTED",
+            ),
+            (
+                "python.yml",
+                "python-result",
+                "python-build",
+                "python_build",
+                "PYTHON_SELECTED",
+            ),
         ):
+            workflow = (WORKFLOWS / filename).read_text()
             block = re.search(
                 rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)",
                 workflow,
@@ -26,7 +39,9 @@ class MatrixSummaryTest(unittest.TestCase):
             self.assertIn("if: ${{ always() }}", block)
             self.assertIn(f"MATRIX_RESULT: ${{{{ needs.{dependency}.result }}}}", block)
             self.assertIn("CHANGES_RESULT: ${{ needs.changes.result }}", block)
-            self.assertIn("CPP_SELECTED: ${{ needs.changes.outputs.cpp }}", block)
+            self.assertIn(
+                f"{selection_var}: ${{{{ needs.changes.outputs.{output} }}}}", block
+            )
             command = textwrap.dedent(block.split("        run: |\n", 1)[1])
             for detection in ("success", "failure", "cancelled", "skipped"):
                 for selected in ("true", "false", ""):
@@ -47,7 +62,7 @@ class MatrixSummaryTest(unittest.TestCase):
                                 env=dict(
                                     os.environ,
                                     CHANGES_RESULT=detection,
-                                    CPP_SELECTED=selected,
+                                    **{selection_var: selected},
                                     MATRIX_RESULT=matrix,
                                 ),
                                 capture_output=True,
