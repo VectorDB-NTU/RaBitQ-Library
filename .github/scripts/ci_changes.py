@@ -82,7 +82,7 @@ def classify(paths):
                 selected.add("python_quality")
         elif path.startswith("sample/python/"):
             selected.update(("python_quality", "python_build", "wheels"))
-        elif path.startswith(("python/", ".github/scripts/")):
+        elif path.startswith(".github/scripts/"):
             selected.add("python_quality")
         elif path == ".github/workflows/test.yaml":
             selected.update(("cpp", "cpp_format", "cpp_tidy"))

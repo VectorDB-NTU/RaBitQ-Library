@@ -300,7 +300,7 @@ def test_legacy_clustering_formats_without_faiss(tmp_path, example_data, argumen
     centroids_path = tmp_path / "centroids.fvecs"
     labels_path = tmp_path / "labels.ivecs"
     run_example(
-        EXAMPLES.parents[1] / "python" / "ivf.py",
+        EXAMPLES / "clustering_cli" / "ivf.py",
         data_path,
         16,
         centroids_path,

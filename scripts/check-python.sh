@@ -18,5 +18,5 @@ if [[ "$($ruff --version)" != "ruff 0.16.1" ]]; then
 fi
 
 cd "$repo_root"
-"$ruff" format --check python python_bindings sample/python tests/python
-"$ruff" check python python_bindings sample/python tests/python
+"$ruff" format --check python_bindings sample/python tests/python
+"$ruff" check python_bindings sample/python tests/python

@@ -1,6 +1,6 @@
 # Maintainer reference
 
-For your first contribution, see [Contributing to RaBitQ](../CONTRIBUTING.md).
+For your first contribution, see [Contributing to RaBitQ](../.github/CONTRIBUTING.md).
 This reference describes CI routing and release maintenance.
 
 ## Checks selected by changed files
@@ -18,7 +18,7 @@ only the affected job groups:
 | `tests/python/test_cpp_clustering_examples.py` | Python lint and C++ checks; examples run in the Ubuntu job |
 | `tests/python/conftest.py` | Python lint, C++ checks, and Python builds/wheels |
 | `sample/python/` | Python lint, source-install smoke tests, comparison tests, and wheels |
-| Scripts under `python/` | Python lint |
+| Python automation under `.github/scripts/` | Python lint (CI routing scripts trigger broader checks) |
 | CMake configuration | C++ tests and clang-tidy, plus Python builds/wheels |
 | `pyproject.toml` | Python lint, builds, and wheels; no C++ checks |
 | Shell scripts | ShellCheck and any check driven by the changed script |

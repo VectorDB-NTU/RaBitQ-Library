@@ -13,6 +13,7 @@ class ChangeSelectionTest(unittest.TestCase):
             classify(
                 [
                     "README.md",
+                    ".github/CONTRIBUTING.md",
                     "docs/docs/index/ivf.md",
                     "docs/mkdocs.yml",
                     "docs/requirements.txt",
@@ -57,6 +58,16 @@ class ChangeSelectionTest(unittest.TestCase):
                 "wheels",
             },
             "sample/python/ivf_rabitq_indexing.py": {
+                "python_quality",
+                "python_build",
+                "wheels",
+            },
+            "sample/python/clustering_cli/ivf.py": {
+                "python_quality",
+                "python_build",
+                "wheels",
+            },
+            "sample/python/clustering_cli/utils/io.py": {
                 "python_quality",
                 "python_build",
                 "wheels",

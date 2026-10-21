@@ -42,11 +42,11 @@ Source builds support Linux and Windows x86-64 with AVX2/FMA (AVX-512
 optional), and Linux and macOS ARM64 with NEON. They need CMake 3.20 or newer,
 a C++17 compiler, and OpenMP for ANN/Python. Core/FastScan can disable OpenMP
 with `RABITQ_USE_OPENMP=OFF`; pure core also has scalar kernels for CPUs without
-the FastScan SIMD baseline. See [component builds](docs/docs/cpp_integration.md#core-only-c-integration).
+the FastScan SIMD baseline. See [component builds](../docs/docs/cpp_integration.md#core-only-c-integration).
 Windows x86-64 uses Visual Studio 2026. See the
-[platform-specific build instructions](tests/README.md#quick-start) for
-[Linux ARM64](tests/README.md#linux-arm64) and
-[Apple Silicon](tests/README.md#macos-arm64).
+[platform-specific build instructions](../tests/README.md#quick-start) for
+[Linux ARM64](../tests/README.md#linux-arm64) and
+[Apple Silicon](../tests/README.md#macos-arm64).
 Documentation-only contributions do not need this hardware or compiler setup.
 
 On Ubuntu or Debian:
@@ -110,7 +110,7 @@ ctest --test-dir build --output-on-failure
 The first configuration needs Git and network access to download GoogleTest.
 Increase `--parallel 2` if your machine has enough memory for more compiler jobs.
 Native CPU tuning is disabled here to keep generic code portable. On Windows
-or Apple Silicon, use the matching commands in [the test guide](tests/README.md#quick-start).
+or Apple Silicon, use the matching commands in [the test guide](../tests/README.md#quick-start).
 
 ## Before opening a pull request
 
@@ -122,17 +122,17 @@ test during development, then apply every matching row below before submitting.
 | --- | --- |
 | Repository Markdown | Check accuracy and local links; `git diff --check` |
 | Documentation site | Above, plus the strict MkDocs build shown above |
-| Python sources | [Python lint and formatting](docs/development.md#python-formatting-and-linting), plus affected tests with `python -m pytest` |
-| First-party C++ | [C++ formatting](docs/development.md#c-formatting), affected build/tests, and [static analysis](docs/development.md#static-analysis); focused analysis is sufficient during iteration |
+| Python sources | [Python lint and formatting](../docs/development.md#python-formatting-and-linting), plus affected tests with `python -m pytest` |
+| First-party C++ | [C++ formatting](../docs/development.md#c-formatting), affected build/tests, and [static analysis](../docs/development.md#static-analysis); focused analysis is sufficient during iteration |
 | Bindings or Python-visible C++ behavior | Both Python and C++ checks; reinstall before testing and verify package/extension paths as described below |
 | Examples | Run the example and its language checks |
-| Shell scripts | [ShellCheck](docs/development.md#shell-scripts) on affected scripts |
+| Shell scripts | [ShellCheck](../docs/development.md#shell-scripts) on affected scripts |
 
 For shared code or changes affecting multiple indexes, run the full relevant
 C++ or Python suite. Changes to SIMD, metrics, packing, persistence, hot paths,
 or build configuration also need the applicable
-[specialized checks](AGENTS.md#verification-by-change-type). Consult the
-[implementation recipes](docs/development.md#implementation-recipes) before changing
+[specialized checks](../AGENTS.md#verification-by-change-type). Consult the
+[implementation recipes](../docs/development.md#implementation-recipes) before changing
 these contracts; preserve public APIs and stored index formats unless a breaking
 change has been agreed on.
 
@@ -144,21 +144,21 @@ In your PR, describe:
 
 **CI and merge requirements:** CI selects jobs from the changed files and may
 run broader checks than your focused local tests. Core library and binding changes
-require the full [static analysis check](docs/development.md#static-analysis) before merging.
+require the full [static analysis check](../docs/development.md#static-analysis) before merging.
 Tests and examples are intentionally excluded from CI clang-tidy; use focused
 local analysis for substantial logic changes.
 If a tool or supported CPU is unavailable, explain that in the PR so the
-maintainer can help arrange validation. See [CI routing](docs/maintaining.md#checks-selected-by-changed-files)
+maintainer can help arrange validation. See [CI routing](../docs/maintaining.md#checks-selected-by-changed-files)
 for details.
 
 ## If setup fails
 
 | Problem | What to check |
 | --- | --- |
-| CMake cannot find OpenMP or a compiler | Check the [platform-specific prerequisites](tests/README.md#prerequisites). On Apple Silicon, install `libomp` and pass its prefix as `OpenMP_ROOT`. Include the compiler version and CMake error when asking for help. |
+| CMake cannot find OpenMP or a compiler | Check the [platform-specific prerequisites](../tests/README.md#prerequisites). On Apple Silicon, install `libomp` and pass its prefix as `OpenMP_ROOT`. Include the compiler version and CMake error when asking for help. |
 | Unsupported CPU or architecture | Use Linux or Windows x86-64 with AVX2/FMA, or Linux or macOS ARM64 with NEON. Disabling native tuning does not add an unsupported architecture. Report your CPU model in the issue or PR. |
 | Tests do not reflect your Python or C++ edits | Re-run the platform-specific install command above in the active environment, then check the import paths below. Re-run the regression test that exercises your change. |
-| Formatting or analysis reports the wrong tool version | Use the pinned versions and executable overrides in the [development reference](docs/development.md). |
+| Formatting or analysis reports the wrong tool version | Use the pinned versions and executable overrides in the [development reference](../docs/development.md). |
 
 Check which installed package and extension Python imports:
 
@@ -178,7 +178,7 @@ another. Each task can be a separate PR.
 
 | Task | Where to start | Done when |
 | --- | --- | --- |
-| Automate the documentation quick-start check | [Quick start](docs/docs/quick_start.md), [documentation workflow](.github/workflows/docs.yml), and [Python tests](tests/python/) | A check executes the documented Python example blocks in order against the current package, verifies the save/load assertions, and cleans up temporary files without keeping a second copy of the example. |
+| Automate the documentation quick-start check | [Quick start](../docs/docs/quick_start.md), [documentation workflow](../.github/workflows/docs.yml), and [Python tests](../tests/python/) | A check executes the documented Python example blocks in order against the current package, verifies the save/load assertions, and cleans up temporary files without keeping a second copy of the example. |
 
 ## Feedback and further reading
 
@@ -186,9 +186,9 @@ another. Each task can be a separate PR.
 reviews. Review timing depends on availability; keep questions in the relevant
 issue or PR so others can learn from the answers.
 
-- [Development reference](docs/development.md): formatters, analysis,
+- [Development reference](../docs/development.md): formatters, analysis,
   performance requirements, and implementation recipes.
-- [Maintainer reference](docs/maintaining.md): CI routing, releases, and PR labels.
+- [Maintainer reference](../docs/maintaining.md): CI routing, releases, and PR labels.
 
 Use [GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose)
 for bug reports, feature requests, and usage or contribution questions. Check

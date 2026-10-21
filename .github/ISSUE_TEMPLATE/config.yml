@@ -4,5 +4,5 @@ contact_links:
     url: https://vectordb-ntu.github.io/RaBitQ-Library/
     about: Find installation instructions, examples, and index guides.
   - name: Maintenance and feedback
-    url: https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/CONTRIBUTING.md#feedback-and-further-reading
+    url: https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/.github/CONTRIBUTING.md#feedback-and-further-reading
     about: Find the maintainer, contribution guide, and published releases.
