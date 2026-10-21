@@ -1,10 +1,10 @@
 # Development reference
 
-Start with [Contributing to RaBitQ](../CONTRIBUTING.md) for setup and your first PR.
+Start with [Contributing to RaBitQ](../.github/CONTRIBUTING.md) for setup and your first PR.
 This reference covers tool configuration and changes to library internals.
 Run commands from the repository root in your activated
-[project environment](../CONTRIBUTING.md#python-environment), after installing
-the [source-build prerequisites](../CONTRIBUTING.md#setup-for-code-changes).
+[project environment](../.github/CONTRIBUTING.md#python-environment), after installing
+the [source-build prerequisites](../.github/CONTRIBUTING.md#setup-for-code-changes).
 Refresh APT package lists with `sudo apt-get update` before installing tools.
 
 ## Compiler and tool versions
@@ -234,8 +234,8 @@ To apply Python formatting and safe automatic lint fixes before running the
 check:
 
 ```bash
-ruff check --fix python python_bindings sample/python tests/python
-ruff format python python_bindings sample/python tests/python
+ruff check --fix python_bindings sample/python tests/python
+ruff format python_bindings sample/python tests/python
 ```
 
 ## Shell scripts

@@ -2,7 +2,7 @@
 
 Run these commands from the repository root in your project Python environment
 with `rabitqlib>=0.7.0` and NumPy installed. When working from source,
-[install the library from the same checkout](../../CONTRIBUTING.md#python-changes)
+[install the library from the same checkout](../../.github/CONTRIBUTING.md#python-changes)
 so the examples and native extension use matching APIs. Clustering and indexing
 both use RaBitQ Library; FAISS is needed only for `compare_with_faiss.py`.
 
@@ -55,3 +55,18 @@ python sample/python/hnsw_rabitq_indexing.py --total-bits 5 --degree 16 \
 
 Query with `hnsw_rabitq_querying.py`. SymphonyQG builds directly from vectors;
 use `symqg_indexing.py` and `symqg_querying.py` without a clustering stage.
+
+## Separate centroid and assignment files
+
+The helper formerly at `python/ivf.py` now lives at
+`sample/python/clustering_cli/ivf.py`. It writes centroids as `.fvecs` and
+assignments as `.ivecs` for workflows using separate files:
+
+```sh
+python sample/python/clustering_cli/ivf.py data/gist/gist_base.fvecs 4096 \
+  data/gist/centroids.fvecs data/gist/assignments.ivecs --method qg
+```
+
+Use `--method rabitq` for flat assignment or the optional positional `ip` metric
+with normalized input. For reusable Python index inputs in `.npz`, use
+`kmeans_clustering.py` above.

@@ -139,7 +139,7 @@ clustering dimension/storage matrix.
 
 ## Python tests
 
-Use an activated [project environment](../CONTRIBUTING.md#python-environment).
+Use an activated [project environment](../.github/CONTRIBUTING.md#python-environment).
 Rebuild and install the extension before testing C++ changes. These commands
 work in PowerShell and Bash:
 

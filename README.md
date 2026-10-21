@@ -220,10 +220,10 @@ listed above.
 
 ## Contributing
 
-Start with the [contribution guide](CONTRIBUTING.md#your-first-contribution)
-or [starter tasks](CONTRIBUTING.md#starter-tasks). Report bugs and request
+Start with the [contribution guide](.github/CONTRIBUTING.md#your-first-contribution)
+or [starter tasks](.github/CONTRIBUTING.md#starter-tasks). Report bugs and request
 features through [GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose).
-See [maintenance and feedback](CONTRIBUTING.md#feedback-and-further-reading) for maintainer information.
+See [maintenance and feedback](.github/CONTRIBUTING.md#feedback-and-further-reading) for maintainer information.
 
 ## Acknowledgements
 
