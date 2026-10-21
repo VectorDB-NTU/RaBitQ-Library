@@ -1571,6 +1571,8 @@ SymphonyQG. Start with the <a href="../../quick_start/">Python quick start</a> f
 <code>64 &lt;= dim &lt;= 65536</code>. Supply the original dimension; the indexes pad internally
 to a multiple of 32. Queries and centroids must have the same original dimension
 as the indexed data.</p>
+<p>Arrays whose data pointers are not aligned for float32 are copied into aligned
+storage before native processing; inputs remain unchanged.</p>
 <p>These limits apply to the Python indexes. The C++ <a href="../../rabitq/core_api/">stable core API</a>
 accepts working dimensions from 2, with multiples of 32 required for <code>SplitPacked</code>.
 C++ <a href="../../rabitq/rotator/">MatrixRotator</a> has separate dimension and storage requirements;
