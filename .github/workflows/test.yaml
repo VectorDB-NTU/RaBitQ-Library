@@ -86,7 +86,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y shellcheck
       - name: Check scripts
-        run: shellcheck scripts/*.sh
+        run: |
+          files=(scripts/*.sh)
+          for runner in sample/run_cpp.sh sample/run_python.sh; do
+            if [[ -f "$runner" ]]; then
+              files+=("$runner")
+            fi
+          done
+          shellcheck "${files[@]}"
 
   ubuntu:
     needs: changes

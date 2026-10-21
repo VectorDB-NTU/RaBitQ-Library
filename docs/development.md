@@ -234,8 +234,8 @@ To apply Python formatting and safe automatic lint fixes before running the
 check:
 
 ```bash
-ruff check --fix python_bindings sample/python tests/python
-ruff format python_bindings sample/python tests/python
+ruff check --fix python_bindings sample/python tests/python benchmarks/plot_homepage.py
+ruff format python_bindings sample/python tests/python benchmarks/plot_homepage.py
 ```
 
 ## Shell scripts
@@ -244,7 +244,7 @@ Run ShellCheck after changing a contributor or automation script:
 
 ```bash
 sudo apt-get install shellcheck
-shellcheck scripts/*.sh
+shellcheck scripts/*.sh sample/run_cpp.sh sample/run_python.sh
 ```
 
 This matches CI's script set. Also pass any changed shell scripts outside
