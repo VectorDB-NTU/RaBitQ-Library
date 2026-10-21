@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://vectordb-ntu.github.io/RaBitQ-Library/benchmarks/bench/">
       
       
-        <link rel="prev" href="../../clustering/">
+        <link rel="prev" href="../../papers/">
       
       
         <link rel="next" href="../ivf/">
@@ -1064,6 +1064,8 @@
       
         
       
+        
+      
     
     
     
@@ -1108,6 +1110,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../integrations/txtai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    txtai
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1175,6 +1205,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../papers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Papers and citations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -1203,10 +1260,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="">
             
   
   
@@ -1224,8 +1281,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1386,6 +1443,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#homepage-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Homepage selection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Homepage selection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gist1m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIST1M
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1600,6 +1685,34 @@
       
     </span>
   </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#homepage-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Homepage selection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Homepage selection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gist1m" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIST1M
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1897,6 +2010,49 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
 <code>--data-dir</code>, and <code>--cache-dir</code>; runners expect the default data paths.</p>
 <p><a href="../figures/qps-recall-points.csv">Query CSV</a> · <a href="../figures/indexing.csv">Indexing CSV</a> ·
 <a href="../figures/kmeans.csv">K-means CSV</a></p>
+<h2 id="homepage-selection">Homepage selection<a class="headerlink" href="#homepage-selection" title="Permanent link">&para;</a></h2>
+<p>The homepage shows IVF/HNSW at 5 total bits (one sign bit plus four extra bits)
+and SymphonyQG at 4 bits. For each GIST1M configuration, the QPS bar selects
+the fastest measured setting with Recall@10 &gt;= 90%, without interpolation.
+Actual recall and total storage differ; this is neither an exact-recall nor an
+equal-memory comparison. The tables below identify the selected CSV rows.</p>
+<!-- homepage-selection:start -->
+
+<h3 id="gist1m">GIST1M<a class="headerlink" href="#gist1m" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th style="text-align: right;">Measured Recall@10</th>
+<th>Selected search setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IVF · 5-bit</td>
+<td style="text-align: right;">92.85%</td>
+<td><code>nprobe=128</code></td>
+</tr>
+<tr>
+<td>HNSW · 5-bit</td>
+<td style="text-align: right;">92.56%</td>
+<td><code>ef=512</code></td>
+</tr>
+<tr>
+<td>SymphonyQG · 4-bit</td>
+<td style="text-align: right;">90.69%</td>
+<td><code>ef=512</code></td>
+</tr>
+</tbody>
+</table>
+<!-- homepage-selection:end -->
+
+<p>The figures use the 0.7.0 measurements described above, with one search thread
+and one query per call. Each setting has one timing pass. QPS includes Python
+call overhead after warm-up and excludes loading. Index size is serialized
+storage including sidecars, not resident or peak RAM.
+See <a href="../ivf/">IVF results</a> and <a href="../graphs/">graph results</a> for full curves,
+construction costs, and additional precision/storage configurations.</p>
 
 
 
@@ -1932,7 +2088,7 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../clustering/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Clustering">
+          <a href="../../papers/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Papers and citations">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1942,7 +2098,7 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
                 Previous
               </span>
               <div class="md-ellipsis">
-                Clustering
+                Papers and citations
               </div>
             </div>
           </a>

@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://vectordb-ntu.github.io/RaBitQ-Library/integrations/zvec/">
       
       
-        <link rel="prev" href="../../index/qg/">
+        <link rel="prev" href="../txtai/">
       
       
         <link rel="next" href="../../clustering/">
@@ -1066,6 +1066,8 @@
       
         
       
+        
+      
     
     
     
@@ -1115,6 +1117,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../txtai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    txtai
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1126,6 +1156,24 @@
       
         
       
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zvec
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
       
       <a href="./" class="md-nav__link md-nav__link--active">
         
@@ -1143,6 +1191,69 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-components-fit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the components fit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-maintained-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A maintained integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-and-api-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform and API boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-this-pattern-in-your-own-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use this pattern in your own engine
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1189,6 +1300,33 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../papers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Papers and citations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
@@ -1213,10 +1351,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
         
           
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="">
             
   
   
@@ -1234,8 +1372,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1384,6 +1522,58 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-components-fit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the components fit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-maintained-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A maintained integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-and-api-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform and API boundaries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-this-pattern-in-your-own-engine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use this pattern in your own engine
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1409,8 +1599,13 @@
 
 <h1 id="how-zvec-integrates-rabitq-library">How zvec integrates RaBitQ-Library<a class="headerlink" href="#how-zvec-integrates-rabitq-library" title="Permanent link">&para;</a></h1>
 <p>Zvec uses RaBitQ-Library for rotation, quantization, and distance estimation
-inside its own IVF and HNSW indexes. Zvec manages storage, search traversal,
-filtering, and result collection.</p>
+inside its IVF-RaBitQ and HNSW-RaBitQ implementations. Zvec manages storage, search traversal,
+filtering, and result collection. This is a component integration: zvec links
+core/FastScan functionality while keeping its own index implementations.</p>
+<p>Checked on October 21, 2026 against the merged RaBitQ 0.7 migration at commit
+<a href="https://github.com/alibaba/zvec/tree/c5496863ee98bca155abca1e9e4aadf46e9ebed1"><code>c5496863ee98</code></a>.
+This identifies the inspected source, not a released zvec package version.</p>
+<h2 id="where-the-components-fit">Where the components fit<a class="headerlink" href="#where-the-components-fit" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -1421,26 +1616,50 @@ filtering, and result collection.</p>
 <tbody>
 <tr>
 <td><strong>IVF</strong></td>
-<td>The <a href="https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/src/core/algorithm/ivf_rabitq/ivf_rabitq_reformer.cc">reformer</a> quantizes vectors in batches and prepares query lookup tables. The <a href="https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/src/core/algorithm/ivf_rabitq/ivf_rabitq_entity.cc">search code</a> uses FastScan estimates and extra-bit refinement for selected candidates.</td>
+<td>The <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/src/core/algorithm/ivf_rabitq/ivf_rabitq_reformer.cc">reformer</a> quantizes vectors in batches and prepares query lookup tables. The <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/src/core/algorithm/ivf_rabitq/ivf_rabitq_entity.cc">search code</a> uses FastScan estimates and extra-bit refinement for selected candidates.</td>
 </tr>
 <tr>
 <td><strong>HNSW</strong></td>
-<td>The <a href="https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/src/core/algorithm/hnsw_rabitq/rabitq_reformer.cc">reformer</a> quantizes individual vectors. The <a href="https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/src/core/algorithm/hnsw_rabitq/hnsw_rabitq_query_algorithm.cc">query algorithm</a> estimates distances from those codes during graph traversal.</td>
+<td>The <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/src/core/algorithm/hnsw_rabitq/rabitq_reformer.cc">reformer</a> quantizes individual vectors. The <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/src/core/algorithm/hnsw_rabitq/hnsw_rabitq_query_algorithm.cc">query algorithm</a> uses core per-vector estimators during graph traversal; it does not use the IVF FastScan batch-scoring path.</td>
 </tr>
 </tbody>
 </table>
-<p>Both integrations preserve centroids and rotator state with the index and use
-padded dimensions consistently for rotated vectors and queries. These are
-key contracts when embedding the quantizer in another system.</p>
-<p>This overview follows zvec commit
-<a href="https://github.com/alibaba/zvec/tree/44d8bc6f7c3d656efde2641c9410432ea14c1657"><code>44d8bc6f7c3d</code></a>.
-Its <a href="https://github.com/alibaba/zvec/blob/44d8bc6f7c3d656efde2641c9410432ea14c1657/thirdparty/RaBitQ-Library/CMakeLists.txt">bundled dependency</a> includes local patches for lookup-table
-reuse and SIMD error handling; check the pinned version before adapting its code.</p>
+<p>The inspected reformers serialize centroids, padded dimensions, and rotator
+state, then restore them when loading. Their query preprocessing uses the stored
+padded dimension and rotation. Preserving this state is a key integration
+contract; this source walkthrough is not a complete persistence audit.</p>
+<h2 id="a-maintained-integration">A maintained integration<a class="headerlink" href="#a-maintained-integration" title="Permanent link">&para;</a></h2>
+<p><a href="https://github.com/alibaba/zvec/pull/814">PR #814</a>, merged on October 19, 2026,
+upgraded zvec's bundled RaBitQ-Library from 0.3.8 to 0.7.0. It replaced custom
+SIMD source lists and a local lookup-table reuse patch with upstream component
+targets and <code>SplitBatchQuery::reset</code>.</p>
+<p>When <code>RABITQ_SUPPORTED</code> is enabled, the <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/thirdparty/RaBitQ-Library/CMakeLists.txt">dependency configuration</a>
+links <code>rabitqlib::fastscan</code>, which also links core,
+and disables RaBitQ's standalone indexes, Python bindings, OpenMP, and native
+tuning. The <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/src/core/algorithm/ivf_rabitq/ivf_rabitq_reformer.cc">IVF query preparation</a> passes lookup-table buffers owned by
+its query state to <code>SplitBatchQuery::reset</code>. This permits reuse when that state
+is reused; it does not imply that every search is allocation-free.</p>
+<p>This change illustrates a practical integration benefit of the component split:
+zvec can consume upstream quantization and scoring implementations while retaining
+control of its indexes and threading. The PR description reports compatibility checks and
+Linux x86-64 validation, along with untested platforms and incomplete full-database
+sanitizer checks. Those checks were not rerun for this walkthrough; it
+is not evidence of production deployment scale or a measured speedup.</p>
+<h2 id="platform-and-api-boundaries">Platform and API boundaries<a class="headerlink" href="#platform-and-api-boundaries" title="Permanent link">&para;</a></h2>
+<p>At this snapshot, zvec's <a href="https://github.com/alibaba/zvec/blob/c5496863ee98bca155abca1e9e4aadf46e9ebed1/CMakeLists.txt">build gate</a> enables RaBitQ only for Linux
+x86-64 or Windows x86-64 with MSVC, and only if its compiler checks pass.
+Other platforms use stub implementations. RaBitQ-Library's own ARM64 support
+does not make these zvec integrations available on ARM64 or macOS.</p>
+<p>The code uses the advanced encoder, query, estimator, and record-layout headers.
+It does not use the stable <code>rabitqlib::quant::v1</code> API. The recommendation below is
+an entry point for new integrations, not a description of zvec's API usage.</p>
+<h2 id="use-this-pattern-in-your-own-engine">Use this pattern in your own engine<a class="headerlink" href="#use-this-pattern-in-your-own-engine" title="Permanent link">&para;</a></h2>
 <p>For a new per-vector integration, start with the
 <a href="../../rabitq/core_api/#minimal-example">stable core API v1</a>. For FastScan or existing
 record layouts like those used here, consult the advanced
 <a href="../../rabitq/quantizer/">quantizer</a> and <a href="../../rabitq/estimator/">estimator</a> references.
-For a complete standalone index, see the <a href="../../quick_start/">quick start</a>.</p>
+For a complete standalone index, see the <a href="../../quick_start/">quick start</a> or
+the <a href="../txtai/">txtai integration</a>.</p>
 
 
 
@@ -1476,7 +1695,7 @@ For a complete standalone index, see the <a href="../../quick_start/">quick star
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../index/qg/" class="md-footer__link md-footer__link--prev" aria-label="Previous: SymphonyQG">
+          <a href="../txtai/" class="md-footer__link md-footer__link--prev" aria-label="Previous: txtai">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1486,7 +1705,7 @@ For a complete standalone index, see the <a href="../../quick_start/">quick star
                 Previous
               </span>
               <div class="md-ellipsis">
-                SymphonyQG
+                txtai
               </div>
             </div>
           </a>

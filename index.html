@@ -329,10 +329,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choose-an-index" class="md-nav__link">
+  <a href="#choose-your-index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choose an index
+        Choose your index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-with-rabitq-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built with RaBitQ-Library
       
     </span>
   </a>
@@ -344,17 +355,6 @@
     <span class="md-ellipsis">
       
         Explore further
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#research-papers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Research papers
       
     </span>
   </a>
@@ -1155,6 +1155,8 @@
       
         
       
+        
+      
     
     
     
@@ -1199,6 +1201,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="integrations/txtai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    txtai
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1268,6 +1298,33 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="papers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Papers and citations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
@@ -1292,10 +1349,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
         
           
-          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="">
             
   
   
@@ -1313,8 +1370,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1483,10 +1540,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choose-an-index" class="md-nav__link">
+  <a href="#choose-your-index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choose an index
+        Choose your index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-with-rabitq-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built with RaBitQ-Library
       
     </span>
   </a>
@@ -1498,17 +1566,6 @@
     <span class="md-ellipsis">
       
         Explore further
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#research-papers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Research papers
       
     </span>
   </a>
@@ -1568,46 +1625,32 @@ from compact quantization to complete indexes.</p>
   </div>
 </div>
 
-<h2 id="choose-an-index">Choose an index<a class="headerlink" href="#choose-an-index" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Index</th>
-<th>Best fit</th>
-<th>Typical relative memory</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><a href="index/ivf/">IVF RaBitQ</a></td>
-<td>Large datasets and predictable storage</td>
-<td>Lowest</td>
-</tr>
-<tr>
-<td><a href="index/hnsw/">HNSW RaBitQ</a></td>
-<td>General-purpose graph search</td>
-<td>Moderate</td>
-</tr>
-<tr>
-<td><a href="index/qg/">SymphonyQG</a></td>
-<td>Latency-focused graph search</td>
-<td>Highest</td>
-</tr>
-</tbody>
-</table>
-<p>Memory, latency, and recall depend on the dataset and search settings. See the
-<a href="index/usage/#estimate-storage">index usage guide</a> for storage estimates and the
-<a href="benchmarks/bench/">benchmarks</a> for measured workloads.</p>
+<h2 id="choose-your-index">Choose your index<a class="headerlink" href="#choose-your-index" title="Permanent link">&para;</a></h2>
+<p>Explore search throughput, recall, and storage for three quantized configurations.</p>
+<!-- homepage-results:start -->
+
+<p><strong>GIST1M</strong></p>
+<p>1,000,000 vectors · 960 dimensions · L2</p>
+<p><img alt="GIST1M: QPS at Recall@10 ≥ 90%, serialized index size" src="benchmarks/figures/homepage-gist1m.svg" /></p>
+<!-- homepage-results:end -->
+
+<p>QPS uses the fastest measured setting reaching <strong>Recall@10 ≥ 90%</strong>;
+actual recall and storage budgets differ.
+<a href="benchmarks/bench/#homepage-selection">Detailed results, settings, and measurement conditions</a>.</p>
+<h2 id="built-with-rabitq-library">Built with RaBitQ-Library<a class="headerlink" href="#built-with-rabitq-library" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="integrations/txtai/">txtai</a> uses the Python IVF and HNSW indexes as an
+  embedding-search backend. See how to select the backend and its search settings.</li>
+<li><a href="integrations/zvec/">zvec</a> uses core quantization in its IVF-RaBitQ and
+  HNSW-RaBitQ implementations, with FastScan batch scoring in IVF. See the
+  integration walkthrough for storage, scoring, and platform boundaries.</li>
+</ul>
+<p>These are direct library integrations, with versioned downstream source links.</p>
 <h2 id="explore-further">Explore further<a class="headerlink" href="#explore-further" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="rabitq/rabitq/">Algorithm overview</a> for the rotation, encoding, and scoring workflow.</li>
 <li><a href="releases/0.7.0/">RaBitQ Library 0.7.0 release notes</a> for new APIs and upgrade guidance.</li>
-</ul>
-<h2 id="research-papers">Research papers<a class="headerlink" href="#research-papers" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="https://doi.org/10.1145/3654970">1-bit RaBitQ</a> · 2024 · Quantization with a theoretical error bound.</li>
-<li><a href="https://doi.org/10.1145/3709730">SymphonyQG</a> · 2025 · Quantization and graph search.</li>
-<li><a href="https://doi.org/10.1145/3725413">Multi-bit RaBitQ</a> · 2025 · Higher-bit quantization.</li>
+<li><a href="papers/">Papers and citations</a> for the original RaBitQ method, its multi-bit extension, and SymphonyQG.</li>
 </ul>
 
 
