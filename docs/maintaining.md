@@ -43,10 +43,28 @@ change detection fails, so a detection error cannot silently waive a check.
 
 Release tags and manual wheel builds always run the full wheel build. CI
 routing edits run the full relevant matrix on pull requests. After an already
-released version reaches `main`, a push changing only the routing files and
-Markdown reruns Python lint and selector tests without repeating platform
-builds. An untagged version on `main` still forces full C++ and Python CI,
+released version reaches `main`, a push containing routing edits avoids repeated
+platform builds only when all accompanying files select at most Python quality
+checks and ShellCheck under the normal path rules. Python lint and selector tests
+always run in this case, and any accompanying shell checks are retained. For
+example, routing plus `scripts/check-python.sh` runs Python quality and ShellCheck;
+routing plus library code, build configuration, wheel-related inputs or unknown
+paths keeps the full selection. PR routing checks remain broad. An untagged version on `main` still forces full C++ and Python CI,
 even for a subsequent docs-only commit, before automatic publishing can proceed.
+
+## Matrix summary checks
+
+`Clang validation` and `Core and FastScan validation` provide stable check names
+for the corresponding matrices. They run even when a dependency fails or is
+skipped. A successful matrix passes. A skipped matrix passes only when change
+detection succeeded and explicitly selected no C++ checks; failure, cancellation,
+or an unexpected skip fails the summary. If detection fails, the existing
+fallback runs the matrix and its success is required.
+
+After these checks have appeared and been validated on GitHub, add their exact
+names to main's required status checks. Workflow definitions do not update branch
+protection automatically. Keep existing protections until that transition is
+complete; these summaries do not cover unrelated jobs.
 
 ## Publishing a release
 

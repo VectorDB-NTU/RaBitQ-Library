@@ -163,10 +163,14 @@ def detect(event_name, event, ref_name):
         if not git("tag", "--list", f"v{version}"):
             # A docs-only fix after failed release CI must not bypass that CI.
             return set(GROUPS)
-        if any(path in CI_ROUTING_PATHS for path in paths) and all(
-            path in CI_ROUTING_PATHS or path.endswith(".md") for path in paths
-        ):
-            return {"python_quality"}
+        if any(path in CI_ROUTING_PATHS for path in paths):
+            companions = classify(
+                [path for path in paths if path not in CI_ROUTING_PATHS]
+            )
+            # Reuse normal path rules: accompanying lint/support edits must keep
+            # their checks, while build-related or unknown inputs remain broad.
+            if companions <= {"python_quality", "shell"}:
+                return companions | {"python_quality"}
     return selected
 
 
