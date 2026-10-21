@@ -219,6 +219,59 @@ class ChangeSelectionTest(unittest.TestCase):
                         detect("push", {"before": "base"}, "main"), expected
                     )
 
+    def test_tagged_main_routing_changes_preserve_lightweight_companion_checks(self):
+        # Complete changed-file set from PR #148, including its lint helper.
+        routing = [
+            ".github/scripts/ci_changes.py",
+            ".github/scripts/test_ci_changes.py",
+            ".github/workflows/test.yaml",
+            "docs/development.md",
+            "docs/maintaining.md",
+        ]
+        for companions, expected in (
+            (["scripts/check-python.sh"], {"python_quality", "shell"}),
+            (["sample/run_cpp.sh"], {"python_quality", "shell"}),
+            (["benchmarks/plot_homepage.py"], {"python_quality"}),
+            ([".github/ISSUE_TEMPLATE/config.yml"], {"python_quality"}),
+            (["src/core/api.cpp"], set(GROUPS)),
+            (["python_bindings/__init__.py"], set(GROUPS)),
+            (["scripts/build-macos-openmp.sh"], set(GROUPS)),
+            (["scripts/check-tidy.sh"], set(GROUPS)),
+            (["CMakeLists.txt"], set(GROUPS)),
+            (["pyproject.toml"], set(GROUPS)),
+            (["unknown-build-input"], set(GROUPS)),
+            (["scripts/check-python.sh", "src/core/api.cpp"], set(GROUPS)),
+            (["python/ivf.py", "sample/python/clustering_cli/ivf.py"], set(GROUPS)),
+        ):
+            changed = "\0".join(routing + companions) + "\0"
+            for event, ref, tags, result in (
+                ("push", "main", "v0.7.0", expected),
+                ("push", "main", "", set(GROUPS)),
+                ("push", "master", None, set(GROUPS)),
+                ("pull_request", "148/merge", None, set(GROUPS)),
+            ):
+                replies = (
+                    ["merge-base", changed] if event == "pull_request" else [changed]
+                )
+                if tags is not None:
+                    replies.append(tags)
+                payload = (
+                    {"pull_request": {"base": {"sha": "base"}}}
+                    if event == "pull_request"
+                    else {"before": "base"}
+                )
+                with self.subTest(
+                    companions=companions, event=event, ref=ref, tags=tags
+                ):
+                    with (
+                        patch("ci_changes.git", side_effect=replies),
+                        patch(
+                            "ci_changes.Path.read_text",
+                            return_value='[project]\nversion = "0.7.0"',
+                        ),
+                    ):
+                        self.assertEqual(detect(event, payload, ref), result)
+
     def test_release_events_and_new_branches_run_everything(self):
         for event, payload, ref in (
             ("workflow_dispatch", {}, "main"),

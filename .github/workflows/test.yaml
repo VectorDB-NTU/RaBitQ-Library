@@ -184,6 +184,25 @@ jobs:
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -P tests/core_consumer/run.cmake
 
+  clang-result:
+    name: Clang validation
+    needs: [changes, clang]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require selected matrix checks
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CPP_SELECTED: ${{ needs.changes.outputs.cpp }}
+          MATRIX_RESULT: ${{ needs.clang.result }}
+        run: |
+          if [ "$CHANGES_RESULT" = success ] && [ "$CPP_SELECTED" = false ]; then
+            test "$MATRIX_RESULT" = skipped || test "$MATRIX_RESULT" = success
+          else
+            test "$MATRIX_RESULT" = success
+          fi
+
   windows:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
@@ -345,6 +364,25 @@ jobs:
           "-DWORK_DIR=$env:RUNNER_TEMP/rabitq-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -P tests/core_consumer/run.cmake
+
+  core-consumer-result:
+    name: Core and FastScan validation
+    needs: [changes, core-consumer]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require selected matrix checks
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CPP_SELECTED: ${{ needs.changes.outputs.cpp }}
+          MATRIX_RESULT: ${{ needs.core-consumer.result }}
+        run: |
+          if [ "$CHANGES_RESULT" = success ] && [ "$CPP_SELECTED" = false ]; then
+            test "$MATRIX_RESULT" = skipped || test "$MATRIX_RESULT" = success
+          else
+            test "$MATRIX_RESULT" = success
+          fi
 
   linux-arm64:
     name: Native Linux ARM64 C++
