@@ -45,6 +45,41 @@
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
+    static void check_search_scratch(QGBuilder& builder) {
+        for (auto& worker : builder.workers_) {
+            worker.pruned.clear();
+        }
+        builder.search_new_neighbors();
+        for (const auto& worker : builder.workers_) {
+            EXPECT_TRUE(worker.pruned.empty());
+        }
+    }
+
+    static CandidateList record_collinear_prune(QGBuilder& builder) {
+        CandidateList pool;
+        for (PID id = 1; id < builder.num_nodes_; ++id) {
+            pool.emplace_back(id, build_distance(builder, 0, id));
+        }
+        CandidateList result;
+        CandidateList recorded;
+        builder.heuristic_prune(pool, result, &recorded);
+        EXPECT_EQ(result.size(), 1U);
+        return recorded;
+    }
+
+    static void prepare_reverse_fan_in(QGBuilder& builder) {
+        for (auto& row : builder.new_neighbors_) {
+            row.clear();
+        }
+        for (PID id = 1; id < builder.num_nodes_; ++id) {
+            builder.new_neighbors_[id].emplace_back(0, build_distance(builder, id, 0));
+        }
+    }
+
+    static void reverse_prune(QGBuilder& builder, bool record) {
+        builder.add_reverse_edges(record);
+    }
+
     static void use_legacy_padding(QuantizedGraph<float>& graph) {
         graph.padded_dim_ = round_up_to_multiple(graph.dim_, 64);
         graph.initialize();
@@ -107,12 +142,9 @@ struct QGConstructionTestAccess {
             } while (selected < 32);
             expected.emplace_back(selected, build_distance(builder, 0, selected));
         }
-        for (auto& row : builder.new_neighbors_) {
-            row.assign(32, AnnCandidate<float>(1, 0.0F));
-        }
         builder.new_neighbors_[0] = current;
-        builder.pruned_neighbors_[0] = pruned;
-        builder.complete_degrees();
+        builder.workers_[0].pruned = pruned;
+        builder.complete_degree(0, builder.workers_[0]);
         const auto& actual = builder.new_neighbors_[0];
         EXPECT_EQ(actual.size(), expected.size());
         for (size_t i = 0; i < std::min(actual.size(), expected.size()); ++i) {
@@ -220,9 +252,7 @@ struct QGConstructionTestAccess {
             }
         }
     }
-    static void search(QGBuilder& builder) {
-        builder.search_new_neighbors(/*record_pruned=*/false);
-    }
+    static void search(QGBuilder& builder) { builder.search_new_neighbors(); }
     static auto encoded_neighbors(const QuantizedGraph<float>& graph, PID id) {
         return graph.get_neighbors(id);
     }
@@ -299,6 +329,58 @@ struct QGConstructionTestAccess {
 
 namespace {
 
+TEST(QGConstructionTest, OnlyFinalReversePruningCompletesRowsWithoutWritingGraph) {
+    constexpr size_t kCount = 400;
+    constexpr size_t kDim = 64;
+    std::vector<float> data(kCount * kDim, 0.0F);
+    for (size_t i = 0; i < kCount; ++i) {
+        data[i * kDim] = static_cast<float>(i + 1);
+    }
+    for (size_t threads : {1U, 4U}) {
+        SCOPED_TRACE(threads);
+        QuantizedGraph<float> graph(
+            kCount, kDim, 32, METRIC_L2, RotatorType::FhtKacRotator, 0, 42
+        );
+        QGBuilder builder(graph, 64, data.data(), threads, QGInitialization::Random, 42);
+        QGConstructionTestAccess::check_search_scratch(builder);
+
+        // Collinear candidates must retain the first 300 occluded edges, in order.
+        const auto recorded = QGConstructionTestAccess::record_collinear_prune(builder);
+        ASSERT_EQ(recorded.size(), 300U);
+        for (size_t i = 0; i < recorded.size(); ++i) {
+            EXPECT_EQ(recorded[i].id, i + 2);
+            EXPECT_FLOAT_EQ(recorded[i].distance, static_cast<float>((i + 2) * (i + 2)));
+        }
+
+        const auto original_graph = QGConstructionTestAccess::rows(graph);
+        QGConstructionTestAccess::prepare_reverse_fan_in(builder);
+        QGConstructionTestAccess::reverse_prune(builder, false);
+        ASSERT_EQ(QGConstructionTestAccess::neighbors(builder)[0].size(), 1U);
+        EXPECT_EQ(QGConstructionTestAccess::rows(graph), original_graph);
+
+        QGConstructionTestAccess::prepare_reverse_fan_in(builder);
+        QGConstructionTestAccess::reverse_prune(builder, true);
+        const auto& rows = QGConstructionTestAccess::neighbors(builder);
+        for (size_t id = 0; id < kCount; ++id) {
+            ASSERT_EQ(rows[id].size(), 32U);
+            std::vector<PID> ids;
+            for (const auto& neighbor : rows[id]) {
+                EXPECT_NE(neighbor.id, id);
+                EXPECT_LT(neighbor.id, kCount);
+                ids.push_back(neighbor.id);
+            }
+            std::sort(ids.begin(), ids.end());
+            EXPECT_EQ(std::adjacent_find(ids.begin(), ids.end()), ids.end());
+        }
+        // At threshold1 collinear candidates fill row0 in distance order.
+        for (size_t i = 0; i < rows[0].size(); ++i) {
+            EXPECT_EQ(rows[0][i].id, i + 1);
+            EXPECT_FLOAT_EQ(rows[0][i].distance, static_cast<float>((i + 1) * (i + 1)));
+        }
+        EXPECT_EQ(QGConstructionTestAccess::rows(graph), original_graph);
+    }
+}
+
 TEST(QGConstructionTest, RefinementMatchesOriginalFinalEndpointAndSeededFallback) {
     constexpr size_t kDim = 65;
     constexpr size_t kCount = 65;
@@ -344,7 +426,9 @@ TEST(QGConstructionTest, RefinementMatchesOriginalFinalEndpointAndSeededFallback
                         ),
                         (std::array<size_t, 3>{2, 3, 0})
                     );
-                    // No probe succeeds; the previously untested endpoint 1.0 does.
+                    // Reuse the same worker after successful completion: no stale
+                    // successful result may survive when every new probe fails.
+                    // The previously untested endpoint 1.0 succeeds.
                     EXPECT_EQ(
                         QGConstructionTestAccess::check_refinement_endpoint(
                             builder, 0.9921875F, false
