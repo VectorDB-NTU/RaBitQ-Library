@@ -1,12 +1,12 @@
-# IVF fixtures from before per-cluster storage
+# IVF-RaBitQ fixtures from before per-cluster storage
 
 These files were written by `main` at commit
-`64fc943e0e92fa7e18eec1477050b23342a976f8`, the last commit where IVF kept every
+`64fc943e0e92fa7e18eec1477050b23342a976f8`, the last commit where IVF-RaBitQ kept every
 cluster in one shared buffer, using [generate.cpp](generate.cpp).
 [manifest.json](manifest.json) records the producer and SHA-256 hashes.
 Keep these files unchanged; tests never regenerate them with the current writer.
 
-The two cases cover four-bit and raw-vector (`nbits=32`) IVF for L2.
+The two cases cover four-bit and raw-vector (`nbits=32`) IVF-RaBitQ for L2.
 Each index holds 130 points in 65 original dimensions (96 padded) across
 four clusters of 0, 1, 32 and 97 points, so the file has an empty cluster, a
 single-point cluster, a full FastScan batch and a partial tail batch. Point 0 is

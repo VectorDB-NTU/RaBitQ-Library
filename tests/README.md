@@ -232,8 +232,8 @@ CI runs this workflow on Linux x86-64, Linux ARM64, macOS ARM64 and Windows x86-
 
 Core and FastScan consumption must also work from a full installation; the standalone
 `sample/cpp/core` and `sample/cpp/fastscan` projects test their respective targets. The original
-`tests/consumer` exercises `rabitqlib::index` and checks that HNSW headers compile with
-the IVF initializer header deliberately unavailable and index value types compile with
+`tests/consumer` exercises `rabitqlib::index` and checks that HNSW-RaBitQ headers compile with
+the IVF-RaBitQ initializer header deliberately unavailable and index value types compile with
 Eigen deliberately unavailable. Numerical consumers forbid the removed `defines.hpp`.
 All FastScan batch layout/encoding coverage lives under `unit/rabitqlib/fastscan/`;
 index ID and nearest-neighbor helper coverage lives under `unit/rabitqlib/index/`.
@@ -281,7 +281,7 @@ Keep a Python construction/search/persistence case for every exported storage wi
 both metrics, but do not cross every width with every original dimension and initializer.
 
 `test_portable_indexes.py` separates supported storage from representative padded-domain
-boundaries. IVF mutation/batching/routing matrices use sign-only, extra-bit and raw-vector
+boundaries. IVF-RaBitQ mutation/batching/routing matrices use sign-only, extra-bit and raw-vector
 storage; full width coverage remains in the corresponding C++ reference tests. The
 SymphonyQG batch test checks both Python names on one built index per storage/metric pair,
 including strided/empty queries and bitwise distance equality.
@@ -302,7 +302,7 @@ entry points in the same setting.
 
 `construction_failure_test` isolates allocation replacement from the normal suite.
 It checks OpenMP construction errors with one/four requested threads and, on Linux,
-wraps C allocations to sweep HNSW constructor failures and verify ownership. Run
+wraps C allocations to sweep HNSW-RaBitQ constructor failures and verify ownership. Run
 these under ASan/UBSan as well as Release; do not disable allocator-mismatch checking.
 `compact_codes_failure_test` covers cold scratch allocation and growth failures in
 serial and OpenMP encoding, including the public FastScan batch entry points.

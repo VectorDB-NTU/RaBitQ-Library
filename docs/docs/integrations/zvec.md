@@ -13,8 +13,8 @@ This identifies the inspected source, not a released zvec package version.
 
 | Index | How it uses RaBitQ-Library |
 | --- | --- |
-| **IVF** | The [reformer][ivf-reformer] quantizes vectors in batches and prepares query lookup tables. The [search code][ivf-entity] uses FastScan estimates and extra-bit refinement for selected candidates. |
-| **HNSW** | The [reformer][hnsw-reformer] quantizes individual vectors. The [query algorithm][hnsw-query] uses core per-vector estimators during graph traversal; it does not use the IVF FastScan batch-scoring path. |
+| **IVF-RaBitQ** | The [reformer][ivf-reformer] quantizes vectors in batches and prepares query lookup tables. The [search code][ivf-entity] uses FastScan estimates and extra-bit refinement for selected candidates. |
+| **HNSW-RaBitQ** | The [reformer][hnsw-reformer] quantizes individual vectors. The [query algorithm][hnsw-query] uses core per-vector estimators during graph traversal; it does not use the IVF-RaBitQ FastScan batch-scoring path. |
 
 The inspected reformers serialize centroids, padded dimensions, and rotator
 state, then restore them when loading. Their query preprocessing uses the stored
@@ -31,7 +31,7 @@ targets and `SplitBatchQuery::reset`.
 When `RABITQ_SUPPORTED` is enabled, the [dependency configuration][dependency]
 links `rabitqlib::fastscan`, which also links core,
 and disables RaBitQ's standalone indexes, Python bindings, OpenMP, and native
-tuning. The [IVF query preparation][ivf-reformer] passes lookup-table buffers owned by
+tuning. The [IVF-RaBitQ query preparation][ivf-reformer] passes lookup-table buffers owned by
 its query state to `SplitBatchQuery::reset`. This permits reuse when that state
 is reused; it does not imply that every search is allocation-free.
 

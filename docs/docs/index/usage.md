@@ -1,6 +1,6 @@
 # Index usage contracts
 
-Shared input, count, concurrency and persistence conventions for IVF, HNSW and
+Shared input, count, concurrency and persistence conventions for IVF-RaBitQ, HNSW-RaBitQ and
 SymphonyQG. Start with the [Python quick start](../quick_start.md) for a complete example.
 
 ## Input requirements
@@ -22,10 +22,10 @@ the Python indexes do not expose a rotator choice.
 ## Index counts
 
 The unified count properties below are introduced in **0.7.0**. In particular,
-HNSW's `num_points` now excludes removed records; see the
+HNSW-RaBitQ's `num_points` now excludes removed records; see the
 [count migration guide](../modular_migration.md#unified-index-counts) when upgrading.
 
-IVF, HNSW, and SymphonyQG expose these read-only Python properties
+IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
 (C++ uses the same names with `()`):
 
 | Property | Meaning |
@@ -37,15 +37,15 @@ IVF, HNSW, and SymphonyQG expose these read-only Python properties
 `0 <= num_points <= num_stored_points <= max_elements`. Before building, both
 point counts are zero; configured capacity may be nonzero.
 
-At build time, IVF requires exactly `max_elements` input rows. HNSW accepts
+At build time, IVF-RaBitQ requires exactly `max_elements` input rows. HNSW-RaBitQ accepts
 1 through `max_elements` rows, so it can reserve capacity for later additions.
 
 Removal decreases only `num_points`; slots and IDs remain occupied. Append IDs
 start at the previous `num_stored_points`. Use this stored count for ID bounds,
 and `num_points` for a live count. Counts survive save/load.
 
-IVF grows automatically and has no spare logical capacity after build or append.
-HNSW's `resize` changes only capacity. SymphonyQG has no incremental updates;
+IVF-RaBitQ grows automatically and has no spare logical capacity after build or append.
+HNSW-RaBitQ's `resize` changes only capacity. SymphonyQG has no incremental updates;
 all three counts are equal after build.
 
 ## Estimate storage
@@ -55,28 +55,28 @@ memory or peak construction memory. Let `d` be the original dimension, `D` the
 stored padded dimension, and `B` the total quantized bits per dimension. New
 indexes use `D = 32 * ceil(d / 32)`; loaded indexes retain their saved padding.
 
-For IVF/HNSW, codes and factors occupy `V(B)` bytes per vector:
+For IVF-RaBitQ/HNSW-RaBitQ, codes and factors occupy `V(B)` bytes per vector:
 
 - One bit: `V(1) = D / 8 + 12` (three float32 factors).
 - Two through nine bits: `V(B) = D * B / 8 + 20` (three binary and two extra-code factors).
 
 | Index / mode | Main bytes per stored point or capacity slot |
 | --- | --- |
-| IVF quantized | Approximately `V(B) + 4`, including the point ID |
-| IVF raw (`nbits=32`) | Approximately `D / 8 + 12 + 4*d + 4`, including filtering codes, raw vector and ID |
-| HNSW | `V(B) + 8*M + 12` per **capacity slot** for base-layer records: up to `2*M` neighbor IDs, a link count, cluster ID and label |
+| IVF-RaBitQ quantized | Approximately `V(B) + 4`, including the point ID |
+| IVF-RaBitQ raw (`nbits=32`) | Approximately `D / 8 + 12 + 4*d + 4`, including filtering codes, raw vector and ID |
+| HNSW-RaBitQ | `V(B) + 8*M + 12` per **capacity slot** for base-layer records: up to `2*M` neighbor IDs, a link count, cluster ID and label |
 | SymphonyQG raw | `4*d + R*(D/8 + 12)`, where `R = max_degree` |
 | SymphonyQG quantized | `D*B/8 + 8 + R*(D/8 + 12)`, with `B` equal to 4 or 8 |
 
-IVF allocates one-bit codes and their three factors in full batches of 32
+IVF-RaBitQ allocates one-bit codes and their three factors in full batches of 32
 **per cluster**. For cluster sizes `n_c`, that part costs
 `sum(32 * ceil(n_c / 32)) * (D/8 + 12)` bytes. Extra codes/raw vectors and IDs
 use the stored point count. Small clusters therefore increase padding overhead.
 Centroids, routing structures and cluster metadata are additional.
 
-HNSW allocates base-layer records for `max_elements`, including unused capacity.
+HNSW-RaBitQ allocates base-layer records for `max_elements`, including unused capacity.
 Upper-layer edges, label maps, locks, visited lists and other bookkeeping are
-additional. Removing points does not reclaim their storage in either IVF or HNSW.
+additional. Removing points does not reclaim their storage in either IVF-RaBitQ or HNSW-RaBitQ.
 
 SymphonyQG stores a one-bit code and two factors **for each neighbor in each row**,
 plus a four-byte neighbor ID. This accounts for `R*(D/8 + 12)` bytes per row,
@@ -84,7 +84,7 @@ even in quantized mode: reducing the vector's own code width does not shrink
 these neighborhood copies.
 
 For example, with `d=D=128`, four-bit storage, `M=16` and `R=32`, the terms above
-are about 88 bytes per IVF point before batch padding, 224 bytes per HNSW capacity
+are about 88 bytes per IVF-RaBitQ point before batch padding, 224 bytes per HNSW-RaBitQ capacity
 slot, and 968 bytes per SymphonyQG row. These are layout calculations, not measured
 RSS. All indexes also retain rotation state; construction, query scratch,
 allocator overhead and update workspaces add to memory use. Measure process

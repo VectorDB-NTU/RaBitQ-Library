@@ -302,7 +302,7 @@ resets, scratch reuse, and changed records alongside normal numerical parity.
 2. Update all applicable declarations and AVX2/AVX-512 implementations in `src/simd/` (core),
    `src/fastscan/` (FastScan), or `src/index/` (indexes).
 3. Register selection and unsupported-CPU behavior in `src/simd/dispatch.cpp` when dispatched
-   (batch scoring uses `src/fastscan/fastscan_dispatch.cpp`, HNSW search uses
+   (batch scoring uses `src/fastscan/fastscan_dispatch.cpp`, HNSW-RaBitQ search uses
    `src/index/hnsw_dispatch.cpp`).
 4. If adding a translation unit, put it in the correct ISA source group and flags in
    `CMakeLists.txt`.
@@ -315,15 +315,15 @@ must happen in generic code first.
 #### Dispatch conventions and coverage
 
 - Keep core backend declarations in `include/rabitqlib/core/detail/simd/`, FastScan
-  declarations in `fastscan/detail/`, and HNSW declarations in `index/detail/`. Keep
+  declarations in `fastscan/detail/`, and HNSW-RaBitQ declarations in `index/detail/`. Keep
   core implementations in `src/simd/*_{generic,neon,avx2,avx512}.cpp` and FastScan
-  implementations in `src/fastscan/`. HNSW keeps its existing
+  implementations in `src/fastscan/`. HNSW-RaBitQ keeps its existing
   `src/index/` implementations and compatibility namespaces.
 - Select a cached function pointer through the private shared resolver in
-  `src/simd/dispatch_resolver.hpp`. Core, FastScan and HNSW have separate dispatch translation units.
+  `src/simd/dispatch_resolver.hpp`. Core, FastScan and HNSW-RaBitQ have separate dispatch translation units.
   The x86 order is AVX-512, AVX2/FMA, then the portable generic implementation. ARM64
   selects NEON for raw float distances, FastScan, packed-code dot products (1–8 extra
-  bits), masked sums, binary warmup, HNSW search, and FHT/Kac rotation including
+  bits), masked sums, binary warmup, HNSW-RaBitQ search, and FHT/Kac rotation including
   sign flipping, query-bit transposition, uint8/uint16 scalar quantization, and
   FastScan LUT construction. Extra-code packing retains a portable scalar implementation.
   Cache selection in thread-safe function-local statics, including tables; public calls must
@@ -332,7 +332,7 @@ must happen in generic code first.
   Standard FastScan accumulation requires AVX2/FMA, AVX-512, or NEON and throws
   `std::runtime_error` when no supported SIMD backend is available. Its scalar kernel
   is retained as a correctness reference only, never as a runtime fallback.
-- Preserve stricter predicates: population-count kernels need AVX512_VPOPCNTDQ, and HNSW's
+- Preserve stricter predicates: population-count kernels need AVX512_VPOPCNTDQ, and HNSW-RaBitQ's
   AVX-512 core variant also needs AVX2 for its warmup implementation. Do not infer support
   from a backend name or from `__AVX*__` macros in a public header.
   All AVX-512 backends require AVX2, which GCC/Clang also enable with `-mavx512f`.
@@ -386,13 +386,13 @@ covers its arithmetic kernels, not every scalar loop in construction and search.
 | Quantizer rescale search | SIMD bounded search; the certified scalar event sweep remains the fallback |
 | Integer scalar quantization, extra-code packing, transpose, sign masks | Existing runtime selection; byte layouts and rounding rules are unchanged |
 | Standard and high-accuracy FastScan | Runtime selection, including NEON float LUT construction; HACC LUT byte conversion remains generic on ARM |
-| IVF and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
+| IVF-RaBitQ and float SymphonyQG batch correction | Complete estimator runs in the selected backend; non-float template paths remain generic |
 | FHT/Kac rotation | Complete rotation and scaling run in selected ISA translation units; shared AVX intrinsics preserve the FFHT butterfly order |
 | Float matrix rotation and PiPNN construction | Matrix products, row norms, and lower-triangle pairwise distances use isolated matrix backends |
 | RaBitQKMeans and QGKMeans centroid updates | Indexed float32 rows accumulate into float64 sums through the matrix backends, preserving per-cluster point order without additional workspace |
-| HNSW search and IVF centroid routing | Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher |
+| HNSW-RaBitQ search and IVF-RaBitQ centroid routing | Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher |
 | Quantization orchestration, reconstruction, non-float utilities | Template/control code remains generic; no blanket native tuning or reduction-order rewrite |
-| Graph scheduling, candidate queues, I/O, allocation, random initialization | Generic control code; IVF one-bit candidate insertion stays in a small compiled function to avoid inlining-induced register spills; thread scheduling and seeds remain caller-owned |
+| Graph scheduling, candidate queues, I/O, allocation, random initialization | Generic control code; IVF-RaBitQ one-bit candidate insertion stays in a small compiled function to avoid inlining-induced register spills; thread scheduling and seeds remain caller-owned |
 | Example KMeans training | Explicit RaBitQKMeans flat or QGKMeans graph assignment; FAISS is an optional comparison dependency only |
 
 Portable wheels disable `RABITQ_ENABLE_NATIVE_OPTIMIZATION`. ARM64 builds exclude all
@@ -414,9 +414,9 @@ non-template dispatch declarations stay in `src/`.
 `defines.hpp` has been removed. Keep metrics in `core/metric.hpp`, scalar quantizer,
 rotation and quantization configuration in `core/types.hpp`, Eigen aliases in `core/detail/eigen.hpp`, and ANN values
 in `index/types.hpp`. Do not introduce an umbrella that couples them again.
-IVF initializer choices live in `index/ivf/types.hpp`. IVF/HNSW/SymphonyQG public index headers
+IVF-RaBitQ initializer choices live in `index/ivf/types.hpp`. IVF-RaBitQ/HNSW-RaBitQ/SymphonyQG public index headers
 contain declarations and small accessors; their operations compile in
-`src/index/{ivf,hnsw,qg}.cpp`. Backend translation units include HNSW's private
+`src/index/{ivf,hnsw,qg}.cpp`. Backend translation units include HNSW-RaBitQ's private
 `src/index/hnsw_search_impl.hpp` to retain per-ISA template instantiation.
 The installed consumer compiles and links each index header independently while poisoning
 encoding, scoring, rotation implementation and vendor headers to enforce this boundary.
@@ -463,10 +463,10 @@ Check all of these together:
 - SIMD pack, inner-product, and FastScan kernels;
 - query-side factors in `core/query.hpp` and `fastscan/query.hpp`;
 - estimators in `core/estimator.hpp` and `fastscan/estimator.hpp`;
-- IVF, HNSW, and SymphonyQG consumers;
+- IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG consumers;
 - C++ tests for factor finiteness, reconstruction, sign convention, pack/unpack, and estimates.
 
-Test both `METRIC_L2` and `METRIC_IP` where supported. In IVF and HNSW, total bits are represented
+Test both `METRIC_L2` and `METRIC_IP` where supported. In IVF-RaBitQ and HNSW-RaBitQ, total bits are represented
 as one sign bit plus `ex_bits`; accepted total bit counts are 1 through 9. SymphonyQG raw storage is
 `quantization_bits == 0`; its quantized storage currently accepts only 4 or 8 bits.
 
@@ -480,16 +480,16 @@ possible; add a forwarding overload when evolving an API compatibly.
 
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
 serialized fields for new formats, validate sizes before allocation, check every read, and retain a
-compatibility test fixture or an explicit rejection path. IVF, HNSW, and SymphonyQG have separate
+compatibility test fixture or an explicit rejection path. IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG have separate
 formats and must each be reviewed. SymphonyQG includes a versioned quantized format plus a legacy
 raw-format fallback; preserve both unless a breaking change is explicitly requested.
 
-IVF `remove` stores a removed point as `f_add = +inf` inside the existing batch data, so it needs no
+IVF-RaBitQ `remove` stores a removed point as `f_add = +inf` inside the existing batch data, so it needs no
 discriminator. No index written before `remove` existed has an infinite `f_add`, so nothing in an old
 file is reinterpreted. In the legacy file formats readable by release 0.5.0, that reader also
 excludes removed points. This compatibility of the removal marker does not extend to the current
 writer's `RABQIDX1` v2 format: older releases cannot read current saves, even when resaving a loaded
-legacy index. Keep this convention when touching IVF code:
+legacy index. Keep this convention when touching IVF-RaBitQ code:
 
 - Every estimator and scan path must turn `f_add = +inf` into an infinite estimated distance and an
   infinite lower bound, and never into NaN. A NaN distance would enter the result buffer.
@@ -498,11 +498,11 @@ legacy index. Keep this convention when touching IVF code:
 - `IvfRemoveTest.ExcludesRemovedPointsOnEveryScanPath`, `IvfRemoveTest.SurvivesSaveLoadAndLaterAdds`,
   and `FastScanPackingTest.UnpackInvertsPackIncludingTailsAndDoesNotOverrun` guard these rules.
 
-HNSW `remove` sets the high bit (`kRemovedMask`) of the stored cluster ID. `construct` and `load`
+HNSW-RaBitQ `remove` sets the high bit (`kRemovedMask`) of the stored cluster ID. `construct` and `load`
 cap the number of clusters at 2^31, so no index written before `remove` existed has that bit set and
 nothing in an old file is reinterpreted. A file that has removals is rejected by releases 0.3.7
 through 0.5.1, whose `load` range-checks every cluster ID; that rejection is the compatibility path.
-This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW code:
+This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW-RaBitQ code:
 
 - Read cluster IDs only through `get_clusterid_by_internalid`, which masks the bit. Estimators,
   routing, and the `add` reconstruction index centroids with it.

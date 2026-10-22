@@ -55,7 +55,7 @@ additional error is typically negligible relative to the RaBitQ encoding error.
 As the data-code bit width increases, the encoding error shrinks and LUT precision
 becomes more significant. High-accuracy FastScan (HACC) uses 16-bit LUT entries
 to reduce the error carried from the sign-code inner product into extra-bit
-refinement. IVF selects HACC by default for 4–9 total bits and standard FastScan
+refinement. IVF-RaBitQ selects HACC by default for 4–9 total bits and standard FastScan
 for 1–3 bits or raw-vector reranking; see [precision selection](index/ivf.md#querying).
 
 ## The kernel for multi-bit codes

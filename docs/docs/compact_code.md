@@ -1,7 +1,7 @@
 # Compact code storage
 
 This section describes packing **extended codes** with 1–8 bits per dimension.
-IVF and HNSW store a separate sign bit, giving total quantized widths of 1–9 bits;
+IVF-RaBitQ and HNSW-RaBitQ store a separate sign bit, giving total quantized widths of 1–9 bits;
 one-bit quantization has no extended code. These layouts accept dimensions that
 are multiples of 32. Pass the padded dimension and already padded, quantized
 codes: the packing function does not add padding itself. For rotated vectors,
@@ -40,7 +40,7 @@ Throughout this page, `c[i]` is the unsigned extended code at coordinate `i`
 within the current block, in the range `0` through `(1 << bits) - 1`.
 Byte offsets are relative to that block, bit 0 is the least-significant bit,
 and division in offset formulas is integer division. These are extended-code
-layouts, not the separate sign-code layout used by IVF and HNSW.
+layouts, not the separate sign-code layout used by IVF-RaBitQ and HNSW-RaBitQ.
 
 Within each byte-layout example, byte addresses increase from top to bottom, and bit positions
 increase **from left to right: bit 0 (LSB) to bit 7 (MSB)**. This is the reverse

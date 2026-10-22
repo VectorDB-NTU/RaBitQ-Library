@@ -1,9 +1,10 @@
-# HNSW RaBitQ
+# HNSW-RaBitQ
 
 C++ callers include `rabitqlib/index/hnsw/hnsw.hpp` and link `rabitqlib::index`.
-[HNSW](https://arxiv.org/abs/1603.09320) is a popular graph-based index. Under
-comparable quantization settings, HNSW RaBitQ typically uses more memory
-than IVF RaBitQ because it stores graph structures in addition to quantized
+[HNSW](https://arxiv.org/abs/1603.09320) is a popular graph-based index.
+HNSW-RaBitQ combines HNSW graph traversal with RaBitQ quantization. Under
+comparable quantization settings, HNSW-RaBitQ typically uses more memory
+than IVF-RaBitQ because it stores graph structures in addition to quantized
 vectors. The actual comparison depends on vector dimension, bit width, graph
 degree, and index parameters.
 
@@ -12,7 +13,7 @@ degree, and index parameters.
 ### Python
 
 Run the [Quick start](../quick_start.md#build-and-search-an-ivf-index) to prepare
-`data`, `queries` and `clustering`, then use those same arrays with HNSW:
+`data`, `queries` and `clustering`, then use those same arrays with HNSW-RaBitQ:
 
 ```python
 from rabitqlib import HnswIndex
@@ -116,7 +117,7 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(const fl
 - **queries**: Query vectors in the original input coordinates.
 -  **query_num**: The number of query vectors.
 -  **TOPK**: The number of nearest neighbors to search.
--  **efSearch**: The size of the candidate set for searching HNSW base layer.
+-  **efSearch**: The size of the candidate set for searching HNSW-RaBitQ base layer.
 -  **thread_num**: Number of threads to use. Each query is processed by one thread.
 
 The search window belongs to each call, so concurrent C++ searches can use
@@ -254,7 +255,7 @@ through 0.5.1 check every cluster ID on `load` and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.
 
-New HNSW indexes pad dimensions to multiples of 32 for all supported bit widths.
+New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
 Loading preserves the saved padded dimension and rotation, so older indexes
 using multiples of 64 remain readable. Older library versions cannot load new
 files whose padded dimension is not a multiple of 64.
@@ -291,7 +292,7 @@ We first pre-process the query:
 
 #### Upper Layers
 
-In the upper layers of HNSW, we compute the 1-bit estimated distance (using `BinData`) to quickly locate the entry point for the next layer.
+In the upper layers of HNSW-RaBitQ, we compute the 1-bit estimated distance (using `BinData`) to quickly locate the entry point for the next layer.
 
 #### Base Layer
 

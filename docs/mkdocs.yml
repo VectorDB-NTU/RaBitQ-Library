@@ -27,8 +27,8 @@ nav:
           - Inner product: kernel_ip.md
   - Vector search:
       - Shared contracts: index/usage.md
-      - IVF RaBitQ: index/ivf.md
-      - HNSW RaBitQ: index/hnsw.md
+      - IVF-RaBitQ: index/ivf.md
+      - HNSW-RaBitQ: index/hnsw.md
       - SymphonyQG: index/qg.md
   - Integrations:
       - txtai: integrations/txtai.md
@@ -45,8 +45,8 @@ theme:
   name: material
   language: en
   font: false
+  logo: assets/logo.png
   icon:
-    logo: material/vector-polygon
     repo: fontawesome/brands/github
   palette:
     - media: "(prefers-color-scheme: light)"

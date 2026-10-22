@@ -45,9 +45,9 @@ class Case:
 
 
 CASES = (
-    Case("rabitq-ivf-raw", "IVF RaBitQ raw", "rabitq-ivf", "ivf", {"bits": 32}),
-    Case("rabitq-ivf-1p4", "IVF RaBitQ 1+4", "rabitq-ivf", "ivf", {"bits": 5}),
-    Case("rabitq-ivf-1p8", "IVF RaBitQ 1+8", "rabitq-ivf", "ivf", {"bits": 9}),
+    Case("rabitq-ivf-raw", "IVF-RaBitQ raw", "rabitq-ivf", "ivf", {"bits": 32}),
+    Case("rabitq-ivf-1p4", "IVF-RaBitQ 1+4", "rabitq-ivf", "ivf", {"bits": 5}),
+    Case("rabitq-ivf-1p8", "IVF-RaBitQ 1+8", "rabitq-ivf", "ivf", {"bits": 9}),
     Case(
         "faiss-rabitqfs-raw",
         "Faiss IVF RaBitQfs raw + RFlat",
@@ -98,8 +98,8 @@ CASES = (
         "graphs",
         {"quantization_bits": 8},
     ),
-    Case("rabitq-hnsw-1p4", "HNSW RaBitQ 1+4", "rabitq-hnsw", "graphs", {"bits": 5}),
-    Case("rabitq-hnsw-1p8", "HNSW RaBitQ 1+8", "rabitq-hnsw", "graphs", {"bits": 9}),
+    Case("rabitq-hnsw-1p4", "HNSW-RaBitQ 1+4", "rabitq-hnsw", "graphs", {"bits": 5}),
+    Case("rabitq-hnsw-1p8", "HNSW-RaBitQ 1+8", "rabitq-hnsw", "graphs", {"bits": 9}),
     Case("faiss-hnsw-flat", "Faiss HNSW Flat", "faiss-hnsw-flat", "graphs", {}),
     Case("faiss-hnsw-sq4", "Faiss HNSW SQ4", "faiss-hnsw-sq4", "graphs", {}),
     Case("faiss-hnsw-sq8", "Faiss HNSW SQ8", "faiss-hnsw-sq8", "graphs", {}),

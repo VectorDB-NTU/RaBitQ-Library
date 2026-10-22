@@ -29,12 +29,12 @@ QPS–recall tradeoffs.
 
 | Index | Search approach | Storage and updates |
 | --- | --- | --- |
-| [IVF](docs/docs/index/ivf.md) | Partitioned search with batch scoring. | 1–9-bit codes or raw-vector reranking; add/remove. |
-| [HNSW](docs/docs/index/hnsw.md) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and resize. |
+| [IVF-RaBitQ](docs/docs/index/ivf.md) | Partitioned search with batch scoring. | 1–9-bit codes or raw-vector reranking; add/remove. |
+| [HNSW-RaBitQ](docs/docs/index/hnsw.md) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and resize. |
 | [SymphonyQG](docs/docs/index/qg.md) | Graph search with batched distance estimation. | Raw or 4/8-bit storage; updates require rebuilding. |
 
 [Native clustering methods](docs/docs/clustering.md) prepare centroids and
-assignments for IVF and HNSW.
+assignments for IVF-RaBitQ and HNSW-RaBitQ.
 
 Search throughput and index size for three quantized configurations.
 QPS uses the fastest measured setting reaching **Recall@10 ≥ 90%**;
@@ -64,7 +64,7 @@ Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
 and macOS 14+ ARM64. x86-64 requires AVX2/FMA and optionally uses
 AVX-512; ARM64 uses NEON. See [platform requirements and source installation](docs/docs/installation.md#requirements).
 
-Build and search a small IVF index with synthetic data; no dataset download is
+Build and search a small IVF-RaBitQ index with synthetic data; no dataset download is
 required. This example demonstrates the API, not performance.
 
 ```python
@@ -90,7 +90,7 @@ values first. Quantization remains approximate even when all clusters are probed
 The [complete quick start](docs/docs/quick_start.md) explains result handling,
 measures recall while varying `nprobe`, and shows save/load.
 
-For other indexes, see the [HNSW](docs/docs/index/hnsw.md#minimal-workflow) and
+For other indexes, see the [HNSW-RaBitQ](docs/docs/index/hnsw.md#minimal-workflow) and
 [SymphonyQG](docs/docs/index/qg.md#minimal-workflow) examples.
 
 ### C++
@@ -123,8 +123,8 @@ Two examples of direct library integration:
 
 | Project | Integration |
 | --- | --- |
-| [txtai](docs/docs/integrations/txtai.md) | Uses the Python IVF and HNSW indexes as an embedding-search backend. |
-| [zvec](docs/docs/integrations/zvec.md) | Uses core quantization in its own IVF-RaBitQ and HNSW-RaBitQ indexes, with FastScan batch scoring in IVF. |
+| [txtai](docs/docs/integrations/txtai.md) | Uses the Python IVF-RaBitQ and HNSW-RaBitQ indexes as an embedding-search backend. |
+| [zvec](docs/docs/integrations/zvec.md) | Uses core quantization in its own IVF-RaBitQ and HNSW-RaBitQ indexes, with FastScan batch scoring in IVF-RaBitQ. |
 
 The linked walkthroughs describe integration boundaries and provide versioned
 source references.

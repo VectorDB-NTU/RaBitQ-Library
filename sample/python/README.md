@@ -6,7 +6,7 @@ with `rabitqlib>=0.7.0` and NumPy installed. When working from source,
 so the examples and native extension use matching APIs. Clustering and indexing
 both use RaBitQ Library; FAISS is needed only for `compare_with_faiss.py`.
 
-## IVF: cluster, then index
+## IVF-RaBitQ: cluster, then index
 
 `kmeans_clustering.py` uses `--method qg` (the default) for QGKMeans graph
 assignment or `--method rabitq` for RaBitQKMeans flat assignment. Both make exact
@@ -39,7 +39,7 @@ training vectors. Use queries and ground truth prepared for the same metric.
 its own limit. See [threading](../../docs/docs/index/usage.md#threading-and-file-paths)
 for affinity and OpenMP placement behavior.
 
-## HNSW
+## HNSW-RaBitQ
 
 Use [RaBitQKMeans](../../docs/docs/clustering.md#rabitqkmeans) for this small-cluster
 example, with the same clustering file format:
