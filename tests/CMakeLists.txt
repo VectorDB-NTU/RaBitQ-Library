@@ -54,7 +54,8 @@ target_link_libraries(rabitq_tests
 
 # Discover tests for CTest
 include(GoogleTest)
-gtest_discover_tests(rabitq_tests DISCOVERY_MODE PRE_TEST)
+# Allow bounded executable startup time on hosted runners before test enumeration.
+gtest_discover_tests(rabitq_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 30)
 
 add_test(NAME CoreModuleBoundary COMMAND "${CMAKE_COMMAND}"
     "-DRABITQ_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
