@@ -7,7 +7,7 @@ on:
     branches: ["main", "master"]
 
 concurrency:
-  group: ${{ github.head_ref || github.sha }}-${{ github.workflow }}
+  group: ${{ github.event.pull_request.number || github.sha }}-${{ github.workflow }}
   cancel-in-progress: true
 
 permissions:
@@ -29,8 +29,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install Ruff
-        run: python -m pip install "ruff==0.16.1"
+      - name: Install validation dependencies
+        run: python -m pip install "ruff==0.16.1" numpy pytest
       - name: Check Python
         run: ./scripts/check-python.sh
       - name: Check release automation
@@ -38,7 +38,8 @@ jobs:
           ruff format --check .github/scripts
           ruff check .github/scripts
           python -m unittest discover -s .github/scripts -p 'test_*.py'
-
+      - name: Test benchmark protocols without native builds
+        run: python -m pytest tests/python/test_benchmark_protocol.py --tb=short -q
 
   python-build:
     needs: changes

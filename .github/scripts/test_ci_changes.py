@@ -51,10 +51,13 @@ class ChangeSelectionTest(unittest.TestCase):
                     "docs/mkdocs.yml",
                     "docs/requirements.txt",
                     "docs/docs/assets/img/plot.png",
-                    ".github/workflows/docs.yml",
                 ]
             ),
-            set(),
+            {"docs"},
+        )
+        self.assertEqual(classify(["README.md", "sample/python/README.md"]), set())
+        self.assertEqual(
+            classify([".github/workflows/docs.yml"]), {"docs", "python_quality"}
         )
 
     def test_known_support_paths_do_not_select_unrelated_builds(self):
@@ -259,7 +262,7 @@ class ChangeSelectionTest(unittest.TestCase):
                 set(GROUPS),
             )
         for changed_paths, tags, expected in (
-            (paths, "v0.3.3", {"python_quality"}),
+            (paths, "v0.3.3", {"python_quality", "docs"}),
             (paths, "", set(GROUPS)),
             (paths + ["src/simd/dispatch.cpp"], "v0.3.3", set(GROUPS)),
         ):
@@ -291,6 +294,7 @@ class ChangeSelectionTest(unittest.TestCase):
             (["scripts/check-python.sh"], {"python_quality", "shell"}),
             (["sample/run_cpp.sh"], {"python_quality", "shell"}),
             (["benchmarks/plot_homepage.py"], {"python_quality"}),
+            (["benchmarks/build_indexes.py"], {"python_quality"}),
             ([".github/ISSUE_TEMPLATE/config.yml"], {"python_quality"}),
             (["src/core/api.cpp"], set(GROUPS)),
             (["python_bindings/__init__.py"], set(GROUPS)),
@@ -305,7 +309,7 @@ class ChangeSelectionTest(unittest.TestCase):
         ):
             changed = "\0".join(routing + companions) + "\0"
             for event, ref, tags, result in (
-                ("push", "main", "v0.7.0", expected),
+                ("push", "main", "v0.7.0", expected | {"docs"}),
                 ("push", "main", "", set(GROUPS)),
                 ("push", "master", None, set(GROUPS)),
                 ("pull_request", "148/merge", None, set(GROUPS)),

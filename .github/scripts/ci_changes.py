@@ -15,9 +15,27 @@ GROUPS = (
     "shell",
     "wheels",
     "benchmarks",
+    "docs",
 )
 
 CPP_SUFFIXES = (".c", ".cc", ".cpp", ".h", ".hpp")
+
+BENCHMARK_PYTHON_PATHS = frozenset(
+    f"benchmarks/{name}.py"
+    for name in (
+        "build_indexes",
+        "download_datasets",
+        "install_baselines",
+        "plot_homepage",
+        "plot_results",
+        "query_index",
+        "reproduce",
+        "run",
+        "run_kmeans",
+        "run_sweeps",
+        "update_indexing",
+    )
+)
 
 # Keep broad pull-request checks for routing edits, then avoid repeating
 # their builds after a CI-only merge into an already released main branch.
@@ -34,10 +52,15 @@ CI_ROUTING_PATHS = frozenset(
 def classify(paths):
     selected = set()
     for path in paths:
-        if path.startswith("docs/") or path.endswith(".md"):
+        if path.startswith("docs/"):
+            selected.add("docs")
+            continue
+        if path.endswith(".md"):
+            continue
+        if path == ".github/workflows/docs.yml":
+            selected.update(("docs", "python_quality"))
             continue
         if path.startswith(".github/ISSUE_TEMPLATE/") or path in (
-            ".github/workflows/docs.yml",
             ".github/release.yml",
             ".github/CODEOWNERS",
             "LICENSE",
@@ -56,7 +79,7 @@ def classify(paths):
                 selected.add("cpp_format")
             elif path.endswith(".py"):
                 selected.add("python_quality")
-        elif path == "benchmarks/plot_homepage.py":
+        elif path in BENCHMARK_PYTHON_PATHS:
             selected.add("python_quality")
         elif path in (
             "sample/run_cpp.sh",
@@ -113,6 +136,8 @@ def classify(paths):
                 selected.add("cpp_format")
         elif path == "tests/python/test_cpp_clustering_examples.py":
             selected.update(("cpp", "python_quality"))
+        elif path == "tests/python/test_benchmark_protocol.py":
+            selected.add("python_quality")
         elif path.startswith("tests/python/"):
             selected.update(("python_build", "wheels"))
             if path == "tests/python/conftest.py":
@@ -194,7 +219,7 @@ def detect(event_name, event, ref_name):
             )
             # Reuse normal path rules: accompanying lint/support edits must keep
             # their checks, while build-related or unknown inputs remain broad.
-            if companions <= {"python_quality", "shell"}:
+            if companions <= {"python_quality", "shell", "docs"}:
                 return companions | {"python_quality"}
     return selected
 
@@ -208,6 +233,4 @@ if __name__ == "__main__":
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         for group in GROUPS:
             print(f"{group}={str(group in selected).lower()}", file=output)
-    print(
-        "Selected checks:", ", ".join(sorted(selected)) or "none (documentation only)"
-    )
+    print("Selected checks:", ", ".join(sorted(selected)) or "none")
