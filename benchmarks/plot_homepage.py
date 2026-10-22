@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIGURES = ROOT / "docs/docs/benchmarks/figures"
 # These are not matched-memory configurations.
 METHODS = (
-    ("rabitq-ivf-1p4", "IVF · 5-bit", "#635bff"),
-    ("rabitq-hnsw-1p4", "HNSW · 5-bit", "#149eaa"),
+    ("rabitq-ivf-1p4", "IVF-RaBitQ · 5-bit", "#635bff"),
+    ("rabitq-hnsw-1p4", "HNSW-RaBitQ · 5-bit", "#149eaa"),
     ("rabitq-symqg-4", "SymphonyQG · 4-bit", "#e29838"),
 )
 
@@ -81,7 +81,7 @@ def main():
             table.append(
                 f"| {label} | {float(selected['recall_at_10']):.2%} | `{parameter}` |"
             )
-        labels = ["IVF\n5-bit", "HNSW\n5-bit", "SymphonyQG\n4-bit"]
+        labels = ["IVF-RaBitQ\n5-bit", "HNSW-RaBitQ\n5-bit", "SymphonyQG\n4-bit"]
         colors = [m[2] for m in METHODS]
         for ax, numbers, heading, direction, precision in zip(
             axes,

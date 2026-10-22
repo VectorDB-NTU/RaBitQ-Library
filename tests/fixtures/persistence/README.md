@@ -9,11 +9,11 @@ adding a new format or release.
 
 The twelve cases cover L2 and inner product for:
 
-- IVF four-bit legacy files without a header, and raw-vector IVF v1 files;
-- HNSW four-bit files, including persisted removal of point 0;
+- IVF-RaBitQ four-bit legacy files without a header, and raw-vector IVF-RaBitQ v1 files;
+- HNSW-RaBitQ four-bit files, including persisted removal of point 0;
 - SymphonyQG legacy raw files and versioned four/eight-bit files.
 
-IVF also persists removal of point 0. Each file contains 33 points in 65 original
+IVF-RaBitQ also persists removal of point 0. Each file contains 33 points in 65 original
 dimensions and the historical **128-dimensional padded domain**. This differs
 from current construction's 96 dimensions and detects accidental regeneration
 of rotation or padding on load. The `.expected` files hold the point count,
@@ -24,11 +24,11 @@ Tests require identical result IDs and allow distance error of
 `2e-4 * max(1, abs(reference))` in C++, or `rtol=atol=2e-4` in Python, to account
 for compiler and SIMD reductions. The native formats contain `size_t`: these
 fixtures target the supported little-endian, 64-bit platforms, not a portable
-interchange format for arbitrary architectures. Python also tests synthetic IVF
+interchange format for arbitrary architectures. Python also tests synthetic IVF-RaBitQ
 v1 headers around the frozen historical payload, unknown versions, and invalid
 padding. That header test is distinct from release-produced fixtures.
 
-The small IVF fixtures use Flat centroid routing. Current round-trip and failure
+The small IVF-RaBitQ fixtures use Flat centroid routing. Current round-trip and failure
 tests exercise explicit HNSW routing and its sidecar; historical auto-selected
 HNSW routing at 20,000 clusters is not represented by these small fixtures.
 

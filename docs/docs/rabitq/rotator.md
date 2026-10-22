@@ -16,7 +16,7 @@ The default FHT/Kac rotator supports `float` and accepts input dimensions from 6
 for power-of-two blocks through `2^16`. Allocate the
 output using `rotator->size()`, which can exceed the input dimension.
 
-RaBitQKMeans, QGKMeans, SymphonyQG, IVF, and HNSW also use multiples of 32
+RaBitQKMeans, QGKMeans, SymphonyQG, IVF-RaBitQ, and HNSW-RaBitQ also use multiples of 32
 for all their supported bit widths.
 Index loading preserves the padded domain used when the index was built.
 Reducing the padded dimension changes the sampled rotation and quantization even

@@ -1,4 +1,4 @@
-`ivf_legacy_4bit.index` was saved by the IVF implementation before raw-vector
+`ivf_legacy_4bit.index` was saved by the IVF-RaBitQ implementation before raw-vector
 storage was introduced (legacy, unversioned x86-64 format). It contains three
 vectors: `[0, 0, 0]`, `[1, 2, 3]`, and `[-1, -2, -3]`, each zero-padded to
 64 dimensions, in one cluster with a zero centroid, four-bit L2 quantization,
@@ -13,13 +13,13 @@ zero centroid, and the same three vectors above with zeros in all remaining
 coordinates. Their widths are 1 and 32 bits, with L2 distance and FHT/Kac rotation.
 They verify that loading does not substitute the new 96-coordinate default.
 
-The IVF tests also query `q[i] = (i % 9 - 4) / 4` before and after migration.
+The IVF-RaBitQ tests also query `q[i] = (i % 9 - 4) / 4` before and after migration.
 The expected IDs and distances were recorded using the pad64 implementation at
 commit `a065785`, covering nonzero query rotation and quantized distance estimation
 as well as raw-vector reranking.
 
-`hnsw_legacy_padding65_4bit.index` was written before HNSW switched to 32-coordinate
+`hnsw_legacy_padding65_4bit.index` was written before HNSW-RaBitQ switched to 32-coordinate
 padding: dimension 65, padded dimension 128, 4 total bits, L2, capacity 8, M=2,
-ef_construction=8. Its three vectors and zero centroid match the dimension-65 IVF
+ef_construction=8. Its three vectors and zero centroid match the dimension-65 IVF-RaBitQ
 fixtures above. A zero query returns IDs 0, 1, 2 with distances 0, 14, 14. Tests
 check loading, preserving the old padded domain through save/load, and insertion.

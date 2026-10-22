@@ -13,8 +13,8 @@ need refinement. It does not guarantee exact top-k membership or exact distances
 for results that were never reranked; measure the recall/cost trade-off for the workload.
 
 This is an application-level strategy, not a built-in disk-retrieval API.
-HNSW stores quantized vectors, so applications must retain raw vectors separately
-for exact reranking. [IVF raw mode](../index/ivf.md#index-construction)
+HNSW-RaBitQ stores quantized vectors, so applications must retain raw vectors separately
+for exact reranking. [IVF-RaBitQ raw mode](../index/ivf.md#index-construction)
 (`nbits=32`) instead owns the original vectors and reranks them in memory.
 
 ## Algorithm description

@@ -1,6 +1,6 @@
 # Quick start
 
-Build, search, save and reload a small IVF index with Python. This guide describes
+Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
 **0.7.0** and uses synthetic data, so no dataset download is required.
 For C++, go directly to [C++ integration](cpp_integration.md).
 
@@ -18,7 +18,9 @@ Supply data and queries with shape `(count, dim)` in the original dimension.
 Python indexes convert them to contiguous float32 and accept `64 <= dim <= 65536`;
 they rotate and pad internally. See [input requirements](index/usage.md#input-requirements).
 
-## Build and search an IVF index
+<a id="build-and-search-an-ivf-index"></a>
+
+## Build and search an IVF-RaBitQ index
 
 The following complete example uses deterministic synthetic data and does not
 require a dataset download:
@@ -36,7 +38,7 @@ clustering = RaBitQKMeans(
 )
 clustering.train(data)
 
-# IVF requires exactly max_elements rows when building.
+# IVF-RaBitQ requires exactly max_elements rows when building.
 index = IvfIndex(
     dim=64,
     max_elements=len(data),
@@ -60,8 +62,8 @@ squared Euclidean distance, while `metric="ip"` estimates `1 - dot(data, query)`
 Smaller values are better for both metrics. Quantized distances are estimates,
 not exact distances to the original vectors.
 
-IVF and HNSW may return fewer than `k` valid neighbors, for example after removals
-or when the probed IVF clusters contain too few points. Unfilled slots contain
+IVF-RaBitQ and HNSW-RaBitQ may return fewer than `k` valid neighbors, for example after removals
+or when the probed IVF-RaBitQ clusters contain too few points. Unfilled slots contain
 ID `2**32 - 1` and distance `+inf`. Filter them with
 `valid = ids != np.iinfo(np.uint32).max` before using IDs to index your data.
 
@@ -118,15 +120,15 @@ with TemporaryDirectory() as directory:
     np.testing.assert_allclose(loaded_distances, distances)
 ```
 
-The loaded index owns its data and restores the saved rotation. IVF indexes using
+The loaded index owns its data and restores the saved rotation. IVF-RaBitQ indexes using
 HNSW centroid routing also need the accompanying `.hnsw` file; keep it with the
 main index. This small example uses Flat routing and has no sidecar.
 See [file compatibility](index/usage.md#index-file-compatibility) before downgrading.
 
 ## Next steps
 
-- [IVF](index/ivf.md): raw-vector reranking, precision, centroid routing and updates.
-- [HNSW](index/hnsw.md) and [SymphonyQG](index/qg.md): graph-index workflows and parameters.
+- [IVF-RaBitQ](index/ivf.md): raw-vector reranking, precision, centroid routing and updates.
+- [HNSW-RaBitQ](index/hnsw.md) and [SymphonyQG](index/qg.md): graph-index workflows and parameters.
 - [Index usage contracts](index/usage.md): counts, threading, input lifetimes and file paths.
 - [Clustering](clustering.md): choose flat RaBitQKMeans or graph-based QGKMeans.
 - [C++ integration](cpp_integration.md): builds, installation and component selection.

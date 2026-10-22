@@ -18,15 +18,15 @@ refinement iteration. Both HNSW implementations use `M=16` and
 | SymphonyQG raw | `quantization_bits=0`, raw vectors | Degree 32, PIPNN initialization |
 | SymphonyQG 4-bit | `quantization_bits=4` | Degree 32, PIPNN initialization |
 | SymphonyQG 8-bit | `quantization_bits=8` | Degree 32, PIPNN initialization |
-| HNSW RaBitQ 1+4 | `nbits=5` | `M=16`, seed 42, 16 residual centroids |
-| HNSW RaBitQ 1+8 | `nbits=9` | `M=16`, seed 42, 16 residual centroids |
+| HNSW-RaBitQ 1+4 | `nbits=5` | `M=16`, seed 42, 16 residual centroids |
+| HNSW-RaBitQ 1+8 | `nbits=9` | `M=16`, seed 42, 16 residual centroids |
 | Faiss HNSW Flat | `HNSW16` | Float32 vectors |
 | Faiss HNSW SQ4 | `HNSW16_SQ4` | Four-bit scalar quantization |
 | Faiss HNSW SQ8 | `HNSW16_SQ8` | Eight-bit scalar quantization |
 
-HNSW RaBitQ trains 16 centroids with RaBitQKMeans (up to 10 iterations, seed 42,
+HNSW-RaBitQ trains 16 centroids with RaBitQKMeans (up to 10 iterations, seed 42,
 exact final assignment, spherical training for DBpedia's inner-product metric).
-Training is included in construction time. SymphonyQG 4/8-bit and HNSW
+Training is included in construction time. SymphonyQG 4/8-bit and HNSW-RaBitQ
 1+4/1+8 use different encodings; serialized sizes include their full storage costs.
 
 All graph methods sweep `ef=16,32,64,128,256,512,1024` (Faiss calls this
@@ -51,8 +51,8 @@ See [figure definitions](bench.md#reading-the-figures) and
 | SymphonyQG raw | 0.00 | 34.54 | 34.54 | 3.20 | 7.51 |
 | SymphonyQG 4-bit | 0.00 | 37.02 | 37.02 | 1.79 | 4.39 |
 | SymphonyQG 8-bit | 0.00 | 37.85 | 37.85 | 1.99 | 4.84 |
-| HNSW RaBitQ 1+4 | 1.39 | 71.06 | 72.46 | 0.33 | 0.72 |
-| HNSW RaBitQ 1+8 | 1.39 | 77.65 | 79.04 | 0.53 | 1.16 |
+| HNSW-RaBitQ 1+4 | 1.39 | 71.06 | 72.46 | 0.33 | 0.72 |
+| HNSW-RaBitQ 1+8 | 1.39 | 77.65 | 79.04 | 0.53 | 1.16 |
 | Faiss HNSW Flat | 0.00 | 78.94 | 78.94 | 1.61 | 3.71 |
 | Faiss HNSW SQ4 | 1.06 | 55.11 | 56.17 | 0.24 | 0.58 |
 | Faiss HNSW SQ8 | 1.08 | 47.12 | 48.20 | 0.42 | 1.03 |
@@ -70,8 +70,8 @@ See [figure definitions](bench.md#reading-the-figures) and
 | SymphonyQG raw | 0.00 | 53.35 | 53.35 | 5.01 | 11.79 |
 | SymphonyQG 4-bit | 0.00 | 54.93 | 54.93 | 2.73 | 6.80 |
 | SymphonyQG 8-bit | 0.00 | 55.38 | 55.38 | 3.27 | 7.51 |
-| HNSW RaBitQ 1+4 | 1.57 | 112.62 | 114.18 | 0.48 | 1.05 |
-| HNSW RaBitQ 1+8 | 1.74 | 124.84 | 126.58 | 0.79 | 1.76 |
+| HNSW-RaBitQ 1+4 | 1.57 | 112.62 | 114.18 | 0.48 | 1.05 |
+| HNSW-RaBitQ 1+8 | 1.74 | 124.84 | 126.58 | 0.79 | 1.76 |
 | Faiss HNSW Flat | 0.00 | 147.53 | 147.53 | 2.69 | 5.85 |
 | Faiss HNSW SQ4 | 1.74 | 101.82 | 103.57 | 0.36 | 0.85 |
 | Faiss HNSW SQ8 | 1.79 | 80.66 | 82.45 | 0.64 | 1.56 |

@@ -21,7 +21,7 @@ The C++ libraries are static; `BUILD_SHARED_LIBS` does not change their type.
 | --- | --- |
 | `rabitqlib::core` | Encoding, single-vector query/estimation, rotation, packing and essential SIMD |
 | `rabitqlib::fastscan` | Batch layout/packing/encoding, query/LUT/estimation and FastScan/HACC SIMD; depends on core |
-| `rabitqlib::index` | IVF, HNSW, SymphonyQG and clustering; depends on FastScan |
+| `rabitqlib::index` | IVF-RaBitQ, HNSW-RaBitQ, SymphonyQG and clustering; depends on FastScan |
 
 The default C++ build includes all three targets. For numerical components only,
 see [core](#core-only-c-integration) or [FastScan](#fastscan-integration).
@@ -46,8 +46,8 @@ for Linux ARM64, Windows, and Apple Silicon.
 ANN example executables are written to `bin/`. Their source demonstrates complete
 indexing and querying workflows:
 
-- [IVF RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
-- [HNSW RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp)
+- [IVF-RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
+- [HNSW-RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp)
 - [SymphonyQG](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/symqg_indexing.cpp)
 - [Core quantization and distance estimation](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/core/main.cpp)
 

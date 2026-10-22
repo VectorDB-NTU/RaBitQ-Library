@@ -272,7 +272,7 @@ initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
     std::vector<float> est_distance(batch_size);  // store the estimated distances
 
-    // QG scoring returns estimates only. Use the IVF batch format below
+    // QG scoring returns estimates only. Use the IVF-RaBitQ batch format below
     // when error intervals are needed.
 
     rabitqlib::qg_batch_estdist(
@@ -281,13 +281,15 @@ initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
 ```
 
-### Format 4: Split single-vector scoring (HNSW)
+<a id="format-4-split-single-vector-scoring-hnsw"></a>
+
+### Format 4: Split single-vector scoring (HNSW-RaBitQ)
 
 #### Indexing
 
 Store a vector as separate sign and extra-bit codes, with factors for each.
 Score the sign code first, then refine selected candidates using the extra bits.
-HNSW uses this layout.
+HNSW-RaBitQ uses this layout.
 
 ```cpp
 #include <cmath>
@@ -407,12 +409,14 @@ Insert this before `return 0` in the indexing example, reusing its data and dime
     );
 ```
 
-### Format 5: Split batch scoring (IVF)
+<a id="format-5-split-batch-scoring-ivf"></a>
+
+### Format 5: Split batch scoring (IVF-RaBitQ)
 
 #### Indexing
 
 Batch the sign codes for FastScan and store each vector's extra-bit codes
-separately. IVF uses this layout to filter a batch before refining candidates.
+separately. IVF-RaBitQ uses this layout to filter a batch before refining candidates.
 
 ```cpp
 #include <cmath>
@@ -491,7 +495,7 @@ Insert this before `return 0` in the indexing example, reusing its buffers and d
     // `use_hacc = false` - each number in LUTs is quantized into 8 bits.
     // `use_hacc = true` - each number in LUTs is quantized into 16 bits.
     // SplitBatchQuery defaults to HACC; this example selects it explicitly.
-    // IVF instead selects HACC for 4-9 total bits and standard FastScan for
+    // IVF-RaBitQ instead selects HACC for 4-9 total bits and standard FastScan for
     // 1-3 total bits or raw-vector storage, unless the caller overrides it.
 
     rabitqlib::SplitBatchQuery<float> processed_query(

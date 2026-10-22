@@ -22,7 +22,7 @@ Replace `rabitqlib::rabitqlib` with the smallest component needed:
 | --- | --- | --- |
 | `rabitqlib::core` | Encoding, single-vector estimation, rotation and packing | Numerical helpers and essential SIMD |
 | `rabitqlib::fastscan` | Batch layouts, packing/encoding adapters and FastScan/HACC scoring | core |
-| `rabitqlib::index` | IVF, HNSW, SymphonyQG and clustering | fastscan and core |
+| `rabitqlib::index` | IVF-RaBitQ, HNSW-RaBitQ, SymphonyQG and clustering | fastscan and core |
 | `rabitqlib::python` | Existing Python ANN extension; build-tree alias only | index |
 
 The old implementation target `rabitq_headers` is also removed. C++ libraries remain
@@ -106,7 +106,7 @@ integer arguments; pass `METRIC_L2` or `METRIC_IP`.
 
 ### Index headers
 
-IVF, HNSW and SymphonyQG operations now compile into `rabitqlib::index`. Their
+IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG operations now compile into `rabitqlib::index`. Their
 main headers no longer import numerical implementations, search scratch, Eigen
 or hnswlib. This implementation move preserves method signatures and file formats.
 
@@ -120,12 +120,14 @@ Include the types you use explicitly:
 | Internal `SearchScratch` | `index/symqg/detail/search_scratch.hpp` |
 
 Explicit includes of `core/rotator.hpp`, `core/encoder.hpp` and
-`index/ivf/initializer.hpp` still expose their associated types. HNSW backend
+`index/ivf/initializer.hpp` still expose their associated types. HNSW-RaBitQ backend
 search templates are private in `src/index/hnsw_search_impl.hpp`.
 
-### Removed HNSW members
+<a id="removed-hnsw-members"></a>
 
-HNSW no longer exposes `HierarchicalNSW::rawDataPtr_`, `ResultRecord`, `Candidate`,
+### Removed HNSW-RaBitQ members
+
+HNSW-RaBitQ no longer exposes `HierarchicalNSW::rawDataPtr_`, `ResultRecord`, `Candidate`,
 or `BoundedKNN` as public interfaces. The construction pointer and search helpers
 are private implementation details. This is a C++ source compatibility break:
 code that accessed those members must stop doing so. Pass construction input through
@@ -145,7 +147,7 @@ Internal headers have explicit ownership:
 | Core SIMD declarations | `core/detail/simd/` |
 | FastScan SIMD declarations and LUT implementation | `fastscan/detail/` |
 | FastScan batch-encoder adapter | `fastscan/detail/encoder.hpp` |
-| HNSW dispatch, search buffers, visited sets and shared scheduling | `index/detail/` |
+| HNSW-RaBitQ dispatch, search buffers, visited sets and shared scheduling | `index/detail/` |
 | Non-template dispatcher implementation and private resolver | `src/simd/`, `src/fastscan/` and `src/index/` |
 
 The old `simd/*` public paths, `fastscan/{simd,estimator_dispatch,lut}.hpp`,
@@ -155,8 +157,8 @@ operations; direct use of `detail/` binds a caller to that implementation revisi
 Some detail headers must be installed because public templates include them. Installation
 does not turn them into a stable extension API.
 
-HNSW and IVF share `index/detail/parallel_for.hpp`. Callers relying on HNSW
-to import the IVF initializer must include it explicitly. Scheduling behavior
+HNSW-RaBitQ and IVF-RaBitQ share `index/detail/parallel_for.hpp`. Callers relying on HNSW-RaBitQ
+to import the IVF-RaBitQ initializer must include it explicitly. Scheduling behavior
 is unchanged; custom thread-pool and SIMD registration remain unsupported.
 
 ## Unified index counts
@@ -164,15 +166,15 @@ is unchanged; custom thread-pool and SIMD registration remain unsupported.
 All three indexes now share the [count contract](index/usage.md#index-counts)
 in C++ and Python.
 
-Compared with the 0.6.0 Python API, IVF adds `num_points` and `num_stored_points`,
-HNSW adds `num_stored_points`, and SymphonyQG adds `max_elements` and
+Compared with the 0.6.0 Python API, IVF-RaBitQ adds `num_points` and `num_stored_points`,
+HNSW-RaBitQ adds `num_stored_points`, and SymphonyQG adds `max_elements` and
 `num_stored_points`.
 
-**HNSW `num_points` now excludes removed records.** Use `num_stored_points` for
+**HNSW-RaBitQ `num_points` now excludes removed records.** Use `num_stored_points` for
 ID bounds, append offsets, and minimum resize capacity. Use `num_points` for a
 live count, without subtracting a separate deletion counter.
 
-The IVF constructor keyword `max_elements` still specifies the required initial
+The IVF-RaBitQ constructor keyword `max_elements` still specifies the required initial
 build size. SymphonyQG's C++ `num_vertices()` still returns the configured graph
 size for builders. Existing index files need no conversion: loading recovers
 counts from their removal markers.

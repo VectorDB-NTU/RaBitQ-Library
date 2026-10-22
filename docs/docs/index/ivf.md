@@ -1,9 +1,9 @@
-# IVF RaBitQ
+# IVF-RaBitQ
 
 C++ callers include `rabitqlib/index/ivf/ivf.hpp` and link `rabitqlib::index`.
 
 [IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical
-clustering-based ANN method. This implementation stores RaBitQ codes and
+clustering-based ANN method. IVF-RaBitQ stores RaBitQ codes and
 vector IDs, optionally retaining raw vectors for reranking, and uses
 [FastScan](https://dl.acm.org/doi/abs/10.1145/3078971.3078992) to estimate a
 batch of distances. Its actual memory, latency, and recall depend on the bit
@@ -13,7 +13,7 @@ width, number of clusters, and `nprobe`.
 
 ### Python
 
-The [complete Quick Start](../quick_start.md) is the runnable IVF example:
+The [complete Quick Start](../quick_start.md) is the runnable IVF-RaBitQ example:
 train centroids, call `IvfIndex.build`, search, then save and reload the index.
 The update examples below reuse its built `index`.
 
@@ -46,7 +46,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `max_elements` | Python IVF build requires exactly this many rows; `add` grows storage automatically. C++ calls this constructor argument `num_points`. |
+| `max_elements` | Python IVF-RaBitQ build requires exactly this many rows; `add` grows storage automatically. C++ calls this constructor argument `num_points`. |
 | `num_clusters` | Must match the centroid count; every cluster ID must be in `[0, num_clusters)`. |
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
@@ -103,7 +103,7 @@ rabitqlib::load_vecs<PID, gt_type>(cids_file, cids);
 See the [complete indexing example](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
 for argument parsing and the surrounding program.
 
-Then initialize an IVF object with the number of data points, vector
+Then initialize an IVF-RaBitQ object with the number of data points, vector
 dimension, number of clusters, and total bits per dimension. The C++ index
 accepts total quantized bit widths from 1 through 9, or `total_bits=32`
 (Python `nbits=32`) to store raw float32 vectors for reranking.
@@ -148,7 +148,7 @@ auto routing = ivf.initializer_type();
   routing is approximate: pruning can miss a true nearest centroid.
 - `hnsw` searches a graph of float32 centroids approximately.
 
-All choices support L2 and inner product. Flat RaBitQ uses the IVF rotation and
+All choices support L2 and inner product. Flat RaBitQ uses the IVF-RaBitQ rotation and
 padded domain, retains float32 centroids for refinement, and stores its mean and
 codes in the main index file. Its code precision is independent of the index's
 `nbits`. It trades additional code storage and an O(cluster count) query work
@@ -356,7 +356,7 @@ A removed point has its `f_add` value set to `+inf`. That value is the constant
 term of the distance estimate, so the estimated distance and the lower bound of the
 point are `+inf` for every bit width, metric, and SIMD backend. The point never
 enters the result buffer and never triggers reranking. Any code that estimates
-IVF distances must keep this behavior and must never turn `+inf` into NaN.
+IVF-RaBitQ distances must keep this behavior and must never turn `+inf` into NaN.
 
 Search may return fewer than `k` results once points are removed: the missing slots
 hold `kPidMax` (`2**32 - 1` in Python) with an infinite distance, as when the probed
@@ -412,13 +412,13 @@ Extra-bit layouts retain full 64-coordinate blocks and store any final
 
 ### Data layout
 
-IVF stores the following data:
+IVF-RaBitQ stores the following data:
 
 ```c++
 [batch data]    // 1-bit code and factors
 [ex_data]       // code for remaining bits, or original float32 vectors
 [ids]           // PID of vectors (organized by clusters)
-[cluster_lst]   // List of clusters' metadata in IVF
+[cluster_lst]   // List of clusters' metadata in IVF-RaBitQ
 ```
 In raw mode, `ex_data` holds `4 * num_points * dim` bytes in cluster order,
 without padding or extra-bit factors. The one-bit filtering codes and factors

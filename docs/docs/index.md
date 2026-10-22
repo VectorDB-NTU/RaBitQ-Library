@@ -29,7 +29,7 @@ from compact quantization to complete indexes.</p>
 <div class="feature-grid">
   <div class="feature-card">
     <h3><a href="quick_start/">Python quick start &rarr;</a></h3>
-    <p>Install the package, build an IVF index, search it, and save it.</p>
+    <p>Install the package, build an IVF-RaBitQ index, search it, and save it.</p>
   </div>
   <div class="feature-card">
     <h3><a href="cpp_integration/">C++ integration &rarr;</a></h3>
@@ -60,10 +60,10 @@ actual recall and storage budgets differ.
 
 ## Built with RaBitQ-Library
 
-- [txtai](integrations/txtai.md) uses the Python IVF and HNSW indexes as an
+- [txtai](integrations/txtai.md) uses the Python IVF-RaBitQ and HNSW-RaBitQ indexes as an
   embedding-search backend. See how to select the backend and its search settings.
 - [zvec](integrations/zvec.md) uses core quantization in its IVF-RaBitQ and
-  HNSW-RaBitQ implementations, with FastScan batch scoring in IVF. See the
+  HNSW-RaBitQ implementations, with FastScan batch scoring in IVF-RaBitQ. See the
   integration walkthrough for storage, scoring, and platform boundaries.
 
 These are direct library integrations, with versioned downstream source links.
