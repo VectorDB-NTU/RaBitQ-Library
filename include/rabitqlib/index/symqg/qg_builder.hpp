@@ -61,7 +61,6 @@ class QGBuilder {
     static constexpr size_t kMaxCandidatePoolSize = 750;
     static constexpr size_t kMaxPrunedSize = 300;
     std::vector<CandidateList> new_neighbors_;  // new neighbors for current iteration
-    std::vector<CandidateList> pruned_neighbors_;
     std::vector<uint32_t> degrees_;
     uint32_t seed_;  // base seed for graph initialization
     std::optional<BuildCache> cache_;
@@ -69,6 +68,9 @@ class QGBuilder {
     struct BuildWorker {
         VisitedSet visited;
         CandidateList candidates;
+        CandidateList pruned;
+        CandidateList completion_result;
+        CandidateList successful_result;
         std::vector<float> rotated_neighbors;
         std::vector<PID> neighbor_ids;
 
@@ -79,13 +81,13 @@ class QGBuilder {
     const BuildCache* build_cache() const;
     void find_candidates(PID, CandidateList&, VisitedSet&) const;
     void random_init();
-    void search_new_neighbors(bool record_pruned);
-    void heuristic_prune(PID, CandidateList&, CandidateList&, bool record_pruned);
-    void add_reverse_edges(bool record_pruned);
+    void search_new_neighbors();
+    void heuristic_prune(CandidateList&, CandidateList&, CandidateList* recorded);
+    void add_reverse_edges(bool final_pass);
     void add_pruned_edges(
         const CandidateList&, const CandidateList&, CandidateList&, float
     );
-    void complete_degrees();
+    void complete_degree(PID, BuildWorker&);
     void run_pass(bool final_pass);
     void run_passes(size_t);
     void write_row(PID, BuildWorker&);

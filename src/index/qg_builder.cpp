@@ -267,13 +267,11 @@ void QGBuilder::initialize_storage(const float* data) {
     // Allocate refinement scratch after PiPNN releases its dense workspace.
     // Clear old graph-dependent state on reset while retaining vector capacities.
     new_neighbors_.resize(num_nodes_);
-    pruned_neighbors_.resize(num_nodes_);
     reverse_buffer_.resize(num_nodes_);
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
          ++index) {
         const size_t i = static_cast<size_t>(index);
         new_neighbors_[i].clear();
-        pruned_neighbors_[i].clear();
         reverse_buffer_[i].clear();
     }
     if (workers_.empty()) {
@@ -402,7 +400,7 @@ void QGBuilder::add_pruned_edges(
 }
 
 void QGBuilder::heuristic_prune(
-    PID cur_id, CandidateList& pool, CandidateList& pruned_results, bool record_pruned
+    CandidateList& pool, CandidateList& pruned_results, CandidateList* recorded
 ) {
     if (pool.empty()) {
         return;
@@ -439,8 +437,8 @@ void QGBuilder::heuristic_prune(
             auto djk = query.distance_to(pool[k].id);
 
             if (djk < dik) {
-                if (record_pruned && pruned_neighbors_[cur_id].size() < kMaxPrunedSize) {
-                    pruned_neighbors_[cur_id].emplace_back(pool[k]);
+                if (recorded != nullptr && recorded->size() < kMaxPrunedSize) {
+                    recorded->emplace_back(pool[k]);
                 }
                 pruned[k] = true;
             }
@@ -453,9 +451,9 @@ void QGBuilder::heuristic_prune(
 /**
  * @brief search for new neighbor in qg
  *
- * @param record_pruned Record pruned candidates for final degree completion.
+ * Search pruning does not record candidates for final degree completion.
  */
-void QGBuilder::search_new_neighbors(bool record_pruned) {
+void QGBuilder::search_new_neighbors() {
     {
         index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
@@ -506,14 +504,14 @@ void QGBuilder::search_new_neighbors(bool record_pruned) {
 
                 // prune and update qg
                 new_neighbors_[cur_id].reserve(degree_bound_);
-                heuristic_prune(cur_id, candidates, new_neighbors_[cur_id], record_pruned);
+                heuristic_prune(candidates, new_neighbors_[cur_id], /*recorded=*/nullptr);
             } catch (...) { failure.capture(); }
         }
         failure.rethrow();
     }
 }
 
-void QGBuilder::add_reverse_edges(bool record_pruned) {
+void QGBuilder::add_reverse_edges(bool final_pass) {
     std::vector<std::mutex> locks(num_nodes_);
     for (auto& row : reverse_buffer_) {
         row.clear();
@@ -586,7 +584,19 @@ void QGBuilder::add_reverse_edges(bool record_pruned) {
                     new_neighbors_[data_id].end()
                 );
                 std::sort(tmp_pool.begin(), tmp_pool.end());
-                heuristic_prune(data_id, tmp_pool, new_neighbors_[data_id], record_pruned);
+                auto& worker = workers_[static_cast<size_t>(omp_get_thread_num())];
+                worker.pruned.clear();
+                if (final_pass) {
+                    worker.pruned.reserve(kMaxPrunedSize);
+                }
+                heuristic_prune(
+                    tmp_pool, new_neighbors_[data_id], final_pass ? &worker.pruned : nullptr
+                );
+                // Reverse collection has finished. Complete this row against the old
+                // graph before reusing its worker scratch; graph writes stay deferred.
+                if (final_pass) {
+                    complete_degree(data_id, worker);
+                }
             } catch (...) { failure.capture(); }
         }
         failure.rethrow();
@@ -607,7 +617,6 @@ void QGBuilder::random_init() {
             try {
                 const size_t i = static_cast<size_t>(index);
                 new_neighbors_[i].clear();
-                pruned_neighbors_[i].clear();
                 std::mt19937 rng(seed_ ^ static_cast<uint32_t>(i));
                 std::uniform_int_distribution<PID> distribution(min_id, max_id);
                 std::unordered_set<PID> neighbor_set;
@@ -637,110 +646,76 @@ void QGBuilder::random_init() {
     }
 }
 
-/**
- * @brief Complete each vertex's degree to the degree bound (multiple of 32), using
- * pruned candidates and random fallback edges.
- *
- */
-void QGBuilder::complete_degrees() {
-    {
-        index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_threads_) schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
-            }
-            try {
-                const size_t i = static_cast<size_t>(index);
-                CandidateList& cur_neighbors = new_neighbors_[i];
-                size_t cur_degree = cur_neighbors.size();
+// Complete one final-pass row using only this worker's reverse-prune candidates.
+void QGBuilder::complete_degree(PID i, BuildWorker& worker) {
+    CandidateList& cur_neighbors = new_neighbors_[i];
+    size_t cur_degree = cur_neighbors.size();
 
-                // skip vertices with enough neighbors
-                if (cur_degree >= degree_bound_) {
-                    continue;
-                }
-
-                CandidateList& pruned_list = pruned_neighbors_[i];
-                CandidateList new_result;
-                new_result.reserve(degree_bound_);
-
-                std::sort(pruned_list.begin(), pruned_list.end());
-
-                // use binary search to get refined results
-                CandidateList successful_result;
-                successful_result.reserve(degree_bound_);
-                float left = 0.5;
-                float right = 1.0;
-                size_t iter = 0;
-                while (iter++ < kMaxBsIter) {
-                    float mid = (left + right) / 2;
-                    add_pruned_edges(cur_neighbors, pruned_list, new_result, mid);
-                    if (new_result.size() < degree_bound_) {
-                        left = mid;
-                    } else {
-                        right = mid;
-                        successful_result = new_result;
-                    }
-                }
-
-                // Every successful right endpoint was already evaluated at that exact
-                // threshold.
-                if (!successful_result.empty()) {
-                    new_result.swap(successful_result);
-                } else {
-                    add_pruned_edges(cur_neighbors, pruned_list, new_result, right);
-                }
-
-                // if the vertex still doesn't have enough neighbors, use random vertices
-                if (new_result.size() < degree_bound_) {
-                    std::mt19937 rng(seed_ ^ static_cast<uint32_t>(i) ^ 0x80000000U);
-                    std::uniform_int_distribution<PID> distribution(
-                        0, static_cast<PID>(num_nodes_) - 1
-                    );
-                    std::unordered_set<PID> ids;
-                    ids.reserve(degree_bound_);
-                    for (auto& neighbor : new_result) {
-                        ids.emplace(neighbor.id);
-                    }
-                    BuildQuery query(qg_, build_cache());
-                    query.reset(i);
-                    while (new_result.size() < degree_bound_) {
-                        const PID rand_id = distribution(rng);
-                        if (rand_id != static_cast<PID>(i) &&
-                            ids.find(rand_id) == ids.end()) {
-                            new_result.emplace_back(rand_id, query.distance_to(rand_id));
-                            ids.emplace(rand_id);
-                        }
-                    }
-                }
-
-                cur_neighbors = new_result;
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+    // skip vertices with enough neighbors
+    if (cur_degree >= degree_bound_) {
+        return;
     }
+
+    CandidateList& pruned_list = worker.pruned;
+    CandidateList& new_result = worker.completion_result;
+    new_result.reserve(degree_bound_);
+
+    std::sort(pruned_list.begin(), pruned_list.end());
+
+    // use binary search to get refined results
+    CandidateList& successful_result = worker.successful_result;
+    successful_result.clear();
+    successful_result.reserve(degree_bound_);
+    float left = 0.5;
+    float right = 1.0;
+    size_t iter = 0;
+    while (iter++ < kMaxBsIter) {
+        float mid = (left + right) / 2;
+        add_pruned_edges(cur_neighbors, pruned_list, new_result, mid);
+        if (new_result.size() < degree_bound_) {
+            left = mid;
+        } else {
+            right = mid;
+            successful_result = new_result;
+        }
+    }
+
+    // Every successful right endpoint was already evaluated at that exact
+    // threshold.
+    if (!successful_result.empty()) {
+        new_result.swap(successful_result);
+    } else {
+        add_pruned_edges(cur_neighbors, pruned_list, new_result, right);
+    }
+
+    // if the vertex still doesn't have enough neighbors, use random vertices
+    if (new_result.size() < degree_bound_) {
+        std::mt19937 rng(seed_ ^ static_cast<uint32_t>(i) ^ 0x80000000U);
+        std::uniform_int_distribution<PID> distribution(
+            0, static_cast<PID>(num_nodes_) - 1
+        );
+        std::unordered_set<PID> ids;
+        ids.reserve(degree_bound_);
+        for (auto& neighbor : new_result) {
+            ids.emplace(neighbor.id);
+        }
+        BuildQuery query(qg_, build_cache());
+        query.reset(i);
+        while (new_result.size() < degree_bound_) {
+            const PID rand_id = distribution(rng);
+            if (rand_id != static_cast<PID>(i) && ids.find(rand_id) == ids.end()) {
+                new_result.emplace_back(rand_id, query.distance_to(rand_id));
+                ids.emplace(rand_id);
+            }
+        }
+    }
+
+    cur_neighbors = new_result;
 }
 
 void QGBuilder::run_pass(bool final_pass) {
-    if (final_pass) {
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_nodes_);
-             ++index) {
-            const size_t i = static_cast<size_t>(index);
-            pruned_neighbors_[i].clear();
-            pruned_neighbors_[i].reserve(kMaxPrunedSize);
-        }
-    }
-
-    const bool record_pruned = final_pass;
-    search_new_neighbors(record_pruned);
-
-    add_reverse_edges(record_pruned);
-
-    // Only the final pass completes degrees; every pass writes updated rows below.
-    if (final_pass) {
-        complete_degrees();
-    }
+    search_new_neighbors();
+    add_reverse_edges(final_pass);
 
     // update qg
     {
