@@ -6,6 +6,8 @@ hide:
 
 <div class="hero" markdown>
 
+![RaBitQ Library logo](assets/logo.png){ .hero-logo }
+
 <p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
 
 # Compact vectors.<br>Accurate search. { #compact-vector-search-with-rabitq }
