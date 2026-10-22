@@ -27,7 +27,7 @@
     
     
       
-        <title>IVF RaBitQ - RaBitQ Library</title>
+        <title>IVF-RaBitQ - RaBitQ Library</title>
       
     
     
@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -110,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              IVF RaBitQ
+              IVF-RaBitQ
             
           </span>
         </div>
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -987,7 +985,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1005,7 +1003,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1253,7 +1251,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1909,17 +1907,17 @@
   
 
 
-<h1 id="ivf-rabitq">IVF RaBitQ<a class="headerlink" href="#ivf-rabitq" title="Permanent link">&para;</a></h1>
+<h1 id="ivf-rabitq">IVF-RaBitQ<a class="headerlink" href="#ivf-rabitq" title="Permanent link">&para;</a></h1>
 <p>C++ callers include <code>rabitqlib/index/ivf/ivf.hpp</code> and link <code>rabitqlib::index</code>.</p>
 <p><a href="https://dl.acm.org/doi/10.1109/TPAMI.2010.57">IVF</a> is a classical
-clustering-based ANN method. This implementation stores RaBitQ codes and
+clustering-based ANN method. IVF-RaBitQ stores RaBitQ codes and
 vector IDs, optionally retaining raw vectors for reranking, and uses
 <a href="https://dl.acm.org/doi/abs/10.1145/3078971.3078992">FastScan</a> to estimate a
 batch of distances. Its actual memory, latency, and recall depend on the bit
 width, number of clusters, and <code>nprobe</code>.</p>
 <h2 id="minimal-workflow">Minimal workflow<a class="headerlink" href="#minimal-workflow" title="Permanent link">&para;</a></h2>
 <h3 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h3>
-<p>The <a href="../../quick_start/">complete Quick Start</a> is the runnable IVF example:
+<p>The <a href="../../quick_start/">complete Quick Start</a> is the runnable IVF-RaBitQ example:
 train centroids, call <code>IvfIndex.build</code>, search, then save and reload the index.
 The update examples below reuse its built <code>index</code>.</p>
 <h3 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h3>
@@ -1956,7 +1954,7 @@ points and five centroids.</p>
 </tr>
 <tr>
 <td><code>max_elements</code></td>
-<td>Python IVF build requires exactly this many rows; <code>add</code> grows storage automatically. C++ calls this constructor argument <code>num_points</code>.</td>
+<td>Python IVF-RaBitQ build requires exactly this many rows; <code>add</code> grows storage automatically. C++ calls this constructor argument <code>num_points</code>.</td>
 </tr>
 <tr>
 <td><code>num_clusters</code></td>
@@ -2022,7 +2020,7 @@ Eigen aliases and I/O helpers explicitly; <code>ivf.hpp</code> does not import t
 </code></pre></div>
 <p>See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp">complete indexing example</a>
 for argument parsing and the surrounding program.</p>
-<p>Then initialize an IVF object with the number of data points, vector
+<p>Then initialize an IVF-RaBitQ object with the number of data points, vector
 dimension, number of clusters, and total bits per dimension. The C++ index
 accepts total quantized bit widths from 1 through 9, or <code>total_bits=32</code>
 (Python <code>nbits=32</code>) to store raw float32 vectors for reranking.</p>
@@ -2059,7 +2057,7 @@ accepts total quantized bit widths from 1 through 9, or <code>total_bits=32</cod
   routing is approximate: pruning can miss a true nearest centroid.</li>
 <li><code>hnsw</code> searches a graph of float32 centroids approximately.</li>
 </ul>
-<p>All choices support L2 and inner product. Flat RaBitQ uses the IVF rotation and
+<p>All choices support L2 and inner product. Flat RaBitQ uses the IVF-RaBitQ rotation and
 padded domain, retains float32 centroids for refinement, and stores its mean and
 codes in the main index file. Its code precision is independent of the index's
 <code>nbits</code>. It trades additional code storage and an O(cluster count) query work
@@ -2229,7 +2227,7 @@ stored point IDs, so batch removals when possible.</p>
 term of the distance estimate, so the estimated distance and the lower bound of the
 point are <code>+inf</code> for every bit width, metric, and SIMD backend. The point never
 enters the result buffer and never triggers reranking. Any code that estimates
-IVF distances must keep this behavior and must never turn <code>+inf</code> into NaN.</p>
+IVF-RaBitQ distances must keep this behavior and must never turn <code>+inf</code> into NaN.</p>
 <p>Search may return fewer than <code>k</code> results once points are removed: the missing slots
 hold <code>kPidMax</code> (<code>2**32 - 1</code> in Python) with an infinite distance, as when the probed
 clusters hold fewer than <code>k</code> points.</p>
@@ -2271,11 +2269,11 @@ bit width, including raw mode (32). This applies to both rotator types.
 Extra-bit layouts retain full 64-coordinate blocks and store any final
 32-coordinate tail compactly.</p>
 <h3 id="data-layout">Data layout<a class="headerlink" href="#data-layout" title="Permanent link">&para;</a></h3>
-<p>IVF stores the following data:</p>
+<p>IVF-RaBitQ stores the following data:</p>
 <p><div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">[</span><span class="n">batch</span><span class="w"> </span><span class="n">data</span><span class="p">]</span><span class="w">    </span><span class="c1">// 1-bit code and factors</span>
 <a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="p">[</span><span class="n">ex_data</span><span class="p">]</span><span class="w">       </span><span class="c1">// code for remaining bits, or original float32 vectors</span>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="p">[</span><span class="n">ids</span><span class="p">]</span><span class="w">           </span><span class="c1">// PID of vectors (organized by clusters)</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">[</span><span class="n">cluster_lst</span><span class="p">]</span><span class="w">   </span><span class="c1">// List of clusters' metadata in IVF</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">[</span><span class="n">cluster_lst</span><span class="p">]</span><span class="w">   </span><span class="c1">// List of clusters' metadata in IVF-RaBitQ</span>
 </code></pre></div>
 In raw mode, <code>ex_data</code> holds <code>4 * num_points * dim</code> bytes in cluster order,
 without padding or extra-bit factors. The one-bit filtering codes and factors
@@ -2340,13 +2338,13 @@ modes. Search returns the top <code>k</code> results after scanning the selected
         
         
           
-          <a href="../hnsw/" class="md-footer__link md-footer__link--next" aria-label="Next: HNSW RaBitQ">
+          <a href="../hnsw/" class="md-footer__link md-footer__link--next" aria-label="Next: HNSW-RaBitQ">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                HNSW RaBitQ
+                HNSW-RaBitQ
               </div>
             </div>
             <div class="md-footer__button md-icon">

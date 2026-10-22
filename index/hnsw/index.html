@@ -27,7 +27,7 @@
     
     
       
-        <title>HNSW RaBitQ - RaBitQ Library</title>
+        <title>HNSW-RaBitQ - RaBitQ Library</title>
       
     
     
@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -110,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              HNSW RaBitQ
+              HNSW-RaBitQ
             
           </span>
         </div>
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -978,7 +976,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1015,7 +1013,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1033,7 +1031,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -2021,17 +2019,18 @@
   
 
 
-<h1 id="hnsw-rabitq">HNSW RaBitQ<a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h1>
+<h1 id="hnsw-rabitq">HNSW-RaBitQ<a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h1>
 <p>C++ callers include <code>rabitqlib/index/hnsw/hnsw.hpp</code> and link <code>rabitqlib::index</code>.
-<a href="https://arxiv.org/abs/1603.09320">HNSW</a> is a popular graph-based index. Under
-comparable quantization settings, HNSW RaBitQ typically uses more memory
-than IVF RaBitQ because it stores graph structures in addition to quantized
+<a href="https://arxiv.org/abs/1603.09320">HNSW</a> is a popular graph-based index.
+HNSW-RaBitQ combines HNSW graph traversal with RaBitQ quantization. Under
+comparable quantization settings, HNSW-RaBitQ typically uses more memory
+than IVF-RaBitQ because it stores graph structures in addition to quantized
 vectors. The actual comparison depends on vector dimension, bit width, graph
 degree, and index parameters.</p>
 <h2 id="minimal-workflow">Minimal workflow<a class="headerlink" href="#minimal-workflow" title="Permanent link">&para;</a></h2>
 <h3 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h3>
 <p>Run the <a href="../../quick_start/#build-and-search-an-ivf-index">Quick start</a> to prepare
-<code>data</code>, <code>queries</code> and <code>clustering</code>, then use those same arrays with HNSW:</p>
+<code>data</code>, <code>queries</code> and <code>clustering</code>, then use those same arrays with HNSW-RaBitQ:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">HnswIndex</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">index</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="p">(</span>
@@ -2143,7 +2142,7 @@ see the <a href="../../modular_migration/#public-and-implementation-interfaces">
 <li><strong>queries</strong>: Query vectors in the original input coordinates.</li>
 <li><strong>query_num</strong>: The number of query vectors.</li>
 <li><strong>TOPK</strong>: The number of nearest neighbors to search.</li>
-<li><strong>efSearch</strong>: The size of the candidate set for searching HNSW base layer.</li>
+<li><strong>efSearch</strong>: The size of the candidate set for searching HNSW-RaBitQ base layer.</li>
 <li><strong>thread_num</strong>: Number of threads to use. Each query is processed by one thread.</li>
 </ul>
 <p>The search window belongs to each call, so concurrent C++ searches can use
@@ -2251,7 +2250,7 @@ unchanged.</p>
 through 0.5.1 check every cluster ID on <code>load</code> and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.</p>
-<p>New HNSW indexes pad dimensions to multiples of 32 for all supported bit widths.
+<p>New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
 Loading preserves the saved padded dimension and rotation, so older indexes
 using multiples of 64 remain readable. Older library versions cannot load new
 files whose padded dimension is not a multiple of 64.</p>
@@ -2279,7 +2278,7 @@ files whose padded dimension is not a multiple of 64.</p>
 <li>Encapsulate the query into <code>SplitSingleQuery&lt;float&gt;</code> for subsequent search.</li>
 </ol>
 <h4 id="upper-layers">Upper Layers<a class="headerlink" href="#upper-layers" title="Permanent link">&para;</a></h4>
-<p>In the upper layers of HNSW, we compute the 1-bit estimated distance (using <code>BinData</code>) to quickly locate the entry point for the next layer.</p>
+<p>In the upper layers of HNSW-RaBitQ, we compute the 1-bit estimated distance (using <code>BinData</code>) to quickly locate the entry point for the next layer.</p>
 <h4 id="base-layer">Base Layer<a class="headerlink" href="#base-layer" title="Permanent link">&para;</a></h4>
 <p>In the base layer, we apply an adaptive re-ranking strategy:</p>
 <ul>
@@ -2360,7 +2359,7 @@ search results.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../ivf/" class="md-footer__link md-footer__link--prev" aria-label="Previous: IVF RaBitQ">
+          <a href="../ivf/" class="md-footer__link md-footer__link--prev" aria-label="Previous: IVF-RaBitQ">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2370,7 +2369,7 @@ search results.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                IVF RaBitQ
+                IVF-RaBitQ
               </div>
             </div>
           </a>

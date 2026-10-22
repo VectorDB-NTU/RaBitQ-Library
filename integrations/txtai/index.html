@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -976,7 +974,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1004,7 +1002,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1577,7 +1575,7 @@
 
 <h1 id="txtai-using-the-complete-indexes">txtai: using the complete indexes<a class="headerlink" href="#txtai-using-the-complete-indexes" title="Permanent link">&para;</a></h1>
 <p><a href="https://github.com/neuml/txtai">txtai</a> exposes RaBitQ-Library through its
-<code>rabitq</code> ANN backend. Applications can select an IVF or HNSW index within txtai's
+<code>rabitq</code> ANN backend. Applications can select an IVF-RaBitQ or HNSW-RaBitQ index within txtai's
 embedding-search workflow, while txtai handles the surrounding application API
 and result conversion.</p>
 <p>This walkthrough was checked on October 21, 2026 against txtai commit
@@ -1586,7 +1584,7 @@ it is a source snapshot, not a verification of every published txtai package.
 Consult the <a href="https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq">current configuration reference</a> for later changes.</p>
 <h2 id="select-the-backend">Select the backend<a class="headerlink" href="#select-the-backend" title="Permanent link">&para;</a></h2>
 <p>In an existing txtai embeddings configuration, select <code>backend: rabitq</code> and add
-the corresponding settings. This fragment uses four-bit IVF:</p>
+the corresponding settings. This fragment uses four-bit IVF-RaBitQ:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">backend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rabitq</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">rabitq</span><span class="p">:</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ivf</span>
@@ -1597,10 +1595,10 @@ optional dependencies according to <a href="https://neuml.github.io/txtai/instal
 adapter imports both <code>rabitqlib</code> and scikit-learn. The inspected
 <a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/setup.py">package configuration</a> declares <code>rabitqlib&gt;=0.7.0</code> in its <code>ann</code> extra. The fragment above selects
 the backend, rather than providing a complete model-and-data example.</p>
-<p><code>clusters</code> controls the KMeans centroid count in both modes: IVF uses these
-centroids for partitioning, while HNSW uses them for residual quantization.
-<code>nprobe</code> controls how many IVF clusters are searched. For HNSW, select <code>mode: hnsw</code> and use <code>m</code>, <code>efconstruction</code>, and
-<code>efsearch</code>. Both modes accept 1–9 quantization bits; IVF also accepts <code>nbits: 32</code>
+<p><code>clusters</code> controls the KMeans centroid count in both modes: IVF-RaBitQ uses these
+centroids for partitioning, while HNSW-RaBitQ uses them for residual quantization.
+<code>nprobe</code> controls how many IVF-RaBitQ clusters are searched. For HNSW-RaBitQ, select <code>mode: hnsw</code> and use <code>m</code>, <code>efconstruction</code>, and
+<code>efsearch</code>. Both modes accept 1–9 quantization bits; IVF-RaBitQ also accepts <code>nbits: 32</code>
 for original-vector reranking. Measure recall and latency on representative
 queries when choosing precision and search parameters.</p>
 <h2 id="how-the-integration-works">How the integration works<a class="headerlink" href="#how-the-integration-works" title="Permanent link">&para;</a></h2>
@@ -1622,7 +1620,7 @@ queries when choosing precision and search parameters.</p>
 <tr>
 <td>Search</td>
 <td>Selects <code>nprobe</code> or <code>ef</code>, drops missing-result IDs, and converts returned distances to scores with <code>1 - distance</code>.</td>
-<td>Searches the native index and returns IDs and distances; quantized modes return estimates, while IVF raw mode uses original-vector reranking.</td>
+<td>Searches the native index and returns IDs and distances; quantized modes return estimates, while IVF-RaBitQ raw mode uses original-vector reranking.</td>
 </tr>
 <tr>
 <td>Persistence</td>
@@ -1631,7 +1629,7 @@ queries when choosing precision and search parameters.</p>
 </tr>
 <tr>
 <td>Updates</td>
-<td>Routes IVF append/delete requests to the backend.</td>
+<td>Routes IVF-RaBitQ append/delete requests to the backend.</td>
 <td>Adds vectors or removes them from search.</td>
 </tr>
 </tbody>
@@ -1639,10 +1637,10 @@ queries when choosing precision and search parameters.</p>
 <p>This is an example of integrating complete indexes: txtai calls the Python index
 APIs without implementing RaBitQ encoding or graph traversal itself.</p>
 <h2 id="boundaries-to-keep-in-mind">Boundaries to keep in mind<a class="headerlink" href="#boundaries-to-keep-in-mind" title="Permanent link">&para;</a></h2>
-<p>At the inspected revision, txtai enables append/delete only for IVF. Its HNSW
+<p>At the inspected revision, txtai enables append/delete only for IVF-RaBitQ. Its HNSW-RaBitQ
 adapter raises <code>NotImplementedError</code> for append/delete through the
-<a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/src/python/txtai/ann/base.py">ANN base class</a>, even though RaBitQ-Library itself supports HNSW updates.
-IVF additions reuse the original clusters, and deletions retain their storage;
+<a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/src/python/txtai/ann/base.py">ANN base class</a>, even though RaBitQ-Library itself supports HNSW-RaBitQ updates.
+IVF-RaBitQ additions reuse the original clusters, and deletions retain their storage;
 txtai recommends rebuilding when new data differs enough to affect recall.
 See its <a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/docs/embeddings/configuration/ann.md#rabitq">versioned configuration documentation</a> for these limits.</p>
 <p>The adapter requests inner-product search and converts its <code>1 - dot</code> distance
@@ -1652,7 +1650,7 @@ estimates in quantized modes; normalization does not remove quantization error.<
 production deployment scale or a performance gain, and this configuration has
 not been exercised end to end in this documentation update.</p>
 <p>To use the same indexes directly, follow the library's <a href="../../quick_start/">Python quick start</a>
-and <a href="../../index/hnsw/">HNSW guide</a>. To integrate only quantization into your own
+and <a href="../../index/hnsw/">HNSW-RaBitQ guide</a>. To integrate only quantization into your own
 index, see the <a href="../zvec/">zvec walkthrough</a>.</p>
 
 

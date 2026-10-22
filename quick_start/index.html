@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -356,10 +354,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#build-and-search-an-ivf-index" class="md-nav__link">
+  <a href="#build-and-search-an-ivf-rabitq-index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Build and search an IVF index
+        Build and search an IVF-RaBitQ index
       
     </span>
   </a>
@@ -1089,7 +1087,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1117,7 +1115,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1560,10 +1558,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#build-and-search-an-ivf-index" class="md-nav__link">
+  <a href="#build-and-search-an-ivf-rabitq-index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Build and search an IVF index
+        Build and search an IVF-RaBitQ index
       
     </span>
   </a>
@@ -1640,7 +1638,7 @@
 
 
 <h1 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h1>
-<p>Build, search, save and reload a small IVF index with Python. This guide describes
+<p>Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
 <strong>0.7.0</strong> and uses synthetic data, so no dataset download is required.
 For C++, go directly to <a href="../cpp_integration/">C++ integration</a>.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
@@ -1652,7 +1650,8 @@ See <a href="../installation/">installation</a> for platform details and source 
 <p>Supply data and queries with shape <code>(count, dim)</code> in the original dimension.
 Python indexes convert them to contiguous float32 and accept <code>64 &lt;= dim &lt;= 65536</code>;
 they rotate and pad internally. See <a href="../index/usage/#input-requirements">input requirements</a>.</p>
-<h2 id="build-and-search-an-ivf-index">Build and search an IVF index<a class="headerlink" href="#build-and-search-an-ivf-index" title="Permanent link">&para;</a></h2>
+<p><a id="build-and-search-an-ivf-index"></a></p>
+<h2 id="build-and-search-an-ivf-rabitq-index">Build and search an IVF-RaBitQ index<a class="headerlink" href="#build-and-search-an-ivf-rabitq-index" title="Permanent link">&para;</a></h2>
 <p>The following complete example uses deterministic synthetic data and does not
 require a dataset download:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -1667,7 +1666,7 @@ require a dataset download:</p>
 <a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="p">)</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">clustering</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 <a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># IVF requires exactly max_elements rows when building.</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="c1"># IVF-RaBitQ requires exactly max_elements rows when building.</span>
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">index</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="p">(</span>
 <a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">dim</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
 <a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">max_elements</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
@@ -1688,8 +1687,8 @@ existing ones. Results are ordered by increasing distance: <code>metric="l2"</co
 squared Euclidean distance, while <code>metric="ip"</code> estimates <code>1 - dot(data, query)</code>.
 Smaller values are better for both metrics. Quantized distances are estimates,
 not exact distances to the original vectors.</p>
-<p>IVF and HNSW may return fewer than <code>k</code> valid neighbors, for example after removals
-or when the probed IVF clusters contain too few points. Unfilled slots contain
+<p>IVF-RaBitQ and HNSW-RaBitQ may return fewer than <code>k</code> valid neighbors, for example after removals
+or when the probed IVF-RaBitQ clusters contain too few points. Unfilled slots contain
 ID <code>2**32 - 1</code> and distance <code>+inf</code>. Filter them with
 <code>valid = ids != np.iinfo(np.uint32).max</code> before using IDs to index your data.</p>
 <p>The <code>metric</code> argument accepts <code>"l2"</code> and <code>"ip"</code> (also <code>"innerproduct"</code>). For
@@ -1734,14 +1733,14 @@ when keeping an index.</p>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">np</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_array_equal</span><span class="p">(</span><span class="n">loaded_ids</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">np</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_allclose</span><span class="p">(</span><span class="n">loaded_distances</span><span class="p">,</span> <span class="n">distances</span><span class="p">)</span>
 </code></pre></div>
-<p>The loaded index owns its data and restores the saved rotation. IVF indexes using
+<p>The loaded index owns its data and restores the saved rotation. IVF-RaBitQ indexes using
 HNSW centroid routing also need the accompanying <code>.hnsw</code> file; keep it with the
 main index. This small example uses Flat routing and has no sidecar.
 See <a href="../index/usage/#index-file-compatibility">file compatibility</a> before downgrading.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../index/ivf/">IVF</a>: raw-vector reranking, precision, centroid routing and updates.</li>
-<li><a href="../index/hnsw/">HNSW</a> and <a href="../index/qg/">SymphonyQG</a>: graph-index workflows and parameters.</li>
+<li><a href="../index/ivf/">IVF-RaBitQ</a>: raw-vector reranking, precision, centroid routing and updates.</li>
+<li><a href="../index/hnsw/">HNSW-RaBitQ</a> and <a href="../index/qg/">SymphonyQG</a>: graph-index workflows and parameters.</li>
 <li><a href="../index/usage/">Index usage contracts</a>: counts, threading, input lifetimes and file paths.</li>
 <li><a href="../clustering/">Clustering</a>: choose flat RaBitQKMeans or graph-based QGKMeans.</li>
 <li><a href="../cpp_integration/">C++ integration</a>: builds, installation and component selection.</li>

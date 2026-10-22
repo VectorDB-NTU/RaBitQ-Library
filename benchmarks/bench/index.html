@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -976,7 +974,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1004,7 +1002,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -2011,7 +2009,7 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
 <p><a href="../figures/qps-recall-points.csv">Query CSV</a> · <a href="../figures/indexing.csv">Indexing CSV</a> ·
 <a href="../figures/kmeans.csv">K-means CSV</a></p>
 <h2 id="homepage-selection">Homepage selection<a class="headerlink" href="#homepage-selection" title="Permanent link">&para;</a></h2>
-<p>The homepage shows IVF/HNSW at 5 total bits (one sign bit plus four extra bits)
+<p>The homepage shows IVF-RaBitQ/HNSW-RaBitQ at 5 total bits (one sign bit plus four extra bits)
 and SymphonyQG at 4 bits. For each GIST1M configuration, the QPS bar selects
 the fastest measured setting with Recall@10 &gt;= 90%, without interpolation.
 Actual recall and total storage differ; this is neither an exact-recall nor an
@@ -2029,12 +2027,12 @@ equal-memory comparison. The tables below identify the selected CSV rows.</p>
 </thead>
 <tbody>
 <tr>
-<td>IVF · 5-bit</td>
+<td>IVF-RaBitQ · 5-bit</td>
 <td style="text-align: right;">92.85%</td>
 <td><code>nprobe=128</code></td>
 </tr>
 <tr>
-<td>HNSW · 5-bit</td>
+<td>HNSW-RaBitQ · 5-bit</td>
 <td style="text-align: right;">92.56%</td>
 <td><code>ef=512</code></td>
 </tr>
@@ -2051,7 +2049,7 @@ equal-memory comparison. The tables below identify the selected CSV rows.</p>
 and one query per call. Each setting has one timing pass. QPS includes Python
 call overhead after warm-up and excludes loading. Index size is serialized
 storage including sidecars, not resident or peak RAM.
-See <a href="../ivf/">IVF results</a> and <a href="../graphs/">graph results</a> for full curves,
+See <a href="../ivf/">IVF-RaBitQ results</a> and <a href="../graphs/">graph results</a> for full curves,
 construction costs, and additional precision/storage configurations.</p>
 
 

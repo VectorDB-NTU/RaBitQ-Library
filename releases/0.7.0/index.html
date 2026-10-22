@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -1075,7 +1073,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1103,7 +1101,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1629,8 +1627,8 @@ with caller-owned code buffers and workspace, separate factors, and no heap
 allocation on valid calls. API version 1.0 is independent of package version 0.7.0.
 Advanced templates and index APIs are not covered by this stability guarantee.</p>
 <h3 id="index-counts-in-c-and-python">Index counts in C++ and Python<a class="headerlink" href="#index-counts-in-c-and-python" title="Permanent link">&para;</a></h3>
-<p>IVF, HNSW and SymphonyQG share <code>max_elements</code>, <code>num_stored_points</code> and <code>num_points</code>
-for capacity, stored records and live points respectively. <strong>HNSW's <code>num_points</code>
+<p>IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG share <code>max_elements</code>, <code>num_stored_points</code> and <code>num_points</code>
+for capacity, stored records and live points respectively. <strong>HNSW-RaBitQ's <code>num_points</code>
 now excludes removed records.</strong> Use <code>num_stored_points</code> for ID bounds, append
 offsets and minimum resize capacity. See the
 <a href="../../modular_migration/#unified-index-counts">count migration details</a>.</p>

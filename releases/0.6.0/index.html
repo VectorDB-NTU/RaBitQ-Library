@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -537,10 +535,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ivf-routing-and-saved-files" class="md-nav__link">
+  <a href="#ivf-rabitq-routing-and-saved-files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        IVF routing and saved files
+        IVF-RaBitQ routing and saved files
       
     </span>
   </a>
@@ -1097,7 +1095,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1125,7 +1123,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1580,10 +1578,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ivf-routing-and-saved-files" class="md-nav__link">
+  <a href="#ivf-rabitq-routing-and-saved-files" class="md-nav__link">
     <span class="md-ellipsis">
       
-        IVF routing and saved files
+        IVF-RaBitQ routing and saved files
       
     </span>
   </a>
@@ -1654,7 +1652,7 @@
 
 
 <h1 id="rabitq-library-060">RaBitQ Library 0.6.0<a class="headerlink" href="#rabitq-library-060" title="Permanent link">&para;</a></h1>
-<p>This release adds concurrent Python index searches, configurable IVF centroid
+<p>This release adds concurrent Python index searches, configurable IVF-RaBitQ centroid
 routing, and 32-coordinate padding. It upgrades Eigen to 5.0.1 and stops
 propagating optimization flags to CMake consumers.</p>
 <h2 id="upgrading-from-052">Upgrading from 0.5.2<a class="headerlink" href="#upgrading-from-052" title="Permanent link">&para;</a></h2>
@@ -1664,14 +1662,15 @@ construction, updates, and file I/O. Searches, saves, and property reads may run
 together. Updates require exclusive access; conflicts immediately raise
 <code>RuntimeError("Index is busy: conflicting operation in progress")</code>.
 Applications that relied on the GIL to serialize access must coordinate updates.</p>
-<p>Keep input arrays unchanged until each call returns. HNSW's Python <code>ef</code> remains
+<p>Keep input arrays unchanged until each call returns. HNSW-RaBitQ's Python <code>ef</code> remains
 optional; SymphonyQG's remains required. With a Python thread pool, consider
 <code>num_threads=1</code> to avoid multiplying native worker pools. Concurrent saves need
 distinct paths, including sidecars. See the
 <a href="../../index/usage/#threading-and-file-paths">threading contract</a>.</p>
 <p>C++ callers must synchronize mutations themselves. SymphonyQG adds
 <code>search_batch_with_ef()</code> for per-call windows; existing search APIs remain available.</p>
-<h3 id="ivf-routing-and-saved-files">IVF routing and saved files<a class="headerlink" href="#ivf-routing-and-saved-files" title="Permanent link">&para;</a></h3>
+<p><a id="ivf-routing-and-saved-files"></a></p>
+<h3 id="ivf-rabitq-routing-and-saved-files">IVF-RaBitQ routing and saved files<a class="headerlink" href="#ivf-rabitq-routing-and-saved-files" title="Permanent link">&para;</a></h3>
 <p>Python's <code>initializer</code> accepts <code>"auto"</code>, <code>"flat"</code>, <code>"flat_rabitq"</code>, or <code>"hnsw"</code>;
 C++ provides the corresponding <code>InitializerType</code>. New indexes using <code>auto</code> select:</p>
 <table>
@@ -1699,17 +1698,17 @@ C++ provides the corresponding <code>InitializerType</code>. New indexes using <
 <p>Flat RaBitQ and HNSW routing are approximate, so rebuilding with <code>auto</code> can change
 recall and latency. To retain the previous routing policy, select Flat below
 20,000 clusters and HNSW otherwise.</p>
-<p>New IVF saves use <code>RABQIDX1</code> version 2 and record the resolved initializer.
+<p>New IVF-RaBitQ saves use <code>RABQIDX1</code> version 2 and record the resolved initializer.
 <strong>Older releases cannot read these files.</strong> Current readers support legacy
 quantized files, raw v1 files, and <code>RABQIDX1</code> v1 files, retaining historical routing
 rules where needed. Keep the <code>.hnsw</code> sidecar with HNSW-routed indexes.
-See the <a href="../../index/ivf/">IVF format guide</a>.</p>
+See the <a href="../../index/ivf/">IVF-RaBitQ format guide</a>.</p>
 <h3 id="padding-and-historical-compatibility">Padding and historical compatibility<a class="headerlink" href="#padding-and-historical-compatibility" title="Permanent link">&para;</a></h3>
 <p>New indexes and clustering pad dimensions to multiples of 32. Loading preserves
 the saved padding and rotation, including historical 64-coordinate padding.
-Older HNSW and SymphonyQG readers that require multiples of 64 cannot load
+Older HNSW-RaBitQ and SymphonyQG readers that require multiples of 64 cannot load
 new files whose stored padding is not divisible by 64.</p>
-<p>Tests cover frozen v0.5.2 IVF, HNSW, and raw/quantized SymphonyQG files under L2
+<p>Tests cover frozen v0.5.2 IVF-RaBitQ, HNSW-RaBitQ, and raw/quantized SymphonyQG files under L2
 and inner product, including queries, resave/load migration, and malformed files.
 This coverage does not guarantee compatibility with every historical format.
 Keep original files if you may need to downgrade. See the
@@ -1728,7 +1727,7 @@ this setting and runtime dispatch.</p>
 <ul>
 <li>Thread-count detection accounts for Linux CPU affinity and supported OpenMP placement settings.
   Clustering reduces parallelism in short graph-building phases.</li>
-<li>HNSW construction/insertion error handling and allocation-failure tests are improved.</li>
+<li>HNSW-RaBitQ construction/insertion error handling and allocation-failure tests are improved.</li>
 <li>Linux packages include GNU OpenMP license and exception texts.</li>
 <li>Benchmark results and reproduction protocols are documented with their software versions.</li>
 </ul>

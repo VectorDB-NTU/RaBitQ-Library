@@ -92,8 +92,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="RaBitQ Library" class="md-header__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../assets/logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -230,8 +229,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="RaBitQ Library" class="md-nav__button md-logo" aria-label="RaBitQ Library" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2v6h2.28l1.29 8H4v6h6v-1.94l5-.01V22h6v-6h-1.83L20 9h2V3h-6v3.53L14.8 8H9.59L8 5.82V2M4 4h2v2H4m14-1h2v2h-2M6.31 8h.8L9 10.59V14h6v-3.09L16.57 9H18l-.84 7H15v2.06h-5V16H7.6m3.4-6h2v2h-2m-5 6h2v2H6m11-2h2v2h-2"/></svg>
+  <img src="../assets/logo.png" alt="logo">
 
     </a>
     RaBitQ Library
@@ -787,10 +785,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#removed-hnsw-members" class="md-nav__link">
+  <a href="#removed-hnsw-rabitq-members" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Removed HNSW members
+        Removed HNSW-RaBitQ members
       
     </span>
   </a>
@@ -1130,7 +1128,7 @@
   <span class="md-ellipsis">
     
   
-    IVF RaBitQ
+    IVF-RaBitQ
   
 
     
@@ -1158,7 +1156,7 @@
   <span class="md-ellipsis">
     
   
-    HNSW RaBitQ
+    HNSW-RaBitQ
   
 
     
@@ -1646,10 +1644,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#removed-hnsw-members" class="md-nav__link">
+  <a href="#removed-hnsw-rabitq-members" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Removed HNSW members
+        Removed HNSW-RaBitQ members
       
     </span>
   </a>
@@ -1753,7 +1751,7 @@ Rebuild C++ consumers against 0.7.0; no cross-version C++ binary ABI is promised
 </tr>
 <tr>
 <td><code>rabitqlib::index</code></td>
-<td>IVF, HNSW, SymphonyQG and clustering</td>
+<td>IVF-RaBitQ, HNSW-RaBitQ, SymphonyQG and clustering</td>
 <td>fastscan and core</td>
 </tr>
 <tr>
@@ -1861,7 +1859,7 @@ they are not implicitly frozen by that promise.</p>
 <p>Query metric arguments use <code>MetricType</code>. <code>SplitSingleQuery</code> no longer accepts
 integer arguments; pass <code>METRIC_L2</code> or <code>METRIC_IP</code>.</p>
 <h3 id="index-headers">Index headers<a class="headerlink" href="#index-headers" title="Permanent link">&para;</a></h3>
-<p>IVF, HNSW and SymphonyQG operations now compile into <code>rabitqlib::index</code>. Their
+<p>IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG operations now compile into <code>rabitqlib::index</code>. Their
 main headers no longer import numerical implementations, search scratch, Eigen
 or hnswlib. This implementation move preserves method signatures and file formats.</p>
 <p>Include the types you use explicitly:</p>
@@ -1892,10 +1890,11 @@ or hnswlib. This implementation move preserves method signatures and file format
 </tbody>
 </table>
 <p>Explicit includes of <code>core/rotator.hpp</code>, <code>core/encoder.hpp</code> and
-<code>index/ivf/initializer.hpp</code> still expose their associated types. HNSW backend
+<code>index/ivf/initializer.hpp</code> still expose their associated types. HNSW-RaBitQ backend
 search templates are private in <code>src/index/hnsw_search_impl.hpp</code>.</p>
-<h3 id="removed-hnsw-members">Removed HNSW members<a class="headerlink" href="#removed-hnsw-members" title="Permanent link">&para;</a></h3>
-<p>HNSW no longer exposes <code>HierarchicalNSW::rawDataPtr_</code>, <code>ResultRecord</code>, <code>Candidate</code>,
+<p><a id="removed-hnsw-members"></a></p>
+<h3 id="removed-hnsw-rabitq-members">Removed HNSW-RaBitQ members<a class="headerlink" href="#removed-hnsw-rabitq-members" title="Permanent link">&para;</a></h3>
+<p>HNSW-RaBitQ no longer exposes <code>HierarchicalNSW::rawDataPtr_</code>, <code>ResultRecord</code>, <code>Candidate</code>,
 or <code>BoundedKNN</code> as public interfaces. The construction pointer and search helpers
 are private implementation details. This is a C++ source compatibility break:
 code that accessed those members must stop doing so. Pass construction input through
@@ -1934,7 +1933,7 @@ change does not alter persisted indexes or the Python API.</p>
 <td><code>fastscan/detail/encoder.hpp</code></td>
 </tr>
 <tr>
-<td>HNSW dispatch, search buffers, visited sets and shared scheduling</td>
+<td>HNSW-RaBitQ dispatch, search buffers, visited sets and shared scheduling</td>
 <td><code>index/detail/</code></td>
 </tr>
 <tr>
@@ -1949,19 +1948,19 @@ paths are removed. Callers using these internals should migrate to supported mod
 operations; direct use of <code>detail/</code> binds a caller to that implementation revision.
 Some detail headers must be installed because public templates include them. Installation
 does not turn them into a stable extension API.</p>
-<p>HNSW and IVF share <code>index/detail/parallel_for.hpp</code>. Callers relying on HNSW
-to import the IVF initializer must include it explicitly. Scheduling behavior
+<p>HNSW-RaBitQ and IVF-RaBitQ share <code>index/detail/parallel_for.hpp</code>. Callers relying on HNSW-RaBitQ
+to import the IVF-RaBitQ initializer must include it explicitly. Scheduling behavior
 is unchanged; custom thread-pool and SIMD registration remain unsupported.</p>
 <h2 id="unified-index-counts">Unified index counts<a class="headerlink" href="#unified-index-counts" title="Permanent link">&para;</a></h2>
 <p>All three indexes now share the <a href="../index/usage/#index-counts">count contract</a>
 in C++ and Python.</p>
-<p>Compared with the 0.6.0 Python API, IVF adds <code>num_points</code> and <code>num_stored_points</code>,
-HNSW adds <code>num_stored_points</code>, and SymphonyQG adds <code>max_elements</code> and
+<p>Compared with the 0.6.0 Python API, IVF-RaBitQ adds <code>num_points</code> and <code>num_stored_points</code>,
+HNSW-RaBitQ adds <code>num_stored_points</code>, and SymphonyQG adds <code>max_elements</code> and
 <code>num_stored_points</code>.</p>
-<p><strong>HNSW <code>num_points</code> now excludes removed records.</strong> Use <code>num_stored_points</code> for
+<p><strong>HNSW-RaBitQ <code>num_points</code> now excludes removed records.</strong> Use <code>num_stored_points</code> for
 ID bounds, append offsets, and minimum resize capacity. Use <code>num_points</code> for a
 live count, without subtracting a separate deletion counter.</p>
-<p>The IVF constructor keyword <code>max_elements</code> still specifies the required initial
+<p>The IVF-RaBitQ constructor keyword <code>max_elements</code> still specifies the required initial
 build size. SymphonyQG's C++ <code>num_vertices()</code> still returns the configured graph
 size for builders. Existing index files need no conversion: loading recovers
 counts from their removal markers.</p>
