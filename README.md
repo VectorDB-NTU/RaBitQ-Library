@@ -1,28 +1,12 @@
 <div align="center">
 
-<h1>RaBitQ Library</h1>
-
-<h3>Compact vector quantization and search with RaBitQ.</h3>
-
-<p>
-  Build and query vectors with IVF, HNSW, and SymphonyQG,<br>
-  or integrate RaBitQ quantization into your own search engine.<br>
-  C++17 components and Python bindings.
-</p>
+<p><img src="docs/docs/assets/logo.png" alt="RaBitQ Library logo" width="800"></p>
 
 <p>
   <a href="https://pypi.org/project/rabitqlib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/rabitqlib.svg?cacheSeconds=300"></a>
   <a href="https://pypi.org/project/rabitqlib/"><img alt="Python versions" src="https://img.shields.io/badge/python-3.11--3.14-3776AB.svg?logo=python&amp;logoColor=white"></a>
   <a href="https://vectordb-ntu.github.io/RaBitQ-Library/"><img alt="Documentation" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/docs.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
-</p>
-
-<p>
-  <a href="#vector-indexes">Vector indexes</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#quantization-components">Quantization components</a> ·
-  <a href="https://vectordb-ntu.github.io/RaBitQ-Library/">Documentation</a> ·
-  <a href="#adoption-and-resources">Adoption and resources</a>
 </p>
 
 </div>
