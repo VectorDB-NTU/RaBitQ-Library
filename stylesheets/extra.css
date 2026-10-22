@@ -78,6 +78,13 @@ body { -webkit-font-smoothing: antialiased; }
   padding-inline: 1rem;
 }
 .md-content__inner:has(.hero) { max-width: none; }
+.hero .hero-logo {
+  display: block;
+  width: 100%;
+  max-width: 800px;
+  height: auto;
+  margin: 0 auto 1.5rem;
+}
 .md-typeset { font-size: .82rem; line-height: 1.65; }
 .md-typeset > p { margin: 1em 0 1.15em; }
 
