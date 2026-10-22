@@ -26,40 +26,43 @@ L2 ground truth for OpenAI.
 | CPU | One Intel Xeon Gold 6418H, 24 cores, 48 hardware threads |
 | Construction / clustering | 48 threads |
 | Query throughput | 1 process, 1 search thread, 1 query per call |
-| Platform | Ubuntu 22.04, x86-64; RaBitQ 0.7.0: Linux 6.8.0-138-generic; historical baselines: Linux 6.8.0-84-generic |
+| Platform | Ubuntu 22.04, x86-64; RaBitQ 0.7.1: Linux 6.8.0-138-generic; retained baselines: Linux 6.8.0-84-generic |
 | Python / NumPy | 3.13.15 / 2.5.2 |
-| Compiler / CMake | RaBitQ 0.7.0: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; historical baselines: GCC 13.1.0 / 3.28.3, Release |
-| RaBitQ-Library | 0.7.0, measured 2026-10-13 |
+| Compiler / CMake | RaBitQ 0.7.1: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; retained baselines: GCC 13.1.0 / 3.28.3, Release |
+| RaBitQ-Library | 0.7.1, measured 2026-10-23 (Asia/Singapore) |
 | Baselines | Faiss 1.15.0, SuperKMeans 0.2.0; Intel MKL 2020.4, GNU OpenMP |
 
 ## Package installation
 
-The RaBitQ-Library rows and curves were refreshed on 2026-10-13 using 0.7.0.
-The measurement checkout was `de793e8a978a51a7031efefe96573043e8251bb7`;
-the installed wheel was built from `0c7578126b84e08b98816c0e01f0824a0a79525f`,
-which has the same source tree. The measured extension SHA-256 was
-`48560860ef4ddc6d929e53a36afd233de3569dcce74d6c46338a11a1113c9ed4`.
+The RaBitQ-Library rows and curves were refreshed on 2026-10-23 (Asia/Singapore)
+using a locally built 0.7.1 wheel. The measurement checkout was
+`1f2a271fea16afabee63a96cf15ecbb3ff1c3723`, with only the package versions in
+`CMakeLists.txt` and `pyproject.toml` changed from 0.7.0 to 0.7.1 before building.
+The SHA-256 of that `git diff --binary` snapshot was
+`c678630e695c45434b1c5296c8b37404abc66f1739a97d9ffe7550f41de68432`.
+The measured extension SHA-256 was
+`c80b90dc666006c5bdcf9884e445da288b8f280f53232d0560c1ff55d4a06d4d`.
 
-Faiss and SuperKMeans measurements are retained unchanged from the historical
+The latest available Faiss and SuperKMeans measurements are retained unchanged from
 snapshot `a332c1ce97588aaed4f6a8a5476f84a81f947313`; they were not rerun.
 The baseline configurations, search grids and timing definitions are unchanged.
 These comparisons combine separate measurement sessions and different compiler
 and kernel versions, as recorded above; they are not a controlled measurement
 of the effect of upgrading RaBitQ alone.
 
-To use the source tree measured for 0.7.0, start in a separate checkout and
+To use the measured library source, start in a separate checkout and
 activate your benchmark Python environment:
 
 ```bash
 git clone --no-checkout https://github.com/VectorDB-NTU/RaBitQ-Library.git RaBitQ-benchmark-snapshot
 cd RaBitQ-benchmark-snapshot
-git checkout --detach de793e8a978a51a7031efefe96573043e8251bb7
+git checkout --detach 1f2a271fea16afabee63a96cf15ecbb3ff1c3723
 ```
 
-For the historical results labeled 0.5.2, use snapshot
-`a332c1ce97588aaed4f6a8a5476f84a81f947313` instead. That snapshot does not
-identify the original measurement binaries, whose exact reproduction remains
-unverified. For any new measurement, record the source commit, local changes,
+Set the two package version declarations to 0.7.1 to reproduce the wheel metadata;
+the library code is unchanged from that commit. The retained baseline snapshot
+does not identify its original measurement binaries, whose exact reproduction
+remains unverified. For any new measurement, record the source commit, local changes,
 compiler and build options, and use a separate output directory.
 
 Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
@@ -79,7 +82,7 @@ in the active environment. Both baselines link to MKL with GNU OpenMP. Build log
 and verification records are saved in `build/benchmark-baselines/`.
 Use `--dry-run` to preview installation commands. The installer defaults to the
 historical GCC 13 toolchain; it does not recreate the GCC 14.3.0 wheel used for
-the 0.7.0 measurements. Match the recorded compiler and native-optimization
+the 0.7.1 measurements. Match the recorded compiler and native-optimization
 setting when comparing new library timings.
 
 ## Construction and search settings
@@ -121,10 +124,11 @@ checks are outside construction timing.
 Each method has one build or fit per dataset; results do not measure run-to-run
 variation.
 The committed CSVs support checking the displayed tables and plotted points,
-but do not include raw run logs or measurement binaries. The 0.7.0 raw records,
+but do not include raw run logs or measurement binaries. The 0.7.1 raw records,
 logs and indexes are retained locally under
-`results/benchmarks-0.7.0-20261013-2239/`, including the run manifest and the
-provenance of the reused local OpenAI dataset. Historical baseline raw logs and
+`results/benchmarks-0.7.1-20261023/`. The source/build manifest, wheel hashes,
+validation logs and execution status are retained in the local release task records.
+Historical baseline raw logs and
 binaries are not included. No run-to-run or shared-host noise correction is
 applied. The experiments in the cited papers are separate measurements.
 
@@ -194,13 +198,13 @@ equal-memory comparison. The tables below identify the selected CSV rows.
 
 | Configuration | Measured Recall@10 | Selected search setting |
 | --- | ---: | --- |
-| IVF-RaBitQ · 5-bit | 92.85% | `nprobe=128` |
-| HNSW-RaBitQ · 5-bit | 92.56% | `ef=512` |
-| SymphonyQG · 4-bit | 90.69% | `ef=512` |
+| IVF-RaBitQ · 5-bit | 92.82% | `nprobe=128` |
+| HNSW-RaBitQ · 5-bit | 92.70% | `ef=512` |
+| SymphonyQG · 4-bit | 90.36% | `ef=512` |
 
 <!-- homepage-selection:end -->
 
-The figures use the 0.7.0 measurements described above, with one search thread
+The figures use the 0.7.1 measurements described above, with one search thread
 and one query per call. Each setting has one timing pass. QPS includes Python
 call overhead after warm-up and excludes loading. Index size is serialized
 storage including sidecars, not resident or peak RAM.

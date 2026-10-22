@@ -47,7 +47,7 @@ def main():
         fig.text(
             0.065,
             0.88,
-            "Fastest measured QPS at Recall@10 ≥ 90% · RaBitQ-Library 0.7.0",
+            "Fastest measured QPS at Recall@10 ≥ 90% · RaBitQ-Library 0.7.1",
             color="#475569",
             fontsize=12,
         )
