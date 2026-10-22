@@ -3,13 +3,7 @@ name: Documentation
 on:
   push:
     branches: ["main"]
-    paths:
-      - "docs/**"
-      - ".github/workflows/docs.yml"
   pull_request:
-    paths:
-      - "docs/**"
-      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 concurrency:
@@ -20,7 +14,12 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   build:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs == 'true') }}
     name: Build documentation
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -35,6 +34,25 @@ jobs:
         run: python -m pip install -r docs/requirements.txt
       - name: Build documentation
         run: mkdocs build --strict --config-file docs/mkdocs.yml
+
+  docs-result:
+    name: Documentation validation
+    needs: [changes, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require selected documentation build
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCS_SELECTED: ${{ needs.changes.outputs.docs }}
+          MATRIX_RESULT: ${{ needs.build.result }}
+        run: |
+          if [ "$CHANGES_RESULT" = success ] && [ "$DOCS_SELECTED" = false ]; then
+            test "$MATRIX_RESULT" = skipped || test "$MATRIX_RESULT" = success
+          else
+            test "$MATRIX_RESULT" = success
+          fi
 
   deploy:
     name: Deploy documentation

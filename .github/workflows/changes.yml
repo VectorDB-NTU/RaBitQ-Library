@@ -5,6 +5,8 @@ on:
     outputs:
       benchmarks:
         value: ${{ jobs.detect.outputs.benchmarks }}
+      docs:
+        value: ${{ jobs.detect.outputs.docs }}
       cpp:
         value: ${{ jobs.detect.outputs.cpp }}
       cpp_format:
@@ -29,6 +31,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       benchmarks: ${{ steps.paths.outputs.benchmarks }}
+      docs: ${{ steps.paths.outputs.docs }}
       cpp: ${{ steps.paths.outputs.cpp }}
       cpp_format: ${{ steps.paths.outputs.cpp_format }}
       cpp_tidy: ${{ steps.paths.outputs.cpp_tidy }}

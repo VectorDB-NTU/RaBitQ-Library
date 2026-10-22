@@ -28,6 +28,7 @@ class MatrixSummaryTest(unittest.TestCase):
                 "python_build",
                 "PYTHON_SELECTED",
             ),
+            ("docs.yml", "docs-result", "build", "docs", "DOCS_SELECTED"),
         ):
             workflow = (WORKFLOWS / filename).read_text()
             block = re.search(

@@ -10,11 +10,13 @@ only the affected job groups:
 
 | Changes | Checks |
 | --- | --- |
-| Documentation and Markdown only | Documentation workflow for `docs/`; no C++ or Python builds |
+| Documentation and Markdown only | Documentation build for `docs/`; no C++ or Python builds; the documentation summary is always emitted |
 | Issue forms/configuration and CODEOWNERS | No C++/Python builds |
 | `benchmarks/core/`, `benchmarks/hotpaths/` code/build files | Ubuntu benchmark build and bounded smoke tests; C++ formatting or Python lint as applicable, without the wheel/platform matrix for benchmark-only edits |
 | `.github/workflows/test.yaml` | C++ checks, ShellCheck, Python quality (including summary-job tests), and benchmark smoke |
-| `benchmarks/plot_homepage.py` | Python lint, including the plotting script; no index or wheel builds |
+| Known root benchmark Python scripts | Python lint and dataset-independent benchmark protocol tests; no index or wheel builds |
+| `tests/python/test_benchmark_protocol.py` | Python lint and benchmark protocol tests; no index or wheel builds |
+| `.github/workflows/docs.yml` | Documentation build and Python quality checks for workflow regression tests |
 | `sample/run_cpp.sh`, `sample/run_python.sh` | ShellCheck, including these runners |
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
@@ -46,9 +48,9 @@ change detection fails, so a detection error cannot silently waive a check.
 Release tags and manual wheel builds always run the full wheel build. CI
 routing edits run the full relevant matrix on pull requests. After an already
 released version reaches `main`, a push containing routing edits avoids repeated
-platform builds only when all accompanying files select at most Python quality
-checks and ShellCheck under the normal path rules. Python lint and selector tests
-always run in this case, and any accompanying shell checks are retained. For
+platform builds only when all accompanying files select at most Python quality,
+ShellCheck, and documentation checks under the normal path rules. Python lint and
+selector tests always run in this case, and any accompanying shell checks are retained. For
 example, routing plus `scripts/check-python.sh` runs Python quality and ShellCheck;
 routing plus library code, build configuration, wheel-related inputs or unknown
 paths keeps the full selection. PR routing checks remain broad. An untagged version on `main` still forces full C++ and Python CI,
@@ -64,9 +66,33 @@ No dataset download, timing threshold, or performance comparison is run.
 
 The job also runs for shared library sources/headers, root/CMake build settings,
 Python bindings/package configuration, and changes to the Test workflow. Other
-unrecognized benchmark paths retain conservative full selection. The hot-path
-Python scripts are included in Python lint. This is Linux build/functionality
-coverage, not a performance result or proof of every SIMD backend executing.
+unrecognized benchmark paths retain conservative full selection. All benchmark
+Python scripts are included in Python lint. Known root Python drivers and their
+protocol tests select the existing `Python formatting and linting` job, which
+also runs `tests/python/test_benchmark_protocol.py` with NumPy and pytest. These
+tests need no native package build, external dataset, or baseline installation.
+This is Linux build/functionality coverage, not a performance result or proof of
+every SIMD backend executing.
+
+## Documentation and concurrency gates
+
+The documentation workflow runs on every PR and main push. Its changed-file
+output selects the strict MkDocs build for documentation changes; manual runs
+also build. `Documentation validation` always reports a result, accepting a
+skipped build only when change detection succeeded and did not select docs.
+Selected build failures, cancellations, and unexpected skips fail this summary.
+Only successful push builds can deploy the documentation.
+
+After the updated workflow is merged and the selected-build and intentional-skip
+paths have been verified on GitHub, add `Documentation validation` to main's
+required status checks, preserving existing contexts and their app IDs. Until
+that remote update is applied, the documentation failure is not a required merge
+gate. Do not require the conditional `Build documentation` job or a workflow
+filtered out by paths: missing check names can leave unrelated PRs pending.
+
+Test and Python workflow concurrency groups use the PR number, so unrelated
+forks using the same branch name do not cancel each other. Push runs keep their
+commit-specific groups, and release serialization is unchanged.
 
 ## Matrix summary checks
 
