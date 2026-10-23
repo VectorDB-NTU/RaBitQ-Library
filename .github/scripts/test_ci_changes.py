@@ -115,6 +115,8 @@ class ChangeSelectionTest(unittest.TestCase):
         cases = {
             "tests/unit/rabitqlib/index/ivf_test.cpp": {"cpp", "cpp_format"},
             "tests/dispatch/fastscan_no_simd_test.cpp": {"cpp", "cpp_format"},
+            "tests/allocation/core_api_no_alloc.cpp": {"cpp", "cpp_format"},
+            "tests/failures/construction_failure_test.cpp": {"cpp", "cpp_format"},
             "sample/cpp/ivf_rabitq_querying.cpp": {"cpp", "cpp_format"},
             "python_bindings/ivf_bindings.cpp": {
                 "benchmarks",

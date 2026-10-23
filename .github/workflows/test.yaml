@@ -187,9 +187,14 @@ jobs:
       CC: clang-23
       CXX: clang++-23
       OMP_NUM_THREADS: "2"
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-clang
+      - name: Install compiler cache
+        run: |
+          sudo apt-get install -y ccache
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
       - name: Configure portable build
         run: >-
           cmake -S . -B build-clang -G Ninja
@@ -217,6 +222,9 @@ jobs:
           -DWORK_DIR="$RUNNER_TEMP/rabitq-clang-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -P tests/core_consumer/run.cmake
+      - name: Report compiler cache statistics
+        if: ${{ always() }}
+        run: ccache --show-stats
 
   clang-result:
     name: Clang validation
@@ -370,9 +378,21 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Install Apple OpenMP
-        if: runner.os == 'macOS' && matrix.openmp == 'ON'
-        run: brew install libomp
+      - name: Install Linux compiler cache
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y ccache
+      - name: Install Apple compiler cache and optional OpenMP
+        if: runner.os == 'macOS'
+        run: |
+          brew install ccache
+          if [ "${{ matrix.openmp }}" = ON ]; then
+            brew install libomp
+          fi
+      - name: Configure compiler cache
+        if: runner.os != 'Windows'
+        run: |
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
       - name: Test external core-only integrations (Linux)
         if: runner.os == 'Linux'
         run: >-
@@ -398,6 +418,9 @@ jobs:
           "-DWORK_DIR=$env:RUNNER_TEMP/rabitq-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -P tests/core_consumer/run.cmake
+      - name: Report compiler cache statistics
+        if: ${{ always() && runner.os != 'Windows' }}
+        run: ccache --show-stats
 
   core-consumer-result:
     name: Core and FastScan validation

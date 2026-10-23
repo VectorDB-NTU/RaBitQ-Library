@@ -22,6 +22,7 @@ only the affected job groups:
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
 | C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
+| `tests/allocation/`, `tests/failures/` | C++ formatting and platform tests, including sanitizer and allocation-failure coverage; no Python builds or wheels |
 | Compiled Python bindings | C++ formatting and clang-tidy, plus Python builds and wheel tests |
 | Python tests | Python lint, source-install smoke tests, and wheel tests |
 | `tests/python/test_cpp_clustering_examples.py` | Python lint and C++ checks; examples run in the Ubuntu job |
@@ -45,6 +46,13 @@ Python example checks and wheels. Other unrecognized paths keep the full fallbac
 Pushes compare the complete pushed range; pull requests compare against
 their base. Renames and deletions are included. Relevant jobs also run if
 change detection fails, so a detection error cannot silently waive a check.
+
+Linux and macOS core/FastScan consumer jobs and the Clang matrix use a job-local
+`ccache` through CMake's compiler launcher. Independent producer, installed-package,
+`add_subdirectory`, and FetchContent builds and tests are retained; identical
+compilations can reuse compiler output within the job. Cache statistics are printed
+after testing. Compiler caches are not uploaded or shared between workflow runs.
+Windows keeps its existing build path without a compiler cache.
 
 Release tags and manual wheel builds always run the full wheel build. CI
 routing edits run the full relevant matrix on pull requests. After an already
