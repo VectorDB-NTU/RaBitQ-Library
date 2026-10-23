@@ -160,6 +160,8 @@ class PrLabelsTest(unittest.TestCase):
     def test_workflow_uses_metadata_only_and_routes_to_regression_checks(self):
         text = WORKFLOW.read_text()
         self.assertIn("pull_request_target:", text)
+        self.assertIn("  pull-requests: write\n", text)
+        self.assertIn("  issues: write\n", text)
         self.assertIn("types: [opened, edited, reopened, ready_for_review]", text)
         self.assertNotIn("actions/checkout", text)
         self.assertNotIn("${{", SCRIPT)
