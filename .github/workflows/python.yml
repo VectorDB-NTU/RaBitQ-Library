@@ -59,8 +59,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y cmake
+      - name: Verify runner CMake
+        run: cmake --version
 
       - name: Upgrade pip
         run: pip install --upgrade pip
@@ -136,8 +136,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - name: Install system dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y cmake
+      - name: Verify runner CMake
+        run: cmake --version
       - name: Install comparison dependencies
         run: python -m pip install ".[test]" faiss-cpu
       - name: Test comparison script

@@ -1,10 +1,16 @@
 name: Set up Clang 23
 description: Install the pinned compiler, analysis, formatting and OpenMP tools on Ubuntu.
+inputs:
+  format-only:
+    description: Install only clang-format for formatting checks.
+    default: "false"
 runs:
   using: composite
   steps:
     - name: Install LLVM 23 tools
       shell: bash
+      env:
+        FORMAT_ONLY: ${{ inputs.format-only }}
       run: |
         set -euo pipefail
         # shellcheck source=/dev/null
@@ -14,7 +20,15 @@ runs:
         echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.asc] https://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-23 main" \
           | sudo tee /etc/apt/sources.list.d/llvm-23.list >/dev/null
         sudo apt-get update -qq
-        sudo apt-get install -y clang-23 clang-format-23 clang-tidy-23 libomp-23-dev cmake ninja-build
-        clang++-23 --version
+        packages=(clang-format-23)
+        if [[ "$FORMAT_ONLY" != true ]]; then
+          packages+=(clang-23 clang-tidy-23 libomp-23-dev)
+        fi
+        sudo apt-get install -y "${packages[@]}"
         clang-format-23 --version
-        clang-tidy-23 --version
+        if [[ "$FORMAT_ONLY" != true ]]; then
+          clang++-23 --version
+          clang-tidy-23 --version
+          cmake --version
+          ninja --version
+        fi
