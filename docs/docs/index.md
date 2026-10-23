@@ -6,7 +6,7 @@ hide:
 
 <div class="hero" markdown>
 
-![RaBitQ Library logo](assets/logo.png){ .hero-logo }
+![RaBitQ Library logo](assets/logo.svg){ .hero-logo }
 
 <p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
 

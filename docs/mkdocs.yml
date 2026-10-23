@@ -45,7 +45,7 @@ theme:
   name: material
   language: en
   font: false
-  logo: assets/logo.png
+  logo: assets/logo.svg
   icon:
     repo: fontawesome/brands/github
   palette:
