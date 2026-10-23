@@ -126,6 +126,8 @@ def classify(paths):
                     "tests/unit/",
                     "tests/integration/",
                     "tests/dispatch/",
+                    "tests/allocation/",
+                    "tests/failures/",
                     "tests/common/",
                     "tests/consumer/",
                     "tests/core_consumer/",

@@ -15,6 +15,74 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class WorkflowContractsTest(unittest.TestCase):
+    def test_format_checker_propagates_file_list_failures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            (root / "bin").mkdir()
+            git = root / "bin/git"
+            git.write_text(f"#!{sys.executable}\nprint({str(root)!r})\n")
+            git.chmod(0o755)
+            formatter = root / "bin/formatter"
+            log = root / "formatted.json"
+            formatter.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "from pathlib import Path\n"
+                "if sys.argv[1:] == ['--version']:\n"
+                "    print('clang-format version 23.1.4')\n"
+                "else:\n"
+                "    Path(os.environ['FORMAT_LOG']).write_text(json.dumps(sys.argv[1:]))\n"
+                "    sys.exit(int(os.environ.get('FORMAT_STATUS', '0')))\n"
+            )
+            formatter.chmod(0o755)
+            env = dict(
+                os.environ,
+                PATH=str(root / "bin") + os.pathsep + os.environ["PATH"],
+                CLANG_FORMAT=str(formatter),
+                FORMAT_LOG=str(log),
+            )
+            helper = root / "scripts/clang-format-files.sh"
+            filename = str(root / "space and\nnewline.cpp")
+            for mode, content, status, expected in (
+                ("missing", None, "0", False),
+                ("failed", "sys.exit(7)\n", "0", False),
+                (
+                    "partial",
+                    f"sys.stdout.write({filename!r} + '\\0')\nsys.exit(7)\n",
+                    "0",
+                    False,
+                ),
+                ("empty", "sys.exit(0)\n", "0", True),
+                ("valid", f"sys.stdout.write({filename!r} + '\\0')\n", "0", True),
+                (
+                    "format-error",
+                    f"sys.stdout.write({filename!r} + '\\0')\n",
+                    "1",
+                    False,
+                ),
+            ):
+                with self.subTest(mode=mode):
+                    if content is not None:
+                        helper.write_text(f"#!{sys.executable}\nimport sys\n" + content)
+                        helper.chmod(0o755)
+                    log.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", str(ROOT / "scripts/check-format.sh")],
+                        env=dict(env, FORMAT_STATUS=status),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode == 0, expected, result.stderr)
+                    if mode in ("valid", "format-error"):
+                        self.assertEqual(
+                            json.loads(log.read_text()),
+                            ["--dry-run", "--Werror", filename],
+                        )
+                    else:
+                        self.assertFalse(log.exists())
+
     def test_benchmark_support_changes_keep_protocol_coverage_without_builds(self):
         for path in sorted((ROOT / "benchmarks").glob("*.py")):
             with self.subTest(path=path.name):

@@ -17,7 +17,14 @@ if [[ "$($formatter --version)" != *"version 23."* ]]; then
     exit 1
 fi
 
-mapfile -d '' files < <("$repo_root/scripts/clang-format-files.sh" "$@")
+# Process substitution would discard the file-list helper's exit status.
+file_list="$(mktemp)"
+trap 'rm -f -- "$file_list"' EXIT
+if ! "$repo_root/scripts/clang-format-files.sh" "$@" > "$file_list"; then
+    echo "error: could not list files for formatting" >&2
+    exit 1
+fi
+mapfile -d '' files < "$file_list"
 
 if printf '%s\n' "${files[@]}" \
     | grep -q '/include/rabitqlib/third/'; then

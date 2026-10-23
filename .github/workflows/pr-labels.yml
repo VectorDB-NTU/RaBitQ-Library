@@ -9,7 +9,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  pull-requests: read
+  # PR label assignment/removal and repository label creation need separate scopes.
+  pull-requests: write
   issues: write
 
 jobs:
