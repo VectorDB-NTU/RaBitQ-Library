@@ -142,6 +142,10 @@ In your PR, describe:
 - The commands you ran and their results, including failures or unavailable checks.
 - Any compatibility implications or performance measurements relevant to the change.
 
+Use a title such as `fix(ivf): correct append metadata` or
+`docs: clarify installation`. The prefix automatically selects the release-note
+category; see the [title and label mapping](../docs/maintaining.md#pull-request-labels-and-release-notes).
+
 **CI and merge requirements:** CI selects jobs from the changed files and may
 run broader checks than your focused local tests. Core library and binding changes
 require the full [static analysis check](../docs/development.md#static-analysis) before merging.

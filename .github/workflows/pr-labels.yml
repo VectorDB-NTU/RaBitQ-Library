@@ -1,0 +1,65 @@
+name: Classify pull request
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, ready_for_review]
+
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  pull-requests: read
+  issues: write
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Metadata only: never check out or execute the PR's code here.
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const repo = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            // Fetch current state so queued events cannot restore an old title's label.
+            const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: issue_number });
+            const categories = {
+              feat: 'added', fix: 'fixed', perf: 'performance', docs: 'documentation',
+              ci: 'build', build: 'build', deps: 'dependencies',
+              chore: 'maintenance', refactor: 'maintenance', test: 'maintenance',
+              style: 'maintenance',
+            };
+            const managed = new Set(Object.values(categories).map(value => `release:${value}`));
+            const match = /^(feat|fix|perf|docs|ci|build|deps|chore|refactor|test|style)(?:\([^()\r\n]+\))?!?:\s+\S/.exec(pr.title);
+            const target = match ? `release:${categories[match[1]]}` : null;
+            const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              ...repo, issue_number, per_page: 100,
+            });
+            if (target && !labels.some(label => label.name === target)) {
+              try {
+                await github.rest.issues.getLabel({ ...repo, name: target });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                try {
+                  await github.rest.issues.createLabel({
+                    ...repo, name: target, color: 'ededed',
+                    description: 'Release category managed from the PR title',
+                  });
+                } catch (creationError) {
+                  // Another PR may have created the same repository label.
+                  if (creationError.status !== 422) throw creationError;
+                  await github.rest.issues.getLabel({ ...repo, name: target });
+                }
+              }
+              await github.rest.issues.addLabels({ ...repo, issue_number, labels: [target] });
+            }
+            for (const label of labels) {
+              if (managed.has(label.name) && label.name !== target) {
+                await github.rest.issues.removeLabel({ ...repo, issue_number, name: label.name });
+              }
+            }
+            if (!target) {
+              core.warning('Unrecognized PR title prefix; add a release label manually or use the documented title convention.');
+            }

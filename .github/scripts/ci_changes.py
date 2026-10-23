@@ -60,6 +60,9 @@ def classify(paths):
         if path == ".github/workflows/docs.yml":
             selected.update(("docs", "python_quality"))
             continue
+        if path == ".github/workflows/pr-labels.yml":
+            selected.add("python_quality")
+            continue
         if path.startswith(".github/ISSUE_TEMPLATE/") or path in (
             ".github/release.yml",
             ".github/CODEOWNERS",
