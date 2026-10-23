@@ -17,6 +17,7 @@ only the affected job groups:
 | Known root benchmark Python scripts | Python lint and dataset-independent benchmark protocol tests; no index or wheel builds |
 | `tests/python/test_benchmark_protocol.py` | Python lint and benchmark protocol tests; no index or wheel builds |
 | `.github/workflows/docs.yml` | Documentation build and Python quality checks for workflow regression tests |
+| `.github/workflows/pr-labels.yml` | Python quality, including metadata-classification regression tests |
 | `sample/run_cpp.sh`, `sample/run_python.sh` | ShellCheck, including these runners |
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
@@ -146,16 +147,48 @@ python -m unittest discover -s .github/scripts -p 'test_*.py'
 
 ## Pull request labels and release notes
 
-GitHub generates categorized release notes from merged pull requests. Before
-merging, maintainers should apply the label that best describes the change:
+GitHub generates categorized release notes from merged pull requests using
+[the release configuration](../.github/release.yml). The
+[classification workflow](../.github/workflows/pr-labels.yml) reads the current
+PR title when a PR is opened, edited, reopened, or marked ready for review:
 
-| Label | Release note category |
-| --- | --- |
-| `enhancement` | Added |
-| `bug` | Fixed |
-| `documentation` | Documentation |
-| `python` | Python |
-| `dependencies` | Dependencies |
+| Title prefix | Automatic label | Release note category |
+| --- | --- | --- |
+| `feat:` | `release:added` | Added |
+| `fix:` | `release:fixed` | Fixed |
+| `perf:` | `release:performance` | Performance |
+| `docs:` | `release:documentation` | Documentation |
+| `ci:`, `build:` | `release:build` | Build and CI |
+| `deps:` | `release:dependencies` | Dependencies |
+| `chore:`, `refactor:`, `test:`, `style:` | `release:maintenance` | Maintenance |
 
-Pull requests without one of these labels appear under `Other changes`. Pull
-requests labeled `duplicate` or `invalid` are omitted from release notes.
+Use lowercase prefixes and a nonempty summary, for example
+`fix(ivf): update only affected clusters`. A scope and a `!` marker before the
+colon are optional. The marker does not change the category or authorize a
+breaking change; compatibility decisions still follow the project rules.
+For dependency-only changes, use `deps:` rather than `chore(deps):`.
+
+The workflow creates its repository labels as needed and updates only the
+listed `release:*` labels. Renaming a PR replaces its old automatic category;
+other labels are preserved. Unrecognized titles produce a workflow warning and
+clear any previous automatic category. They do not block a contribution.
+Before merging, check the title and resulting label, especially for mixed changes.
+
+Manual labels remain supported: `enhancement`, `bug`, `performance`,
+`documentation`, `build`/`ci`, `python`, and `dependencies`. They map to Added,
+Fixed, Performance, Documentation, Build and CI, Python, and Dependencies,
+respectively. If labels match several categories, the first matching category
+in the release configuration wins; keep manual and automatic labels consistent.
+PRs without a matching label appear under `Other changes`. Labels `duplicate`
+or `invalid` exclude a PR from release notes.
+
+The classifier uses `pull_request_target` so fork PRs can be labeled. It reads
+GitHub metadata only and never checks out or executes PR code. Keep PR titles
+as data; never interpolate them into executable workflow expressions.
+Local classifier tests execute the workflow's JavaScript with Node.js and mocked
+GitHub APIs through the automation unittest command above.
+
+The workflow becomes active after merging into the default branch. It does not
+backfill historical PRs or update published releases. Before a version-bump PR
+is merged, review the upcoming PR labels and prepare any user-facing highlights:
+automatic categories organize the PR list but do not write a release summary.

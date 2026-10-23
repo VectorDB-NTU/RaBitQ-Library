@@ -7,15 +7,29 @@ changelog:
   categories:
     - title: Added
       labels:
+        - release:added
         - enhancement
 
     - title: Fixed
       labels:
+        - release:fixed
         - bug
+
+    - title: Performance
+      labels:
+        - release:performance
+        - performance
 
     - title: Documentation
       labels:
+        - release:documentation
         - documentation
+
+    - title: Build and CI
+      labels:
+        - release:build
+        - build
+        - ci
 
     - title: Python
       labels:
@@ -23,7 +37,12 @@ changelog:
 
     - title: Dependencies
       labels:
+        - release:dependencies
         - dependencies
+
+    - title: Maintenance
+      labels:
+        - release:maintenance
 
     - title: Other changes
       labels:
