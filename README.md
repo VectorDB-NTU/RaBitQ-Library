@@ -57,7 +57,7 @@ actual recall and storage budgets differ.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.7.0"
+python -m pip install --upgrade "rabitqlib>=0.7.1"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
