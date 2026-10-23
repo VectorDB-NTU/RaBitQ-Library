@@ -1,4 +1,5 @@
 # Run with -DRABITQ_SOURCE_DIR=<checkout> -DWORK_DIR=<external directory> -P run.cmake.
+# Optional -DRABITQ_COMPONENT=core|fastscan selects one independent partition.
 cmake_minimum_required(VERSION 3.20)
 if(NOT RABITQ_SOURCE_DIR OR NOT WORK_DIR)
     message(FATAL_ERROR "RABITQ_SOURCE_DIR and WORK_DIR are required")
@@ -26,7 +27,15 @@ endif()
 if(DEFINED OpenMP_ROOT)
     list(APPEND configure_options "-DOpenMP_ROOT=${OpenMP_ROOT}")
 endif()
-foreach(component IN ITEMS core fastscan)
+# Windows CI runs the two independent component checks on separate runners.
+set(components core fastscan)
+if(DEFINED RABITQ_COMPONENT)
+    if(NOT RABITQ_COMPONENT IN_LIST components)
+        message(FATAL_ERROR "RABITQ_COMPONENT must be core or fastscan")
+    endif()
+    set(components "${RABITQ_COMPONENT}")
+endif()
+foreach(component IN LISTS components)
     set(scan OFF)
     if(component STREQUAL "fastscan")
         set(scan ON)
@@ -87,6 +96,12 @@ foreach(component IN ITEMS core fastscan)
     endforeach()
 endforeach()
 
+# The core partition owns the core-only rejection checks and core benchmark.
+if(NOT "core" IN_LIST components)
+    message(STATUS "FastScan external consumers passed")
+    return()
+endif()
+
 # Configuration must fail early for combinations that cannot provide full functionality.
 execute_process(COMMAND "${CMAKE_COMMAND}" -S "${RABITQ_SOURCE_DIR}"
     -B "${WORK_DIR}/invalid-python" -DRABITQ_BUILD_INDEX=OFF
@@ -138,4 +153,4 @@ run("${CMAKE_COMMAND}" -S "${RABITQ_SOURCE_DIR}/benchmarks/core"
 run("${CMAKE_COMMAND}" --build "${WORK_DIR}/benchmark" --config Release --parallel 2)
 run("${CMAKE_CTEST_COMMAND}" --test-dir "${WORK_DIR}/benchmark" -C Release
     --output-on-failure)
-message(STATUS "Core and FastScan external consumers and core benchmark passed")
+message(STATUS "External consumers and core benchmark passed for: ${components}")
