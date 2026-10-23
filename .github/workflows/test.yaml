@@ -22,6 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-clang
+        with:
+          format-only: "true"
       - name: Check formatting
         run: ./scripts/check-format.sh
 
@@ -111,7 +113,8 @@ jobs:
           python-version: "3.11"
       - name: Install build dependencies
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+          cmake --version
+          ninja --version
           python -m pip install "numpy>=1.23" "pybind11>=2.12"
       - name: Configure benchmark targets only
         run: >-
@@ -140,8 +143,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Verify runner build tools
+        run: |
+          cmake --version
+          ninja --version
       - name: Configure
         run: cmake -S . -B build -G Ninja -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build
@@ -251,6 +256,9 @@ jobs:
     name: Windows x86-64 (VS 2026)
     runs-on: windows-2025-vs2026
     timeout-minutes: 45
+    env:
+      # MSBuild's project parallelism alone does not parallelize source files.
+      CL: /MP2
     steps:
       - uses: actions/checkout@v7
       - name: Configure
@@ -278,8 +286,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Install dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Verify runner build tools
+        run: |
+          cmake --version
+          ninja --version
       # Keep assertions/debug symbols while avoiding unoptimized sanitizer loops.
       - name: Configure
         run: >-
@@ -317,8 +327,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - name: Install dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - name: Verify runner build tools
+        run: |
+          cmake --version
+          ninja --version
       - name: Build RaBitQ-Library with portable tests
         run: |
           cmake -S . -B build-install -G Ninja \
@@ -413,6 +425,7 @@ jobs:
         env:
           CMAKE_GENERATOR: Visual Studio 18 2026
           CMAKE_GENERATOR_PLATFORM: x64
+          CL: /MP2
         run: >-
           cmake "-DRABITQ_SOURCE_DIR=$PWD"
           "-DWORK_DIR=$env:RUNNER_TEMP/rabitq-core"
