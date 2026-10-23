@@ -176,6 +176,52 @@ class WorkflowContractsTest(unittest.TestCase):
                     group(template, 0, "b", filename),
                 )
 
+    def test_windows_consumers_cover_each_component_and_openmp_mode(self):
+        workflow = (ROOT / ".github/workflows/test.yaml").read_text()
+        block = workflow.split("  core-consumer:\n", 1)[1].split(
+            "  core-consumer-result:\n", 1
+        )[0]
+        variants = re.findall(
+            r'- os: windows-2025-vs2026\n\s+openmp: "(ON|OFF)"'
+            r"\n\s+component: (core|fastscan)",
+            block,
+        )
+        self.assertCountEqual(
+            variants,
+            [
+                (mode, component)
+                for mode in ("ON", "OFF")
+                for component in ("core", "fastscan")
+            ],
+        )
+        windows = block.split(
+            "      - name: Test external core-only integrations (Windows)\n", 1
+        )[1].split("      - name: Report compiler cache statistics", 1)[0]
+        self.assertIn("-DRABITQ_COMPONENT=${{ matrix.component }}", windows)
+
+    def test_component_partition_rejects_unknown_or_empty_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for component in ("unknown", ""):
+                with self.subTest(component=component):
+                    result = subprocess.run(
+                        [
+                            "cmake",
+                            f"-DRABITQ_SOURCE_DIR={ROOT}",
+                            f"-DWORK_DIR={directory}",
+                            f"-DRABITQ_COMPONENT={component}",
+                            "-P",
+                            str(ROOT / "tests/core_consumer/run.cmake"),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(
+                        "RABITQ_COMPONENT must be core or fastscan", result.stderr
+                    )
+                    self.assertFalse(list(Path(directory).iterdir()))
+
     def test_documentation_summary_is_available_for_non_doc_prs(self):
         text = (ROOT / ".github/workflows/docs.yml").read_text()
         triggers = text.split("concurrency:", 1)[0]

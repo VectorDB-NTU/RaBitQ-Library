@@ -78,6 +78,14 @@ jobs:
           tests/python/test_symqg.py::test_save_load_roundtrip
           tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
+      - name: Install FAISS comparison dependency
+        if: matrix.python-version == '3.11'
+        run: python -m pip install faiss-cpu
+      - name: Test comparison script
+        if: matrix.python-version == '3.11'
+        env:
+          OMP_NUM_THREADS: "2"
+        run: python -m pytest tests/python/test_compare_with_faiss.py --tb=short -q
 
   python-result:
     name: Python validation
@@ -123,22 +131,21 @@ jobs:
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
 
   faiss-comparison:
-    needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_build == 'true') }}
+    # Keep the required check name; FAISS runs against the 3.11 source installation.
     name: FAISS comparison script
+    needs: [changes, python-build]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      OMP_NUM_THREADS: "2"
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Verify runner CMake
-        run: cmake --version
-      - name: Install comparison dependencies
-        run: python -m pip install ".[test]" faiss-cpu
-      - name: Test comparison script
-        run: python -m pytest tests/python/test_compare_with_faiss.py --tb=short -q
+      - name: Require selected comparison tests
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          PYTHON_SELECTED: ${{ needs.changes.outputs.python_build }}
+          MATRIX_RESULT: ${{ needs.python-build.result }}
+        run: |
+          if [ "$CHANGES_RESULT" = success ] && [ "$PYTHON_SELECTED" = false ]; then
+            test "$MATRIX_RESULT" = skipped || test "$MATRIX_RESULT" = success
+          else
+            test "$MATRIX_RESULT" = success
+          fi
