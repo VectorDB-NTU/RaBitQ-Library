@@ -10,40 +10,86 @@ hide:
 
 <p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
 
-# Compact vectors.<br>Accurate search. { #compact-vector-search-with-rabitq }
+# Vector search with<br>compact RaBitQ codes. { #compact-vector-search-with-rabitq }
 
-<p class="hero-description">A C++17 and Python library for vector search,
-from compact quantization to complete indexes.</p>
+<p class="hero-description">Compress vectors and search for nearest neighbors.
+Use ready-made indexes in Python or C++, or integrate quantization and distance
+estimation into your own C++ search engine.</p>
 
-<div class="hero-actions" markdown>
+<div class="hero-actions" id="start-here" markdown>
 
-[Get started with Python](quick_start.md){ .md-button .md-button--primary }
-[Use C++ &rarr;](cpp_integration.md)
+[Python quick start](quick_start.md){ .md-button .md-button--primary }
+[C++ integration](cpp_integration.md){ .md-button }
 
 </div>
 
-</div>
+```bash
+python -m pip install "rabitqlib>=0.7.0"
+```
 
-## Start here
+[Installation and supported platforms](installation.md) ·
+[How RaBitQ works](rabitq/rabitq.md)
 
-<div class="feature-grid">
-  <div class="feature-card">
-    <h3><a href="quick_start/">Python quick start &rarr;</a></h3>
-    <p>Install the package, build an IVF-RaBitQ index, search it, and save it.</p>
-  </div>
-  <div class="feature-card">
-    <h3><a href="cpp_integration/">C++ integration &rarr;</a></h3>
-    <p>Choose core, FastScan, or index components for your application.</p>
-  </div>
-  <div class="feature-card">
-    <h3><a href="rabitq/rabitq/">How RaBitQ works &rarr;</a></h3>
-    <p>Understand rotation, compact codes, and distance estimation.</p>
-  </div>
 </div>
 
 ## Choose your index
 
-Explore search throughput, recall, and storage for three quantized configurations.
+All three indexes support L2 and inner-product search, with save/load support.
+Start with IVF-RaBitQ for the complete introductory example, then compare on your own data.
+
+<div class="feature-grid" markdown>
+
+<div class="feature-card" markdown>
+
+### [IVF-RaBitQ](index/ivf.md)
+
+Search selected clusters of compressed vectors. Tune the bit width and number
+of clusters probed to balance storage, recall, and query time.
+
+**Updates:** append and remove vectors.
+
+</div>
+
+<div class="feature-card" markdown>
+
+### [HNSW-RaBitQ](index/hnsw.md)
+
+Traverse a graph over compressed vectors. Graph links add storage; tune the
+search window and graph degree alongside the code precision.
+
+**Updates:** append and remove vectors.
+
+</div>
+
+<div class="feature-card" markdown>
+
+### [SymphonyQG](index/qg.md)
+
+Build a graph directly from vectors, without a separate clustering step.
+Combine batched neighbor scoring with raw or 4/8-bit vector storage.
+
+**Updates:** rebuild to change the dataset.
+
+</div>
+
+</div>
+
+For input shapes, distance conventions, memory estimates, and threading, see
+[shared index contracts](index/usage.md).
+
+## Build on the library
+
+- **Bring your own storage:** use the [stable C++ core API](rabitq/core_api.md)
+  to encode vectors and estimate distances in caller-owned buffers. Add
+  [FastScan](cpp_integration.md#fastscan-integration) for batch scoring.
+- **Train clusters:** use [RaBitQKMeans or QGKMeans](clustering.md) to prepare
+  centroids and assignments for IVF-RaBitQ or HNSW-RaBitQ.
+
+## Compare measured performance
+
+This GIST1M example compares query throughput and serialized index size for
+three quantized configurations. Evaluate recall and query time on your own
+dataset when choosing an index.
 
 <!-- homepage-results:start -->
 
@@ -65,8 +111,6 @@ actual recall and storage budgets differ.
 - [zvec](integrations/zvec.md) uses core quantization in its IVF-RaBitQ and
   HNSW-RaBitQ implementations, with FastScan batch scoring in IVF-RaBitQ. See the
   integration walkthrough for storage, scoring, and platform boundaries.
-
-These are direct library integrations, with versioned downstream source links.
 
 ## Explore further
 
