@@ -200,7 +200,9 @@ jobs:
         run: |
           sudo apt-get install -y ccache
           echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+      # OpenMP OFF runs the full core/FastScan suites in the integrations below.
       - name: Configure portable build
+        if: matrix.openmp == 'ON'
         run: >-
           cmake -S . -B build-clang -G Ninja
           -DCMAKE_BUILD_TYPE=Release
@@ -210,6 +212,7 @@ jobs:
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -DRABITQ_BUILD_INDEX=${{ matrix.openmp }}
       - name: Build and test
+        if: matrix.openmp == 'ON'
         run: |
           cmake --build build-clang --parallel 2
           ctest --test-dir build-clang --output-on-failure --no-tests=error
@@ -306,7 +309,8 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: ctest --test-dir build-sanitizers --output-on-failure
+        # Each case is a separate process; bound concurrent sanitizer memory use.
+        run: ctest --test-dir build-sanitizers --output-on-failure --no-tests=error --parallel 2
       - name: Test installed sanitizer usage requirements
         env:
           ASAN_OPTIONS: detect_leaks=1
