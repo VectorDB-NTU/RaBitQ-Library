@@ -316,10 +316,60 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
+  <a href="#choose-your-index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Start here
+        Choose your index
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choose your index">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ivf-rabitq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IVF-RaBitQ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hnsw-rabitq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HNSW-RaBitQ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#symphonyqg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SymphonyQG
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-on-the-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build on the library
       
     </span>
   </a>
@@ -327,10 +377,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choose-your-index" class="md-nav__link">
+  <a href="#compare-measured-performance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choose your index
+        Compare measured performance
       
     </span>
   </a>
@@ -1527,10 +1577,60 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
+  <a href="#choose-your-index" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Start here
+        Choose your index
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Choose your index">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ivf-rabitq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IVF-RaBitQ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hnsw-rabitq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HNSW-RaBitQ
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#symphonyqg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SymphonyQG
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-on-the-library" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build on the library
       
     </span>
   </a>
@@ -1538,10 +1638,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choose-your-index" class="md-nav__link">
+  <a href="#compare-measured-performance" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choose your index
+        Compare measured performance
       
     </span>
   </a>
@@ -1600,32 +1700,56 @@
 <div class="hero">
 <p><img alt="RaBitQ Library logo" class="hero-logo" src="assets/logo.svg" /></p>
 <p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
-<h1 id="compact-vector-search-with-rabitq">Compact vectors.<br>Accurate search.<a class="headerlink" href="#compact-vector-search-with-rabitq" title="Permanent link">&para;</a></h1>
-<p class="hero-description">A C++17 and Python library for vector search,
-from compact quantization to complete indexes.</p>
-<div class="hero-actions">
-<p><a class="md-button md-button--primary" href="quick_start/">Get started with Python</a>
-<a href="cpp_integration/">Use C++ &rarr;</a></p>
+<h1 id="compact-vector-search-with-rabitq">Vector search with<br>compact RaBitQ codes.<a class="headerlink" href="#compact-vector-search-with-rabitq" title="Permanent link">&para;</a></h1>
+<p class="hero-description">Compress vectors and search for nearest neighbors.
+Use ready-made indexes in Python or C++, or integrate quantization and distance
+estimation into your own C++ search engine.</p>
+<div class="hero-actions" id="start-here">
+<p><a class="md-button md-button--primary" href="quick_start/">Python quick start</a>
+<a class="md-button" href="cpp_integration/">C++ integration</a></p>
 </div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.7.0"</span>
+</code></pre></div>
+<p><a href="installation/">Installation and supported platforms</a> ·
+<a href="rabitq/rabitq/">How RaBitQ works</a></p>
 </div>
-<h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
-<div class="feature-grid">
-  <div class="feature-card">
-    <h3><a href="quick_start/">Python quick start &rarr;</a></h3>
-    <p>Install the package, build an IVF-RaBitQ index, search it, and save it.</p>
-  </div>
-  <div class="feature-card">
-    <h3><a href="cpp_integration/">C++ integration &rarr;</a></h3>
-    <p>Choose core, FastScan, or index components for your application.</p>
-  </div>
-  <div class="feature-card">
-    <h3><a href="rabitq/rabitq/">How RaBitQ works &rarr;</a></h3>
-    <p>Understand rotation, compact codes, and distance estimation.</p>
-  </div>
-</div>
-
 <h2 id="choose-your-index">Choose your index<a class="headerlink" href="#choose-your-index" title="Permanent link">&para;</a></h2>
-<p>Explore search throughput, recall, and storage for three quantized configurations.</p>
+<p>All three indexes support L2 and inner-product search, with save/load support.
+Start with IVF-RaBitQ for the complete introductory example, then compare on your own data.</p>
+<div class="feature-grid">
+<div class="feature-card">
+<h3 id="ivf-rabitq"><a href="index/ivf/">IVF-RaBitQ</a><a class="headerlink" href="#ivf-rabitq" title="Permanent link">&para;</a></h3>
+<p>Search selected clusters of compressed vectors. Tune the bit width and number
+of clusters probed to balance storage, recall, and query time.</p>
+<p><strong>Updates:</strong> append and remove vectors.</p>
+</div>
+<div class="feature-card">
+<h3 id="hnsw-rabitq"><a href="index/hnsw/">HNSW-RaBitQ</a><a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h3>
+<p>Traverse a graph over compressed vectors. Graph links add storage; tune the
+search window and graph degree alongside the code precision.</p>
+<p><strong>Updates:</strong> append and remove vectors.</p>
+</div>
+<div class="feature-card">
+<h3 id="symphonyqg"><a href="index/qg/">SymphonyQG</a><a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h3>
+<p>Build a graph directly from vectors, without a separate clustering step.
+Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
+<p><strong>Updates:</strong> rebuild to change the dataset.</p>
+</div>
+</div>
+<p>For input shapes, distance conventions, memory estimates, and threading, see
+<a href="index/usage/">shared index contracts</a>.</p>
+<h2 id="build-on-the-library">Build on the library<a class="headerlink" href="#build-on-the-library" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Bring your own storage:</strong> use the <a href="rabitq/core_api/">stable C++ core API</a>
+  to encode vectors and estimate distances in caller-owned buffers. Add
+  <a href="cpp_integration/#fastscan-integration">FastScan</a> for batch scoring.</li>
+<li><strong>Train clusters:</strong> use <a href="clustering/">RaBitQKMeans or QGKMeans</a> to prepare
+  centroids and assignments for IVF-RaBitQ or HNSW-RaBitQ.</li>
+</ul>
+<h2 id="compare-measured-performance">Compare measured performance<a class="headerlink" href="#compare-measured-performance" title="Permanent link">&para;</a></h2>
+<p>This GIST1M example compares query throughput and serialized index size for
+three quantized configurations. Evaluate recall and query time on your own
+dataset when choosing an index.</p>
 <!-- homepage-results:start -->
 
 <p><strong>GIST1M</strong></p>
@@ -1644,7 +1768,6 @@ actual recall and storage budgets differ.
   HNSW-RaBitQ implementations, with FastScan batch scoring in IVF-RaBitQ. See the
   integration walkthrough for storage, scoring, and platform boundaries.</li>
 </ul>
-<p>These are direct library integrations, with versioned downstream source links.</p>
 <h2 id="explore-further">Explore further<a class="headerlink" href="#explore-further" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="rabitq/rabitq/">Algorithm overview</a> for the rotation, encoding, and scoring workflow.</li>
