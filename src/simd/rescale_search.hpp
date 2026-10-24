@@ -7,7 +7,11 @@
 #include <limits>
 #include <vector>
 
+#include "rabitqlib/core/detail/quantized_level.hpp"
+
 namespace rabitqlib::simd::detail {
+
+using ::rabitqlib::quant::detail::quantized_level_at_scale;
 
 struct RescaleScratch {
     std::vector<double> magnitudes;
@@ -33,55 +37,28 @@ struct RescaleSearchState {
 // Keep executable helpers local to each translation unit. This header is
 // compiled with different ISA flags; merging external inline/template symbols
 // could make the AVX2 backend call an AVX512-compiled helper.
-static inline int quantized_code_at_scale(double magnitude, double scale, int max_code) {
-    // Keep the division-based boundary correction identical to the event sweep.
-    if (magnitude == 0)
-        return 0;
-    int code = static_cast<int>(std::min(scale * magnitude, static_cast<double>(max_code)));
-    if (code < max_code && (code + 1.0) / magnitude <= scale)
-        ++code;
-    else if (code > 0 && static_cast<double>(code) / magnitude > scale)
-        --code;
-    return code;
-}
 
-// Return the next representable double greater than value, e.g.
-// next_double_up(1.0) = 1.0000000000000002. This is one floating-point step, not +1.
-// All bound operands here are finite. After a rounded arithmetic operation,
-// stepping outward gives a conservative bound even if the result was exact.
-// Use upward steps for upper bounds and downward steps for lower bounds so
-// rounding cannot make an interval look worse and cause an incorrect prune.
-// These helpers do not change the processor's floating-point rounding mode.
+// Finite IEEE-754 binary64 neighbors for outward-rounded bounds.
+// Adjusting the representation leaves the floating-point rounding mode unchanged.
 static inline double next_double_up(double value) {
-    // The bit ordering below relies on the IEEE-754 binary64 representation.
     static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8);
-    // Both +0 and -0 step to the smallest positive subnormal, not min(),
-    // which is the smallest positive *normal* double and would skip values.
+    // Both signed zeros step to the smallest positive subnormal.
     if (value == 0)
         return std::numeric_limits<double>::denorm_min();
     uint64_t bits = 0;
-    // Copy the representation without numeric conversion or pointer aliasing.
     std::memcpy(&bits, &value, sizeof(bits));
-    // For positive doubles, increasing the bits increases the value. For
-    // negative doubles, decreasing the bits moves toward zero (a larger value).
-    // Converting -1 to uint64_t makes this unsigned addition subtract one.
+    // Negative values have reversed bit ordering.
     bits += value > 0 ? uint64_t{1} : static_cast<uint64_t>(-1);
     std::memcpy(&value, &bits, sizeof(value));
     return value;
 }
 
-// Return the next representable double less than value, e.g.
-// next_double_down(1.0) = 0.9999999999999999. This supplies the downward step used
-// in lower bounds; its spacing depends on value, unlike a fixed epsilon.
-// It uses the same finite-input and binary64 assumptions as next_double_up above.
 static inline double next_double_down(double value) {
     // Both signed zeros step to the smallest-magnitude negative subnormal.
     if (value == 0)
         return -std::numeric_limits<double>::denorm_min();
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
-    // Reverse next_double_up: positive values move toward zero by subtracting one
-    // from the bits; negative values become more negative by adding one.
     bits += value > 0 ? static_cast<uint64_t>(-1) : uint64_t{1};
     std::memcpy(&value, &bits, sizeof(value));
     return value;
@@ -200,25 +177,12 @@ static inline double interval_squared_cosine_upper_bound(
     );
 }
 
-// SIMD branch-and-bound alternative to the heap sweep in rabitq_impl.hpp.
-// Evaluating a scale scans independent coordinates, which maps well to SIMD.
-// Recursively split the unexplored scale range, discarding constant-code spans
-// and intervals whose score upper bound cannot beat an evaluated candidate.
-// Unlike binary search, either or both halves may need further exploration.
-//
-// Search outline:
-//   1. Evaluate the first and last allowed scales and save the best candidate.
-//   2. Bound every unevaluated code between two endpoint plateaus.
-//   3. Skip the gap if it has no other codes or cannot improve the best score.
-//   4. Otherwise evaluate a midpoint, split around its entire plateau, and recur.
-// No fixed step size is used: interval bounds determine how large a range can
-// be skipped. The supplied [t_start, t_end) limits are the same as the heap's.
-//
-// Return false to use the exact event search when the interval cannot be
-// resolved within bounded work. The evaluator must emit legal states and
-// division-based first/next thresholds; only its numerator sum may round.
-// False discards the tentative SIMD result: the caller runs the heap sweep,
-// rather than accepting an approximate winner after a budget or precision limit.
+// SIMD branch-and-bound over the heap sweep's [t_start, t_end) range.
+// Evaluate endpoint plateaus, then split gaps whose bounds can beat the best score.
+// Evaluators return legal states and division-based plateau boundaries;
+// only numerator accumulation may round.
+// Return false on ambiguous scores or work limits: the caller discards the
+// tentative result and runs the exact heap sweep, preserving its tie order.
 template <typename Evaluator>
 static bool try_find_best_scale_by_interval_search(
     const float* input,
@@ -275,8 +239,7 @@ static bool try_find_best_scale_by_interval_search(
             return false;
         ++evaluations;
         result.state = evaluator(magnitudes, reciprocals, dim, max_code, t_start, t_end, t);
-        // A valid evaluator must return a plateau containing the requested t.
-        // Every t in that plateau produces the same codes and score.
+        // Reject evaluator states whose plateau does not contain t.
         if (result.state.first > t || result.state.next <= t)
             return false;
         // If the computed numerator is N_hat and its relative error is at most
@@ -305,8 +268,6 @@ static bool try_find_best_scale_by_interval_search(
             result.score_upper >= best.score_lower &&
             result.state.squared_norm != best.state.squared_norm
         ) {
-            // The event sweep resolves numerically indistinguishable winners
-            // with its existing arithmetic and tie order.
             return false;
         }
         return true;
@@ -334,15 +295,12 @@ static bool try_find_best_scale_by_interval_search(
         if (left.state.next > right.state.first || depth == kMaxDepth)
             return false;
 
-        // The endpoint plateaus are already evaluated. Split only the gap
-        // between them, not the constant-code spans surrounding their scales.
+        // Split only [left.next, right.first); stay below the right plateau
+        // despite rounding.
         double midpoint = left.state.next + (right.state.first - left.state.next) * 0.5;
         midpoint = std::max(
             left.state.next, std::min(midpoint, next_double_down(right.state.first))
         );
-        // Keep the trial inside [left.next, right.first); rounding must not
-        // send us back to the already evaluated right plateau. If no new state
-        // can be established, let the heap resolve the remaining events.
         if (midpoint >= right.state.first)
             return false;
         BoundedRescaleState middle;
@@ -351,12 +309,10 @@ static bool try_find_best_scale_by_interval_search(
             middle.state.squared_norm >= right.state.squared_norm)
             return false;
 
-        // The middle code covers [middle.first, middle.next). These two bounds
-        // exclude that whole plateau, so recursion never searches inside it.
+        // Exclude the middle plateau from both recursive gaps.
         const double left_upper = interval_squared_cosine_upper_bound(left, middle);
         const double right_upper = interval_squared_cosine_upper_bound(middle, right);
-        // Explore the more promising half first; a better candidate found there
-        // raises best_lower and can let us prune the other half immediately.
+        // Explore the stronger bound first to improve subsequent pruning.
         if (left_upper > right_upper) {
             return self(self, left, middle, left_upper, depth + 1) &&
                    self(self, middle, right, right_upper, depth + 1);

@@ -64,7 +64,7 @@ static RescaleSearchState evaluate_scale_state_avx2(
             _mm256_store_pd(corrected, c);
             for (unsigned mask = boundary; mask; mask &= mask - 1) {
                 unsigned k = bitops::countr_zero32(mask);
-                corrected[k] = quantized_code_at_scale(magnitudes[i + k], scale, max_code);
+                corrected[k] = quantized_level_at_scale(magnitudes[i + k], scale, max_code);
             }
             c = _mm256_load_pd(corrected);
         }
@@ -123,18 +123,18 @@ static RescaleSearchState evaluate_scale_state_avx2(
         s.first = std::max(
             s.first,
             static_cast<double>(
-                quantized_code_at_scale(magnitudes[fi[fk]], scale, max_code)
+                quantized_level_at_scale(magnitudes[fi[fk]], scale, max_code)
             ) / magnitudes[fi[fk]]
         );
     if (ni[nk] != std::numeric_limits<size_t>::max())
         s.next = std::min(
             s.next,
-            (quantized_code_at_scale(magnitudes[ni[nk]], scale, max_code) + 1.0) /
+            (quantized_level_at_scale(magnitudes[ni[nk]], scale, max_code) + 1.0) /
                 magnitudes[ni[nk]]
         );
     // Handle the remaining zero to three coordinates with the same definitions.
     for (; i < dim; ++i) {
-        int c = quantized_code_at_scale(magnitudes[i], scale, max_code);
+        int c = quantized_level_at_scale(magnitudes[i], scale, max_code);
         double q = c + .5;
         s.numerator += magnitudes[i] * q;
         s.squared_norm += q * q;

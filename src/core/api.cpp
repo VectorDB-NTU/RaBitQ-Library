@@ -279,23 +279,41 @@ Factors encode(
     RowMajorArrayMap<float> residual(s.scratch.residual, 1, static_cast<long>(p.dim));
     residual = ConstRowMajorArrayMap<float>(input, 1, static_cast<long>(p.dim)) -
                ConstRowMajorArrayMap<float>(centroid, 1, static_cast<long>(p.dim));
-    if (!std::isfinite(l2norm_sqr(s.scratch.residual, p.dim))) {
+    const float residual_squared_norm = l2norm_sqr(s.scratch.residual, p.dim);
+    if (!std::isfinite(residual_squared_norm)) {
         throw std::overflow_error("Residual squared norm is not representable in float32");
     }
     Factors factors;
-    rabitq_impl::total_bits::rabitq_full_impl_with_scratch(
-        input,
-        centroid,
-        p.dim,
-        p.total_bits,
-        s.codes,
-        factors.add,
-        factors.rescale,
-        factors.error,
-        p.metric,
-        p.t_const,
-        &s.scratch
-    );
+    if (p.total_bits > 1) {
+        rabitq_impl::ex_bits::code_with_factor_from_residual<true>(
+            s.scratch.residual,
+            residual_squared_norm,
+            centroid,
+            p.dim,
+            p.total_bits - 1,
+            s.codes,
+            factors.add,
+            factors.rescale,
+            factors.error,
+            p.metric,
+            p.t_const,
+            &s.scratch
+        );
+    } else {
+        rabitq_impl::total_bits::rabitq_full_impl_with_scratch(
+            input,
+            centroid,
+            p.dim,
+            p.total_bits,
+            s.codes,
+            factors.add,
+            factors.rescale,
+            factors.error,
+            p.metric,
+            p.t_const,
+            &s.scratch
+        );
+    }
     if (!std::isfinite(factors.add) || !std::isfinite(factors.rescale) ||
         !std::isfinite(factors.error)) {
         throw std::overflow_error("Quantization factors are not representable in float32");
