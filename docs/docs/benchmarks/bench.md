@@ -184,15 +184,14 @@ reuses saved indexes; export runs no experiments. `--dry-run` previews commands;
 [Query CSV](figures/qps-recall-points.csv) · [Indexing CSV](figures/indexing.csv) ·
 [K-means CSV](figures/kmeans.csv)
 
-## Homepage selection
+## Selected GIST1M configurations
 
-The homepage shows IVF-RaBitQ/HNSW-RaBitQ at 5 total bits (one sign bit plus four extra bits)
+The comparison uses IVF-RaBitQ/HNSW-RaBitQ at 5 total bits (one sign bit plus four extra bits)
 and SymphonyQG at 4 bits. For each GIST1M configuration, the QPS bar selects
 the fastest measured setting with Recall@10 >= 90%, without interpolation.
 Actual recall and total storage differ; this is neither an exact-recall nor an
-equal-memory comparison. The tables below identify the selected CSV rows.
-
-<!-- homepage-selection:start -->
+equal-memory comparison. The tables below identify the selected CSV rows for the
+[comparison figure](figures/homepage-gist1m.svg).
 
 ### GIST1M
 
@@ -201,8 +200,6 @@ equal-memory comparison. The tables below identify the selected CSV rows.
 | IVF-RaBitQ · 5-bit | 92.82% | `nprobe=128` |
 | HNSW-RaBitQ · 5-bit | 92.70% | `ef=512` |
 | SymphonyQG · 4-bit | 90.36% | `ef=512` |
-
-<!-- homepage-selection:end -->
 
 The figures use the 0.7.1 measurements described above, with one search thread
 and one query per call. Each setting has one timing pass. QPS includes Python
