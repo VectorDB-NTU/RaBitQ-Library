@@ -1747,19 +1747,9 @@ Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
   centroids and assignments for IVF-RaBitQ or HNSW-RaBitQ.</li>
 </ul>
 <h2 id="compare-measured-performance">Compare measured performance<a class="headerlink" href="#compare-measured-performance" title="Permanent link">&para;</a></h2>
-<p>This GIST1M example compares query throughput and serialized index size for
-three quantized configurations. Evaluate recall and query time on your own
-dataset when choosing an index.</p>
-<!-- homepage-results:start -->
-
-<p><strong>GIST1M</strong></p>
-<p>1,000,000 vectors · 960 dimensions · L2</p>
-<p><img alt="GIST1M: QPS at Recall@10 ≥ 90%, serialized index size" src="benchmarks/figures/homepage-gist1m.svg" /></p>
-<!-- homepage-results:end -->
-
-<p>QPS uses the fastest measured setting reaching <strong>Recall@10 ≥ 90%</strong>;
-actual recall and storage budgets differ.
-<a href="benchmarks/bench/#homepage-selection">Detailed results, settings, and measurement conditions</a>.</p>
+<p>See the <a href="benchmarks/bench/">benchmarks</a> for datasets, settings, measured
+results, and limitations. Evaluate recall and query time on your own dataset
+when choosing an index.</p>
 <h2 id="built-with-rabitq-library">Built with RaBitQ-Library<a class="headerlink" href="#built-with-rabitq-library" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="integrations/txtai/">txtai</a> uses the Python IVF-RaBitQ and HNSW-RaBitQ indexes as an

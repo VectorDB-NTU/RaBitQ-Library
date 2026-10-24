@@ -1445,15 +1445,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#homepage-selection" class="md-nav__link">
+  <a href="#selected-gist1m-configurations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Homepage selection
+        Selected GIST1M configurations
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Homepage selection">
+    <nav class="md-nav" aria-label="Selected GIST1M configurations">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1687,15 +1687,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#homepage-selection" class="md-nav__link">
+  <a href="#selected-gist1m-configurations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Homepage selection
+        Selected GIST1M configurations
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Homepage selection">
+    <nav class="md-nav" aria-label="Selected GIST1M configurations">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2012,14 +2012,13 @@ reuses saved indexes; export runs no experiments. <code>--dry-run</code> preview
 <code>--data-dir</code>, and <code>--cache-dir</code>; runners expect the default data paths.</p>
 <p><a href="../figures/qps-recall-points.csv">Query CSV</a> · <a href="../figures/indexing.csv">Indexing CSV</a> ·
 <a href="../figures/kmeans.csv">K-means CSV</a></p>
-<h2 id="homepage-selection">Homepage selection<a class="headerlink" href="#homepage-selection" title="Permanent link">&para;</a></h2>
-<p>The homepage shows IVF-RaBitQ/HNSW-RaBitQ at 5 total bits (one sign bit plus four extra bits)
+<h2 id="selected-gist1m-configurations">Selected GIST1M configurations<a class="headerlink" href="#selected-gist1m-configurations" title="Permanent link">&para;</a></h2>
+<p>The comparison uses IVF-RaBitQ/HNSW-RaBitQ at 5 total bits (one sign bit plus four extra bits)
 and SymphonyQG at 4 bits. For each GIST1M configuration, the QPS bar selects
 the fastest measured setting with Recall@10 &gt;= 90%, without interpolation.
 Actual recall and total storage differ; this is neither an exact-recall nor an
-equal-memory comparison. The tables below identify the selected CSV rows.</p>
-<!-- homepage-selection:start -->
-
+equal-memory comparison. The tables below identify the selected CSV rows for the
+<a href="../figures/homepage-gist1m.svg">comparison figure</a>.</p>
 <h3 id="gist1m">GIST1M<a class="headerlink" href="#gist1m" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -2047,8 +2046,6 @@ equal-memory comparison. The tables below identify the selected CSV rows.</p>
 </tr>
 </tbody>
 </table>
-<!-- homepage-selection:end -->
-
 <p>The figures use the 0.7.1 measurements described above, with one search thread
 and one query per call. Each setting has one timing pass. QPS includes Python
 call overhead after warm-up and excludes loading. Index size is serialized
