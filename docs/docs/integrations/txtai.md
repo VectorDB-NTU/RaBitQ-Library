@@ -66,6 +66,9 @@ The source inspection establishes the integration path. It does not establish
 production deployment scale or a performance gain, and this configuration has
 not been exercised end to end in this documentation update.
 
+For maintainer checks against future library versions, see the
+[downstream compatibility procedure](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/development.md#downstream-compatibility-validation).
+
 To use the same indexes directly, follow the library's [Python quick start](../quick_start.md)
 and [HNSW-RaBitQ guide](../index/hnsw.md). To integrate only quantization into your own
 index, see the [zvec walkthrough](zvec.md).

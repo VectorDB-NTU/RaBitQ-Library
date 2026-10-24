@@ -55,6 +55,9 @@ an entry point for new integrations, not a description of zvec's API usage.
 
 ## Use this pattern in your own engine
 
+For maintainer checks against future library versions, see the
+[downstream compatibility procedure](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/development.md#downstream-compatibility-validation).
+
 For a new per-vector integration, start with the
 [stable core API v1](../rabitq/core_api.md#minimal-example). For FastScan or existing
 record layouts like those used here, consult the advanced

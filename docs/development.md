@@ -275,6 +275,27 @@ This matches CI's script set. Also pass any changed shell scripts outside
   authorize a quality reduction.
 - Avoid unrelated refactoring or formatting in performance-sensitive changes.
 
+## Downstream compatibility validation
+
+Before a release, check the real downstream integrations on Linux x86-64.
+Pin each downstream to a tag or commit and verify it uses the candidate library.
+These checks are currently manual and are not enforced by release CI.
+
+| Downstream | Minimum checks |
+| --- | --- |
+| [txtai](docs/integrations/txtai.md) | Through its `rabitq` adapter: IVF/HNSW build, query and save/load; IVF append/delete. |
+| [zvec](docs/integrations/zvec.md) | Build its RaBitQ components with candidate core/FastScan; exercise IVF/HNSW build, query and save/load. |
+
+Use small, fixed inputs to check IDs, score conventions, recall against exact
+search, and save/load consistency. Set quality thresholds and numerical tolerances
+before running, and compare with the previous supported library version.
+For updates, check that added vectors are retrievable and deleted IDs stay absent
+after save/load. Follow the operations supported by the pinned downstream adapter.
+
+Record library/downstream revisions, platform, commands, results and untested scope
+in the release PR or issue. Investigate failures and clearly identify skipped checks.
+See [release preparation](maintaining.md#publishing-a-release).
+
 ## Implementation recipes
 
 ### Validation, ownership, and numerical preparation

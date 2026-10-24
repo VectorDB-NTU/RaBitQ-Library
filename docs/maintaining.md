@@ -125,6 +125,11 @@ otherwise leaves documentation-only PRs waiting indefinitely.
 
 ## Publishing a release
 
+Before merging a version bump, run the
+[downstream compatibility checks](development.md#downstream-compatibility-validation)
+and record results and any unresolved failures or missing coverage in the release PR
+or issue. These manual checks are not enforced by the automatic publishing workflow.
+
 Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt`,
 add a short README news entry, and merge into `main`. Once the `Test` and
 `Python Wheel` workflows succeed for the same commit, `Release wheels` checks
