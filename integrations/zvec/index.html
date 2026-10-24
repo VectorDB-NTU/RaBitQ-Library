@@ -1652,6 +1652,8 @@ does not make these zvec integrations available on ARM64 or macOS.</p>
 It does not use the stable <code>rabitqlib::quant::v1</code> API. The recommendation below is
 an entry point for new integrations, not a description of zvec's API usage.</p>
 <h2 id="use-this-pattern-in-your-own-engine">Use this pattern in your own engine<a class="headerlink" href="#use-this-pattern-in-your-own-engine" title="Permanent link">&para;</a></h2>
+<p>For maintainer checks against future library versions, see the
+<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/development.md#downstream-compatibility-validation">downstream compatibility procedure</a>.</p>
 <p>For a new per-vector integration, start with the
 <a href="../../rabitq/core_api/#minimal-example">stable core API v1</a>. For FastScan or existing
 record layouts like those used here, consult the advanced
