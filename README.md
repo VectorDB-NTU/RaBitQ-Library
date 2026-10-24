@@ -36,21 +36,8 @@ QPS–recall tradeoffs.
 [Native clustering methods](docs/docs/clustering.md) prepare centroids and
 assignments for IVF-RaBitQ and HNSW-RaBitQ.
 
-Search throughput and index size for three quantized configurations.
-QPS uses the fastest measured setting reaching **Recall@10 ≥ 90%**;
-actual recall and storage budgets differ.
-
-<!-- homepage-results:start -->
-
-**GIST1M**
-
-1,000,000 vectors · 960 dimensions · L2
-
-![GIST1M: QPS at Recall@10 ≥ 90%, serialized index size](docs/docs/benchmarks/figures/homepage-gist1m.svg)
-
-<!-- homepage-results:end -->
-
-[Detailed results, settings, and measurement conditions](docs/docs/benchmarks/bench.md#homepage-selection).
+See the [benchmarks](docs/docs/benchmarks/bench.md) for measured results,
+settings, and limitations.
 
 ## Quick start
 

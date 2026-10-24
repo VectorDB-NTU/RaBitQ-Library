@@ -87,22 +87,9 @@ For input shapes, distance conventions, memory estimates, and threading, see
 
 ## Compare measured performance
 
-This GIST1M example compares query throughput and serialized index size for
-three quantized configurations. Evaluate recall and query time on your own
-dataset when choosing an index.
-
-<!-- homepage-results:start -->
-
-**GIST1M**
-
-1,000,000 vectors · 960 dimensions · L2
-
-![GIST1M: QPS at Recall@10 ≥ 90%, serialized index size](benchmarks/figures/homepage-gist1m.svg)
-<!-- homepage-results:end -->
-
-QPS uses the fastest measured setting reaching **Recall@10 ≥ 90%**;
-actual recall and storage budgets differ.
-[Detailed results, settings, and measurement conditions](benchmarks/bench.md#homepage-selection).
+See the [benchmarks](benchmarks/bench.md) for datasets, settings, measured
+results, and limitations. Evaluate recall and query time on your own dataset
+when choosing an index.
 
 ## Built with RaBitQ-Library
 
