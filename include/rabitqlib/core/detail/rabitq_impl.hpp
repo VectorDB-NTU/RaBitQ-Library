@@ -13,6 +13,7 @@
 
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
+#include "rabitqlib/core/detail/quantized_level.hpp"
 #include "rabitqlib/core/detail/scratch.hpp"
 #include "rabitqlib/core/detail/simd/quantization_dispatch.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -28,6 +29,66 @@
 namespace rabitqlib::quant::rabitq_impl {
 
 constexpr float kConstEpsilon = 1.9;
+
+// Arithmetic only: callers own residual/centered storage and choose rescale arithmetic.
+template <typename T>
+struct CodeFactorTerms {
+    T add;
+    T error;
+    T residual_norm;
+    T residual_code_ip;
+};
+
+template <typename T>
+inline CodeFactorTerms<T> code_factor_terms(
+    const T* residual,
+    const T* centroid,
+    const T* centered,
+    size_t dim,
+    T l2_sqr,
+    MetricType metric_type,
+    const char* invalid_metric_message
+) {
+    // A zero residual needs no centered code or inner-product divisions.
+    if (l2_sqr == 0) {
+        if (metric_type == METRIC_L2) {
+            return {0, 0, 0, 0};
+        }
+        if (metric_type == METRIC_IP) {
+            return {1, 0, 0, 0};
+        }
+        throw std::invalid_argument(invalid_metric_message);
+    }
+    const T l2_norm = std::sqrt(l2_sqr);
+    const T ip_resi_xucb = dot_product<T>(residual, centered, dim);
+    const T ip_cent_xucb = dot_product<T>(centroid, centered, dim);
+    assert(ip_resi_xucb > 0);
+
+    // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
+    const T normalized_error =
+        (((l2_sqr * l2norm_sqr<T>(centered, dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1) /
+        (dim - 1);
+    const T tmp_error =
+        l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
+
+    // Metric-specific derivation: docs/docs/rabitq/estimator.md.
+    if (metric_type == METRIC_L2) {
+        return {
+            l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb),
+            2 * tmp_error,
+            l2_norm,
+            ip_resi_xucb};
+    }
+    if (metric_type == METRIC_IP) {
+        return {
+            1 - dot_product<T>(residual, centroid, dim) +
+                (l2_sqr * ip_cent_xucb / ip_resi_xucb),
+            1 * tmp_error,
+            l2_norm,
+            ip_resi_xucb};
+    }
+    throw std::invalid_argument(invalid_metric_message);
+}
 
 namespace one_bit {
 
@@ -94,52 +155,21 @@ inline void one_bit_code_with_factor_into(
         xu_cb = x_u.template cast<T>() + T{-0.5};
     }
 
-    // distance to centroid
-    T l2_sqr = l2norm_sqr<T>(residual, dim);
-    T l2_norm = std::sqrt(l2_sqr);
-
-    if (l2_sqr == 0) {
-        if (metric_type == METRIC_L2) {
-            f_add = 0;
-        } else if (metric_type == METRIC_IP) {
-            f_add = 1;
-        } else {
-            throw std::invalid_argument("Unsupported metric type in quantization");
-        }
-        f_rescale = 0;
-        f_error = 0;
-        return;
-    }
-    T ip_resi_xucb = dot_product<T>(residual, centered, dim);
-    T ip_cent_xucb = dot_product<T>(centroid, centered, dim);
-
-    // A nonzero residual and its sign code have a strictly positive inner product.
-    assert(ip_resi_xucb > 0);
-
-    // tan^2(angle(residual, centered)) / (dim - 1), using unnormalized vectors.
-    // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
-    const T normalized_error =
-        (((l2_sqr * l2norm_sqr<T>(centered, dim)) / (ip_resi_xucb * ip_resi_xucb)) - 1) /
-        (dim - 1);
-    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
-
-    // Factor derivation: docs/docs/rabitq/estimator.md, metric-specific estimators.
-    // For f_rescale and 2nd item of f_add, we use the dot product of raw residual (rather
-    // than the normalized one) as the denominator, thus we need to multiply another l2norm.
-    // For (ip_cent_xucb / ip_resi_xucb), the norm of xucb does not matter since it is also
-    // in numerator.
-    if (metric_type == METRIC_L2) {
-        f_add = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
-        f_rescale = -2 * l2_sqr / ip_resi_xucb;
-        f_error = 2 * tmp_error;
-    } else if (metric_type == METRIC_IP) {
-        f_add = 1 - dot_product<T>(residual, centroid, dim) +
-                (l2_sqr * ip_cent_xucb / ip_resi_xucb);
-        f_rescale = -l2_sqr / ip_resi_xucb;
-        f_error = 1 * tmp_error;
-    } else {
-        throw std::invalid_argument("Unsupported metric type in quantization");
-    }
+    const T l2_sqr = l2norm_sqr<T>(residual, dim);
+    const auto factors = code_factor_terms(
+        residual,
+        centroid,
+        centered,
+        dim,
+        l2_sqr,
+        metric_type,
+        "Unsupported metric type in quantization"
+    );
+    f_add = factors.add;
+    f_rescale = l2_sqr == 0                ? T{0}
+                : metric_type == METRIC_L2 ? -2 * l2_sqr / factors.residual_code_ip
+                                           : -l2_sqr / factors.residual_code_ip;
+    f_error = factors.error;
 }
 
 template <typename T>
@@ -320,21 +350,7 @@ constexpr std::array<float, 9> kTightStart = {
     0.81,
 };
 
-// Preconditions: magnitude >= 0 and finite; t >= 0 and finite; max_code >= 0.
-// Compare thresholds exactly as the queue does. Multiplication alone can round
-// to the wrong side of an event; adding a fixed epsilon can cross other events.
-inline int quantized_level_at_scale(double magnitude, double t, int max_code) {
-    if (magnitude == 0)
-        return 0;
-    int code = static_cast<int>(std::min(t * magnitude, static_cast<double>(max_code)));
-    // Clamping only bounds the code; correct rounding in either direction to match
-    // the queue's division-based thresholds.
-    if (code < max_code && (code + 1.0) / magnitude <= t)
-        ++code;
-    else if (code > 0 && static_cast<double>(code) / magnitude > t)
-        --code;
-    return code;
-}
+using ::rabitqlib::quant::detail::quantized_level_at_scale;
 
 template <typename T, class Heap, class Codes>
 inline double event_sweep(
@@ -556,8 +572,9 @@ T faster_quantize_ex(const T* o_abs, TP* code, size_t dim, size_t ex_bits, doubl
 }
 
 template <typename T, typename TP>
-inline T ex_bits_code_with_scratch(
+inline T ex_bits_code_with_norm(
     const T* residual,
+    T residual_norm,
     size_t dim,
     size_t ex_bits,
     TP* ex_code,
@@ -566,7 +583,6 @@ inline T ex_bits_code_with_scratch(
 ) {
     ConstRowMajorArrayMap<T> res_arr(residual, 1, dim);
     T ipnorm_inv = 1;
-    const T residual_norm = std::sqrt(l2norm_sqr<T>(residual, dim));
     if (residual_norm == 0) {
         std::fill(ex_code, ex_code + dim, static_cast<TP>(0));
     } else {
@@ -599,14 +615,22 @@ template <typename T, typename TP>
 inline T ex_bits_code(
     const T* residual, size_t dim, size_t ex_bits, TP* ex_code, double t_const = -1
 ) {
-    return ex_bits_code_with_scratch(
-        residual, dim, ex_bits, ex_code, t_const, static_cast<Scratch<T>*>(nullptr)
+    return ex_bits_code_with_norm(
+        residual,
+        std::sqrt(l2norm_sqr<T>(residual, dim)),
+        dim,
+        ex_bits,
+        ex_code,
+        t_const,
+        static_cast<Scratch<T>*>(nullptr)
     );
 }
 
-template <typename T, typename TP>
-inline void ex_bits_code_with_factor_with_scratch(
-    const T* data,
+// l2_sqr belongs to residual. FullCode returns the combined code used for factors.
+template <bool FullCode, typename T, typename TP>
+inline void code_with_factor_from_residual(
+    const T* residual,
+    T l2_sqr,
     const T* centroid,
     size_t dim,
     size_t ex_bits,
@@ -618,39 +642,38 @@ inline void ex_bits_code_with_factor_with_scratch(
     double t_const,
     Scratch<T>* scratch
 ) {
-    ConstRowMajorArrayMap<T> data_arr(data, 1, dim);
-    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, dim);
-    RowMajorArray<T> owned_residual;
-    auto residual_arr = scratch_array(
-        scratch == nullptr ? nullptr : scratch->residual, dim, owned_residual
-    );
-    residual_arr = data_arr - cent_arr;
-
-    const T l2_sqr = l2norm_sqr(residual_arr.data(), dim);
     if (l2_sqr == 0) {
         std::fill(ex_code, ex_code + dim, static_cast<TP>(0));
-        if (metric_type == METRIC_L2) {
-            f_add_ex = 0;
-        } else if (metric_type == METRIC_IP) {
-            f_add_ex = 1;
-        } else {
-            throw std::invalid_argument("Unsupported metric for ex_bits_code()");
-        }
+        const auto factors = code_factor_terms<T>(
+            residual,
+            centroid,
+            nullptr,
+            dim,
+            l2_sqr,
+            metric_type,
+            "Unsupported metric for ex_bits_code()"
+        );
+        f_add_ex = factors.add;
         f_rescale_ex = 0;
-        f_error_ex = 0;
+        f_error_ex = factors.error;
+        if constexpr (FullCode) {
+            // A tiny nonzero residual can have a squared norm of zero.
+            for (size_t i = 0; i < dim; ++i) {
+                ex_code[i] = static_cast<TP>(residual[i] > 0) << ex_bits;
+            }
+        }
         return;
     }
 
-    T ipnorm_inv = ex_bits_code_with_scratch<T, TP>(
-        residual_arr.data(), dim, ex_bits, ex_code, t_const, scratch
+    T ipnorm_inv = ex_bits_code_with_norm<T, TP>(
+        residual, std::sqrt(l2_sqr), dim, ex_bits, ex_code, t_const, scratch
     );
     RowMajorArray<int> owned_total;
     auto total_code =
         scratch_array(scratch == nullptr ? nullptr : scratch->total, dim, owned_total);
     total_code = RowMajorArrayMap<TP>(ex_code, 1, dim).template cast<int>();
     for (size_t i = 0; i < dim; ++i) {
-        total_code(0, static_cast<long>(i)) += static_cast<int>(residual_arr.data()[i] > 0)
-                                               << ex_bits;
+        total_code(0, static_cast<long>(i)) += static_cast<int>(residual[i] > 0) << ex_bits;
     }
 
     // Full-code factors use the metric-specific derivation in
@@ -662,32 +685,23 @@ inline void ex_bits_code_with_factor_with_scratch(
     );
     xu_cb = total_code.template cast<T>() + cb;
 
-    T l2_norm = std::sqrt(l2_sqr);
-
-    T ip_resi_xucb = dot_product<T>(residual_arr.data(), xu_cb.data(), dim);
-    T ip_cent_xucb = dot_product<T>(centroid, xu_cb.data(), dim);
-
-    // A nonzero residual and its quantized code have a strictly positive inner product.
-    assert(ip_resi_xucb > 0);
-
-    // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
-    const T normalized_error =
-        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
-         1) /
-        (dim - 1);
-    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
-
-    if (metric_type == METRIC_L2) {
-        f_add_ex = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
-        f_rescale_ex = ipnorm_inv * -2 * l2_norm;
-        f_error_ex = 2 * tmp_error;
-    } else if (metric_type == METRIC_IP) {
-        f_add_ex = 1 - dot_product<T>(residual_arr.data(), centroid, dim) +
-                   (l2_sqr * ip_cent_xucb / ip_resi_xucb);
-        f_rescale_ex = ipnorm_inv * -l2_norm;
-        f_error_ex = 1 * tmp_error;
-    } else {
-        throw std::invalid_argument("Unsupported metric for ex_bits_code()");
+    const auto factors = code_factor_terms(
+        residual,
+        centroid,
+        xu_cb.data(),
+        dim,
+        l2_sqr,
+        metric_type,
+        "Unsupported metric for ex_bits_code()"
+    );
+    f_add_ex = factors.add;
+    // Retain the normalized-code rescale expression and its rounding order.
+    f_rescale_ex = metric_type == METRIC_L2 ? ipnorm_inv * -2 * factors.residual_norm
+                                            : ipnorm_inv * -factors.residual_norm;
+    f_error_ex = factors.error;
+    if constexpr (FullCode) {
+        RowMajorArrayMap<TP>(ex_code, 1, static_cast<long>(dim)) =
+            total_code.template cast<TP>();
     }
 }
 
@@ -704,8 +718,12 @@ inline void ex_bits_code_with_factor(
     MetricType metric_type = METRIC_L2,
     double t_const = -1
 ) {
-    ex_bits_code_with_factor_with_scratch(
-        data,
+    RowMajorArray<T> residual =
+        ConstRowMajorArrayMap<T>(data, 1, static_cast<long>(dim)) -
+        ConstRowMajorArrayMap<T>(centroid, 1, static_cast<long>(dim));
+    code_with_factor_from_residual<false>(
+        residual.data(),
+        l2norm_sqr<T>(residual.data(), dim),
         centroid,
         dim,
         ex_bits,
@@ -832,30 +850,17 @@ static inline void rabitq_full_impl_with_scratch(
     double t_const,
     Scratch<T>* scratch
 ) {
-    std::vector<int> owned_binary;
-    int* binary_code = nullptr;
-    if (scratch == nullptr) {
-        owned_binary.resize(dim);
-        binary_code = owned_binary.data();
-    } else {
-        binary_code = scratch->binary;
-    }
-    size_t ex_bits = total_bits - 1;
-
+    const size_t ex_bits = total_bits - 1;
     if (ex_bits > 0) {
-        if (scratch == nullptr) {
-            rabitq_impl::one_bit::one_bit_code(data, centroid, dim, binary_code);
-        } else {
-            ConstRowMajorArrayMap<T> input(data, 1, static_cast<long>(dim));
-            ConstRowMajorArrayMap<T> center(centroid, 1, static_cast<long>(dim));
-            RowMajorArrayMap<T> residual(scratch->residual, 1, static_cast<long>(dim));
-            residual = input - center;
-            RowMajorArrayMap<int> signs(binary_code, 1, static_cast<long>(dim));
-            signs = (residual > 0).template cast<int>();
-        }
-
-        ex_bits::ex_bits_code_with_factor_with_scratch<T, TP>(
-            data,
+        RowMajorArray<T> owned_residual;
+        auto residual = scratch_array(
+            scratch == nullptr ? nullptr : scratch->residual, dim, owned_residual
+        );
+        residual = ConstRowMajorArrayMap<T>(data, 1, static_cast<long>(dim)) -
+                   ConstRowMajorArrayMap<T>(centroid, 1, static_cast<long>(dim));
+        ex_bits::code_with_factor_from_residual<true>(
+            residual.data(),
+            l2norm_sqr<T>(residual.data(), dim),
             centroid,
             dim,
             ex_bits,
@@ -867,30 +872,34 @@ static inline void rabitq_full_impl_with_scratch(
             t_const,
             scratch
         );
-    } else {
-        if (scratch == nullptr) {
-            one_bit::one_bit_code_with_factor(
-                data, centroid, dim, binary_code, f_add, f_rescale, f_error, metric_type
-            );
-        } else {
-            one_bit::one_bit_code_with_factor_into(
-                data,
-                centroid,
-                dim,
-                binary_code,
-                f_add,
-                f_rescale,
-                f_error,
-                metric_type,
-                scratch->residual,
-                scratch->centered
-            );
-        }
+        return;
     }
 
+    std::vector<int> owned_binary;
+    int* binary_code = nullptr;
+    if (scratch == nullptr) {
+        owned_binary.resize(dim);
+        binary_code = owned_binary.data();
+        one_bit::one_bit_code_with_factor(
+            data, centroid, dim, binary_code, f_add, f_rescale, f_error, metric_type
+        );
+    } else {
+        binary_code = scratch->binary;
+        one_bit::one_bit_code_with_factor_into(
+            data,
+            centroid,
+            dim,
+            binary_code,
+            f_add,
+            f_rescale,
+            f_error,
+            metric_type,
+            scratch->residual,
+            scratch->centered
+        );
+    }
     for (size_t i = 0; i < dim; ++i) {
-        const TP sign_code = static_cast<TP>(binary_code[i]) << ex_bits;
-        total_code[i] = ex_bits > 0 ? total_code[i] + sign_code : sign_code;
+        total_code[i] = static_cast<TP>(binary_code[i]);
     }
 }
 template <typename T, typename TP>
@@ -951,12 +960,8 @@ inline void validate_bit_size(size_t base_bits, size_t ex_bits) {
  * the code's integer range alone does not guarantee this. A zero residual
  * produces zero rescale/error factors and a metric-specific additive term.
  *
- * one_bit_code_with_factor() and ex_bits_code_with_factor() both compute the
- * same three quantities from xu_cb = code + cb, differing only in how the
- * code and cb are produced. This is that shared derivation, so a base-only
- * code and a combined code can both be turned into factors without
- * duplicating the algebra. With cb = -0.5 and a sign-bit code it reproduces
- * one_bit_code_with_factor()'s outputs bit-for-bit.
+ * Centers the supplied code before applying the shared factor arithmetic.
+ * With cb = -0.5 and a sign-bit code, it matches the one-bit factors.
  *
  * @param residual data - centroid
  * @param code integer code, values in [0, 2^bits)
@@ -977,49 +982,21 @@ inline void code_factors(
     ConstRowMajorArrayMap<int> code_arr(code, 1, static_cast<long>(dim));
     RowMajorArray<T> xu_cb = code_arr.template cast<T>() + cb;
 
-    T l2_sqr = l2norm_sqr<T>(residual, dim);
-
-    if (l2_sqr == 0) {
-        if (metric_type == METRIC_L2) {
-            f_add = 0;
-        } else if (metric_type == METRIC_IP) {
-            f_add = 1;
-        } else {
-            throw std::invalid_argument("Unsupported metric type in code_factors()");
-        }
-        f_rescale = 0;
-        f_error = 0;
-        return;
-    }
-
-    T l2_norm = std::sqrt(l2_sqr);
-
-    T ip_resi_xucb = dot_product<T>(residual, xu_cb.data(), dim);
-    T ip_cent_xucb = dot_product<T>(centroid, xu_cb.data(), dim);
-
-    // A nonzero residual and its quantized code have a strictly positive inner product.
-    assert(ip_resi_xucb > 0);
-
-    // Cauchy-Schwarz guarantees this value is nonnegative. Clamp small negative
-    // round-off errors for collinear residual/code vectors before taking the square root.
-    const T normalized_error =
-        (((l2_sqr * l2norm_sqr<T>(xu_cb.data(), dim)) / (ip_resi_xucb * ip_resi_xucb)) -
-         1) /
-        (dim - 1);
-    T tmp_error = l2_norm * kConstEpsilon * std::sqrt(std::max(normalized_error, T{0}));
-
-    if (metric_type == METRIC_L2) {
-        f_add = l2_sqr + (2 * l2_sqr * ip_cent_xucb / ip_resi_xucb);
-        f_rescale = -2 * l2_sqr / ip_resi_xucb;
-        f_error = 2 * tmp_error;
-    } else if (metric_type == METRIC_IP) {
-        f_add = 1 - dot_product<T>(residual, centroid, dim) +
-                (l2_sqr * ip_cent_xucb / ip_resi_xucb);
-        f_rescale = -l2_sqr / ip_resi_xucb;
-        f_error = 1 * tmp_error;
-    } else {
-        throw std::invalid_argument("Unsupported metric type in code_factors()");
-    }
+    const T l2_sqr = l2norm_sqr<T>(residual, dim);
+    const auto factors = code_factor_terms(
+        residual,
+        centroid,
+        xu_cb.data(),
+        dim,
+        l2_sqr,
+        metric_type,
+        "Unsupported metric type in code_factors()"
+    );
+    f_add = factors.add;
+    f_rescale = l2_sqr == 0                ? T{0}
+                : metric_type == METRIC_L2 ? -2 * l2_sqr / factors.residual_code_ip
+                                           : -l2_sqr / factors.residual_code_ip;
+    f_error = factors.error;
 }
 
 template <typename T>
