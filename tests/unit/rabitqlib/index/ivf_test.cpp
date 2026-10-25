@@ -606,6 +606,88 @@ Hits search_everything(
     return hits;
 }
 
+TEST(IvfLifecycleTest, BatchTailSurvivesAddRemoveAndReload) {
+    constexpr size_t kOld = 31, kCount = 33;
+    const auto points = random_rows(kCount, 753);
+    const auto query = random_rows(1, 754);
+    const std::vector<float> centroid(kDynDim, 0.0F);
+    const std::vector<PID> assigned(kCount, 0);
+    const std::array<PID, 2> removed{0, kCount - 1};
+    const std::string path = ::testing::TempDir() + "rabitq_ivf_lifecycle.index";
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {1U, 4U, 9U, 32U}) {
+            for (bool hacc : {false, true}) {
+                SCOPED_TRACE(::testing::Message() << metric << "/" << bits << "/" << hacc);
+                IVF index(kOld, kDynDim, 1, bits, metric);
+                index.construct(points.data(), centroid.data(), assigned.data(), false, 1);
+                index.add(
+                    points.data() + kOld * kDynDim,
+                    kCount - kOld,
+                    assigned.data() + kOld,
+                    false,
+                    1
+                );
+                ASSERT_EQ(index.num_points(), kCount);
+                const auto search = [&](const IVF& source) {
+                    Hits hits{
+                        std::vector<PID>(source.num_points()),
+                        std::vector<float>(source.num_points())};
+                    source.search(
+                        query.data(),
+                        hits.ids.size(),
+                        1,
+                        hits.ids.data(),
+                        hits.distances.data(),
+                        hacc
+                    );
+                    return hits;
+                };
+                const auto before = search(index);
+                auto ids = before.ids;
+                std::sort(ids.begin(), ids.end());
+                for (size_t row = 0; row < kCount; ++row) {
+                    ASSERT_EQ(ids[row], row);
+                    EXPECT_TRUE(std::isfinite(before.distances[row]));
+                    if (bits == 32) {
+                        EXPECT_NEAR(
+                            before.distances[row],
+                            exact_distance(
+                                query.data(),
+                                points.data() + before.ids[row] * kDynDim,
+                                metric
+                            ),
+                            1e-3
+                        );
+                    }
+                }
+                ASSERT_EQ(index.remove(removed.data(), removed.size()), removed.size());
+                ASSERT_EQ(index.num_points(), kCount - removed.size());
+                const auto after = search(index);
+                size_t next = 0;
+                for (size_t row = 0; row < kCount; ++row) {
+                    if (before.ids[row] == removed[0] || before.ids[row] == removed[1]) {
+                        continue;
+                    }
+                    ASSERT_LT(next, after.ids.size());
+                    EXPECT_EQ(after.ids[next], before.ids[row]);
+                    EXPECT_EQ(after.distances[next], before.distances[row]);
+                    ++next;
+                }
+                EXPECT_EQ(next, after.ids.size());
+                index.save(path.c_str());
+                IVF loaded;
+                loaded.load(path.c_str());
+                EXPECT_EQ(loaded.metric_type(), metric);
+                EXPECT_EQ(loaded.nbits(), bits);
+                const auto restored = search(loaded);
+                EXPECT_EQ(restored.ids, after.ids);
+                EXPECT_EQ(restored.distances, after.distances);
+            }
+        }
+    }
+    std::remove(path.c_str());
+}
+
 TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
     constexpr size_t kOld = 200;
     constexpr size_t kNew = 200;

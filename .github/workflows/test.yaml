@@ -277,7 +277,7 @@ jobs:
         run: |
           cmake --version
           ninja --version
-      # Keep assertions/debug symbols while avoiding unoptimized sanitizer loops.
+      # Keep assertions and source locations without full variable debug information.
       - name: Configure
         run: >-
           cmake -S . -B build-sanitizers -G Ninja
@@ -286,7 +286,7 @@ jobs:
           -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
           -DRABITQ_ENABLE_SANITIZERS=ON
           -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_CXX_FLAGS_DEBUG="-O1 -g -fno-optimize-sibling-calls"
+          -DCMAKE_CXX_FLAGS_DEBUG="-O1 -g1 -fno-optimize-sibling-calls"
       - name: Build
         run: cmake --build build-sanitizers
       - name: Test
@@ -319,6 +319,7 @@ jobs:
         run: |
           cmake --version
           ninja --version
+          lscpu
       - name: Build RaBitQ-Library with portable tests
         run: |
           cmake -S . -B build-install -G Ninja \
@@ -351,7 +352,7 @@ jobs:
           simd_filter+=':IvfPersistenceTest.ReloadsRawAndQuantizedStorage'
           simd_filter+=':HnswSaveTest.SuccessfulSavePreservesSearchAfterLoading'
           simd_filter+=':HnswPaddingTest.TailDimensionsMatchEveryAvailableSearchBackend'
-          simd_filter+=':IvfAddTest.*:IvfRemoveTest.*:HnswRemoveTest.*'
+          simd_filter+=':IvfLifecycleTest.BatchTailSurvivesAddRemoveAndReload:HnswRemoveTest.*'
           for cpu_model in hsw icl; do
             RABITQ_TEST_CPU="$cpu_model" "$RUNNER_TEMP/sde/sde64" "-$cpu_model" -- \
               build-install/tests/rabitq_tests --gtest_filter="$simd_filter"

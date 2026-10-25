@@ -121,8 +121,9 @@ applicable platforms. Passing on an AVX2 machine does not verify AVX-512 executi
 The installed-consumer job runs the full portable Linux Release suite. The Ubuntu
 native build runs SIMD and clustering smoke tests; Windows, ARM64, and ASan/UBSan
 jobs retain their full C++ suites. The sanitizer job uses Debug with
-`-O1 -g -fno-optimize-sibling-calls`, retaining assertions, frame pointers, leak
-checking, and both ASan/UBSan while avoiding unoptimized clustering loops.
+`-O1 -g1 -fno-optimize-sibling-calls`, retaining assertions, source locations,
+frame pointers, leak checking, and both ASan/UBSan. Minimal debug information
+reduces compilation work while omitting full variable/type information.
 
 The portable Linux job also reuses its test binary under pinned
 [Intel SDE](https://www.intel.com/content/www/us/en/download/684897/intel-software-development-emulator.html)
@@ -130,6 +131,10 @@ CPU models: Haswell (`-hsw`, AVX2 only) and Ice Lake (`-icl`, AVX-512 including
 VPOPCNTDQ). Kernel reference tests and small clustering/index tests exercise real
 runtime dispatch under emulation. `RABITQ_TEST_CPU` checks the emulated features
 and prints them; an incorrect CPU model fails instead of silently losing coverage.
+IVF emulation uses a 31-to-33-point append/remove/reload case across L2/IP,
+sign-only, extra-bit and raw storage, and standard/HACC scans. Full IVF lifecycle
+combinations remain in the native Release and sanitizer suites. The job prints
+the runner CPU information before applying SDE's emulated CPU models.
 These are correctness checks, not hardware performance measurements.
 
 Source-install Python jobs check imports, index persistence, and both clustering
