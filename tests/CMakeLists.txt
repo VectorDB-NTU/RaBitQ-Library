@@ -87,6 +87,15 @@ foreach(mode IN ITEMS dispatch scalar)
 endforeach()
 
 if(RABITQ_BUILD_INDEX)
+    if(RABITQ_BUILD_SAMPLES)
+        # The Python CLI integration test validates indexes without Python bindings.
+        add_executable(cpp_example_index_check integration/cpp_example_index_check.cpp)
+        target_link_libraries(cpp_example_index_check PRIVATE rabitqlib::index)
+        rabitq_configure_target(cpp_example_index_check)
+        set_target_properties(cpp_example_index_check PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
+    endif()
+
     # Binding is initialized before main; test it in its own process.
     add_test(NAME OpenMPBinding COMMAND rabitq_tests
         --gtest_filter=ThreadCount.BoundParallelForUsesRuntimePlacementAndPropagatesErrors)

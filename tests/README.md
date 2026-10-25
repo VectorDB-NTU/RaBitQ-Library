@@ -156,13 +156,17 @@ The [Python example tests](python/test_examples.py) cover RaBitQKMeans and
 QGKMeans clustering, L2/IP indexing, saved cluster files, and queries without
 importing FAISS. The [FAISS comparison tests](python/test_compare_with_faiss.py)
 cover both clustering methods and skip FAISS-dependent cases when `faiss-cpu`
-is absent. CI runs them in a dedicated Linux job; wheel tests do not install FAISS.
+is absent. CI runs them in the Linux Python 3.11 source-install job, whose result
+feeds `Python validation`; wheel tests do not install FAISS.
 
 The [C++ clustering example tests](python/test_cpp_clustering_examples.py) check
 saved vectors, exact labels, and compatibility with the C++ index builders.
 The Ubuntu C++ job runs them against its sample binaries, with
 `RABITQ_REQUIRE_CPP_EXAMPLES=1` so missing executables fail. Wheel jobs exclude
-these tests. Locally, build the examples first; missing executables otherwise skip.
+these tests. With both `RABITQ_BUILD_TESTS=ON` and `RABITQ_BUILD_SAMPLES=ON`, the build
+also provides `cpp_example_index_check`, which loads each CLI-produced index and
+checks its metadata and self-query results without requiring Python bindings.
+Locally, build both the examples and this checker first; missing executables otherwise skip.
 
 ## Installed CMake package test
 
@@ -212,11 +216,17 @@ continues to run all tests, including index, clustering, persistence and allocat
 The external consumer runner copies its CMake project and the standalone core example
 to separate working directories, then tests both core and FastScan with
 `add_subdirectory`, local-source `FetchContent`, and relocated installed packages.
-It also runs each producer's reference tests (downloading the existing GoogleTest dependency). Pass absolute paths:
+By default it runs references once in the FastScan producer, which includes the
+core suite. A core-only partition runs its own core references. Pass absolute paths:
 
 ```text
 cmake -DRABITQ_SOURCE_DIR=<checkout> -DWORK_DIR=<external-working-directory> -P tests/core_consumer/run.cmake
 ```
+
+Use `-DRABITQ_RUN_REFERENCE_TESTS=OFF` for integration-only checks when references
+have already run in the matching full build. CI uses this for OpenMP ON; OpenMP OFF
+keeps one combined reference run per compiler/platform. Consumer tests, header/symbol
+checks, invalid-configuration checks and the core benchmark always remain enabled.
 
 On macOS, also pass `-DOpenMP_ROOT=<OpenMP-prefix>`. On Windows, set
 `CMAKE_GENERATOR=Visual Studio 18 2026` and `CMAKE_GENERATOR_PLATFORM=x64` in the

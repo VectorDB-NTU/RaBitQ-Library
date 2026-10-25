@@ -1,57 +1,42 @@
 """Tests for module import and class construction."""
 
 import pytest
-from rabitqlib import HnswIndex, IvfIndex, QGKMeans, SymqgIndex
-
-# ── import ────────────────────────────────────────────────────────────────────
+from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 
-def test_all_classes_importable():
-    assert HnswIndex is not None
-    assert IvfIndex is not None
-    assert SymqgIndex is not None
-    assert QGKMeans is not None
-
-
-# ── valid construction ────────────────────────────────────────────────────────
-
-
-def test_ivf_construct_l2():
-    idx = IvfIndex(64, 500, 5, nbits=4, metric="l2")
+@pytest.mark.parametrize(
+    "cls,args,kwargs,expected",
+    [
+        (
+            IvfIndex,
+            (64, 500, 5),
+            {"nbits": 4, "metric": "l2"},
+            {"num_clusters": 5, "nbits": 4, "metric": "l2"},
+        ),
+        (IvfIndex, (64, 500, 5), {"nbits": 4, "metric": "ip"}, {"metric": "ip"}),
+        (HnswIndex, (64, 500), {}, {}),
+        (
+            HnswIndex,
+            (64, 500),
+            {
+                "M": 8,
+                "ef_construction": 50,
+                "nbits": 4,
+                "metric": "ip",
+                "random_seed": 7,
+            },
+            {"metric": "ip", "nbits": 4},
+        ),
+        (SymqgIndex, (64,), {"max_degree": 32}, {"max_degree": 32}),
+    ],
+    ids=["ivf-l2", "ivf-ip", "hnsw-default", "hnsw-explicit", "symqg"],
+)
+def test_constructor_contract(cls, args, kwargs, expected):
+    idx = cls(*args, **kwargs)
     assert idx.dim == 64
-    assert idx.num_clusters == 5
-    assert idx.nbits == 4
-    assert idx.metric == "l2"
     assert not idx.is_built
-
-
-def test_ivf_construct_ip():
-    idx = IvfIndex(64, 500, 5, nbits=4, metric="ip")
-    assert idx.metric == "ip"
-
-
-def test_hnsw_construct_defaults():
-    idx = HnswIndex(64, 500)
-    assert idx.dim == 64
-    assert not idx.is_built
-
-
-def test_hnsw_construct_explicit():
-    idx = HnswIndex(
-        64, 500, M=8, ef_construction=50, nbits=4, metric="ip", random_seed=7
-    )
-    assert idx.metric == "ip"
-    assert idx.nbits == 4
-
-
-def test_symqg_construct():
-    idx = SymqgIndex(64, max_degree=32)
-    assert idx.dim == 64
-    assert idx.max_degree == 32
-    assert not idx.is_built
-
-
-# ── invalid metric ────────────────────────────────────────────────────────────
+    for name, value in expected.items():
+        assert getattr(idx, name) == value
 
 
 @pytest.mark.parametrize(

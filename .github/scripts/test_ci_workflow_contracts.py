@@ -15,6 +15,59 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class WorkflowContractsTest(unittest.TestCase):
+    def test_tidy_rejects_empty_scope_and_propagates_analysis_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            compiler = work / "compiler"
+            compiler.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' '#include <...> search starts here:' "
+                "' /test/include' 'End of search list.'\n"
+            )
+            compiler.chmod(0o755)
+            runner = work / "runner"
+            marker = work / "analyzed"
+            runner.write_text(
+                f"#!{sys.executable}\n"
+                "import os, sys\n"
+                "from pathlib import Path\n"
+                "Path(os.environ['TIDY_MARKER']).touch()\n"
+                "sys.exit(int(os.environ['ANALYSIS_STATUS']))\n"
+            )
+            runner.chmod(0o755)
+            for entries, status, selected in (
+                ([], 0, False),
+                ([{"directory": str(work), "file": "foreign.cpp"}], 0, False),
+                ([{"directory": str(ROOT), "file": "src/core/api.cpp"}], 0, True),
+                ([{"directory": str(ROOT / "src"), "file": "core/api.cpp"}], 0, True),
+                ([{"directory": str(ROOT), "file": "src/core/api.cpp"}], 7, True),
+            ):
+                with self.subTest(entries=entries, status=status):
+                    (work / "compile_commands.json").write_text(json.dumps(entries))
+                    marker.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", str(ROOT / "scripts/check-tidy.sh"), str(work)],
+                        env=dict(
+                            os.environ,
+                            CXX=str(compiler),
+                            RUN_CLANG_TIDY=str(runner),
+                            PYTHON=sys.executable,
+                            TIDY_MARKER=str(marker),
+                            ANALYSIS_STATUS=str(status),
+                        ),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode == 0, selected and status == 0)
+                    self.assertEqual(marker.exists(), selected)
+                    if not selected:
+                        self.assertIn(
+                            "no matching first-party translation units", result.stderr
+                        )
+                    if result.returncode:
+                        self.assertNotIn("clang-tidy passed", result.stdout)
+
     def test_format_checker_propagates_file_list_failures(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -198,6 +251,122 @@ class WorkflowContractsTest(unittest.TestCase):
             "      - name: Test external core-only integrations (Windows)\n", 1
         )[1].split("      - name: Report compiler cache statistics", 1)[0]
         self.assertIn("-DRABITQ_COMPONENT=${{ matrix.component }}", windows)
+        self.assertIn(
+            "-DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && "
+            "matrix.component != 'core' && 'ON' || 'OFF' }}",
+            windows,
+        )
+
+    def test_consumer_reference_ownership_preserves_integration_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "calls.bin"
+            for tool in ("cmake", "ctest"):
+                helper = root / tool
+                helper.write_text(
+                    r"""#!/usr/bin/env bash
+set -euo pipefail
+# CMake emits nonempty arguments here; a double NUL separates invocations.
+printf '%s\0' "${0##*/}" "$@" >> "$CONSUMER_TRACE"
+printf '\0' >> "$CONSUMER_TRACE"
+args=("$@")
+for ((i = 0; i + 1 < ${#args[@]}; ++i)); do
+    case "${args[i]}" in
+        --prefix) mkdir -p "${args[i+1]}" ;;
+        -B)
+            case "${args[i+1]##*/}" in
+                invalid-python) printf '%s\n' 'requires RABITQ_BUILD_INDEX=ON' >&2; exit 1 ;;
+                invalid-index) printf '%s\n' 'requires RABITQ_BUILD_FASTSCAN=ON' >&2; exit 1 ;;
+                invalid-openmp) printf '%s\n' 'ANN indexes require RABITQ_USE_OPENMP=ON' >&2; exit 1 ;;
+                missing-index|missing-fastscan) printf '%s\n' 'rabitqlib component not found' >&2; exit 1 ;;
+            esac ;;
+        --test-dir)
+            if [[ "${args[i+1]##*/}" == producer && "${FAIL_REFERENCE:-0}" == 1 ]]; then
+                exit 7
+            fi ;;
+    esac
+done
+"""
+                )
+                helper.chmod(0o755)
+            for index, (openmp, reference, component, expected, fail) in enumerate(
+                [
+                    ("ON", "OFF", None, {"core": "OFF", "fastscan": "OFF"}, False),
+                    ("OFF", "ON", None, {"core": "OFF", "fastscan": "ON"}, False),
+                    ("ON", None, None, {"core": "OFF", "fastscan": "ON"}, False),
+                    ("OFF", "OFF", "core", {"core": "OFF"}, False),
+                    ("ON", None, "core", {"core": "ON"}, False),
+                    ("OFF", "ON", "fastscan", {"fastscan": "ON"}, False),
+                    ("OFF", "ON", "fastscan", {"fastscan": "ON"}, True),
+                ]
+            ):
+                with self.subTest(
+                    openmp=openmp, reference=reference, component=component, fail=fail
+                ):
+                    log.unlink(missing_ok=True)
+                    command = [
+                        "cmake",
+                        f"-DRABITQ_SOURCE_DIR={ROOT}",
+                        f"-DWORK_DIR={root / str(index)}",
+                        f"-DCMAKE_COMMAND={root / 'cmake'}",
+                        f"-DCMAKE_CTEST_COMMAND={root / 'ctest'}",
+                        f"-DRABITQ_USE_OPENMP={openmp}",
+                    ]
+                    if reference is not None:
+                        command.append(f"-DRABITQ_RUN_REFERENCE_TESTS={reference}")
+                    if component is not None:
+                        command.append(f"-DRABITQ_COMPONENT={component}")
+                    result = subprocess.run(
+                        [*command, "-P", str(ROOT / "tests/core_consumer/run.cmake")],
+                        env=dict(
+                            os.environ,
+                            CONSUMER_TRACE=str(log),
+                            FAIL_REFERENCE=str(int(fail)),
+                        ),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode == 0, not fail, result.stderr)
+                    if fail:
+                        self.assertIn("Command failed (7)", result.stderr)
+                        continue
+                    calls = [
+                        record.decode().split("\0")
+                        for record in log.read_bytes().split(b"\0\0")
+                        if record
+                    ]
+                    producers = {}
+                    tests = []
+                    for tool, *args in calls:
+                        if tool == "cmake" and "-B" in args:
+                            build = Path(args[args.index("-B") + 1])
+                            if build.name == "producer":
+                                producers[build.parent.name] = next(
+                                    arg.split("=", 1)[1]
+                                    for arg in args
+                                    if arg.startswith("-DRABITQ_BUILD_TESTS=")
+                                )
+                        if tool == "ctest":
+                            tests.append(Path(args[args.index("--test-dir") + 1]))
+                    self.assertEqual(producers, expected)
+                    self.assertEqual(
+                        {path.parent.name for path in tests if path.name == "producer"},
+                        {name for name, enabled in expected.items() if enabled == "ON"},
+                    )
+                    for name in expected:
+                        self.assertEqual(
+                            {
+                                path.name
+                                for path in tests
+                                if path.parent.name == name and path.name != "producer"
+                            },
+                            {"ADD_SUBDIRECTORY", "FETCHCONTENT", "PACKAGE"},
+                        )
+                    self.assertEqual(
+                        any(path.name == "benchmark" for path in tests),
+                        "core" in expected,
+                    )
 
     def test_component_partition_rejects_unknown_or_empty_selection(self):
         with tempfile.TemporaryDirectory() as directory:

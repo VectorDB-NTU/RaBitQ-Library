@@ -50,21 +50,31 @@ TEST_F(RotatorTest, DefaultRotatorType) {
 
 TEST_F(RotatorTest, RejectsPaddedDimensionSmallerThanInput) {
     EXPECT_THROW(
-        (choose_rotator<float>(dim, RotatorType::FhtKacRotator, dim / 2)),
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(dim, RotatorType::FhtKacRotator, dim / 2)
+        )),
         std::invalid_argument
     );
     EXPECT_THROW(
-        (choose_rotator<float>(dim, RotatorType::MatrixRotator, dim / 2)),
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(dim, RotatorType::MatrixRotator, dim / 2)
+        )),
         std::invalid_argument
     );
 }
 
 TEST_F(RotatorTest, RejectsZeroDimension) {
     EXPECT_THROW(
-        (choose_rotator<float>(0, RotatorType::FhtKacRotator)), std::invalid_argument
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(0, RotatorType::FhtKacRotator)
+        )),
+        std::invalid_argument
     );
     EXPECT_THROW(
-        (choose_rotator<float>(0, RotatorType::MatrixRotator)), std::invalid_argument
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(0, RotatorType::MatrixRotator)
+        )),
+        std::invalid_argument
     );
 }
 
@@ -93,12 +103,20 @@ TEST(FhtRotatorTest, PadsToThirtyTwoAndAcceptsLegacyPadding) {
     EXPECT_THROW((rotator_impl::FhtKacRotator(65, 72)), std::invalid_argument);
     EXPECT_THROW((rotator_impl::FhtKacRotator(65, 80)), std::invalid_argument);
     EXPECT_THROW(
-        (choose_rotator<float>(65, RotatorType::FhtKacRotator, 80)), std::invalid_argument
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(65, RotatorType::FhtKacRotator, 80)
+        )),
+        std::invalid_argument
     );
     EXPECT_THROW(
-        (choose_rotator<float>(65, RotatorType::FhtKacRotator, 72)), std::invalid_argument
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(65, RotatorType::FhtKacRotator, 72)
+        )),
+        std::invalid_argument
     );
-    EXPECT_THROW((choose_rotator<float>(63)), std::invalid_argument);
+    EXPECT_THROW(
+        (std::unique_ptr<Rotator<float>>(choose_rotator<float>(63))), std::invalid_argument
+    );
     EXPECT_THROW(
         (rotator_impl::padding_requirement(
             std::numeric_limits<size_t>::max(), RotatorType::FhtKacRotator
@@ -140,46 +158,11 @@ TEST(FhtRotatorTest, RejectsUnaddressableDimensionsBeforeAllocation) {
         std::invalid_argument
     );
     EXPECT_THROW(
-        (choose_rotator<float>(rotator_impl::FhtKacRotator::kMaxDim + 1)),
+        (std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(rotator_impl::FhtKacRotator::kMaxDim + 1)
+        )),
         std::invalid_argument
     );
-}
-
-uint8_t bitreverse8(uint8_t x) {
-    x = (((x & 0x55) << 1) | ((x & 0xAA) >> 1));
-    x = (((x & 0x33) << 2) | ((x & 0xCC) >> 2));
-    x = (((x & 0x0F) << 4) | ((x & 0xF0) >> 4));
-    return x;
-}
-TEST(FlipSignTest, FlipWorks) {
-    const size_t dim = 128;
-    float data[dim];
-    uint8_t flip[dim / 8];  // 1 bit per float
-
-    // Initialize data and flip pattern
-    for (size_t i = 0; i < dim; ++i) {
-        data[i] = static_cast<float>(i + 1);  // Example data
-    }
-    for (size_t i = 0; i < dim / 8; ++i) {
-        flip[i] = static_cast<uint8_t>(i % 256);  // Example flip pattern
-    }
-
-    // Perform sign flipping
-    rabitqlib::rotator_impl::flip_sign(flip, data, dim);
-
-    // Output the results
-    uint8_t signs = 0;
-    for (size_t i = 0; i < dim; ++i) {
-        ASSERT_EQ(abs(data[i]), static_cast<float>(i + 1));
-        int sign = (data[i] < 0) ? 1 : 0;
-        signs = (signs << 1) | sign;
-        if (i % 8 == 7) {
-            uint8_t expected = flip[i / 8];
-            signs = bitreverse8(signs);
-            ASSERT_EQ(static_cast<uint8_t>(signs & 0xFF), expected);
-            signs = 0;
-        }
-    }
 }
 
 TEST(FhtDispatchTest, BackendsMatchScalarButterfliesAndPadding) {
@@ -342,7 +325,7 @@ TEST(MatrixRotatorTest, PreservesOverlappingInputAndOutput) {
 
 TEST(FlipSignTest, BackendsPreserveBitsAndUnalignedBuffers) {
     std::vector<decltype(&simd::flip_sign)> backends{
-        simd::flip_sign_generic, simd::flip_sign};
+        simd::flip_sign_generic, rotator_impl::flip_sign};
 #if defined(__aarch64__) || defined(_M_ARM64)
     if (cpu::has_neon()) {
         backends.push_back(simd::flip_sign_neon);
@@ -358,20 +341,31 @@ TEST(FlipSignTest, BackendsPreserveBitsAndUnalignedBuffers) {
     const std::array<uint32_t, 8> values{
         0, 0x80000000U, 0x7f800000U, 0xff800000U, 0x7fc12345U, 0xffc54321U, 1, 0x3f812345U};
     for (size_t dim : {64U, 96U, 128U, 160U}) {
-        for (unsigned mask = 0; mask < 256; ++mask) {
+        for (unsigned mask = 0; mask <= 256; ++mask) {
+            SCOPED_TRACE(::testing::Message() << "dim=" << dim << " mask=" << mask);
             std::vector<uint8_t> flip(dim / 8 + 1);
-            std::fill(flip.begin(), flip.end(), static_cast<uint8_t>(mask));
+            // The final pattern retains distinct bytes from the old FlipWorks case.
+            for (size_t i = 0; i < dim / 8; ++i) {
+                flip[i + 1] = static_cast<uint8_t>(mask == 256 ? i : mask);
+            }
             for (auto backend : backends) {
                 std::vector<float> data(dim + 2);
+                std::vector<uint32_t> expected(dim);
                 data.front() = data.back() = 12345;
                 for (size_t i = 0; i < dim; ++i) {
-                    std::memcpy(&data[i + 1], &values[i % 8], sizeof(float));
+                    if (mask == 256) {
+                        data[i + 1] = static_cast<float>(i + 1);
+                    } else {
+                        std::memcpy(&data[i + 1], &values[i % 8], sizeof(float));
+                    }
+                    std::memcpy(&expected[i], &data[i + 1], sizeof(uint32_t));
+                    expected[i] ^= uint32_t{(flip[1 + i / 8] >> (i % 8)) & 1U} << 31;
                 }
                 backend(flip.data() + 1, data.data() + 1, dim);
                 for (size_t i = 0; i < dim; ++i) {
                     uint32_t actual;
                     std::memcpy(&actual, &data[i + 1], sizeof(actual));
-                    EXPECT_EQ(actual, values[i % 8] ^ (((mask >> (i % 8)) & 1U) << 31));
+                    EXPECT_EQ(actual, expected[i]);
                 }
                 EXPECT_EQ(data.front(), 12345);
                 EXPECT_EQ(data.back(), 12345);

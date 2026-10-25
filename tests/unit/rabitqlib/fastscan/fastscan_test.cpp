@@ -71,12 +71,9 @@ void check_lut_subset_sums(void (*pack_fn)(size_t, const T*, T*) = pack_lut<T>) 
     }
 }
 
-TEST(FastScanLutTest, MatchesOrderedSubsetSumsExactly) {
+TEST(FastScanLutTest, EverySupportedBackendMatchesOrderedSubsetSumsExactly) {
     check_lut_subset_sums<float>();
     check_lut_subset_sums<double>();
-}
-
-TEST(FastScanLutTest, EverySupportedBackendMatchesOrderedSubsetSumsExactly) {
     check_lut_subset_sums<float>(simd::pack_lut_generic);
 #if defined(__aarch64__) || defined(_M_ARM64)
     if (cpu::has_neon()) {

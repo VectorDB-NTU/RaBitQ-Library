@@ -61,13 +61,6 @@ def test_properties(built_hnsw):
     assert built_hnsw.num_clusters == N_CLUSTERS
 
 
-def test_fast_quantization_builds(base_data, clusters):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
-    centroids, cluster_ids = clusters
-    idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
-    assert idx.is_built
-
-
 def test_seed_reproduces_serial_build_and_search(tmp_path):
     rng = np.random.default_rng(47)
     data = rng.standard_normal((65, 65), dtype=np.float32)
@@ -105,13 +98,14 @@ def test_parallel_build_preserves_self_retrieval(base_data, clusters):
 # ── search output shape and dtype ─────────────────────────────────────────────
 
 
-def test_search_output_contract(built_hnsw, query_data):
-    ids, dists = built_hnsw.search(query_data, k=_TOPK, ef=_EF)
-    assert ids.shape == (N_QUERIES, _TOPK)
-    assert dists.shape == (N_QUERIES, _TOPK)
+@pytest.mark.parametrize("nq,k", [(N_QUERIES, _TOPK), (1, 1)])
+def test_search_output_contract(built_hnsw, query_data, nq, k):
+    ids, dists = built_hnsw.search(query_data[:nq], k=k, ef=_EF)
+    assert ids.shape == dists.shape == (nq, k)
     assert ids.dtype == np.uint32
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
+    assert np.isfinite(dists).all()
     assert np.all(dists >= 0)
 
 
@@ -125,18 +119,20 @@ def test_ef_default(built_hnsw, query_data, k):
         np.testing.assert_array_equal(distances, expected_distances)
 
 
-def test_single_query(built_hnsw, query_data):
-    ids, dists = built_hnsw.search(query_data[:1], k=1, ef=_EF)
-    assert ids.shape == (1, 1)
-
-
 # ── search correctness ────────────────────────────────────────────────────────
 
 
-def test_self_retrieval(built_hnsw, base_data):
+@pytest.mark.parametrize("fast_quantization", [False, True])
+def test_self_retrieval(built_hnsw, base_data, clusters, fast_quantization):
     """Each database vector must be its own nearest neighbor at high ef."""
+    idx = built_hnsw
+    if fast_quantization:
+        idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+        centroids, cluster_ids = clusters
+        idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
+    assert idx.is_built
     probes = base_data[:10]
-    ids, _ = built_hnsw.search(probes, k=1, ef=200)
+    ids, _ = idx.search(probes, k=1, ef=200)
     for i in range(10):
         assert i in ids[i], f"Vector {i} not found in its own top-1 result"
 

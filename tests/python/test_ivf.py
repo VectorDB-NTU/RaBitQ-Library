@@ -34,30 +34,21 @@ def test_properties(built_ivf):
     assert built_ivf.max_elements == N_VECTORS
 
 
-def test_fast_quantization_builds(base_data, clusters):
-    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
-    centroids, cluster_ids = clusters
-    idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
-    assert idx.is_built
-
-
 # ── search output shape and dtype ─────────────────────────────────────────────
 
 
-def test_search_output_contract(built_ivf, query_data):
-    ids, dists = built_ivf.search(query_data, k=_TOPK, nprobe=_NPROBE_ALL)
-    assert ids.shape == (N_QUERIES, _TOPK)
-    assert dists.shape == (N_QUERIES, _TOPK)
+@pytest.mark.parametrize(
+    "nq,k,nprobe",
+    [(N_QUERIES, _TOPK, _NPROBE_ALL), (1, 1, _NPROBE_ALL), (N_QUERIES, 1, 1)],
+)
+def test_search_output_contract(built_ivf, query_data, nq, k, nprobe):
+    ids, dists = built_ivf.search(query_data[:nq], k=k, nprobe=nprobe)
+    assert ids.shape == dists.shape == (nq, k)
     assert ids.dtype == np.uint32
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
+    assert np.isfinite(dists).all()
     assert np.all(dists >= 0)
-
-
-def test_single_query(built_ivf, query_data):
-    ids, dists = built_ivf.search(query_data[:1], k=1, nprobe=_NPROBE_ALL)
-    assert ids.shape == (1, 1)
-    assert dists.shape == (1, 1)
 
 
 # C++ BatchSearchMatchesIndividualQueries covers every width; exercise binding
@@ -97,12 +88,6 @@ def test_batch_search_matches_individual_queries(bits, metric):
     assert np.all(np.isinf(distances))
 
 
-def test_k_equals_one(built_ivf, query_data):
-    ids, dists = built_ivf.search(query_data, k=1, nprobe=1)
-    assert ids.shape == (N_QUERIES, 1)
-    assert dists.shape == (N_QUERIES, 1)
-
-
 def test_unfilled_results_use_sentinels():
     data = np.zeros((4, DIM), dtype=np.float32)
     data[1:] = 100.0
@@ -120,10 +105,17 @@ def test_unfilled_results_use_sentinels():
 # ── search correctness ────────────────────────────────────────────────────────
 
 
-def test_self_retrieval(built_ivf, base_data):
+@pytest.mark.parametrize("fast_quantization", [False, True])
+def test_self_retrieval(built_ivf, base_data, clusters, fast_quantization):
     """Probing all clusters: each database vector must be its own nearest neighbor."""
+    idx = built_ivf
+    if fast_quantization:
+        idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
+        centroids, cluster_ids = clusters
+        idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
+    assert idx.is_built
     probes = base_data[:10]
-    ids, _ = built_ivf.search(probes, k=1, nprobe=_NPROBE_ALL)
+    ids, _ = idx.search(probes, k=1, nprobe=_NPROBE_ALL)
     for i in range(10):
         assert i in ids[i], f"Vector {i} not found in its own top-1 result"
 

@@ -90,7 +90,15 @@ def test_cpp_clustering_file_outputs(tmp_path, method, k, metric):
             metric,
         )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert index_path.stat().st_size > 0
+    result = run_cpp(
+        "cpp_example_index_check",
+        "ivf" if method == "qgkmeans" else "hnsw",
+        index_path,
+        source,
+        metric,
+        3 if method == "qgkmeans" else 5,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("method", ["qgkmeans", "rabitqkmeans"])

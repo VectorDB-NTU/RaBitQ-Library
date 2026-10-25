@@ -129,23 +129,3 @@ jobs:
           tests/python/test_symqg.py::test_save_load_roundtrip
           tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
-
-  faiss-comparison:
-    # Keep the required check name; FAISS runs against the 3.11 source installation.
-    name: FAISS comparison script
-    needs: [changes, python-build]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require selected comparison tests
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          PYTHON_SELECTED: ${{ needs.changes.outputs.python_build }}
-          MATRIX_RESULT: ${{ needs.python-build.result }}
-        run: |
-          if [ "$CHANGES_RESULT" = success ] && [ "$PYTHON_SELECTED" = false ]; then
-            test "$MATRIX_RESULT" = skipped || test "$MATRIX_RESULT" = success
-          else
-            test "$MATRIX_RESULT" = success
-          fi

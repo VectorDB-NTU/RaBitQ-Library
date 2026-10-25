@@ -17,6 +17,19 @@ namespace rabitqlib {
 namespace {
 template <typename T>
 void check_quantization(void (*quantize)(T*, const float*, size_t, float, float)) {
+    const auto check =
+        [&](const std::vector<float>& input, size_t dim, float lo, float delta) {
+            SCOPED_TRACE(dim);
+            SCOPED_TRACE(delta);
+            std::vector<T> actual(dim + 2, 99), expected(actual);
+            const float reciprocal = 1.0F / delta;
+            for (size_t i = 0; i < dim; ++i) {
+                expected[i + 1] =
+                    static_cast<T>(std::round((input[i + 1] - lo) * reciprocal));
+            }
+            quantize(actual.data() + 1, input.data() + 1, dim, lo, delta);
+            EXPECT_EQ(actual, expected);
+        };
     const auto max = static_cast<float>(std::numeric_limits<T>::max());
     for (const auto& params : {std::array<float, 2>{0, 1}, {-3.25F, 0.125F}, {-7, 0.1F}}) {
         const float lo = params[0], delta = params[1];
@@ -44,18 +57,28 @@ void check_quantization(void (*quantize)(T*, const float*, size_t, float, float)
                  32UL,
                  33UL,
                  input.size() - 1}) {
-            SCOPED_TRACE(dim);
-            SCOPED_TRACE(delta);
-            std::vector<T> actual(dim + 2, 99), expected(actual);
-            const float reciprocal = 1.0F / delta;
-            for (size_t i = 0; i < dim; ++i) {
-                expected[i + 1] =
-                    static_cast<T>(std::round((input[i + 1] - lo) * reciprocal));
-            }
-            quantize(actual.data() + 1, input.data() + 1, dim, lo, delta);
-            EXPECT_EQ(actual, expected);
+            check(input, dim, lo, delta);
         }
     }
+
+    // Keep exact half-integers at the old SIMD/tail regression coordinates.
+    const std::array<float, 9> values{
+        0.5F,
+        1.5F,
+        2.5F,
+        3.5F,
+        4.5F,
+        std::nextafter(2.5F, 0.0F),
+        std::nextafter(2.5F, std::numeric_limits<float>::infinity()),
+        125.5F,
+        126.5F,
+    };
+    std::vector<float> input(34);
+    for (size_t i = 0; i < 33; ++i) {
+        input[i + 1] = (i == 8 || i == 16 || i == 32) ? 2.5F : values[i % values.size()];
+    }
+    SCOPED_TRACE("Half-integer lane boundaries");
+    check(input, 33, 0.0F, 1.0F);
 }
 
 template <typename T>
