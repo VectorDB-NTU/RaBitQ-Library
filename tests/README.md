@@ -121,8 +121,9 @@ applicable platforms. Passing on an AVX2 machine does not verify AVX-512 executi
 The installed-consumer job runs the full portable Linux Release suite. The Ubuntu
 native build runs SIMD and clustering smoke tests; Windows, ARM64, and ASan/UBSan
 jobs retain their full C++ suites. The sanitizer job uses Debug with
-`-O1 -g -fno-optimize-sibling-calls`, retaining assertions, frame pointers, leak
-checking, and both ASan/UBSan while avoiding unoptimized clustering loops.
+`-O1 -g1 -fno-optimize-sibling-calls`, retaining assertions, source locations,
+frame pointers, leak checking, and both ASan/UBSan. Minimal debug information
+reduces compilation work while omitting full variable/type information.
 
 The portable Linux job also reuses its test binary under pinned
 [Intel SDE](https://www.intel.com/content/www/us/en/download/684897/intel-software-development-emulator.html)
@@ -130,6 +131,10 @@ CPU models: Haswell (`-hsw`, AVX2 only) and Ice Lake (`-icl`, AVX-512 including
 VPOPCNTDQ). Kernel reference tests and small clustering/index tests exercise real
 runtime dispatch under emulation. `RABITQ_TEST_CPU` checks the emulated features
 and prints them; an incorrect CPU model fails instead of silently losing coverage.
+IVF emulation uses a 31-to-33-point append/remove/reload case across L2/IP,
+sign-only, extra-bit and raw storage, and standard/HACC scans. Full IVF lifecycle
+combinations remain in the native Release and sanitizer suites. The job prints
+the runner CPU information before applying SDE's emulated CPU models.
 These are correctness checks, not hardware performance measurements.
 
 Source-install Python jobs check imports, index persistence, and both clustering
@@ -156,13 +161,17 @@ The [Python example tests](python/test_examples.py) cover RaBitQKMeans and
 QGKMeans clustering, L2/IP indexing, saved cluster files, and queries without
 importing FAISS. The [FAISS comparison tests](python/test_compare_with_faiss.py)
 cover both clustering methods and skip FAISS-dependent cases when `faiss-cpu`
-is absent. CI runs them in a dedicated Linux job; wheel tests do not install FAISS.
+is absent. CI runs them in the Linux Python 3.11 source-install job, whose result
+feeds `Python validation`; wheel tests do not install FAISS.
 
 The [C++ clustering example tests](python/test_cpp_clustering_examples.py) check
 saved vectors, exact labels, and compatibility with the C++ index builders.
 The Ubuntu C++ job runs them against its sample binaries, with
 `RABITQ_REQUIRE_CPP_EXAMPLES=1` so missing executables fail. Wheel jobs exclude
-these tests. Locally, build the examples first; missing executables otherwise skip.
+these tests. With both `RABITQ_BUILD_TESTS=ON` and `RABITQ_BUILD_SAMPLES=ON`, the build
+also provides `cpp_example_index_check`, which loads each CLI-produced index and
+checks its metadata and self-query results without requiring Python bindings.
+Locally, build both the examples and this checker first; missing executables otherwise skip.
 
 ## Installed CMake package test
 
@@ -212,11 +221,17 @@ continues to run all tests, including index, clustering, persistence and allocat
 The external consumer runner copies its CMake project and the standalone core example
 to separate working directories, then tests both core and FastScan with
 `add_subdirectory`, local-source `FetchContent`, and relocated installed packages.
-It also runs each producer's reference tests (downloading the existing GoogleTest dependency). Pass absolute paths:
+By default it runs references once in the FastScan producer, which includes the
+core suite. A core-only partition runs its own core references. Pass absolute paths:
 
 ```text
 cmake -DRABITQ_SOURCE_DIR=<checkout> -DWORK_DIR=<external-working-directory> -P tests/core_consumer/run.cmake
 ```
+
+Use `-DRABITQ_RUN_REFERENCE_TESTS=OFF` for integration-only checks when references
+have already run in the matching full build. CI uses this for OpenMP ON; OpenMP OFF
+keeps one combined reference run per compiler/platform. Consumer tests, header/symbol
+checks, invalid-configuration checks and the core benchmark always remain enabled.
 
 On macOS, also pass `-DOpenMP_ROOT=<OpenMP-prefix>`. On Windows, set
 `CMAKE_GENERATOR=Visual Studio 18 2026` and `CMAKE_GENERATOR_PLATFORM=x64` in the

@@ -65,6 +65,7 @@ class ChangeSelectionTest(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/config.yml": set(),
             ".github/ISSUE_TEMPLATE/bug_report.yml": set(),
             ".github/CODEOWNERS": set(),
+            ".github/release.yml": {"python_quality"},
             "benchmarks/plot_homepage.py": {"python_quality"},
             "sample/run_cpp.sh": {"shell"},
             "sample/run_python.sh": {"shell"},
@@ -72,7 +73,7 @@ class ChangeSelectionTest(unittest.TestCase):
             "example_py.sh": {"shell"},
             "python/ivf.py": {"python_quality", "python_build", "wheels"},
             "python/utils/io.py": {"python_quality", "python_build", "wheels"},
-            "tests/core_consumer/run.cmake": {"cpp"},
+            "tests/core_consumer/run.cmake": {"cpp", "python_quality"},
             "tests/fixtures/core_api_v1/consumer.cpp": {"cpp"},
         }
         for path, expected in cases.items():
@@ -166,8 +167,8 @@ class ChangeSelectionTest(unittest.TestCase):
             ".github/scripts/prepare_release.py": {"python_quality"},
             "scripts/check-python.sh": {"shell", "python_quality"},
             "scripts/build-macos-openmp.sh": {"shell", "wheels"},
-            "scripts/check-tidy.sh": {"shell", "cpp_tidy"},
-            "scripts/check-format.sh": {"shell", "cpp_format"},
+            "scripts/check-tidy.sh": {"shell", "cpp_tidy", "python_quality"},
+            "scripts/check-format.sh": {"shell", "cpp_format", "python_quality"},
             "scripts/check-includes.sh": {"shell"},
             ".clang-format": {"cpp_format"},
             ".clang-tidy": {"cpp_tidy"},

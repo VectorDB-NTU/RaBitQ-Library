@@ -27,4 +27,6 @@ if(RABITQ_BUILD_INDEX)
         "${CMAKE_CURRENT_BINARY_DIR}/ivf-add-smoke-single" 64 8 256 16 1 single)
     add_test(NAME IvfAddHotpathRouted COMMAND rabitq_ivf_add_hotpaths
         "${CMAKE_CURRENT_BINARY_DIR}/ivf-add-smoke-routed" 64 8 256 16 1 routed)
+    add_test(NAME IvfAddHotpathSmall COMMAND rabitq_ivf_add_hotpaths
+        "${CMAKE_CURRENT_BINARY_DIR}/ivf-add-smoke-small" 64 8 8 1 1 single)
 endif()

@@ -39,19 +39,15 @@ def test_properties(built_symqg):
 # ── search output shape and dtype ─────────────────────────────────────────────
 
 
-def test_search_output_contract(built_symqg, query_data):
-    ids, dists = built_symqg.search(query_data, k=_TOPK, ef=_EF)
-    assert ids.shape == (N_QUERIES, _TOPK)
-    assert dists.shape == (N_QUERIES, _TOPK)
+@pytest.mark.parametrize("nq,k", [(N_QUERIES, _TOPK), (1, 1)])
+def test_search_output_contract(built_symqg, query_data, nq, k):
+    ids, dists = built_symqg.search(query_data[:nq], k=k, ef=_EF)
+    assert ids.shape == dists.shape == (nq, k)
     assert ids.dtype == np.uint32
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
+    assert np.isfinite(dists).all()
     assert np.all(dists >= 0)
-
-
-def test_single_query(built_symqg, query_data):
-    ids, dists = built_symqg.search(query_data[:1], k=1, ef=_EF)
-    assert ids.shape == (1, 1)
 
 
 @pytest.mark.parametrize("bits", [0, 4, 8])

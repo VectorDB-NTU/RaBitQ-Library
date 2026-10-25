@@ -59,6 +59,8 @@ the deterministic input. Original production indexes are not benchmark fixtures.
 
 ## Timing and correctness contract
 
+- IVF add verifies the expected point counts and samples new points' self-neighbors
+  outside the timed call, in addition to comparing output hashes across repetitions.
 - Inputs use an LCG with seed 42 (query/centroid seed 91 where applicable), metric L2.
   Dimensions for encoding/scoring are multiples of 32. Use 64, 128 and 960 dimensions;
   encoding rows 32/4096 and threads 1/4 retain the cases from the original investigation.

@@ -18,8 +18,10 @@ only the affected job groups:
 | `tests/python/test_benchmark_protocol.py` | Python lint and benchmark protocol tests; no index or wheel builds |
 | `.github/workflows/docs.yml` | Documentation build and Python quality checks for workflow regression tests |
 | `.github/workflows/pr-labels.yml` | Python quality, including metadata-classification regression tests |
+| `.github/release.yml` | Python quality, including release-category compatibility tests |
 | `sample/run_cpp.sh`, `sample/run_python.sh` | ShellCheck, including these runners |
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
+| `tests/core_consumer/run.cmake`, `scripts/check-format.sh`, `scripts/check-tidy.sh` | Their usual checks, plus Python quality to run their failure-path regression tests |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
 | C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
 | `tests/allocation/`, `tests/failures/` | C++ formatting and platform tests, including sanitizer and allocation-failure coverage; no Python builds or wheels |
@@ -48,11 +50,20 @@ their base. Renames and deletions are included. Relevant jobs also run if
 change detection fails, so a detection error cannot silently waive a check.
 
 Linux and macOS core/FastScan consumer jobs and the Clang matrix use a job-local
-`ccache` through CMake's compiler launcher. Independent producer, installed-package,
-`add_subdirectory`, and FetchContent builds and tests are retained; identical
+`ccache` through CMake's compiler launcher. Independent producer builds and
+installed-package, `add_subdirectory`, and FetchContent consumer checks are retained; identical
 compilations can reuse compiler output within the job. Cache statistics are printed
 after testing. Compiler caches are not uploaded or shared between workflow runs.
 Windows keeps its existing build path without a compiler cache.
+
+Numerical reference suites have one owner per compiler/platform and OpenMP mode.
+The full C++ jobs own OpenMP ON references; component consumer jobs retain their
+build/install/header/symbol checks without rebuilding those suites. OpenMP OFF
+runs the combined core/FastScan reference suite in the FastScan producer only.
+Across the component and Clang consumer matrices, this reduces producer reference
+builds from 20 to 5 while preserving all 60 consumer integration configurations.
+`C++ static analysis` runs the complete configured library/binding compilation
+database in one job, replacing the two shards and their summary job.
 
 Release tags and manual wheel builds always run the full wheel build. CI
 routing edits run the full relevant matrix on pull requests. After an already
@@ -114,6 +125,11 @@ detection succeeded and explicitly selected no checks for that matrix
 (`cpp` or `python_build`); failure, cancellation,
 or an unexpected skip fails the summary. If detection fails, the existing
 fallback runs the matrix and its success is required.
+
+`Python validation` also covers the FAISS comparison run in the Linux 3.11 job.
+When migrating from the older workflow, remove the obsolete `FAISS comparison script`
+required context before dropping its duplicate summary job. Keep `Python validation`
+and every other required context with their existing app IDs.
 
 After these checks have appeared and been validated on GitHub, add their exact
 names to main's required status checks. Workflow definitions do not update branch

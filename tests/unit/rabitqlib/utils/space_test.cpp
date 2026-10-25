@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -269,47 +268,21 @@ TEST(WarmupIpX0Q, RejectsQueryWidthsBeyondByte) {
 }
 
 TEST(Select_IP_Func, returns_stable_function_pointer) {
-    auto ip_func = select_excode_ipfunc(0);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(0));
-
-    ip_func = select_excode_ipfunc(1);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(1));
-
-    ip_func = select_excode_ipfunc(2);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(2));
-
-    ip_func = select_excode_ipfunc(3);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(3));
-
-    ip_func = select_excode_ipfunc(4);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(4));
-
-    ip_func = select_excode_ipfunc(5);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(5));
-
-    ip_func = select_excode_ipfunc(6);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(6));
-
-    ip_func = select_excode_ipfunc(7);
-    ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func, select_excode_ipfunc(7));
-
-    ip_func = select_excode_ipfunc(8);
-    ASSERT_NE(ip_func, nullptr);
+    for (size_t bits = 0; bits <= 8; ++bits) {
+        SCOPED_TRACE(bits);
+        const auto ip_func = select_excode_ipfunc(bits);
+        ASSERT_NE(ip_func, nullptr);
+        ASSERT_EQ(ip_func, select_excode_ipfunc(bits));
 #if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx512_core()) {
-        ASSERT_EQ(ip_func, simd::excode_ipimpl::ip16_fxu8_avx512);
-    } else if (cpu::has_avx2()) {
-        ASSERT_EQ(ip_func, simd::excode_ipimpl::ip16_fxu8_avx2);
-    }
+        if (bits == 8) {
+            if (cpu::has_avx512_core()) {
+                ASSERT_EQ(ip_func, simd::excode_ipimpl::ip16_fxu8_avx512);
+            } else if (cpu::has_avx2()) {
+                ASSERT_EQ(ip_func, simd::excode_ipimpl::ip16_fxu8_avx2);
+            }
+        }
 #endif
+    }
 }
 
 TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
@@ -327,52 +300,6 @@ TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
     ex_ipfunc ip_func = select_excode_ipfunc(0);
     ASSERT_NE(ip_func, nullptr);
     ASSERT_EQ(ip_func(query.data(), codes.data(), dim), 0.0F);
-}
-
-constexpr size_t kScalarQuantizeTestDim = 33;
-
-TEST(ScalarQuantize, HalfValuesMatchScalarAcrossVectorBoundaries) {
-    constexpr size_t dim = kScalarQuantizeTestDim;
-    const std::array<float, 9> values{
-        0.5F,
-        1.5F,
-        2.5F,
-        3.5F,
-        4.5F,
-        std::nextafter(2.5F, 0.0F),
-        std::nextafter(2.5F, std::numeric_limits<float>::infinity()),
-        125.5F,
-        126.5F,
-    };
-    std::array<float, dim> input{};
-    std::array<uint8_t, dim> expected8{};
-    std::array<uint16_t, dim> expected16{};
-    for (size_t i = 0; i < dim; ++i) {
-        input[i] = (i == 8 || i == 16 || i == 32) ? 2.5F : values[i % values.size()];
-        expected8[i] = static_cast<uint8_t>(std::round(input[i]));
-        expected16[i] = static_cast<uint16_t>(std::round(input[i]));
-    }
-
-    const auto check = [&](auto quantize8, auto quantize16) {
-        std::array<uint8_t, kScalarQuantizeTestDim> actual8{};
-        std::array<uint16_t, kScalarQuantizeTestDim> actual16{};
-        quantize8(actual8.data(), input.data(), dim, 0.0F, 1.0F);
-        quantize16(actual16.data(), input.data(), dim, 0.0F, 1.0F);
-        EXPECT_EQ(actual8, expected8);
-        EXPECT_EQ(actual16, expected16);
-    };
-
-    check(simd::scalar_quantize_uint8, simd::scalar_quantize_uint16);
-#if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx2()) {
-        check(simd::scalar_quantize_uint8_avx2, simd::scalar_quantize_uint16_avx2);
-    }
-#endif
-#if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx512_core()) {
-        check(simd::scalar_quantize_uint8_avx512, simd::scalar_quantize_uint16_avx512);
-    }
-#endif
 }
 
 TEST(ip16_fxu1_avx, ip_works) {

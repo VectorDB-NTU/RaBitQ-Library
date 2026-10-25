@@ -63,8 +63,17 @@ def classify(paths):
         if path == ".github/workflows/pr-labels.yml":
             selected.add("python_quality")
             continue
-        if path.startswith(".github/ISSUE_TEMPLATE/") or path in (
+        if path in (
             ".github/release.yml",
+            "scripts/check-format.sh",
+            "scripts/check-tidy.sh",
+            "tests/core_consumer/run.cmake",
+        ):
+            # These inputs are exercised by the CI automation regression tests.
+            selected.add("python_quality")
+            if path == ".github/release.yml":
+                continue
+        if path.startswith(".github/ISSUE_TEMPLATE/") or path in (
             ".github/CODEOWNERS",
             "LICENSE",
         ):

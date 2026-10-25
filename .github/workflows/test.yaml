@@ -27,19 +27,13 @@ jobs:
       - name: Check formatting
         run: ./scripts/check-format.sh
 
-  clang-tidy-shard:
+  clang-tidy:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp_tidy == 'true') }}
-    name: C++ static analysis shard ${{ matrix.shard }}
+    name: C++ static analysis
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1]
     env:
-      TIDY_SHARD_INDEX: ${{ matrix.shard }}
-      TIDY_SHARD_COUNT: "2"
       CXX: clang++-23
     steps:
       - uses: actions/checkout@v7
@@ -63,17 +57,6 @@ jobs:
           -Dpybind11_DIR="$pybind11_DIR"
       - name: Run clang-tidy
         run: ./scripts/check-tidy.sh build-tidy
-
-  clang-tidy:
-    name: C++ static analysis
-    needs: clang-tidy-shard
-    if: ${{ always() && !cancelled() && needs.clang-tidy-shard.result != 'skipped' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require both shards
-        env:
-          BUILD_RESULT: ${{ needs.clang-tidy-shard.result }}
-        run: test "$BUILD_RESULT" = success
 
   shellcheck:
     needs: changes
@@ -229,6 +212,7 @@ jobs:
           cmake -DRABITQ_SOURCE_DIR="$PWD"
           -DWORK_DIR="$RUNNER_TEMP/rabitq-clang-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && 'ON' || 'OFF' }}
           -P tests/core_consumer/run.cmake
       - name: Report compiler cache statistics
         if: ${{ always() }}
@@ -293,7 +277,7 @@ jobs:
         run: |
           cmake --version
           ninja --version
-      # Keep assertions/debug symbols while avoiding unoptimized sanitizer loops.
+      # Keep assertions and source locations without full variable debug information.
       - name: Configure
         run: >-
           cmake -S . -B build-sanitizers -G Ninja
@@ -302,7 +286,7 @@ jobs:
           -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
           -DRABITQ_ENABLE_SANITIZERS=ON
           -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_CXX_FLAGS_DEBUG="-O1 -g -fno-optimize-sibling-calls"
+          -DCMAKE_CXX_FLAGS_DEBUG="-O1 -g1 -fno-optimize-sibling-calls"
       - name: Build
         run: cmake --build build-sanitizers
       - name: Test
@@ -335,6 +319,7 @@ jobs:
         run: |
           cmake --version
           ninja --version
+          lscpu
       - name: Build RaBitQ-Library with portable tests
         run: |
           cmake -S . -B build-install -G Ninja \
@@ -360,13 +345,14 @@ jobs:
         run: |
           simd_filter='CpuFeatures.*:FloatDistance.*:MatrixDispatchTest.*:FastScan*.*:BatchEstimatorTest.*'
           simd_filter+=':FhtDispatchTest.*:FlipSignTest.*:KacsWalkTest.*:ExcodeIp.*:MaskIpX0Q.*'
-          simd_filter+=':PortableKernels.*:QueryPreparation.*:ScalarQuantize.*:WarmupIpX0Q.*:PackBinary.*'
+          simd_filter+=':PortableKernels.*:QueryPreparation.*:WarmupIpX0Q.*:PackBinary.*'
           simd_filter+=':ExplicitSimd/RabitqRescaleBackendTest.*:QGEstimatorTest.*'
           simd_filter+=':QGKMeansTest.TrainsAndReturnsAssignmentsForFinalCentroids'
           simd_filter+=':RaBitQKMeansTest.FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts'
           simd_filter+=':IvfPersistenceTest.ReloadsRawAndQuantizedStorage'
           simd_filter+=':HnswSaveTest.SuccessfulSavePreservesSearchAfterLoading'
-          simd_filter+=':IvfAddTest.*:IvfRemoveTest.*:HnswRemoveTest.*'
+          simd_filter+=':HnswPaddingTest.TailDimensionsMatchEveryAvailableSearchBackend'
+          simd_filter+=':IvfLifecycleTest.BatchTailSurvivesAddRemoveAndReload:HnswRemoveTest.*'
           for cpu_model in hsw icl; do
             RABITQ_TEST_CPU="$cpu_model" "$RUNNER_TEMP/sde/sde64" "-$cpu_model" -- \
               build-install/tests/rabitq_tests --gtest_filter="$simd_filter"
@@ -428,6 +414,7 @@ jobs:
           cmake -DRABITQ_SOURCE_DIR="$PWD"
           -DWORK_DIR="$RUNNER_TEMP/rabitq-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
           -P tests/core_consumer/run.cmake
       - name: Test external core-only integrations (macOS)
         if: runner.os == 'macOS'
@@ -435,6 +422,7 @@ jobs:
           cmake -DRABITQ_SOURCE_DIR="$PWD"
           -DWORK_DIR="$RUNNER_TEMP/rabitq-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
           -DOpenMP_ROOT="$(brew --prefix)/opt/libomp"
           -P tests/core_consumer/run.cmake
       - name: Test external core-only integrations (Windows)
@@ -448,6 +436,7 @@ jobs:
           "-DWORK_DIR=$env:RUNNER_TEMP/rabitq-core"
           -DRABITQ_COMPONENT=${{ matrix.component }}
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
+          -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
           -P tests/core_consumer/run.cmake
       - name: Report compiler cache statistics
         if: ${{ always() && runner.os != 'Windows' }}

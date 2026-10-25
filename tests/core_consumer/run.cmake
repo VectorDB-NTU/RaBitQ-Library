@@ -1,5 +1,6 @@
 # Run with -DRABITQ_SOURCE_DIR=<checkout> -DWORK_DIR=<external directory> -P run.cmake.
 # Optional -DRABITQ_COMPONENT=core|fastscan selects one independent partition.
+# Set RABITQ_RUN_REFERENCE_TESTS=OFF when another job owns the numerical suite.
 cmake_minimum_required(VERSION 3.20)
 if(NOT RABITQ_SOURCE_DIR OR NOT WORK_DIR)
     message(FATAL_ERROR "RABITQ_SOURCE_DIR and WORK_DIR are required")
@@ -15,6 +16,9 @@ endfunction()
 set(configure_options -DCMAKE_BUILD_TYPE=Release -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF)
 if(NOT DEFINED RABITQ_USE_OPENMP)
     set(RABITQ_USE_OPENMP ON)
+endif()
+if(NOT DEFINED RABITQ_RUN_REFERENCE_TESTS)
+    set(RABITQ_RUN_REFERENCE_TESTS ON)
 endif()
 list(APPEND configure_options "-DRABITQ_USE_OPENMP=${RABITQ_USE_OPENMP}")
 if(NOT RABITQ_USE_OPENMP)
@@ -36,6 +40,11 @@ if(DEFINED RABITQ_COMPONENT)
     set(components "${RABITQ_COMPONENT}")
 endif()
 foreach(component IN LISTS components)
+    set(reference_tests "${RABITQ_RUN_REFERENCE_TESTS}")
+    # The FastScan suite includes every core reference with the same core flags.
+    if(component STREQUAL "core" AND "fastscan" IN_LIST components)
+        set(reference_tests OFF)
+    endif()
     set(scan OFF)
     if(component STREQUAL "fastscan")
         set(scan ON)
@@ -50,10 +59,12 @@ foreach(component IN LISTS components)
         DESTINATION "${work}/consumer")
     run("${CMAKE_COMMAND}" -S "${RABITQ_SOURCE_DIR}" -B "${work}/producer"
         ${configure_options} -DRABITQ_BUILD_INDEX=OFF
-        "-DRABITQ_BUILD_FASTSCAN=${scan}" -DRABITQ_BUILD_TESTS=ON)
+        "-DRABITQ_BUILD_FASTSCAN=${scan}" "-DRABITQ_BUILD_TESTS=${reference_tests}")
     run("${CMAKE_COMMAND}" --build "${work}/producer" --config Release --parallel 2)
-    run("${CMAKE_CTEST_COMMAND}" --test-dir "${work}/producer" -C Release
-        --output-on-failure --timeout 120)
+    if(reference_tests)
+        run("${CMAKE_CTEST_COMMAND}" --test-dir "${work}/producer" -C Release
+            --output-on-failure --no-tests=error --timeout 120)
+    endif()
     # Relocate the initial install; subsequent runs update that same test prefix.
     if(EXISTS "${work}/relocated")
         run("${CMAKE_COMMAND}" --install "${work}/producer" --config Release
