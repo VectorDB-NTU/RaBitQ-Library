@@ -1670,6 +1670,10 @@ and <code>num_points</code> for a live count. Counts survive save/load.</p>
 <p>IVF-RaBitQ grows automatically and has no spare logical capacity after build or append.
 HNSW-RaBitQ's <code>resize</code> changes only capacity. SymphonyQG has no incremental updates;
 all three counts are equal after build.</p>
+<p><code>repr(index)</code> shows dimension, metric, quantization bits, live point count and build
+state. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
+the resolved initializer, and SymphonyQG includes its degree bound. The summary
+reads only metadata and follows the same concurrency rules as property reads.</p>
 <h2 id="estimate-storage">Estimate storage<a class="headerlink" href="#estimate-storage" title="Permanent link">&para;</a></h2>
 <p>The following estimates describe the main float32 index storage, not total process
 memory or peak construction memory. Let <code>d</code> be the original dimension, <code>D</code> the
@@ -1746,7 +1750,7 @@ construction, updates, and file I/O. The following contract applies to
 </thead>
 <tbody>
 <tr>
-<td><code>search</code>, <code>search_batch</code>, <code>save</code>, and property reads</td>
+<td><code>search</code>, <code>search_batch</code>, <code>save</code>, <code>repr</code>, and property reads</td>
 <td>May run together</td>
 </tr>
 <tr>
