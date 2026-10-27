@@ -338,3 +338,13 @@ python -m pytest tests/python/test_editor_support.py -q
 The suite checks installed declarations, signatures, documentation, examples, and
 valid/invalid calls with strict mypy. CI requires it; missing mypy fails the test.
 Keep the mypy pins in the `test` extra and wheel test requirements synchronized.
+
+CI also checks the public type examples and test code with Pyright. With Node 24
+and the `test,typing` extras installed in the same environment, run:
+
+```bash
+python -m pytest tests/test_pyright.py -q
+```
+
+This requires clean diagnostics and verifies that every intentional invalid call
+is rejected. Pyright is not required for the platform wheel test suite.

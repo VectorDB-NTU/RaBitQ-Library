@@ -28,6 +28,7 @@ Paper = "https://doi.org/10.1145/3725413"
 
 [project.optional-dependencies]
 test = ["pytest>=7", "numpy", "mypy==2.4.0"]
+typing = ["pyright==1.1.414"]
 
 [tool.scikit-build]
 # Disable directory auto-discovery so we can map it via CMake's install target
@@ -76,3 +77,11 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.pyright]
+include = [
+    "tests/python/typing/public_api.py",
+    "tests/python/test_editor_support.py",
+    "tests/test_pyright.py",
+]
+typeCheckingMode = "standard"

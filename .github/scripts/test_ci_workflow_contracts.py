@@ -31,7 +31,7 @@ class WorkflowContractsTest(unittest.TestCase):
         build = workflow.split("  python-build:\n", 1)[1].split(
             "  python-result:\n", 1
         )[0]
-        self.assertIn('pip install ".[test]"', build)
+        self.assertIn('pip install ".[test,typing]"', build)
         self.assertIn("python -m pytest tests/python/test_editor_support.py", build)
         self.assertNotIn("continue-on-error", build)
         self.assertIn(
@@ -72,6 +72,48 @@ class WorkflowContractsTest(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(checked.returncode == 0, matrix_result == "success")
+
+    def test_pyright_checks_are_required_and_scoped(self):
+        config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        self.assertEqual(
+            set(config["tool"]["pyright"]["include"]),
+            {
+                "tests/python/typing/public_api.py",
+                "tests/python/test_editor_support.py",
+                "tests/test_pyright.py",
+            },
+        )
+        self.assertEqual(config["tool"]["pyright"]["typeCheckingMode"], "standard")
+        self.assertTrue(
+            any(
+                dependency.startswith("pyright==")
+                for dependency in config["project"]["optional-dependencies"]["typing"]
+            )
+        )
+        self.assertFalse(
+            any(
+                dependency.startswith("pyright")
+                for dependency in config["project"]["dependencies"]
+            )
+        )
+        self.assertFalse(
+            any(
+                dependency.startswith("pyright")
+                for dependency in config["tool"]["cibuildwheel"]["test-requires"]
+            )
+        )
+        workflow = (ROOT / ".github/workflows/python.yml").read_text()
+        build = workflow.split("  python-build:\n", 1)[1].split(
+            "  python-result:\n", 1
+        )[0]
+        self.assertIn("actions/setup-node@v7", build)
+        self.assertIn('node-version: "24"', build)
+        self.assertIn('pip install ".[test,typing]"', build)
+        self.assertIn("python -m pytest tests/test_pyright.py", build)
+        self.assertNotIn("continue-on-error", build)
+        self.assertEqual(
+            classify(["tests/test_pyright.py"]), {"python_quality", "python_build"}
+        )
 
     def test_tidy_rejects_empty_scope_and_propagates_analysis_failure(self):
         with tempfile.TemporaryDirectory() as directory:
