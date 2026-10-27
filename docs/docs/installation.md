@@ -1,6 +1,6 @@
 # Installation
 
-Platform requirements and source installation for RaBitQ Library **0.7.0**.
+Platform requirements and source installation for RaBitQ Library **0.7.2**.
 For the first Python example, see [Quick Start](quick_start.md).
 
 ## Requirements
@@ -40,7 +40,7 @@ build can use scalar kernels without the FastScan CPU baseline.
 ## Python wheels
 
 ```bash
-python -m pip install "rabitqlib>=0.7.0"
+python -m pip install "rabitqlib>=0.7.2"
 ```
 
 For changes from 0.6.0, see the [0.7.0 upgrade notes](releases/0.7.0.md).
@@ -50,13 +50,21 @@ Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
 need a separate OpenMP installation.
 Release wheels disable native CPU tuning and select supported kernels at runtime.
 
+### Python editor support
+
+Version 0.7.2 includes type declarations (`__init__.pyi`) and a `py.typed` marker
+for editor completion and static type checking. Select the Python environment
+where `rabitqlib` is installed. Index and clustering docstrings describe parameters,
+defaults and returned arrays; use `help(IvfIndex)` or `help(RaBitQKMeans)` after
+importing those classes. Array shapes and parameter ranges are still checked at runtime.
+
 ## Get the source
 
-For Python source builds or C++ use, obtain the 0.7.0 checkout once. With Git
+For Python source builds or C++ use, obtain the 0.7.2 checkout once. With Git
 installed, run:
 
 ```bash
-git clone --branch v0.7.0 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git
+git clone --branch v0.7.2 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git
 cd RaBitQ-Library
 ```
 

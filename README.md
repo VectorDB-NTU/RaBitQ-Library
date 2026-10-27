@@ -19,6 +19,7 @@ approximate nearest-neighbor search. See the [research papers](docs/docs/papers.
 - **v0.7.2:** Python type hints, expanded API documentation, path-like inputs,
   clearer input errors, and concise index representations. Internal quantization
   refactoring and streamlined regression checks preserve existing APIs and index formats.
+  See the [release notes](docs/docs/releases/0.7.2.md).
 - **v0.7.0:** Modular C++ components, stable core API v1, optional
   OpenMP for numerical components, and unified index counts. See the
   [upgrade notes](docs/docs/releases/0.7.0.md).
