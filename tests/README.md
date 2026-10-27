@@ -332,12 +332,16 @@ Array shapes and value ranges remain runtime checks.
 After rebuilding and installing with the `test` extra, run:
 
 ```bash
-python -m pytest tests/python/test_editor_support.py -q
+python -m pytest tests/python/test_editor_support.py tests/test_mypy.py -q
 ```
 
 The suite checks installed declarations, signatures, documentation, examples, and
-valid/invalid calls with strict mypy. CI requires it; missing mypy fails the test.
-Keep the mypy pins in the `test` extra and wheel test requirements synchronized.
+runtime metadata on every wheel. Strict mypy valid/invalid-call checks live in
+`tests/test_mypy.py`, run for source installs and each CPython ABI on Linux x86-64
+wheels. Other wheel platforms do not repeat static analysis. CI requires mypy
+for these selected checks; missing mypy fails the test. Keep its pins in the
+`test` extra and Linux x86-64 wheel override synchronized.
+Benchmark protocol tests run in Python quality CI, separately from wheel tests.
 
 CI also checks the public type examples and test code with Pyright. With Node 24
 and the `test,typing` extras installed in the same environment, run:

@@ -154,6 +154,8 @@ def classify(paths):
             selected.add("python_quality")
         elif path == "tests/test_pyright.py":
             selected.update(("python_quality", "python_build"))
+        elif path == "tests/test_mypy.py":
+            selected.update(("python_quality", "python_build", "wheels"))
         elif path.startswith("tests/python/"):
             selected.update(("python_build", "wheels"))
             if path == "tests/python/conftest.py":

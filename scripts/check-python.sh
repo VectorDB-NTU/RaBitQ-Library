@@ -18,6 +18,6 @@ if [[ "$($ruff --version)" != "ruff 0.16.1" ]]; then
 fi
 
 cd "$repo_root"
-paths=(python_bindings sample/python tests/python tests/test_pyright.py benchmarks)
+paths=(python_bindings sample/python tests/python tests/test_mypy.py tests/test_pyright.py benchmarks)
 "$ruff" format --check "${paths[@]}"
 "$ruff" check "${paths[@]}"
