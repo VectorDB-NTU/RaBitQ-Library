@@ -94,10 +94,17 @@ def test_hnsw_rejects_corrupt_sidecar(tmp_path, metric, damage):
         np.testing.assert_array_equal(left, right)
 
 
-@pytest.mark.parametrize("metric", ["l2", "ip"])
 # Routing is independent of bit width; retain each distinct reranking storage path.
-@pytest.mark.parametrize("bits", [1, 4, 32])
-@pytest.mark.parametrize("initializer", ["auto", "flat", "flat_rabitq", "hnsw"])
+@pytest.mark.parametrize(
+    "initializer,bits,metric",
+    [
+        (mode, bits, metric)
+        for mode in ("flat", "flat_rabitq", "hnsw")
+        for bits in (1, 4, 32)
+        for metric in ("l2", "ip")
+    ]
+    + [("auto", 4, "l2")],
+)
 def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     rng = np.random.default_rng(773)
     dim, count = 65, 33

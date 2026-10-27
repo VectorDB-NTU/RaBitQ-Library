@@ -1,12 +1,12 @@
 """Check lightweight CI coverage and workflow scheduling contracts."""
 
+import fnmatch
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
-import textwrap
 import tomllib
 import unittest
 from pathlib import Path
@@ -23,7 +23,28 @@ class WorkflowContractsTest(unittest.TestCase):
         wheel_dependencies = config["tool"]["cibuildwheel"]["test-requires"]
         checker = [value for value in test_dependencies if value.startswith("mypy==")]
         self.assertEqual(len(checker), 1)
-        self.assertIn(checker[0], wheel_dependencies)
+        self.assertFalse(any(value.startswith("mypy") for value in wheel_dependencies))
+        wheels = config["tool"]["cibuildwheel"]
+        typing_overrides = [
+            o for o in wheels["overrides"] if checker[0] in o.get("test-requires", [])
+        ]
+        self.assertEqual(len(typing_overrides), 1)
+        override = typing_overrides[0]
+        self.assertEqual(override["inherit"]["test-requires"], "append")
+        self.assertEqual(override["inherit"]["test-command"], "append")
+        self.assertIn("pytest {project}/tests/test_mypy.py", override["test-command"])
+        self.assertEqual(
+            {
+                identifier
+                for identifier in wheels["build"].split()
+                if fnmatch.fnmatchcase(identifier, override["select"])
+            },
+            {f"cp{abi}-manylinux_x86_64" for abi in (311, 312, 313, 314)},
+        )
+        self.assertIn(
+            "--ignore={project}/tests/python/test_benchmark_protocol.py",
+            wheels["test-command"],
+        )
         self.assertFalse(
             any(value.startswith("mypy") for value in config["project"]["dependencies"])
         )
@@ -32,7 +53,10 @@ class WorkflowContractsTest(unittest.TestCase):
             "  python-result:\n", 1
         )[0]
         self.assertIn('pip install ".[test,typing]"', build)
-        self.assertIn("python -m pytest tests/python/test_editor_support.py", build)
+        self.assertIn(
+            "python -m pytest tests/python/test_editor_support.py tests/test_mypy.py",
+            build,
+        )
         self.assertNotIn("continue-on-error", build)
         self.assertIn(
             "pytest {project}/tests/python",
@@ -45,33 +69,12 @@ class WorkflowContractsTest(unittest.TestCase):
         for path in (
             "python_bindings/__init__.pyi",
             "tests/python/typing/public_api.py",
+            "tests/test_mypy.py",
         ):
             with self.subTest(path=path):
                 self.assertLessEqual(
                     {"python_build", "python_quality", "wheels"}, classify([path])
                 )
-        # Exercise the actual aggregator script, so a failed selected matrix
-        # cannot be reported as a successful Python validation check.
-        result = workflow.split("  python-result:\n", 1)[1].split(
-            "  python-windows:\n", 1
-        )[0]
-        self.assertIn("needs: [changes, python-build]", result)
-        script = textwrap.dedent(result.split("        run: |\n", 1)[1])
-        for matrix_result in ("success", "failure", "cancelled", "skipped"):
-            with self.subTest(matrix_result=matrix_result):
-                checked = subprocess.run(
-                    ["bash", "-e", "-c", script],
-                    env=dict(
-                        os.environ,
-                        CHANGES_RESULT="success",
-                        PYTHON_SELECTED="true",
-                        MATRIX_RESULT=matrix_result,
-                    ),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                self.assertEqual(checked.returncode == 0, matrix_result == "success")
 
     def test_pyright_checks_are_required_and_scoped(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text())

@@ -76,7 +76,7 @@ jobs:
       - name: Check installed Python types and editor metadata
         env:
           OMP_NUM_THREADS: "2"
-        run: python -m pytest tests/python/test_editor_support.py --tb=short -q
+        run: python -m pytest tests/python/test_editor_support.py tests/test_mypy.py --tb=short -q
 
       - name: Check Pyright public API and test code
         run: python -m pytest tests/test_pyright.py --tb=short -q

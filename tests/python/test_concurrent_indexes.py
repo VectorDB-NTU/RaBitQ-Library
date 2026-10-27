@@ -3,6 +3,7 @@
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event, Thread
+from time import monotonic, sleep
 
 import numpy as np
 import pytest
@@ -171,29 +172,39 @@ def test_active_mutation_rejects_reads_and_other_mutations(kind, tmp_path):
 def test_search_releases_gil(kind):
     index, data, _ = make_index(kind)
     queries = np.tile(data, (32, 1))
-    go, finished = Event(), Event()
-    observed = []
+    ready, progress = Event(), Event()
+    active = stopped = False
+    options = parameters(kind, True)
 
     def python_worker():
-        go.wait(timeout=10)
-        observed.append(not finished.is_set())
+        ready.set()
+        while not active and not stopped:
+            sleep(0.001)
+        if active:
+            progress.set()
 
     worker = Thread(target=python_worker)
     worker.start()
     previous = sys.getswitchinterval()
     try:
-        # Prevent an interpreter timeslice between go.set() and the native call.
-        # The worker must run while that call has released the GIL.
+        assert ready.wait(timeout=10)
+        # Suppress interpreter timeslices across the whole probe. Repeated native
+        # calls allow a delayed worker to run; one short search is not a deadline.
         sys.setswitchinterval(100)
-        go.set()
-        index.search(queries, 5, num_threads=1, **parameters(kind, True))
-        finished.set()
+        deadline = monotonic() + 5
+        # Arm with a Python assignment: signaling an Event here could itself
+        # release the GIL on a contended lock and falsely satisfy the probe.
+        active = True
+        while not progress.is_set() and monotonic() < deadline:
+            index.search(queries, 5, num_threads=1, **options)
+        # Capture before restoring normal scheduling or joining the worker.
+        released = progress.is_set()
     finally:
+        stopped = True
         sys.setswitchinterval(previous)
-        finished.set()
         worker.join(timeout=10)
     assert not worker.is_alive()
-    assert observed == [True]
+    assert released, "Python worker made no progress during native searches"
 
 
 def test_native_exception_reacquires_gil_and_releases_access():

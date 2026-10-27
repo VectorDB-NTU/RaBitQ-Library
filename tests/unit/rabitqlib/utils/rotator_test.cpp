@@ -6,7 +6,6 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -23,18 +22,7 @@ using namespace rabitq_test;
 
 class RotatorTest : public ::testing::Test {
    protected:
-    void SetUp() override {
-        dim = 128;
-        test_data = TestDataGenerator::GenerateRandomVector(dim, -1.0f, 1.0f, 42);
-    }
-
-    void TearDown() override {
-        // Clean up any temporary files
-        std::remove("test_rotator.bin");
-    }
-
-    size_t dim;
-    std::vector<float> test_data;
+    size_t dim = 128;
 };
 
 // Test that FhtKacRotator is chosen by default

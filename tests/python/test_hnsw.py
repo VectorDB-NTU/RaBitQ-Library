@@ -245,23 +245,23 @@ def partial_hnsw(base_data, clusters):
     return idx
 
 
-def test_add_returns_dense_labels(partial_hnsw, base_data, clusters):
+def test_add_returns_dense_labels_and_preserves_search(
+    partial_hnsw, base_data, clusters
+):
     _, cluster_ids = clusters
     assert partial_hnsw.num_points == 400
+    before, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
     ids = partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
     np.testing.assert_array_equal(ids, np.arange(400, N_VECTORS))
     assert partial_hnsw.num_points == N_VECTORS
-
-
-def test_add_makes_points_searchable(partial_hnsw, base_data, clusters):
     # A sparse graph can isolate the odd point, as it can after build, so this
     # asks for near-perfect self-retrieval rather than exact.
-    _, cluster_ids = clusters
-    partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
     ids, distances = partial_hnsw.search(base_data[400:], k=1, ef=N_VECTORS)
     found = np.count_nonzero(ids[:, 0] == np.arange(400, N_VECTORS))
     assert found >= 0.95 * (N_VECTORS - 400)
     assert np.isfinite(distances).all()
+    after, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(before[:, 0], after[:, 0])
 
 
 def test_add_into_a_dense_graph_retrieves_every_point(base_data, clusters):
@@ -282,14 +282,6 @@ def test_add_without_cluster_ids_preserves_self_retrieval(partial_hnsw, base_dat
     # routing need not reproduce the round-robin assignments used during construction.
     found, _ = partial_hnsw.search(base_data[400:], k=1, ef=N_VECTORS)
     assert np.count_nonzero(found[:, 0] == np.arange(400, N_VECTORS)) >= 0.95 * 100
-
-
-def test_add_preserves_earlier_points(partial_hnsw, base_data, clusters):
-    _, cluster_ids = clusters
-    before, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
-    partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
-    after, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
-    np.testing.assert_array_equal(before[:, 0], after[:, 0])
 
 
 def test_add_beyond_capacity_raises(partial_hnsw, base_data):

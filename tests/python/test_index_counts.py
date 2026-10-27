@@ -14,13 +14,14 @@ def check_counts(index, capacity, stored, active):
     assert 0 <= index.num_points <= index.num_stored_points <= index.max_elements
 
 
-@pytest.mark.parametrize("metric", ["l2", "ip"])
+# Metric forwarding is covered by portable-index tests; counts are metric-independent.
 @pytest.mark.parametrize(
     "kind,bits",
     [("ivf", 1), ("ivf", 4), ("ivf", 32), ("hnsw", 1), ("hnsw", 9)]
     + [("symqg", bits) for bits in (0, 4, 8)],
 )
-def test_count_contract_through_lifecycle(tmp_path, kind, bits, metric):
+def test_count_contract_through_lifecycle(tmp_path, kind, bits):
+    metric = "l2"
     count, dim = 40, 65
     data = np.random.default_rng(42).normal(size=(count + 4, dim)).astype(np.float32)
     data /= np.linalg.norm(data, axis=1, keepdims=True)
