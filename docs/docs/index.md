@@ -24,7 +24,7 @@ estimation into your own C++ search engine.</p>
 </div>
 
 ```bash
-python -m pip install "rabitqlib>=0.7.0"
+python -m pip install "rabitqlib>=0.7.2"
 ```
 
 [Installation and supported platforms](installation.md) ·
@@ -102,5 +102,5 @@ when choosing an index.
 ## Explore further
 
 - [Algorithm overview](rabitq/rabitq.md) for the rotation, encoding, and scoring workflow.
-- [RaBitQ Library 0.7.0 release notes](releases/0.7.0.md) for new APIs and upgrade guidance.
+- [RaBitQ Library 0.7.2 release notes](releases/0.7.2.md) for the latest changes and upgrade guidance.
 - [Papers and citations](papers.md) for the original RaBitQ method, its multi-bit extension, and SymphonyQG.

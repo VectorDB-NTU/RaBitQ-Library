@@ -16,9 +16,13 @@ approximate nearest-neighbor search. See the [research papers](docs/docs/papers.
 
 ## News
 
+- **v0.7.2:** Python type hints, expanded API documentation, path-like inputs,
+  clearer input errors, and concise index representations. Internal quantization
+  refactoring and streamlined regression checks preserve existing APIs and index formats.
+  See the [release notes](docs/docs/releases/0.7.2.md).
 - **v0.7.0:** Modular C++ components, stable core API v1, optional
-  OpenMP for numerical components, and unified index counts. This documentation
-  targets 0.7.0; see the [upgrade notes](docs/docs/releases/0.7.0.md).
+  OpenMP for numerical components, and unified index counts. See the
+  [upgrade notes](docs/docs/releases/0.7.0.md).
 
 ## Vector indexes
 
@@ -44,7 +48,7 @@ settings, and limitations.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.7.1"
+python -m pip install --upgrade "rabitqlib>=0.7.2"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,

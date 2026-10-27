@@ -1,13 +1,13 @@
 # Quick start
 
 Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
-**0.7.0** and uses synthetic data, so no dataset download is required.
+**0.7.2** and uses synthetic data, so no dataset download is required.
 For C++, go directly to [C++ integration](cpp_integration.md).
 
 ## Install
 
 ```bash
-python -m pip install "rabitqlib>=0.7.0"
+python -m pip install "rabitqlib>=0.7.2"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64 and
