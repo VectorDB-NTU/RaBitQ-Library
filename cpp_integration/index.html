@@ -16,7 +16,7 @@
         <link rel="prev" href="../installation/">
       
       
-        <link rel="next" href="../releases/0.7.0/">
+        <link rel="next" href="../releases/0.7.2/">
       
       
         
@@ -555,6 +555,8 @@
       
         
       
+        
+      
     
     
     
@@ -599,6 +601,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.7.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1843,10 +1873,10 @@ indexing and querying workflows:</p>
 <h2 id="use-in-another-c-project">Use in another C++ project<a class="headerlink" href="#use-in-another-c-project" title="Permanent link">&para;</a></h2>
 <p>The <a href="../rabitq/core_api/">core quantization v1 API</a> has a C++ source-compatibility contract.
 Other C++ APIs may evolve, and no cross-version C++ binary ABI is promised.
-Pin the <code>v0.7.0</code> release and include RaBitQ-Library as a Git submodule:</p>
+Pin the <code>v0.7.2</code> release and include RaBitQ-Library as a Git submodule:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>submodule<span class="w"> </span>add<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git<span class="w"> </span>third_party/rabitqlib
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>v0.7.0
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>v0.7.2
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>git<span class="w"> </span>add<span class="w"> </span>third_party/rabitqlib
 </code></pre></div>
 <p>Add the library and link its namespaced target in your <code>CMakeLists.txt</code>:</p>
@@ -2052,13 +2082,13 @@ MODULE, not a C++ link library, and is not exported as a C++ <code>find_package<
         
         
           
-          <a href="../releases/0.7.0/" class="md-footer__link md-footer__link--next" aria-label="Next: 0.7.0">
+          <a href="../releases/0.7.2/" class="md-footer__link md-footer__link--next" aria-label="Next: 0.7.2">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                0.7.0
+                0.7.2
               </div>
             </div>
             <div class="md-footer__button md-icon">
