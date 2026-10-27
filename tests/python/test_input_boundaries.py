@@ -1,5 +1,6 @@
 """Public input diagnostics and filesystem-path conversion contracts."""
 
+import errno
 import os
 from pathlib import Path
 
@@ -69,6 +70,16 @@ def test_path_roundtrip(built_index, tmp_path, kind):
 def test_path_preserves_undecodable_bytes(built_index, tmp_path):
     index, queries = built_index
     raw = os.fsencode(tmp_path) + b"/index-\xff.bin"
+    # POSIX does not guarantee that the filesystem accepts non-UTF-8 names.
+    # Probe independently so binding failures below cannot become skips.
+    try:
+        descriptor = os.open(raw, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except OSError as error:
+        if error.errno in (errno.EINVAL, errno.EILSEQ):
+            pytest.skip(f"filesystem rejects non-UTF-8 filenames (errno {error.errno})")
+        raise
+    os.close(descriptor)
+    os.unlink(raw)
     filename = Path(os.fsdecode(raw))
     index.save(filename)
     assert os.path.isfile(raw)

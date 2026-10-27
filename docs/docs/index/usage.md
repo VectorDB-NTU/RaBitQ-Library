@@ -132,9 +132,9 @@ before starting the program.
 C++ paths use UTF-8 on Windows and native path bytes on POSIX.
 Python `save`/`load` accept strings, `pathlib.Path` and `os.PathLike` objects;
 existing `bytes` and `bytearray` paths remain supported. POSIX paths preserve native
-bytes, including surrogate-escaped names; Windows byte paths use UTF-8. Embedded
-null characters are rejected before file access. IVF HNSW sidecars use the same
-path conversion.
+bytes, but non-UTF-8 filenames require filesystem support. Windows byte paths use
+UTF-8. Embedded null characters are rejected before file access. IVF HNSW sidecars
+use the same path conversion.
 
 ## Index file compatibility
 
