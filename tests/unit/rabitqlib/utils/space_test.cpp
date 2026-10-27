@@ -40,6 +40,7 @@ TEST(BitOps, Popcount64MatchesBitReference) {
     };
     check(0);
     check(std::numeric_limits<uint64_t>::max());
+    check(0x8000000000000001ULL);
     for (size_t bit = 0; bit < 64; ++bit) {
         check(uint64_t{1} << bit);
         check(~(uint64_t{1} << bit));

@@ -70,7 +70,7 @@ def test_batch_search_matches_individual_queries(bits, metric):
             individual = [index.search(q[None, :], **kwargs) for q in queries]
             expected_ids = np.concatenate([result[0] for result in individual])
             expected_distances = np.concatenate([result[1] for result in individual])
-            for threads in [1, 4]:
+            for threads in [1, 2, 4]:
                 ids, distances = index.search(queries, num_threads=threads, **kwargs)
                 np.testing.assert_array_equal(ids, expected_ids)
                 np.testing.assert_array_equal(distances, expected_distances)
@@ -184,17 +184,6 @@ def test_full_quantization_centroid_distances_roundtrip(nbits, metric, tmp_path)
     )
     np.testing.assert_array_equal(loaded_ids, ids)
     np.testing.assert_array_equal(loaded_distances, distances)
-
-
-def test_multithreaded_search_matches_single(built_ivf, query_data):
-    ids1, dists1 = built_ivf.search(
-        query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=1
-    )
-    ids2, dists2 = built_ivf.search(
-        query_data, k=_TOPK, nprobe=_NPROBE_ALL, num_threads=2
-    )
-    np.testing.assert_array_equal(ids1, ids2)
-    np.testing.assert_allclose(dists1, dists2, rtol=1e-5)
 
 
 # ── error handling ────────────────────────────────────────────────────────────

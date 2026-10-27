@@ -368,34 +368,6 @@ TEST(XyQuantization, CollinearResidualGivesFiniteErrorFactor) {
     EXPECT_FLOAT_EQ(base_map.f_error(), 0.0F);
 }
 
-TEST(XyQuantization, SplitInnerProductRecombinesExactly) {
-    constexpr size_t kDim = 64;
-    constexpr size_t kBaseBits = 3;
-    constexpr size_t kExtraBits = 4;
-
-    std::mt19937 gen(7);
-    std::vector<float> data = RandomVec(kDim, gen);
-    std::vector<float> centroid(kDim, 0.0F);
-    std::vector<float> query = RandomVec(kDim, gen);
-
-    XySplitResult res = SplitCode(data, centroid, kDim, kBaseBits, kExtraBits);
-
-    double split_ip = 0;
-    double direct_ip = 0;
-    for (size_t i = 0; i < kDim; ++i) {
-        uint32_t total = (static_cast<uint32_t>(res.base_code[i]) << kExtraBits) |
-                         static_cast<uint32_t>(res.extra_code[i]);
-        direct_ip += static_cast<double>(query[i]) * static_cast<double>(total);
-    }
-    for (size_t i = 0; i < kDim; ++i) {
-        split_ip += static_cast<double>(query[i]) * static_cast<double>(res.base_code[i]) *
-                    static_cast<double>(1U << kExtraBits);
-        split_ip += static_cast<double>(query[i]) * static_cast<double>(res.extra_code[i]);
-    }
-
-    EXPECT_NEAR(split_ip, direct_ip, 1e-6 * std::abs(direct_ip) + 1e-6);
-}
-
 // The base code must be stored exactly once: total storage is
 // (base_bits + extra_bits) bits per dimension plus 5 floats (3 base factors +
 // 2 full factors), never (2*base_bits + extra_bits) as an independently
@@ -593,18 +565,32 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
 
     XySplitResult res = SplitCode(data, centroid, kDim, kBaseBits, kExtraBits);
 
+    // Encode the unsplit reference independently of XY splitting and packed reads.
+    std::vector<uint16_t> full_code(kDim);
+    float full_add = 0, full_rescale = 0, full_error = 0;
+    quant::quantize_full_single(
+        data.data(),
+        centroid.data(),
+        kDim,
+        kBaseBits + kExtraBits,
+        full_code.data(),
+        full_add,
+        full_rescale,
+        full_error
+    );
+
     double total_ip = 0;
     double sumq = 0;
     for (size_t i = 0; i < kDim; ++i) {
         uint32_t total = (static_cast<uint32_t>(res.base_code[i]) << kExtraBits) |
                          static_cast<uint32_t>(res.extra_code[i]);
-        total_ip += static_cast<double>(query[i]) * static_cast<double>(total);
+        EXPECT_EQ(total, full_code[i]) << "dim " << i;
+        total_ip += static_cast<double>(query[i]) * full_code[i];
         sumq += query[i];
     }
     double c_b = -(static_cast<double>(1 << (kBaseBits + kExtraBits)) - 1) / 2.0;
-    float ref_est = static_cast<float>(
-        res.f_add_full + kGAdd + (res.f_rescale_full * (total_ip + (sumq * c_b)))
-    );
+    float ref_est =
+        static_cast<float>(full_add + kGAdd + (full_rescale * (total_ip + (sumq * c_b))));
 
     std::vector<char> base_data(BaseDataMap<float>::data_bytes(kDim, kBaseBits));
     std::vector<char> extra_data(ExDataMap<float>::data_bytes(kDim, kExtraBits));

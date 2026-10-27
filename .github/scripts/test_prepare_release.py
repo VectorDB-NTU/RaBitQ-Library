@@ -41,11 +41,18 @@ class ReleaseTest(unittest.TestCase):
             if args[:2] == ("git", "rev-list"):
                 return tag_sha
             if "/actions/workflows/" in args[-1]:
-                conclusion = (
-                    ci.get(args[-1].split("/workflows/")[1].split("/")[0])
-                    if isinstance(ci, dict)
-                    else ci
+                workflow = args[-1].split("/workflows/")[1].split("/")[0]
+                self.assertIn(workflow, ("test.yaml", "python.yml"))
+                self.assertEqual(
+                    args,
+                    (
+                        "gh",
+                        "api",
+                        f"repos/{REPO}/actions/workflows/{workflow}/runs"
+                        f"?event=push&head_sha={SHA}&per_page=100",
+                    ),
                 )
+                conclusion = ci.get(workflow) if isinstance(ci, dict) else ci
                 runs = (
                     []
                     if conclusion == "missing"
