@@ -321,3 +321,20 @@ wraps C allocations to sweep HNSW-RaBitQ constructor failures and verify ownersh
 these under ASan/UBSan as well as Release; do not disable allocator-mismatch checking.
 `compact_codes_failure_test` covers cold scratch allocation and growth failures in
 serial and OpenMP encoding, including the public FastScan batch entry points.
+
+## Python editor support
+
+Wheels include type stubs and `py.typed`; select the installed environment in your editor.
+Keep [public declarations](../python_bindings/__init__.pyi) and runtime docstrings in sync,
+following the [numpydoc style](https://numpydoc.readthedocs.io/en/latest/format.html).
+Array shapes and value ranges remain runtime checks.
+
+After rebuilding and installing with the `test` extra, run:
+
+```bash
+python -m pytest tests/python/test_editor_support.py -q
+```
+
+The suite checks installed declarations, signatures, documentation, examples, and
+valid/invalid calls with strict mypy. CI requires it; missing mypy fails the test.
+Keep the mypy pins in the `test` extra and wheel test requirements synchronized.

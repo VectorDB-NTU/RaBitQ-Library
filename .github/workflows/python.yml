@@ -68,6 +68,11 @@ jobs:
       - name: Build and install wheel
         run: pip install ".[test]" -v
 
+      - name: Check installed Python types and editor metadata
+        env:
+          OMP_NUM_THREADS: "2"
+        run: python -m pytest tests/python/test_editor_support.py --tb=short -q
+
       # Repaired-wheel jobs run the full Python suite.
       - name: Smoke-test source installation
         run: >-

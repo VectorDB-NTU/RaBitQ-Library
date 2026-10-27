@@ -27,7 +27,7 @@ Issues = "https://github.com/VectorDB-NTU/RaBitQ-Library/issues"
 Paper = "https://doi.org/10.1145/3725413"
 
 [project.optional-dependencies]
-test = ["pytest>=7", "numpy"]
+test = ["pytest>=7", "numpy", "mypy==2.4.0"]
 
 [tool.scikit-build]
 # Disable directory auto-discovery so we can map it via CMake's install target
@@ -45,7 +45,7 @@ cmake.args = [
 build = "cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64 cp311-manylinux_aarch64 cp312-manylinux_aarch64 cp313-manylinux_aarch64 cp314-manylinux_aarch64 cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64 cp311-macosx_arm64 cp312-macosx_arm64 cp313-macosx_arm64 cp314-macosx_arm64"
 build-verbosity = 1
 environment = { CMAKE_ARGS = "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" }
-test-requires = ["pytest"]
+test-requires = ["pytest", "mypy==2.4.0"]
 test-command = "pytest {project}/tests/python --ignore={project}/tests/python/test_compare_with_faiss.py --ignore={project}/tests/python/test_cpp_clustering_examples.py --tb=short -q"
 
 [tool.cibuildwheel.linux]

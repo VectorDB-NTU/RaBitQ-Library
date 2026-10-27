@@ -125,7 +125,7 @@ def classify(paths):
             )
         elif path.startswith("python_bindings/"):
             selected.update(("python_build", "wheels", "benchmarks"))
-            if path.endswith(".py"):
+            if path.endswith((".py", ".pyi")):
                 selected.add("python_quality")
             elif path.endswith(CPP_SUFFIXES):
                 selected.update(("cpp_format", "cpp_tidy"))

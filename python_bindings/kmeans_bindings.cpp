@@ -60,15 +60,43 @@ double train(Clustering& clustering, py::handle x) {
 
 template <typename Parameters>
 void bind_training_parameters(py::class_<Parameters>& binding) {
-    binding.def(py::init<>())
-        .def_readwrite("niter", &Parameters::niter)
-        .def_readwrite("verbose", &Parameters::verbose)
-        .def_readwrite("spherical", &Parameters::spherical)
-        .def_readwrite("seed", &Parameters::seed)
-        .def_readwrite("min_points_per_centroid", &Parameters::min_points_per_centroid)
-        .def_readwrite("early_stop_threshold", &Parameters::early_stop_threshold)
-        .def_readwrite("num_threads", &Parameters::num_threads)
-        .def_readwrite("final_assignment", &Parameters::final_assignment);
+    binding.def(py::init<>(), "Create parameters with their documented defaults.")
+        .def_readwrite(
+            "niter",
+            &Parameters::niter,
+            R"doc(Maximum number of clustering iterations. Default is 25.)doc"
+        )
+        .def_readwrite(
+            "verbose",
+            &Parameters::verbose,
+            R"doc(Print training progress when True. Default is False.)doc"
+        )
+        .def_readwrite(
+            "spherical",
+            &Parameters::spherical,
+            R"doc(Normalize centroids after each update and use inner-product assignment. Normalize input vectors yourself for cosine clustering. Default is False.)doc"
+        )
+        .def_readwrite("seed", &Parameters::seed, R"doc(Random seed. Default is 42.)doc")
+        .def_readwrite(
+            "min_points_per_centroid",
+            &Parameters::min_points_per_centroid,
+            R"doc(Warn below this many training vectors per centroid. Default is 39.)doc"
+        )
+        .def_readwrite(
+            "early_stop_threshold",
+            &Parameters::early_stop_threshold,
+            R"doc(Stop when the absolute relative objective change is at most this threshold. Default is 0.0.)doc"
+        )
+        .def_readwrite(
+            "num_threads",
+            &Parameters::num_threads,
+            R"doc(Worker count; 0 selects the available CPU count. Default is 0.)doc"
+        )
+        .def_readwrite(
+            "final_assignment",
+            &Parameters::final_assignment,
+            R"doc(Approximate uses the training assignment method; Exact uses exhaustive assignment against final centroids. Default is FinalAssignmentMode.Approximate.)doc"
+        );
 }
 
 template <typename Clustering, typename Parameters>
@@ -122,29 +150,87 @@ void register_kmeans(py::module_& m) {
     using rabitqlib::rabitqkmeans::RaBitQKMeans;
     using rabitqlib::rabitqkmeans::RaBitQKMeansParameters;
 
-    py::enum_<FinalAssignmentMode>(m, "FinalAssignmentMode")
+    py::enum_<FinalAssignmentMode>(
+        m, "FinalAssignmentMode", R"doc(Final centroid assignment policy.
+
+Approximate uses the selected clustering algorithm. SymphonyQG is a
+compatibility alias for Approximate. Exact performs exhaustive assignment.)doc"
+    )
         .value("Approximate", FinalAssignmentMode::Approximate)
         .value("SymphonyQG", FinalAssignmentMode::SymphonyQG)
         .value("Exact", FinalAssignmentMode::Exact);
 
-    py::class_<QGKMeansParameters> qg_parameters(m, "QGKMeansParameters");
-    bind_training_parameters(qg_parameters);
-    qg_parameters.def_readwrite("graph_degree", &QGKMeansParameters::graph_degree)
-        .def_readwrite("ef_build", &QGKMeansParameters::ef_build)
-        .def_readwrite("ef_search", &QGKMeansParameters::ef_search)
-        .def_readwrite(
-            "graph_build_iterations", &QGKMeansParameters::graph_build_iterations
-        )
-        .def_readwrite("quantization_bits", &QGKMeansParameters::quantization_bits);
+    py::class_<QGKMeansParameters> qg_parameters(
+        m, "QGKMeansParameters", R"doc(Mutable training settings for QGKMeans.
 
-    py::class_<RaBitQKMeansParameters> flat_parameters(m, "RaBitQKMeansParameters");
+Notes
+-----
+Create with no arguments; set attributes directly or use keyword arguments
+on QGKMeans.)doc"
+    );
+    bind_training_parameters(qg_parameters);
+    qg_parameters
+        .def_readwrite(
+            "graph_degree",
+            &QGKMeansParameters::graph_degree,
+            R"doc(Centroid graph degree; a positive multiple of 32. Default is 32.)doc"
+        )
+        .def_readwrite(
+            "ef_build",
+            &QGKMeansParameters::ef_build,
+            R"doc(Positive centroid-graph construction search breadth. Default is 240.)doc"
+        )
+        .def_readwrite(
+            "ef_search",
+            &QGKMeansParameters::ef_search,
+            R"doc(Positive centroid-graph assignment search breadth. Default is 16.)doc"
+        )
+        .def_readwrite(
+            "graph_build_iterations",
+            &QGKMeansParameters::graph_build_iterations,
+            R"doc(Positive number of graph-building passes after initialization. Default is 1.)doc"
+        )
+        .def_readwrite(
+            "quantization_bits",
+            &QGKMeansParameters::quantization_bits,
+            R"doc(Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is 0.)doc"
+        );
+
+    py::class_<RaBitQKMeansParameters> flat_parameters(
+        m, "RaBitQKMeansParameters", R"doc(Mutable training settings for RaBitQKMeans.
+
+Notes
+-----
+Create with no arguments; set attributes directly or use keyword arguments
+on RaBitQKMeans.)doc"
+    );
     bind_training_parameters(flat_parameters);
 
-    py::class_<QGKMeansIterationStats>(m, "QGKMeansIterationStats")
-        .def_readonly("iteration", &QGKMeansIterationStats::iteration)
-        .def_readonly("obj", &QGKMeansIterationStats::obj)
-        .def_readonly("shift", &QGKMeansIterationStats::shift)
-        .def_readonly("nsplit", &QGKMeansIterationStats::nsplit);
+    py::class_<QGKMeansIterationStats>(
+        m,
+        "QGKMeansIterationStats",
+        R"doc(Read-only statistics for one completed clustering iteration.)doc"
+    )
+        .def_readonly(
+            "iteration",
+            &QGKMeansIterationStats::iteration,
+            R"doc(Iteration number, starting at 1.)doc"
+        )
+        .def_readonly(
+            "obj",
+            &QGKMeansIterationStats::obj,
+            R"doc(Objective measured before the centroid update.)doc"
+        )
+        .def_readonly(
+            "shift",
+            &QGKMeansIterationStats::shift,
+            R"doc(Total squared centroid displacement during the update.)doc"
+        )
+        .def_readonly(
+            "nsplit",
+            &QGKMeansIterationStats::nsplit,
+            R"doc(Number of empty centroids repaired by splitting.)doc"
+        );
     m.attr("RaBitQKMeansIterationStats") = m.attr("QGKMeansIterationStats");
 
     bind_clustering<QGKMeans, QGKMeansParameters>(m, "_QGKMeans", "QGKMeans");

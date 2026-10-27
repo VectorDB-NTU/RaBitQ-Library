@@ -327,7 +327,43 @@ class IvfIndex {
 void register_ivf(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
-    py::class_<IvfIndex>(m, "IvfIndex")
+    py::class_<IvfIndex>(
+        m, "IvfIndex", R"doc(An approximate nearest-neighbor index using IVF.
+
+Parameters
+----------
+dim : int
+    Original vector dimension, from 64 through 65536.
+max_elements : int
+    Number of vectors required by the initial build. Later adds grow
+    storage.
+num_clusters : int
+    Number of supplied centroids.
+nbits : int
+    Total quantization bits, 1 through 9, or 32 for owned float32 vectors
+    with one-bit filtering and raw reranking.
+metric : {'l2', 'ip', 'innerproduct'}, optional
+    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+    automatically normalized for cosine similarity.
+initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+    Centroid routing strategy. Default is 'auto'.
+
+Notes
+-----
+Build or load the index before searching or saving. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.
+
+Examples
+--------
+>>> import numpy as np
+>>> from rabitqlib import IvfIndex
+>>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
+>>> index = IvfIndex(64, len(x), num_clusters=1, nbits=4)
+>>> index.build(x, x.mean(axis=0, keepdims=True), np.zeros(len(x), dtype=np.uint32))
+>>> ids, distances = index.search(x[:2], k=3, nprobe=1)
+>>> ids.shape, distances.shape
+((2, 3), (2, 3)))doc"
+    )
         .def(
             py::init<
                 size_t,
@@ -342,9 +378,41 @@ void register_ivf(py::module_& m) {
             py::arg("nbits"),
             py::arg("metric") = "l2",
             py::arg("initializer") = "auto",
-            "Create IVF with 1-9 quantization bits, or nbits=32 for owned raw-vector "
-            "reranking. initializer selects auto, flat, flat_rabitq, or hnsw centroid "
-            "routing."
+            R"doc(An approximate nearest-neighbor index using IVF.
+
+Parameters
+----------
+dim : int
+    Original vector dimension, from 64 through 65536.
+max_elements : int
+    Number of vectors required by the initial build. Later adds grow
+    storage.
+num_clusters : int
+    Number of supplied centroids.
+nbits : int
+    Total quantization bits, 1 through 9, or 32 for owned float32 vectors
+    with one-bit filtering and raw reranking.
+metric : {'l2', 'ip', 'innerproduct'}, optional
+    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+    automatically normalized for cosine similarity.
+initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+    Centroid routing strategy. Default is 'auto'.
+
+Notes
+-----
+Build or load the index before searching or saving. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.
+
+Examples
+--------
+>>> import numpy as np
+>>> from rabitqlib import IvfIndex
+>>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
+>>> index = IvfIndex(64, len(x), num_clusters=1, nbits=4)
+>>> index.build(x, x.mean(axis=0, keepdims=True), np.zeros(len(x), dtype=np.uint32))
+>>> ids, distances = index.search(x[:2], k=3, nprobe=1)
+>>> ids.shape, distances.shape
+((2, 3), (2, 3)))doc"
         )
         .def(
             "build",
@@ -353,7 +421,30 @@ void register_ivf(py::module_& m) {
             py::arg("centroids"),
             py::arg("cluster_ids"),
             py::arg("num_threads") = 1,
-            py::arg("fast_quantization") = false
+            py::arg("fast_quantization") = false,
+            R"doc(Build the index from vectors and supplied centroid assignments.
+
+Parameters
+----------
+data : array_like of float, shape (n, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+centroids : array_like of float, shape (num_clusters, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+cluster_ids : array_like of int, shape (n,)
+    Centroid ID per vector, in [0, num_clusters). Floating-point and
+    boolean IDs are rejected.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+fast_quantization : bool, optional
+    Use faster quantizer configuration. Default is False.
+
+Notes
+-----
+The initial data must satisfy n == max_elements. Centroids and data use
+original coordinates. The input arrays need not be retained after this
+synchronous call.)doc"
         )
         .def(
             "add",
@@ -362,26 +453,69 @@ void register_ivf(py::module_& m) {
             py::arg("cluster_ids") = py::none(),
             py::arg("num_threads") = 1,
             py::arg("fast_quantization") = false,
-            "Append vectors without the original data and return their ids. Vectors "
-            "are quantized against the existing centroids, which do not move. Without "
-            "cluster_ids each vector goes to its nearest centroid. Each call copies "
-            "every cluster it adds to, unless reserve left room for the new vectors, "
-            "so add many vectors per call rather than one at a time."
+            R"doc(Append vectors using the existing centroids.
+
+Parameters
+----------
+data : array_like of float, shape (n, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+cluster_ids : array_like of int, shape (n,), optional
+    Existing centroid IDs. None assigns each vector to its nearest
+    centroid. Centroids do not move.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+fast_quantization : bool, optional
+    Use faster quantizer configuration. Default is False.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n,)
+    Assigned point IDs.
+
+Notes
+-----
+Batch additions to reduce repeated cluster copying; reserve can preallocate
+room.)doc"
         )
         .def(
             "reserve",
             &IvfIndex::reserve,
             py::arg("cluster_id"),
             py::arg("num_points"),
-            "Preallocate room for a cluster to hold num_points vectors, so later adds "
-            "to it do not copy it. Reserved room is not saved."
+            R"doc(Preallocate storage for a cluster.
+
+Parameters
+----------
+cluster_id : int
+    Cluster ID in [0, num_clusters).
+num_points : int
+    Nonnegative capacity to reserve for this cluster.
+
+Notes
+-----
+Requires a built index. Reserved room is not saved.)doc"
         )
         .def(
             "remove",
             &IvfIndex::remove,
             py::arg("ids"),
-            "Exclude ids from later search results and return how many were newly "
-            "removed. Removed vectors keep their storage and cannot be restored."
+            R"doc(Exclude point IDs from subsequent search results.
+
+Parameters
+----------
+ids : array_like of int, shape (n,)
+    IDs in [0, num_stored_points). Floating-point and boolean IDs are
+    rejected.
+
+Returns
+-------
+count : int
+    Number of newly removed points; repeats do not count twice.
+
+Notes
+-----
+Removal does not reclaim storage and cannot be undone.)doc"
         )
         .def(
             "search",
@@ -390,17 +524,102 @@ void register_ivf(py::module_& m) {
             py::arg("k"),
             py::arg("nprobe"),
             py::arg("high_accuracy") = py::none(),
-            py::arg("num_threads") = 1
+            py::arg("num_threads") = 1,
+            R"doc(Search a batch of query vectors.
+
+Parameters
+----------
+queries : array_like of float, shape (n_queries, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+k : int
+    Number of neighbors requested, between 1 and max_elements.
+nprobe : int
+    Positive number of clusters to probe; capped at num_clusters.
+high_accuracy : bool, optional
+    Enable HACC. None (default) selects it for 4-9 bits and standard
+    FastScan otherwise. Raw storage uses standard FastScan.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n_queries, k)
+    Point IDs of the selected neighbors.
+distances : ndarray of float32, shape (n_queries, k)
+    Lower values are better; squared L2 estimates for l2 and inner-product
+    distance estimates for ip. These are distances, not similarity scores.
+
+Notes
+-----
+Returns (ids, distances), in that order. Missing neighbors have ID
+4294967295 and distance inf. Array shapes and value ranges are checked at
+runtime, not by static type checkers.)doc"
         )
-        .def("save", &IvfIndex::save, py::arg("path"))
-        .def_static("load", &IvfIndex::load, py::arg("path"))
-        .def_property_readonly("dim", &IvfIndex::dim)
-        .def_property_readonly("max_elements", &IvfIndex::max_elements)
-        .def_property_readonly("num_points", &IvfIndex::num_points)
-        .def_property_readonly("num_stored_points", &IvfIndex::num_stored_points)
-        .def_property_readonly("num_clusters", &IvfIndex::num_clusters)
-        .def_property_readonly("nbits", &IvfIndex::nbits)
-        .def_property_readonly("is_built", &IvfIndex::is_built)
-        .def_property_readonly("metric", &IvfIndex::metric)
-        .def_property_readonly("initializer", &IvfIndex::initializer);
+        .def(
+            "save",
+            &IvfIndex::save,
+            py::arg("path"),
+            R"doc(Save a built index to disk.
+
+Parameters
+----------
+path : str
+    Index file path. Pass str(path) for pathlib.Path objects.
+
+Notes
+-----
+IVF with HNSW centroid routing also writes its required sidecar file.)doc"
+        )
+        .def_static(
+            "load",
+            &IvfIndex::load,
+            py::arg("path"),
+            R"doc(Load an index and its saved rotation from disk.
+
+Parameters
+----------
+path : str
+    Index file path. Pass str(path) for pathlib.Path objects.
+
+Returns
+-------
+index : IvfIndex
+    A built index ready for search.)doc"
+        )
+        .def_property_readonly("dim", &IvfIndex::dim, R"doc(Original vector dimension.)doc")
+        .def_property_readonly(
+            "max_elements", &IvfIndex::max_elements, R"doc(Current storage capacity.)doc"
+        )
+        .def_property_readonly(
+            "num_points",
+            &IvfIndex::num_points,
+            R"doc(Number of live, searchable points.)doc"
+        )
+        .def_property_readonly(
+            "num_stored_points",
+            &IvfIndex::num_stored_points,
+            R"doc(Number of stored points, including removed points.)doc"
+        )
+        .def_property_readonly(
+            "num_clusters",
+            &IvfIndex::num_clusters,
+            R"doc(Number of centroids used for quantization.)doc"
+        )
+        .def_property_readonly(
+            "nbits", &IvfIndex::nbits, R"doc(Total storage bits per coordinate.)doc"
+        )
+        .def_property_readonly(
+            "is_built",
+            &IvfIndex::is_built,
+            R"doc(Whether the index has been built or loaded.)doc"
+        )
+        .def_property_readonly(
+            "metric", &IvfIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+        )
+        .def_property_readonly(
+            "initializer",
+            &IvfIndex::initializer,
+            R"doc(Resolved centroid routing strategy.)doc"
+        );
 }
