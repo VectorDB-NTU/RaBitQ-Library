@@ -26,6 +26,8 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     ivf = IvfIndex(64, 64, 2, 4)
     hnsw = HnswIndex(64, 128)
     graph = SymqgIndex(64, 32)
+    for index in (ivf, hnsw, graph):
+        assert_type(index.__repr__(), str)
     for index in (ivf, hnsw):
         index.build(x, x[:2], labels)
         assert_type(index.add(x, labels), npt.NDArray[np.uint32])

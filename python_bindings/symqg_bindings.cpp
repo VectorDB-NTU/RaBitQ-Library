@@ -158,6 +158,16 @@ class SymqgIndex {
         return wrapper;
     }
 
+    [[nodiscard]] std::string repr() const {
+        const auto operation = access_.read();
+        return "SymqgIndex(dim=" + std::to_string(dim_) + ", metric='" +
+               metric_to_string(metric_) +
+               "', quantization_bits=" + std::to_string(quantization_bits_) +
+               ", num_points=" + std::to_string(index_ ? index_->num_points() : 0) +
+               ", max_degree=" + std::to_string(max_degree_) +
+               ", is_built=" + (built_ ? "True" : "False") + ")";
+    }
+
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
         return dim_;
@@ -382,6 +392,11 @@ Returns
 -------
 index : SymqgIndex
     A built index ready for search.)doc"
+        )
+        .def(
+            "__repr__",
+            &SymqgIndex::repr,
+            "Return a one-line summary of configuration, counts and build state."
         )
         .def_property_readonly(
             "dim", &SymqgIndex::dim, R"doc(Original vector dimension.)doc"
