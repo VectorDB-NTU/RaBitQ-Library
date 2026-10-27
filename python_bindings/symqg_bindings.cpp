@@ -211,13 +211,52 @@ class SymqgIndex {
 void register_symqg(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
-    py::class_<SymqgIndex>(m, "SymqgIndex")
+    py::class_<SymqgIndex>(
+        m, "SymqgIndex", R"doc(An approximate nearest-neighbor index using SymphonyQG.
+
+Parameters
+----------
+dim : int
+    Original vector dimension, from 64 through 65536.
+max_degree : int
+    Graph degree bound; a positive multiple of 32.
+metric : {'l2', 'ip', 'innerproduct'}, optional
+    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+    automatically normalized for cosine similarity.
+quantization_bits : {0, 4, 8}, optional
+    Centroid-relative RaBitQ storage at 4 or 8 bits, or raw float32 at 0
+    (default).
+
+Notes
+-----
+Build or load the index before searching or saving. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.)doc"
+    )
         .def(
             py::init<size_t, size_t, const std::string&, size_t>(),
             py::arg("dim"),
             py::arg("max_degree"),
             py::arg("metric") = "l2",
-            py::arg("quantization_bits") = 0
+            py::arg("quantization_bits") = 0,
+            R"doc(An approximate nearest-neighbor index using SymphonyQG.
+
+Parameters
+----------
+dim : int
+    Original vector dimension, from 64 through 65536.
+max_degree : int
+    Graph degree bound; a positive multiple of 32.
+metric : {'l2', 'ip', 'innerproduct'}, optional
+    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+    automatically normalized for cosine similarity.
+quantization_bits : {0, 4, 8}, optional
+    Centroid-relative RaBitQ storage at 4 or 8 bits, or raw float32 at 0
+    (default).
+
+Notes
+-----
+Build or load the index before searching or saving. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.)doc"
         )
         .def(
             "build",
@@ -225,7 +264,25 @@ void register_symqg(py::module_& m) {
             py::arg("data"),
             py::arg("ef_construction"),
             py::arg("num_threads") = 1,
-            py::arg("init") = "pipnn"
+            py::arg("init") = "pipnn",
+            R"doc(Build the graph from input vectors.
+
+Parameters
+----------
+data : array_like of float, shape (n, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+ef_construction : int
+    Positive construction search breadth fitting uint32.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+init : {'pipnn', 'random'}, optional
+    Graph initialization method. Default is 'pipnn'.
+
+Notes
+-----
+Requires n > max_degree. Input arrays need not be retained after this
+synchronous call.)doc"
         )
         .def(
             "search",
@@ -233,7 +290,33 @@ void register_symqg(py::module_& m) {
             py::arg("queries"),
             py::arg("k"),
             py::arg("ef"),
-            py::arg("num_threads") = 1
+            py::arg("num_threads") = 1,
+            R"doc(Search a batch of query vectors.
+
+Parameters
+----------
+queries : array_like of float, shape (n_queries, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+k : int
+    Number of neighbors requested, between 1 and num_points.
+ef : int
+    Search breadth. Must be positive and at least k.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n_queries, k)
+    Point IDs of the selected neighbors.
+distances : ndarray of float32, shape (n_queries, k)
+    Lower values are better; squared L2 estimates for l2 and inner-product
+    distance estimates for ip. These are distances, not similarity scores.
+
+Notes
+-----
+Returns (ids, distances), in that order. Array shapes and value ranges are
+checked at runtime, not by static type checkers.)doc"
         )
         .def(
             "search_batch",
@@ -241,16 +324,95 @@ void register_symqg(py::module_& m) {
             py::arg("queries"),
             py::arg("k"),
             py::arg("ef"),
-            py::arg("num_threads") = 1
+            py::arg("num_threads") = 1,
+            R"doc(Search a batch of query vectors.
+
+Parameters
+----------
+queries : array_like of float, shape (n_queries, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+k : int
+    Number of neighbors requested, between 1 and num_points.
+ef : int
+    Search breadth. Must be positive and at least k.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n_queries, k)
+    Point IDs of the selected neighbors.
+distances : ndarray of float32, shape (n_queries, k)
+    Lower values are better; squared L2 estimates for l2 and inner-product
+    distance estimates for ip. These are distances, not similarity scores.
+
+Notes
+-----
+Returns (ids, distances), in that order. Array shapes and value ranges are
+checked at runtime, not by static type checkers.)doc"
         )
-        .def("save", &SymqgIndex::save, py::arg("path"))
-        .def_static("load", &SymqgIndex::load, py::arg("path"))
-        .def_property_readonly("dim", &SymqgIndex::dim)
-        .def_property_readonly("max_degree", &SymqgIndex::max_degree)
-        .def_property_readonly("num_points", &SymqgIndex::num_points)
-        .def_property_readonly("num_stored_points", &SymqgIndex::num_stored_points)
-        .def_property_readonly("max_elements", &SymqgIndex::max_elements)
-        .def_property_readonly("is_built", &SymqgIndex::is_built)
-        .def_property_readonly("metric", &SymqgIndex::metric)
-        .def_property_readonly("quantization_bits", &SymqgIndex::quantization_bits);
+        .def(
+            "save",
+            &SymqgIndex::save,
+            py::arg("path"),
+            R"doc(Save a built index to disk.
+
+Parameters
+----------
+path : str
+    Index file path. Pass str(path) for pathlib.Path objects.
+
+Notes
+-----
+The saved state includes the rotation used to build the index.)doc"
+        )
+        .def_static(
+            "load",
+            &SymqgIndex::load,
+            py::arg("path"),
+            R"doc(Load an index and its saved rotation from disk.
+
+Parameters
+----------
+path : str
+    Index file path. Pass str(path) for pathlib.Path objects.
+
+Returns
+-------
+index : SymqgIndex
+    A built index ready for search.)doc"
+        )
+        .def_property_readonly(
+            "dim", &SymqgIndex::dim, R"doc(Original vector dimension.)doc"
+        )
+        .def_property_readonly(
+            "max_degree", &SymqgIndex::max_degree, R"doc(Graph degree bound.)doc"
+        )
+        .def_property_readonly(
+            "num_points",
+            &SymqgIndex::num_points,
+            R"doc(Number of live, searchable points.)doc"
+        )
+        .def_property_readonly(
+            "num_stored_points",
+            &SymqgIndex::num_stored_points,
+            R"doc(Number of stored points, including removed points.)doc"
+        )
+        .def_property_readonly(
+            "max_elements", &SymqgIndex::max_elements, R"doc(Current storage capacity.)doc"
+        )
+        .def_property_readonly(
+            "is_built",
+            &SymqgIndex::is_built,
+            R"doc(Whether the index has been built or loaded.)doc"
+        )
+        .def_property_readonly(
+            "metric", &SymqgIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+        )
+        .def_property_readonly(
+            "quantization_bits",
+            &SymqgIndex::quantization_bits,
+            R"doc(Storage bits: 0 for raw float32, or 4 or 8 for RaBitQ.)doc"
+        );
 }

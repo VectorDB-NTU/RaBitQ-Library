@@ -6,6 +6,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -15,6 +17,62 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class WorkflowContractsTest(unittest.TestCase):
+    def test_installed_typing_checks_are_required(self):
+        config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        test_dependencies = config["project"]["optional-dependencies"]["test"]
+        wheel_dependencies = config["tool"]["cibuildwheel"]["test-requires"]
+        checker = [value for value in test_dependencies if value.startswith("mypy==")]
+        self.assertEqual(len(checker), 1)
+        self.assertIn(checker[0], wheel_dependencies)
+        self.assertFalse(
+            any(value.startswith("mypy") for value in config["project"]["dependencies"])
+        )
+        workflow = (ROOT / ".github/workflows/python.yml").read_text()
+        build = workflow.split("  python-build:\n", 1)[1].split(
+            "  python-result:\n", 1
+        )[0]
+        self.assertIn('pip install ".[test]"', build)
+        self.assertIn("python -m pytest tests/python/test_editor_support.py", build)
+        self.assertNotIn("continue-on-error", build)
+        self.assertIn(
+            "pytest {project}/tests/python",
+            config["tool"]["cibuildwheel"]["test-command"],
+        )
+        self.assertNotIn(
+            "--ignore={project}/tests/python/test_editor_support.py",
+            config["tool"]["cibuildwheel"]["test-command"],
+        )
+        for path in (
+            "python_bindings/__init__.pyi",
+            "tests/python/typing/public_api.py",
+        ):
+            with self.subTest(path=path):
+                self.assertLessEqual(
+                    {"python_build", "python_quality", "wheels"}, classify([path])
+                )
+        # Exercise the actual aggregator script, so a failed selected matrix
+        # cannot be reported as a successful Python validation check.
+        result = workflow.split("  python-result:\n", 1)[1].split(
+            "  python-windows:\n", 1
+        )[0]
+        self.assertIn("needs: [changes, python-build]", result)
+        script = textwrap.dedent(result.split("        run: |\n", 1)[1])
+        for matrix_result in ("success", "failure", "cancelled", "skipped"):
+            with self.subTest(matrix_result=matrix_result):
+                checked = subprocess.run(
+                    ["bash", "-e", "-c", script],
+                    env=dict(
+                        os.environ,
+                        CHANGES_RESULT="success",
+                        PYTHON_SELECTED="true",
+                        MATRIX_RESULT=matrix_result,
+                    ),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(checked.returncode == 0, matrix_result == "success")
+
     def test_tidy_rejects_empty_scope_and_propagates_analysis_failure(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)

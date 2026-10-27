@@ -290,7 +290,32 @@ class HnswIndex {
 void register_hnsw(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
-    py::class_<HnswIndex>(m, "HnswIndex")
+    py::class_<HnswIndex>(
+        m, "HnswIndex", R"doc(An approximate nearest-neighbor index using HNSW.
+
+Parameters
+----------
+dim : int
+    Original vector dimension, from 64 through 65536.
+max_elements : int
+    Storage capacity, including removed points. Use resize to grow it.
+M : int, optional
+    Graph connectivity, at least 2. Default is 16.
+ef_construction : int, optional
+    Construction search breadth. Default is 200.
+nbits : int, optional
+    Total quantization bits, 1 through 9. Default is 8.
+metric : {'l2', 'ip', 'innerproduct'}, optional
+    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+    automatically normalized for cosine similarity.
+random_seed : int, optional
+    Graph random seed. Default is 100.
+
+Notes
+-----
+Build or load the index before searching or saving. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.)doc"
+    )
         .def(
             py::init<size_t, size_t, size_t, size_t, size_t, const std::string&, size_t>(),
             py::arg("dim"),
@@ -299,7 +324,31 @@ void register_hnsw(py::module_& m) {
             py::arg("ef_construction") = 200,
             py::arg("nbits") = 8,
             py::arg("metric") = "l2",
-            py::arg("random_seed") = 100
+            py::arg("random_seed") = 100,
+            R"doc(An approximate nearest-neighbor index using HNSW.
+
+Parameters
+----------
+dim : int
+    Original vector dimension, from 64 through 65536.
+max_elements : int
+    Storage capacity, including removed points. Use resize to grow it.
+M : int, optional
+    Graph connectivity, at least 2. Default is 16.
+ef_construction : int, optional
+    Construction search breadth. Default is 200.
+nbits : int, optional
+    Total quantization bits, 1 through 9. Default is 8.
+metric : {'l2', 'ip', 'innerproduct'}, optional
+    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+    automatically normalized for cosine similarity.
+random_seed : int, optional
+    Graph random seed. Default is 100.
+
+Notes
+-----
+Build or load the index before searching or saving. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.)doc"
         )
         .def(
             "build",
@@ -308,7 +357,30 @@ void register_hnsw(py::module_& m) {
             py::arg("centroids"),
             py::arg("cluster_ids"),
             py::arg("num_threads") = 1,
-            py::arg("fast_quantization") = false
+            py::arg("fast_quantization") = false,
+            R"doc(Build the index from vectors and supplied centroid assignments.
+
+Parameters
+----------
+data : array_like of float, shape (n, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+centroids : array_like of float, shape (num_clusters, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+cluster_ids : array_like of int, shape (n,)
+    Centroid ID per vector, in [0, num_clusters). Floating-point and
+    boolean IDs are rejected.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+fast_quantization : bool, optional
+    Use faster quantizer configuration. Default is False.
+
+Notes
+-----
+The initial data must satisfy 1 <= n <= max_elements. Centroids and data
+use original coordinates. The input arrays need not be retained after this
+synchronous call.)doc"
         )
         .def(
             "search",
@@ -316,7 +388,34 @@ void register_hnsw(py::module_& m) {
             py::arg("queries"),
             py::arg("k"),
             py::arg("ef") = 0,
-            py::arg("num_threads") = 1
+            py::arg("num_threads") = 1,
+            R"doc(Search a batch of query vectors.
+
+Parameters
+----------
+queries : array_like of float, shape (n_queries, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+k : int
+    Number of neighbors requested, between 1 and max_elements.
+ef : int, optional
+    Search breadth. 0 (default) selects max(k, 10).
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n_queries, k)
+    Point IDs of the selected neighbors.
+distances : ndarray of float32, shape (n_queries, k)
+    Lower values are better; squared L2 estimates for l2 and inner-product
+    distance estimates for ip. These are distances, not similarity scores.
+
+Notes
+-----
+Returns (ids, distances), in that order. Missing neighbors have ID
+4294967295 and distance inf. Array shapes and value ranges are checked at
+runtime, not by static type checkers.)doc"
         )
         .def(
             "add",
@@ -324,26 +423,125 @@ void register_hnsw(py::module_& m) {
             py::arg("data"),
             py::arg("cluster_ids") = py::none(),
             py::arg("num_threads") = 1,
-            py::arg("fast_quantization") = false
+            py::arg("fast_quantization") = false,
+            R"doc(Append vectors using the existing centroids.
+
+Parameters
+----------
+data : array_like of float, shape (n, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+cluster_ids : array_like of int, shape (n,), optional
+    Existing centroid IDs. None assigns each vector to its nearest
+    centroid. Centroids do not move.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+fast_quantization : bool, optional
+    Use faster quantizer configuration. Default is False.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n,)
+    Assigned point IDs.
+
+Notes
+-----
+The stored point count plus n must fit max_elements; resize first if
+needed. Removed IDs are not reused.)doc"
         )
-        .def("resize", &HnswIndex::resize, py::arg("max_elements"))
+        .def(
+            "resize",
+            &HnswIndex::resize,
+            py::arg("max_elements"),
+            R"doc(Resize the storage capacity of a built index.
+
+Parameters
+----------
+max_elements : int
+    New capacity; must be at least num_stored_points.)doc"
+        )
         .def(
             "remove",
             &HnswIndex::remove,
             py::arg("ids"),
-            "Exclude ids from later search results and return how many were newly "
-            "removed. Removed points stay in the graph and in num_stored_points, and "
-            "cannot "
-            "be restored."
+            R"doc(Exclude point IDs from subsequent search results.
+
+Parameters
+----------
+ids : array_like of int, shape (n,)
+    IDs in [0, num_stored_points). Floating-point and boolean IDs are
+    rejected.
+
+Returns
+-------
+count : int
+    Number of newly removed points; repeats do not count twice.
+
+Notes
+-----
+Removal does not reclaim storage and cannot be undone.)doc"
         )
-        .def("save", &HnswIndex::save, py::arg("path"))
-        .def_static("load", &HnswIndex::load, py::arg("path"))
-        .def_property_readonly("dim", &HnswIndex::dim)
-        .def_property_readonly("max_elements", &HnswIndex::max_elements)
-        .def_property_readonly("num_points", &HnswIndex::num_points)
-        .def_property_readonly("num_stored_points", &HnswIndex::num_stored_points)
-        .def_property_readonly("nbits", &HnswIndex::nbits)
-        .def_property_readonly("num_clusters", &HnswIndex::num_clusters)
-        .def_property_readonly("is_built", &HnswIndex::is_built)
-        .def_property_readonly("metric", &HnswIndex::metric);
+        .def(
+            "save",
+            &HnswIndex::save,
+            py::arg("path"),
+            R"doc(Save a built index to disk.
+
+Parameters
+----------
+path : str
+    Index file path. Pass str(path) for pathlib.Path objects.
+
+Notes
+-----
+The saved state includes the rotation used to build the index.)doc"
+        )
+        .def_static(
+            "load",
+            &HnswIndex::load,
+            py::arg("path"),
+            R"doc(Load an index and its saved rotation from disk.
+
+Parameters
+----------
+path : str
+    Index file path. Pass str(path) for pathlib.Path objects.
+
+Returns
+-------
+index : HnswIndex
+    A built index ready for search.)doc"
+        )
+        .def_property_readonly(
+            "dim", &HnswIndex::dim, R"doc(Original vector dimension.)doc"
+        )
+        .def_property_readonly(
+            "max_elements", &HnswIndex::max_elements, R"doc(Current storage capacity.)doc"
+        )
+        .def_property_readonly(
+            "num_points",
+            &HnswIndex::num_points,
+            R"doc(Number of live, searchable points.)doc"
+        )
+        .def_property_readonly(
+            "num_stored_points",
+            &HnswIndex::num_stored_points,
+            R"doc(Number of stored points, including removed points.)doc"
+        )
+        .def_property_readonly(
+            "nbits", &HnswIndex::nbits, R"doc(Total storage bits per coordinate.)doc"
+        )
+        .def_property_readonly(
+            "num_clusters",
+            &HnswIndex::num_clusters,
+            R"doc(Number of centroids used for quantization.)doc"
+        )
+        .def_property_readonly(
+            "is_built",
+            &HnswIndex::is_built,
+            R"doc(Whether the index has been built or loaded.)doc"
+        )
+        .def_property_readonly(
+            "metric", &HnswIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+        );
 }

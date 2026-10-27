@@ -58,7 +58,7 @@ endif()
 # 5. Map files to a 'rabitqlib' directory
 # inside the target wheel, completely bypassing your local layout.
 install(TARGETS _rabitqlib DESTINATION rabitqlib)
-install(FILES __init__.py DESTINATION rabitqlib)
+install(FILES __init__.py __init__.pyi py.typed DESTINATION rabitqlib)
 
 if(RABITQ_BUILD_BENCHMARKS)
     # Benchmark the production conversion helper without importing or replacing
