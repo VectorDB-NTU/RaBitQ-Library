@@ -47,9 +47,7 @@ py::array_t<float> centroids_to_array(const Clustering& clustering, const char* 
 template <typename Clustering>
 double train(Clustering& clustering, py::handle x) {
     auto x_array = ensure_2d_array<float>(x, "x");
-    if (static_cast<size_t>(x_array.shape(1)) != clustering.d) {
-        throw std::invalid_argument("x dimension does not match d");
-    }
+    ensure_dimension(x_array, clustering.d, "x dimension does not match d");
 
     {
         py::gil_scoped_release release;

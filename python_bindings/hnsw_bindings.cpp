@@ -58,18 +58,22 @@ class HnswIndex {
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
 
-        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("data dimension does not match index dim");
-        }
+        ensure_dimension(
+            data_array, index_->dimension(), "data dimension does not match index dim"
+        );
         if (data_array.shape(0) == 0 ||
             static_cast<size_t>(data_array.shape(0)) > index_->max_elements()) {
             throw std::invalid_argument(
-                "number of data rows must be between 1 and max_elements"
+                "number of data rows must be between 1 and max_elements; expected 1 to " +
+                std::to_string(index_->max_elements()) + ", got shape " +
+                array_shape(data_array)
             );
         }
-        if (static_cast<size_t>(centroids_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("centroid dimension does not match index dim");
-        }
+        ensure_dimension(
+            centroids_array,
+            index_->dimension(),
+            "centroid dimension does not match index dim"
+        );
         const size_t num_clusters = static_cast<size_t>(centroids_array.shape(0));
         if (num_clusters == 0) {
             throw std::invalid_argument("at least one centroid is required");
@@ -110,9 +114,9 @@ class HnswIndex {
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before add");
         }
-        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("data dimension does not match index dim");
-        }
+        ensure_dimension(
+            data_array, index_->dimension(), "data dimension does not match index dim"
+        );
         const auto rows = static_cast<size_t>(data_array.shape(0));
 
         std::vector<rabitqlib::PID> assigned;
@@ -185,9 +189,10 @@ class HnswIndex {
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before search");
         }
-        if (index_->dimension() != 0 &&
-            static_cast<size_t>(query_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("query dimension does not match index dim");
+        if (index_->dimension() != 0) {
+            ensure_dimension(
+                query_array, index_->dimension(), "query dimension does not match index dim"
+            );
         }
         if (ef == 0) {
             ef = std::max<size_t>(k, 10);
@@ -231,21 +236,23 @@ class HnswIndex {
         return py::make_tuple(ids, dists);
     }
 
-    void save(const std::string& path) const {
+    void save(py::handle path) const {
+        const auto filename = path_string(path);
         const auto operation = access_.read();
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before save");
         }
         py::gil_scoped_release release;
-        index_->save(path.c_str());
+        index_->save(filename.c_str());
     }
 
-    static HnswIndex load(const std::string& path) {
+    static HnswIndex load(py::handle path) {
+        const auto filename = path_string(path);
         HnswIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::hnsw::HierarchicalNSW>();
         {
             py::gil_scoped_release release;
-            wrapper.index_->load(path.c_str());
+            wrapper.index_->load(filename.c_str());
         }
         wrapper.built_ = true;
         return wrapper;
@@ -489,8 +496,9 @@ Removal does not reclaim storage and cannot be undone.)doc"
 
 Parameters
 ----------
-path : str
-    Index file path. Pass str(path) for pathlib.Path objects.
+path : str, bytes, bytearray, or os.PathLike
+    Index file path. PathLike objects are resolved via __fspath__.
+    Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
 Notes
 -----
@@ -504,8 +512,9 @@ The saved state includes the rotation used to build the index.)doc"
 
 Parameters
 ----------
-path : str
-    Index file path. Pass str(path) for pathlib.Path objects.
+path : str, bytes, bytearray, or os.PathLike
+    Index file path. PathLike objects are resolved via __fspath__.
+    Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
 Returns
 -------

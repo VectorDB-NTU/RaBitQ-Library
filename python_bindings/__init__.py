@@ -26,8 +26,19 @@ class _KMeans:
         self.k = int(k)
         self.cp = self._parameters_type()
         for name, value in kwargs.items():
-            getattr(self.cp, name)
-            setattr(self.cp, name, value)
+            try:
+                getattr(self.cp, name)
+            except AttributeError:
+                raise AttributeError(
+                    f"{type(self).__name__}() got an unexpected keyword argument {name!r}"
+                ) from None
+            try:
+                setattr(self.cp, name, value)
+            except TypeError as error:
+                raise TypeError(
+                    f"{type(self).__name__}() could not convert parameter {name!r} "
+                    f"from {type(value).__name__}"
+                ) from error
         self._impl = None
 
     def train(self, x):

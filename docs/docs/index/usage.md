@@ -129,8 +129,12 @@ Python index methods default to one thread; clustering defaults to `0`.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.
 
-Index save/load paths are UTF-8 strings on Windows and native path bytes on POSIX
-in C++; Python paths are Unicode strings on all platforms.
+C++ paths use UTF-8 on Windows and native path bytes on POSIX.
+Python `save`/`load` accept strings, `pathlib.Path` and `os.PathLike` objects;
+existing `bytes` and `bytearray` paths remain supported. POSIX paths preserve native
+bytes, including surrogate-escaped names; Windows byte paths use UTF-8. Embedded
+null characters are rejected before file access. IVF HNSW sidecars use the same
+path conversion.
 
 ## Index file compatibility
 

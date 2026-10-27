@@ -1,5 +1,6 @@
 """Tests for IvfIndex: construction, search, properties, error handling, save/load."""
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -203,7 +204,14 @@ def test_wrong_data_dim_raises(clusters):
     idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
     centroids, cluster_ids = clusters
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
-    with pytest.raises(ValueError, match="^data dimension does not match index dim$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"data dimension does not match index dim; expected last dimension {DIM}, got shape {bad_data.shape}"
+        )
+        + "$",
+    ):
         idx.build(bad_data, centroids, cluster_ids)
 
 
@@ -212,7 +220,12 @@ def test_wrong_centroid_dim_raises(base_data, clusters):
     _, cluster_ids = clusters
     bad_centroids = np.zeros((N_CLUSTERS, DIM + 1), dtype=np.float32)
     with pytest.raises(
-        ValueError, match="^centroid dimension does not match index dim$"
+        ValueError,
+        match="^"
+        + re.escape(
+            f"centroid dimension does not match index dim; expected last dimension {DIM}, got shape {bad_centroids.shape}"
+        )
+        + "$",
     ):
         idx.build(base_data, bad_centroids, cluster_ids)
 
@@ -222,14 +235,22 @@ def test_wrong_cluster_ids_length_raises(base_data, clusters):
     centroids, _ = clusters
     bad_ids = np.zeros(N_VECTORS + 5, dtype=np.uint32)
     with pytest.raises(
-        ValueError, match="^cluster_ids length must match number of rows in data$"
+        ValueError,
+        match=f"^cluster_ids length must match number of rows in data; expected {N_VECTORS} IDs, got {len(bad_ids)}$",
     ):
         idx.build(base_data, centroids, bad_ids)
 
 
 def test_wrong_query_dim_raises(built_ivf):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
-    with pytest.raises(ValueError, match="^query dimension does not match index dim$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"query dimension does not match index dim; expected last dimension {DIM}, got shape {bad_queries.shape}"
+        )
+        + "$",
+    ):
         built_ivf.search(bad_queries, k=1, nprobe=1)
 
 

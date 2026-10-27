@@ -1,5 +1,7 @@
 """Tests for the FAISS-style QGKMeans Python API."""
 
+import re
+
 import numpy as np
 import pytest
 from conftest import DIM
@@ -270,7 +272,14 @@ def test_nonfinite_training_input_preserves_previous_fit(
 @pytest.mark.parametrize("model_type", [QGKMeans, RaBitQKMeans])
 def test_failed_first_fit_keeps_results_unavailable(model_type):
     clustering = model_type(DIM, K, niter=2, num_threads=1)
-    with pytest.raises(ValueError, match="^x dimension does not match d$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"x dimension does not match d; expected last dimension {DIM}, got shape {(K, DIM + 1)}"
+        )
+        + "$",
+    ):
         clustering.train(np.zeros((K, DIM + 1), dtype=np.float32))
     assert clustering.centroids is None
     assert clustering.obj is None
@@ -282,7 +291,14 @@ def test_failed_refit_keeps_previous_results(base_data, model_type):
     clustering.train(base_data)
     expected_centroids = clustering.centroids
     expected_assignments = clustering.assignments
-    with pytest.raises(ValueError, match="^x dimension does not match d$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"x dimension does not match d; expected last dimension {DIM}, got shape {(K, DIM + 1)}"
+        )
+        + "$",
+    ):
         clustering.train(np.zeros((K, DIM + 1), dtype=np.float32))
     np.testing.assert_array_equal(clustering.centroids, expected_centroids)
     np.testing.assert_array_equal(clustering.assignments, expected_assignments)
