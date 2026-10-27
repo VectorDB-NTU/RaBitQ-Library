@@ -61,9 +61,7 @@ class SymqgIndex {
             throw std::invalid_argument("ef_construction must be positive and fit uint32");
         }
         auto data_array = ensure_2d_array<float>(data, "data");
-        if (static_cast<size_t>(data_array.shape(1)) != dim_) {
-            throw std::invalid_argument("data dimension does not match index dim");
-        }
+        ensure_dimension(data_array, dim_, "data dimension does not match index dim");
 
         const size_t num_points = static_cast<size_t>(data_array.shape(0));
         auto index = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>(
@@ -108,9 +106,7 @@ class SymqgIndex {
         if (ef < k) {
             throw std::invalid_argument("ef must be at least k");
         }
-        if (static_cast<size_t>(query_array.shape(1)) != dim_) {
-            throw std::invalid_argument("query dimension does not match index dim");
-        }
+        ensure_dimension(query_array, dim_, "query dimension does not match index dim");
 
         const size_t nq = static_cast<size_t>(query_array.shape(0));
         const auto shape = std::vector<py::ssize_t>{
@@ -136,21 +132,23 @@ class SymqgIndex {
         return py::make_tuple(ids, dists);
     }
 
-    void save(const std::string& path) const {
+    void save(py::handle path) const {
+        const auto filename = path_string(path);
         const auto operation = access_.read();
         if (!built_) {
             throw std::runtime_error("SymqgIndex must be built before save");
         }
         py::gil_scoped_release release;
-        index_->save(path.c_str());
+        index_->save(filename.c_str());
     }
 
-    static SymqgIndex load(const std::string& path) {
+    static SymqgIndex load(py::handle path) {
+        const auto filename = path_string(path);
         SymqgIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>();
         {
             py::gil_scoped_release release;
-            wrapper.index_->load(path.c_str());
+            wrapper.index_->load(filename.c_str());
         }
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_degree_ = wrapper.index_->degree_bound();
@@ -360,8 +358,9 @@ checked at runtime, not by static type checkers.)doc"
 
 Parameters
 ----------
-path : str
-    Index file path. Pass str(path) for pathlib.Path objects.
+path : str, bytes, bytearray, or os.PathLike
+    Index file path. PathLike objects are resolved via __fspath__.
+    Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
 Notes
 -----
@@ -375,8 +374,9 @@ The saved state includes the rotation used to build the index.)doc"
 
 Parameters
 ----------
-path : str
-    Index file path. Pass str(path) for pathlib.Path objects.
+path : str, bytes, bytearray, or os.PathLike
+    Index file path. PathLike objects are resolved via __fspath__.
+    Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
 Returns
 -------

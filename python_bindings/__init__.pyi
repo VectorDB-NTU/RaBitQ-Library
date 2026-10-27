@@ -4,6 +4,7 @@ Array shapes and numeric ranges are documented runtime constraints.
 """
 
 from collections.abc import Sequence
+from os import PathLike
 from typing import Any, ClassVar, Literal, SupportsIndex, TypeAlias
 
 import numpy as np
@@ -21,6 +22,8 @@ __all__ = [
     "RaBitQKMeansParameters",
     "SymqgIndex",
 ]
+
+_Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
 _Metric: TypeAlias = Literal["l2", "ip", "innerproduct"]
 _Initializer: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
@@ -307,13 +310,14 @@ class IvfIndex:
         runtime, not by static type checkers.
         """
 
-    def save(self, path: str) -> None:
+    def save(self, path: _Path) -> None:
         """Save a built index to disk.
 
         Parameters
         ----------
-        path : str
-            Index file path. Pass str(path) for pathlib.Path objects.
+        path : str, bytes, bytearray, or os.PathLike
+            Index file path. PathLike objects are resolved via __fspath__.
+            Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
         Notes
         -----
@@ -321,13 +325,14 @@ class IvfIndex:
         """
 
     @staticmethod
-    def load(path: str) -> IvfIndex:
+    def load(path: _Path) -> IvfIndex:
         """Load an index and its saved rotation from disk.
 
         Parameters
         ----------
-        path : str
-            Index file path. Pass str(path) for pathlib.Path objects.
+        path : str, bytes, bytearray, or os.PathLike
+            Index file path. PathLike objects are resolved via __fspath__.
+            Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
         Returns
         -------
@@ -570,13 +575,14 @@ class HnswIndex:
         runtime, not by static type checkers.
         """
 
-    def save(self, path: str) -> None:
+    def save(self, path: _Path) -> None:
         """Save a built index to disk.
 
         Parameters
         ----------
-        path : str
-            Index file path. Pass str(path) for pathlib.Path objects.
+        path : str, bytes, bytearray, or os.PathLike
+            Index file path. PathLike objects are resolved via __fspath__.
+            Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
         Notes
         -----
@@ -584,13 +590,14 @@ class HnswIndex:
         """
 
     @staticmethod
-    def load(path: str) -> HnswIndex:
+    def load(path: _Path) -> HnswIndex:
         """Load an index and its saved rotation from disk.
 
         Parameters
         ----------
-        path : str
-            Index file path. Pass str(path) for pathlib.Path objects.
+        path : str, bytes, bytearray, or os.PathLike
+            Index file path. PathLike objects are resolved via __fspath__.
+            Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
         Returns
         -------
@@ -786,13 +793,14 @@ class SymqgIndex:
         checked at runtime, not by static type checkers.
         """
 
-    def save(self, path: str) -> None:
+    def save(self, path: _Path) -> None:
         """Save a built index to disk.
 
         Parameters
         ----------
-        path : str
-            Index file path. Pass str(path) for pathlib.Path objects.
+        path : str, bytes, bytearray, or os.PathLike
+            Index file path. PathLike objects are resolved via __fspath__.
+            Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
         Notes
         -----
@@ -800,13 +808,14 @@ class SymqgIndex:
         """
 
     @staticmethod
-    def load(path: str) -> SymqgIndex:
+    def load(path: _Path) -> SymqgIndex:
         """Load an index and its saved rotation from disk.
 
         Parameters
         ----------
-        path : str
-            Index file path. Pass str(path) for pathlib.Path objects.
+        path : str, bytes, bytearray, or os.PathLike
+            Index file path. PathLike objects are resolved via __fspath__.
+            Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
         Returns
         -------

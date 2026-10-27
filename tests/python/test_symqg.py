@@ -1,6 +1,7 @@
 """Tests for SymqgIndex: construction, search, properties, error handling, save/load."""
 
 import os
+import re
 import struct
 
 import numpy as np
@@ -136,13 +137,27 @@ def test_recall_vs_brute_force(built_symqg, base_data, query_data):
 def test_wrong_data_dim_raises():
     idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
-    with pytest.raises(ValueError, match="^data dimension does not match index dim$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"data dimension does not match index dim; expected last dimension {DIM}, got shape {bad_data.shape}"
+        )
+        + "$",
+    ):
         idx.build(bad_data, ef_construction=_EF_BUILD)
 
 
 def test_wrong_query_dim_raises(built_symqg):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
-    with pytest.raises(ValueError, match="^query dimension does not match index dim$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"query dimension does not match index dim; expected last dimension {DIM}, got shape {bad_queries.shape}"
+        )
+        + "$",
+    ):
         built_symqg.search(bad_queries, k=1, ef=_EF)
 
 

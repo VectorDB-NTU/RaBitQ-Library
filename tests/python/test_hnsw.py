@@ -1,5 +1,6 @@
 """Tests for HnswIndex: construction, search, properties, error handling, save/load."""
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -153,7 +154,14 @@ def test_wrong_data_dim_raises(clusters):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
-    with pytest.raises(ValueError, match="^data dimension does not match index dim$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"data dimension does not match index dim; expected last dimension {DIM}, got shape {bad_data.shape}"
+        )
+        + "$",
+    ):
         idx.build(bad_data, centroids, cluster_ids)
 
 
@@ -168,7 +176,14 @@ def test_out_of_range_cluster_id_raises(base_data, clusters):
 
 def test_wrong_query_dim_raises(built_hnsw):
     bad_queries = np.zeros((5, DIM + 1), dtype=np.float32)
-    with pytest.raises(ValueError, match="^query dimension does not match index dim$"):
+    with pytest.raises(
+        ValueError,
+        match="^"
+        + re.escape(
+            f"query dimension does not match index dim; expected last dimension {DIM}, got shape {bad_queries.shape}"
+        )
+        + "$",
+    ):
         built_hnsw.search(bad_queries, k=1)
 
 

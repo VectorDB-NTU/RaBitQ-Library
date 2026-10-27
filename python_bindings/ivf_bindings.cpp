@@ -90,20 +90,26 @@ class IvfIndex {
         auto data_array = ensure_2d_array<float>(data, "data");
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
 
-        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("data dimension does not match index dim");
-        }
+        ensure_dimension(
+            data_array, index_->dimension(), "data dimension does not match index dim"
+        );
         if (static_cast<size_t>(data_array.shape(0)) != index_->max_elements()) {
             throw std::invalid_argument(
-                "number of data rows must match index max_elements"
+                "number of data rows must match index max_elements; expected " +
+                std::to_string(index_->max_elements()) + ", got shape " +
+                array_shape(data_array)
             );
         }
-        if (static_cast<size_t>(centroids_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("centroid dimension does not match index dim");
-        }
+        ensure_dimension(
+            centroids_array,
+            index_->dimension(),
+            "centroid dimension does not match index dim"
+        );
         if (static_cast<size_t>(centroids_array.shape(0)) != index_->num_clusters()) {
             throw std::invalid_argument(
-                "number of centroid rows must match index num_clusters"
+                "number of centroid rows must match index num_clusters; expected " +
+                std::to_string(index_->num_clusters()) + ", got shape " +
+                array_shape(centroids_array)
             );
         }
         auto cluster_ids_vec = checked_cluster_ids(
@@ -133,9 +139,9 @@ class IvfIndex {
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before add");
         }
-        if (static_cast<size_t>(data_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("data dimension does not match index dim");
-        }
+        ensure_dimension(
+            data_array, index_->dimension(), "data dimension does not match index dim"
+        );
         const auto rows = static_cast<size_t>(data_array.shape(0));
 
         std::vector<rabitqlib::PID> assigned;
@@ -216,9 +222,9 @@ class IvfIndex {
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before search");
         }
-        if (static_cast<size_t>(query_array.shape(1)) != index_->dimension()) {
-            throw std::invalid_argument("query dimension does not match index dim");
-        }
+        ensure_dimension(
+            query_array, index_->dimension(), "query dimension does not match index dim"
+        );
         if (k == 0 || k > index_->max_elements()) {
             throw std::invalid_argument("k must be between 1 and max_elements");
         }
@@ -256,21 +262,23 @@ class IvfIndex {
         return py::make_tuple(ids, dists);
     }
 
-    void save(const std::string& path) const {
+    void save(py::handle path) const {
+        const auto filename = path_string(path);
         const auto operation = access_.read();
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before save");
         }
         py::gil_scoped_release release;
-        index_->save(path.c_str());
+        index_->save(filename.c_str());
     }
 
-    static IvfIndex load(const std::string& path) {
+    static IvfIndex load(py::handle path) {
+        const auto filename = path_string(path);
         IvfIndex wrapper;
         wrapper.index_ = std::make_unique<rabitqlib::ivf::IVF>();
         {
             py::gil_scoped_release release;
-            wrapper.index_->load(path.c_str());
+            wrapper.index_->load(filename.c_str());
         }
         wrapper.built_ = true;
         return wrapper;
@@ -564,8 +572,9 @@ runtime, not by static type checkers.)doc"
 
 Parameters
 ----------
-path : str
-    Index file path. Pass str(path) for pathlib.Path objects.
+path : str, bytes, bytearray, or os.PathLike
+    Index file path. PathLike objects are resolved via __fspath__.
+    Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
 Notes
 -----
@@ -579,8 +588,9 @@ IVF with HNSW centroid routing also writes its required sidecar file.)doc"
 
 Parameters
 ----------
-path : str
-    Index file path. Pass str(path) for pathlib.Path objects.
+path : str, bytes, bytearray, or os.PathLike
+    Index file path. PathLike objects are resolved via __fspath__.
+    Byte paths use native bytes on POSIX and UTF-8 on Windows.
 
 Returns
 -------

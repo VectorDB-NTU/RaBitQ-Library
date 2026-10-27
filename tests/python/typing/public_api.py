@@ -1,5 +1,7 @@
 """Static-only fixture: assert precise types and reject invalid usage."""
 
+from os import PathLike
+from pathlib import Path
 from typing import Literal, assert_type
 
 import numpy as np
@@ -213,3 +215,28 @@ def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
     ivf.remove([1.5])  # type: ignore[list-item]
     hnsw.remove(bool_ids)  # type: ignore[arg-type]
     ivf.remove(string_ids)  # type: ignore[arg-type]
+
+
+def check_paths(
+    ivf: IvfIndex,
+    hnsw: HnswIndex,
+    graph: SymqgIndex,
+    path: Path,
+    text_path: PathLike[str],
+    bytes_path: PathLike[bytes],
+) -> None:
+    for filename in (
+        path,
+        text_path,
+        bytes_path,
+        "index.bin",
+        b"index.bin",
+        bytearray(b"index.bin"),
+    ):
+        for index in (ivf, hnsw, graph):
+            index.save(filename)
+        assert_type(IvfIndex.load(filename), IvfIndex)
+        assert_type(HnswIndex.load(filename), HnswIndex)
+        assert_type(SymqgIndex.load(filename), SymqgIndex)
+    ivf.save(42)  # type: ignore[arg-type]
+    HnswIndex.load(object())  # type: ignore[arg-type]
