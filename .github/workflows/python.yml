@@ -59,6 +59,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
       - name: Verify runner CMake
         run: cmake --version
 
@@ -66,12 +71,15 @@ jobs:
         run: pip install --upgrade pip
 
       - name: Build and install wheel
-        run: pip install ".[test]" -v
+        run: pip install ".[test,typing]" -v
 
       - name: Check installed Python types and editor metadata
         env:
           OMP_NUM_THREADS: "2"
         run: python -m pytest tests/python/test_editor_support.py --tb=short -q
+
+      - name: Check Pyright public API and test code
+        run: python -m pytest tests/test_pyright.py --tb=short -q
 
       # Repaired-wheel jobs run the full Python suite.
       - name: Smoke-test source installation
