@@ -48,6 +48,11 @@ IVF-RaBitQ grows automatically and has no spare logical capacity after build or 
 HNSW-RaBitQ's `resize` changes only capacity. SymphonyQG has no incremental updates;
 all three counts are equal after build.
 
+`repr(index)` shows dimension, metric, quantization bits, live point count and build
+state. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
+the resolved initializer, and SymphonyQG includes its degree bound. The summary
+reads only metadata and follows the same concurrency rules as property reads.
+
 ## Estimate storage
 
 The following estimates describe the main float32 index storage, not total process
@@ -104,7 +109,7 @@ construction, updates, and file I/O. The following contract applies to
 
 | Operation on the same index | Concurrent access |
 | --- | --- |
-| `search`, `search_batch`, `save`, and property reads | May run together |
+| `search`, `search_batch`, `save`, `repr`, and property reads | May run together |
 | `build`, `add`, `remove`, `reserve`, and `resize`, where available | Require exclusive access |
 
 A conflicting call immediately raises

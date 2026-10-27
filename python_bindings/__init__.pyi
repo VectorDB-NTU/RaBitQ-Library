@@ -153,6 +153,9 @@ class IvfIndex:
         ((2, 3), (2, 3))
         """
 
+    def __repr__(self) -> str:
+        """Return a one-line summary of configuration, counts and build state."""
+
     @property
     def dim(self) -> int:
         """Original vector dimension."""
@@ -422,6 +425,9 @@ class HnswIndex:
         supported; an overlapping mutation raises RuntimeError.
         """
 
+    def __repr__(self) -> str:
+        """Return a one-line summary of configuration, counts and build state."""
+
     @property
     def dim(self) -> int:
         """Original vector dimension."""
@@ -663,6 +669,9 @@ class SymqgIndex:
         Build or load the index before searching or saving. Concurrent reads are
         supported; an overlapping mutation raises RuntimeError.
         """
+
+    def __repr__(self) -> str:
+        """Return a one-line summary of configuration, counts and build state."""
 
     @property
     def dim(self) -> int:

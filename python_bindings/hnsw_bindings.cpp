@@ -258,6 +258,19 @@ class HnswIndex {
         return wrapper;
     }
 
+    [[nodiscard]] std::string repr() const {
+        const auto operation = access_.read();
+        return "HnswIndex(dim=" + std::to_string(index_->dimension()) + ", metric='" +
+               metric_to_string(index_->metric_type()) +
+               "', nbits=" + std::to_string(index_->nbits()) +
+               ", num_points=" + std::to_string(built_ ? index_->num_points() : 0) +
+               ", num_stored_points=" +
+               std::to_string(built_ ? index_->num_stored_points() : 0) +
+               ", max_elements=" + std::to_string(index_->max_elements()) +
+               ", num_clusters=" + std::to_string(index_->num_clusters()) +
+               ", is_built=" + (built_ ? "True" : "False") + ")";
+    }
+
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
         return index_->dimension();
@@ -520,6 +533,11 @@ Returns
 -------
 index : HnswIndex
     A built index ready for search.)doc"
+        )
+        .def(
+            "__repr__",
+            &HnswIndex::repr,
+            "Return a one-line summary of configuration, counts and build state."
         )
         .def_property_readonly(
             "dim", &HnswIndex::dim, R"doc(Original vector dimension.)doc"

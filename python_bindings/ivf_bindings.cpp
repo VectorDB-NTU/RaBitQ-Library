@@ -284,6 +284,19 @@ class IvfIndex {
         return wrapper;
     }
 
+    [[nodiscard]] std::string repr() const {
+        const auto operation = access_.read();
+        return "IvfIndex(dim=" + std::to_string(index_->dimension()) + ", metric='" +
+               metric_to_string(index_->metric_type()) +
+               "', nbits=" + std::to_string(index_->nbits()) +
+               ", num_points=" + std::to_string(index_->num_points()) +
+               ", num_stored_points=" + std::to_string(index_->num_stored_points()) +
+               ", max_elements=" + std::to_string(index_->max_elements()) +
+               ", num_clusters=" + std::to_string(index_->num_clusters()) +
+               ", initializer='" + initializer_to_string(index_->initializer_type()) +
+               "', is_built=" + (built_ ? "True" : "False") + ")";
+    }
+
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
         return index_->dimension();
@@ -596,6 +609,11 @@ Returns
 -------
 index : IvfIndex
     A built index ready for search.)doc"
+        )
+        .def(
+            "__repr__",
+            &IvfIndex::repr,
+            "Return a one-line summary of configuration, counts and build state."
         )
         .def_property_readonly("dim", &IvfIndex::dim, R"doc(Original vector dimension.)doc")
         .def_property_readonly(

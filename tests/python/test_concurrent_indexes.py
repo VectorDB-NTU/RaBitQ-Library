@@ -105,12 +105,14 @@ class PausedArray:
 def test_active_search_allows_reads_and_rejects_mutations(kind, tmp_path):
     index, data, build = make_index(kind)
     queries = PausedArray(data[:3])
+    summary = repr(index)
     options = parameters(kind, True)
     with ThreadPoolExecutor(max_workers=1) as pool:
         running = pool.submit(index.search, queries, 5, **options)
         try:
             assert queries.entered.wait(timeout=10)
             assert index.dim == 65
+            assert repr(index) == summary
             index.search(data[:1], 5, **options)
             index.save(str(tmp_path / "reading.index"))
             mutations = [build]
@@ -145,6 +147,8 @@ def test_active_mutation_rejects_reads_and_other_mutations(kind, tmp_path):
                 lambda: index.save(str(tmp_path / "busy.index")),
                 lambda: index.dim,
                 lambda: index.is_built,
+                lambda: repr(index),
+                lambda: str(index),
                 build,
             ]
             if kind != "qg":
