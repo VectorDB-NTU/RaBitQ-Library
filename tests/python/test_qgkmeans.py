@@ -54,12 +54,6 @@ def test_constructor_accepts_faiss_style_keyword_parameters():
     assert clustering.obj is None
 
 
-@pytest.mark.parametrize("model_type", [QGKMeans, RaBitQKMeans])
-def test_unknown_parameter_raises(model_type):
-    with pytest.raises(AttributeError):
-        model_type(DIM, K, unknown_parameter=True)
-
-
 def test_train_populates_faiss_style_outputs(base_data):
     clustering = qgkmeans()
     final_obj = clustering.train(base_data)

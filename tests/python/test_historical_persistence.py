@@ -35,9 +35,23 @@ def reference(name):
 
 
 def test_fixture_hashes_match_pinned_manifest():
-    manifest = json.loads((FIXTURES / "manifest.json").read_text())
-    for filename, digest in manifest["sha256"].items():
-        assert hashlib.sha256((FIXTURES / filename).read_bytes()).hexdigest() == digest
+    registered = set()
+    for path in sorted(FIXTURES.rglob("manifest.json")):
+        manifest = json.loads(path.read_text())
+        assert manifest["sha256"], path
+        for filename, digest in manifest["sha256"].items():
+            assert filename not in registered, filename
+            registered.add(filename)
+            assert (
+                hashlib.sha256((FIXTURES / filename).read_bytes()).hexdigest() == digest
+            ), filename
+    expected = {
+        path.relative_to(FIXTURES).as_posix()
+        for suffix in ("*.index", "*.expected")
+        for path in FIXTURES.rglob(suffix)
+    }
+    assert expected
+    assert registered == expected
 
 
 @pytest.mark.parametrize("name", NAMES)

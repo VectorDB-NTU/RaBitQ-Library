@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -540,34 +542,99 @@ TEST(CoreApi, ScoringRetainsBufferAndNumericalChecks) {
 }
 
 TEST(CoreApi, ConcurrentCallsUseOnlyTheirOwnWorkspace) {
-    constexpr size_t dim = 96;
-    std::array<float, dim> data{}, query{};
-    for (size_t i = 0; i < dim; ++i) {
-        data[i] = std::sin(static_cast<float>(i));
-        query[i] = std::cos(static_cast<float>(i));
+    struct Case {
+        api::Parameters parameters;
+        std::vector<float> data, query;
+        std::vector<uint8_t> signs, extra, unpacked;
+        api::Factors factors;
+        float score = 0;
+    };
+    std::array<Case, 4> cases;
+    for (size_t i = 0; i < cases.size(); ++i) {
+        auto& c = cases[i];
+        c.parameters = {
+            32 + i * 64,
+            i == 0   ? 1U
+            : i == 1 ? 4U
+                     : 9U,
+            i % 2 == 0 ? METRIC_L2 : METRIC_IP};
+        const size_t dim = c.parameters.dim;
+        c.data.resize(dim);
+        c.query.resize(dim);
+        for (size_t j = 0; j < dim; ++j) {
+            c.data[j] = std::sin(static_cast<float>(j + i * 7)) * static_cast<float>(i + 1);
+            c.query[j] = std::cos(static_cast<float>(j + i * 11));
+        }
+        const auto r = api::requirements(c.parameters, api::CodeLayout::SplitPacked);
+        Workspace scratch(r.workspace_bytes);
+        c.signs.resize(r.code_bytes);
+        c.extra.resize(r.extra_bytes);
+        c.unpacked.resize(dim * sizeof(uint16_t));
+        api::CodeOutput out{
+            api::CodeLayout::SplitPacked,
+            {c.signs.data(), c.signs.size()},
+            {c.extra.data(), c.extra.size()}};
+        c.factors = api::encode(c.parameters, c.data.data(), nullptr, out, scratch.view());
+        c.score = api::compute(
+            api::prepare_query(c.parameters, c.query.data(), nullptr), view(out), c.factors
+        );
+        api::convert_codes(
+            c.parameters,
+            view(out),
+            {api::CodeLayout::UnpackedU16, {c.unpacked.data(), c.unpacked.size()}, {}},
+            scratch.view()
+        );
     }
-    api::Parameters p{dim, 9};
-    auto r = api::requirements(p, api::CodeLayout::SplitPacked);
-    auto q = api::prepare_query(p, query.data(), nullptr);
-    std::array<float, 4> results{};
-    std::vector<std::thread> workers;
-    for (size_t i = 0; i < results.size(); ++i) {
-        workers.emplace_back([&, i] {
-            Workspace scratch(r.workspace_bytes);
-            std::vector<uint8_t> sign(r.code_bytes), extra(r.extra_bytes);
-            api::CodeOutput out{
-                api::CodeLayout::SplitPacked,
-                {sign.data(), sign.size()},
-                {extra.data(), extra.size()}};
+
+    std::promise<void> start;
+    const auto gate = start.get_future().share();
+    std::atomic<size_t> ready{0};
+    std::vector<std::future<bool>> workers;
+    workers.reserve(cases.size());
+    for (size_t worker = 0; worker < cases.size(); ++worker) {
+        workers.push_back(std::async(std::launch::async, [&, worker] {
+            ++ready;
+            gate.wait();
             for (size_t run = 0; run < 20; ++run) {
-                auto f = api::encode(p, data.data(), nullptr, out, scratch.view());
-                results[i] = api::compute(q, view(out), f);
+                // Each round uses distinct inputs across workers, and changes shape
+                // within each worker. Compare every result to a serial oracle.
+                const auto& c = cases[(worker + run) % cases.size()];
+                const auto r =
+                    api::requirements(c.parameters, api::CodeLayout::SplitPacked);
+                Workspace scratch(r.workspace_bytes);
+                std::vector<uint8_t> signs(r.code_bytes), extra(r.extra_bytes);
+                std::vector<uint8_t> unpacked(c.unpacked.size());
+                api::CodeOutput out{
+                    api::CodeLayout::SplitPacked,
+                    {signs.data(), signs.size()},
+                    {extra.data(), extra.size()}};
+                const auto f =
+                    api::encode(c.parameters, c.data.data(), nullptr, out, scratch.view());
+                const auto query =
+                    api::prepare_query(c.parameters, c.query.data(), nullptr);
+                if (signs != c.signs || extra != c.extra || f.add != c.factors.add ||
+                    f.rescale != c.factors.rescale || f.error != c.factors.error ||
+                    api::compute(query, view(out), f) != c.score)
+                    return false;
+                api::CodeOutput raw{
+                    api::CodeLayout::UnpackedU16, {unpacked.data(), unpacked.size()}, {}};
+                api::convert_codes(c.parameters, view(out), raw, scratch.view());
+                if (unpacked != c.unpacked)
+                    return false;
+                std::fill(signs.begin(), signs.end(), 0xA5);
+                std::fill(extra.begin(), extra.end(), 0xA5);
+                api::convert_codes(c.parameters, view(raw), out, scratch.view());
+                if (signs != c.signs || extra != c.extra ||
+                    api::compute(query, view(out), f) != c.score)
+                    return false;
             }
-        });
+            return true;
+        }));
     }
+    while (ready.load() != cases.size())
+        std::this_thread::yield();
+    start.set_value();
     for (auto& worker : workers)
-        worker.join();
-    for (float result : results)
-        EXPECT_EQ(result, results[0]);
+        EXPECT_TRUE(worker.get());
 }
 }  // namespace
