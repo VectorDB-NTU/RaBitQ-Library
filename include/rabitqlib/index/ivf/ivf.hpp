@@ -118,8 +118,8 @@ class IVF {
         const quant::RabitqConfig&
     ) const;
 
-    // True if `n` points cannot be addressed by the storage size computations
-    [[nodiscard]] bool exceeds_storage(size_t n) const;
+    // True if `num_points` points cannot be addressed by the storage size computations
+    [[nodiscard]] bool exceeds_storage(size_t num_points) const;
 
     [[nodiscard]] static size_t ids_bytes(size_t cluster_size) {
         return sizeof(PID) * cluster_size;
@@ -132,12 +132,12 @@ class IVF {
 
     [[nodiscard]] inline size_t ex_data_bytes(size_t cluster_size) const;
 
-    // Size every buffer of a cluster's storage for `n` points
-    void resize_storage(ClusterStorage& cs, size_t n) const;
+    // Size every buffer of a cluster's storage for `num_points` points
+    void resize_storage(ClusterStorage& cs, size_t num_points) const;
 
-    void reserve_storage(ClusterStorage& cs, size_t n) const;
+    void reserve_storage(ClusterStorage& cs, size_t num_points) const;
 
-    [[nodiscard]] bool has_capacity(const ClusterStorage& cs, size_t n) const;
+    [[nodiscard]] bool has_capacity(const ClusterStorage& cs, size_t num_points) const;
 
     void allocate_memory(const std::vector<size_t>&);
 
@@ -159,8 +159,8 @@ class IVF {
         const char* batch_data,
         const char* ex_data,
         const PID* ids,
-        const SplitBatchQuery<float>& q_obj,
-        buffer::SearchBuffer<float>& knns,
+        const SplitBatchQuery<float>& query_wrapper,
+        buffer::SearchBuffer<float>& result_pool,
         size_t num_points,
         bool,
         const float*
@@ -197,13 +197,14 @@ class IVF {
     [[nodiscard]] RotatorType rotator_type() const { return rotator_type_; }
     [[nodiscard]] InitializerType initializer_type() const { return initializer_type_; }
 
-    // faster selects fixed-scale extra-bit quantization instead of exact scale search,
-    // trading quantization accuracy for speed. One-bit and raw storage are unaffected.
+    // fast_quantization selects fixed-scale extra-bit quantization instead of exact scale
+    // search, trading quantization accuracy for speed. One-bit and raw storage are
+    // unaffected.
     void construct(
         const float* data,
         const float* centroids,
         const PID* cluster_ids,
-        bool faster = false,
+        bool fast_quantization = false,
         size_t num_threads = std::numeric_limits<size_t>::max()
     );
 
@@ -217,24 +218,24 @@ class IVF {
      *
      * Only clusters that receive points are touched. Each one is rebuilt next to its old
      * storage, so a call needs extra memory for, and takes time proportional to, those
-     * clusters plus `n`; prefer a few large calls to many small ones. A cluster with
-     * enough capacity from `reserve` grows in place instead. `construct` expects
+     * clusters plus `num_points`; prefer a few large calls to many small ones. A cluster
+     * with enough capacity from `reserve` grows in place instead. `construct` expects
      * `max_elements()` rows afterwards.
      * Not safe to call while another thread searches, adds or removes.
      *
-     * @param data New points (n * dim)
-     * @param n Number of new points
+     * @param data New points (num_points * dim)
+     * @param num_points Number of new points
      * @param cluster_ids Cluster of each new point, or nullptr to route each point to its
      * nearest centroid the same way a query is routed
-     * @param faster Use fixed-scale extra-bit quantization for speed at a possible
-     * loss of accuracy; has no effect on one-bit or raw storage
+     * @param fast_quantization Use fixed-scale extra-bit quantization for speed at a
+     * possible loss of accuracy; has no effect on one-bit or raw storage
      * @param num_threads Threads used for routing and quantization
      */
     void add(
         const float* data,
-        size_t n,
+        size_t num_points,
         const PID* cluster_ids = nullptr,
-        bool faster = false,
+        bool fast_quantization = false,
         size_t num_threads = std::numeric_limits<size_t>::max()
     );
 
@@ -262,10 +263,10 @@ class IVF {
      * restored. Not safe to call while another thread searches or adds.
      *
      * @param ids_to_remove PIDs to remove
-     * @param n Number of PIDs
+     * @param num_points Number of PIDs
      * @return Number of points newly removed
      */
-    size_t remove(const PID* ids_to_remove, size_t n);
+    size_t remove(const PID* ids_to_remove, size_t num_points);
 
     void save(const char* filename) const;
 
@@ -277,26 +278,26 @@ class IVF {
         const float* query,
         size_t k,
         size_t nprobe,
-        PID* results,
+        PID* result_ids,
         float* distances = nullptr
     ) const;
 
     void search(
-        const float* query, size_t k, size_t nprobe, PID* results, bool use_hacc
+        const float* query, size_t k, size_t nprobe, PID* result_ids, bool use_hacc
     ) const;
 
     void search(
         const float* query,
         size_t k,
         size_t nprobe,
-        PID* results,
+        PID* result_ids,
         float* distances,
         bool use_hacc
     ) const;
 
     /**
      * Search contiguous row-major queries using at most num_threads workers.
-     * queries contains num_queries * dimension() floats. results and optional
+     * queries contains num_queries * dimension() floats. result_ids and optional
      * distances each hold num_queries * k elements. Empty batches do no work.
      * use_hacc defaults to the same automatic policy as search().
      * Input and output buffers must not overlap. Concurrent calls are safe if
@@ -307,7 +308,7 @@ class IVF {
         size_t num_queries,
         size_t k,
         size_t nprobe,
-        PID* results,
+        PID* result_ids,
         float* distances = nullptr,
         std::optional<bool> use_hacc = std::nullopt,
         size_t num_threads = 1

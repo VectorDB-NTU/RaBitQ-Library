@@ -102,16 +102,16 @@ class SearchBuffer {
 
     [[nodiscard]] size_t size() const { return size_; }
 
-    void copy_results(PID* knn) const {
+    void copy_results(PID* result_ids) const {
         for (size_t i = 0; i < size_; ++i) {
-            knn[i] = data_[i].id;
+            result_ids[i] = data_[i].id;
         }
     }
 
-    void copy_results(PID* knn, T* dist) const {
+    void copy_results(PID* result_ids, T* distances) const {
         for (size_t i = 0; i < size_; ++i) {
-            knn[i] = data_[i].id;
-            dist[i] = data_[i].distance;
+            result_ids[i] = data_[i].id;
+            distances[i] = data_[i].distance;
         }
     }
 

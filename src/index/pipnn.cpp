@@ -120,14 +120,14 @@ class CandidateTable {
     }
 
     // Export only after every row has been pruned.
-    InitialGraph export_graph(size_t threads) const {
+    InitialGraph export_graph(size_t num_workers) const {
         InitialGraph result;
         result.offsets.resize(sizes_.size() + 1, 0);
         for (size_t i = 0; i < sizes_.size(); ++i) {
             result.offsets[i + 1] = result.offsets[i] + sizes_[i];
         }
         result.neighbors.resize(result.offsets.back());
-#pragma omp parallel for num_threads(threads)
+#pragma omp parallel for num_threads(num_workers)
         for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(sizes_.size());
              ++index) {
             const size_t i = static_cast<size_t>(index);
@@ -153,21 +153,27 @@ struct BucketJob {
     uint32_t seed = 555;
 };
 
-ScratchPool::ScratchPool(size_t count, size_t dim, size_t threads)
-    : point_size(std::min(count, kTileSize) * dim)
-    , distance_size(
+ScratchPool::ScratchPool(size_t count, size_t dim, size_t num_workers)
+    : points_buffer_size(std::min(count, kTileSize) * dim)
+    , distances_buffer_size(
           std::max(
               std::min(count, kTileSize) * std::min(count, size_t{512}),
               std::min(count, kLeafSize) * std::min(count, kLeafSize)
           )
       )
-    , stride(point_size + distance_size + std::min(count, kTileSize))
+    , worker_buffer_size(
+          points_buffer_size + distances_buffer_size + std::min(count, kTileSize)
+      )
     // Preserve uninitialized allocation and worker first-touch placement.
-    , storage(new float[threads * stride]) {}
+    , storage(new float[num_workers * worker_buffer_size]) {}
 
 Workspace ScratchPool::worker(size_t id) {
-    float* base = storage.get() + id * stride;
-    return {base, base + point_size, base + point_size + distance_size, {}};
+    float* base = storage.get() + id * worker_buffer_size;
+    return {
+        base,
+        base + points_buffer_size,
+        base + points_buffer_size + distances_buffer_size,
+        {}};
 }
 
 void gather(const float* data, size_t dim, const Bucket& ids, Workspace& work) {
@@ -176,9 +182,9 @@ void gather(const float* data, size_t dim, const Bucket& ids, Workspace& work) {
     }
 }
 
-void pairwise(Workspace& work, size_t size, size_t dim, MetricType metric) {
+void pairwise(Workspace& work, size_t size, size_t dim, MetricType metric_type) {
     simd::pairwise_distances_lower(
-        work.points, work.distances, work.norms, size, dim, metric == METRIC_IP
+        work.points, work.distances, work.norms, size, dim, metric_type == METRIC_IP
     );
 }
 
@@ -213,8 +219,8 @@ std::vector<Bucket> partition(
     const float* data,
     size_t dim,
     const BucketJob& job,
-    MetricType metric,
-    size_t threads,
+    MetricType metric_type,
+    size_t num_workers,
     ScratchPool& scratch
 ) {
     const auto& ids = job.ids;
@@ -224,7 +230,7 @@ std::vector<Bucket> partition(
         job.depth == 0
             ? std::min(
                   kTileSize,
-                  round_up_to_multiple(div_round_up(ids.size(), threads), kMinTileSize)
+                  round_up_to_multiple(div_round_up(ids.size(), num_workers), kMinTileSize)
               )
             : kTileSize;
     const size_t leader_count = std::min(
@@ -274,7 +280,7 @@ std::vector<Bucket> partition(
                 const float dot =
                     distances(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j));
                 const float distance =
-                    metric == METRIC_L2
+                    metric_type == METRIC_L2
                         ? std::max(0.0F, norms.data()[i] + leader_norms.data()[j] - 2 * dot)
                         : -dot;
                 work.candidates[j] = {distance, static_cast<PID>(j)};
@@ -292,7 +298,7 @@ std::vector<Bucket> partition(
     if (job.depth == 0) {
         {
             index_detail::ParallelException failure;
-#pragma omp parallel num_threads(std::min(threads, div_round_up(ids.size(), tile_size)))
+#pragma omp parallel num_threads(std::min(num_workers, div_round_up(ids.size(), tile_size)))
             {
                 auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
 #pragma omp for schedule(static)
@@ -331,8 +337,8 @@ std::vector<Bucket> cluster(
     const float* data,
     size_t count,
     size_t dim,
-    MetricType metric,
-    size_t threads,
+    MetricType metric_type,
+    size_t num_workers,
     ScratchPool& scratch
 ) {
     Bucket all(count);
@@ -350,7 +356,7 @@ std::vector<Bucket> cluster(
                 finished[i].push_back(std::move(job.ids));
                 return;
             }
-            auto children = partition(data, dim, job, metric, threads, scratch);
+            auto children = partition(data, dim, job, metric_type, num_workers, scratch);
             std::sort(children.begin(), children.end(), [](const auto& a, const auto& b) {
                 return a.size() < b.size();
             });
@@ -408,7 +414,7 @@ std::vector<Bucket> cluster(
         } else {
             {
                 index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(std::min(threads, active.size())) schedule(dynamic)
+#pragma omp parallel for num_threads(std::min(num_workers, active.size())) schedule(dynamic)
                 for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(active.size());
                      ++i) {
                     if (failure.failed()) {
@@ -443,10 +449,10 @@ InitialGraph build_initial_graph(
     size_t count,
     size_t dim,
     size_t degree,
-    MetricType metric,
+    MetricType metric_type,
     size_t num_threads
 ) {
-    validate_metric_type(metric);
+    validate_metric_type(metric_type);
     if (data == nullptr || dim == 0 || degree == 0 || degree >= count ||
         count >= buffer::kSearchBufferMaxPointCount || degree % 32 != 0) {
         throw std::invalid_argument(
@@ -455,9 +461,9 @@ InitialGraph build_initial_graph(
         );
     }
     using namespace pipnn_impl;
-    const size_t threads = resolve_num_threads(num_threads);
-    ScratchPool scratch(count, dim, threads);
-    auto leaves = cluster(data, count, dim, metric, threads, scratch);
+    const size_t num_workers = resolve_num_threads(num_threads);
+    ScratchPool scratch(count, dim, num_workers);
+    auto leaves = cluster(data, count, dim, metric_type, num_workers, scratch);
     RowMajorMatrix<float> projections(dim, kHashBits);
     std::mt19937 random(555);
     std::normal_distribution<float> normal;
@@ -466,12 +472,13 @@ InitialGraph build_initial_graph(
     }
     RowMajorMatrix<float> sketches(count, kHashBits);
     const size_t sketch_tile = std::min(
-        kTileSize, round_up_to_multiple(div_round_up(count, threads), kMinTileSize)
+        kTileSize, round_up_to_multiple(div_round_up(count, num_workers), kMinTileSize)
     );
     {
         index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(std::min(threads, div_round_up(count, sketch_tile))) \
-    schedule(static)
+#pragma omp parallel for num_threads(                           \
+        std::min(num_workers, div_round_up(count, sketch_tile)) \
+) schedule(static)
         for (std::ptrdiff_t offset = 0; offset < static_cast<std::ptrdiff_t>(count);
              offset += static_cast<std::ptrdiff_t>(sketch_tile)) {
             if (failure.failed()) {
@@ -496,7 +503,7 @@ InitialGraph build_initial_graph(
     CandidateTable table(count, degree * 5 / 2);
     {
         index_detail::ParallelException failure;
-#pragma omp parallel num_threads(std::min(threads, leaves.size()))
+#pragma omp parallel num_threads(std::min(num_workers, leaves.size()))
         {
             auto work = scratch.worker(static_cast<size_t>(omp_get_thread_num()));
 #pragma omp for schedule(dynamic)
@@ -513,7 +520,7 @@ InitialGraph build_initial_graph(
                         continue;
                     }
                     gather(data, dim, ids, work);
-                    pairwise(work, ids.size(), dim, metric);
+                    pairwise(work, ids.size(), dim, metric_type);
                     select_local_neighbors(ids, work);
                     const size_t keep = std::min(kLocalDegree, ids.size() - 1);
                     // Retain the original point order and (distance, ID) tie order
@@ -537,7 +544,7 @@ InitialGraph build_initial_graph(
     // Prune in-place: retain selected IDs in the front of each reservoir row.
     {
         index_detail::ParallelException failure;
-#pragma omp parallel num_threads(threads)
+#pragma omp parallel num_threads(num_workers)
         {
             std::vector<Candidate> candidates;
             Bucket selected;
@@ -562,7 +569,7 @@ InitialGraph build_initial_graph(
                     for (const auto& candidate : candidates) {
                         bool occluded = false;
                         for (PID accepted : selected) {
-                            const float distance = metric == METRIC_L2
+                            const float distance = metric_type == METRIC_L2
                                                        ? euclidean_sqr<float>(
                                                              data + accepted * dim,
                                                              data + candidate.id * dim,
@@ -591,6 +598,6 @@ InitialGraph build_initial_graph(
         }
         failure.rethrow();
     }
-    return table.export_graph(threads);
+    return table.export_graph(num_workers);
 }
 }  // namespace rabitqlib::symqg::detail

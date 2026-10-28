@@ -23,21 +23,24 @@
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::ivf {
-FlatRaBitQInitializer::FlatRaBitQInitializer(size_t d, size_t k, MetricType metric)
-    : Initializer(d, k), metric_type_(metric) {
+FlatRaBitQInitializer::FlatRaBitQInitializer(
+    size_t dim, size_t num_clusters, MetricType metric
+)
+    : Initializer(dim, num_clusters), metric_type_(metric) {
     validate_metric_type(metric);
     const size_t max_size = std::numeric_limits<size_t>::max();
-    if (d == 0 || d % 32 != 0 || d > max_size / 32 || k == 0 ||
-        k > buffer::kSearchBufferMaxPointCount || k > max_size / sizeof(float) / d) {
+    if (dim == 0 || dim % 32 != 0 || dim > max_size / 32 || num_clusters == 0 ||
+        num_clusters > buffer::kSearchBufferMaxPointCount ||
+        num_clusters > max_size / sizeof(float) / dim) {
         throw std::invalid_argument("Invalid Flat RaBitQ initializer dimensions");
     }
-    const size_t batches = div_round_up(k, fastscan::kBatchSize);
-    const size_t batch_bytes = BatchDataMap<float>::data_bytes(d);
+    const size_t batches = div_round_up(num_clusters, fastscan::kBatchSize);
+    const size_t batch_bytes = BatchDataMap<float>::data_bytes(dim);
     if (batches > max_size / batch_bytes) {
         throw std::invalid_argument("Flat RaBitQ initializer storage overflow");
     }
-    centroids_.resize(k * d);
-    global_centroid_.resize(d);
+    centroids_.resize(num_clusters * dim);
+    global_centroid_.resize(dim);
     batch_data_.resize(batches * batch_bytes);
 }
 
@@ -78,24 +81,24 @@ void FlatRaBitQInitializer::add_vectors(const float* centroids, size_t num_threa
 void FlatRaBitQInitializer::centroids_distances(
     const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
 ) const {
-    const size_t topk = std::min(nprobe, num_cluster_);
-    candidates.resize(topk);
-    if (topk == 0) {
+    const size_t nprobed = std::min(nprobe, num_cluster_);
+    candidates.resize(nprobed);
+    if (nprobed == 0) {
         return;
     }
     const auto exact_distance = [&](PID id) {
         return metric_type_ == METRIC_L2 ? euclidean_sqr(query, centroid(id), dim_)
                                          : dot_product_dis(query, centroid(id), dim_);
     };
-    if (topk == num_cluster_) {
-        for (size_t i = 0; i < topk; ++i) {
+    if (nprobed == num_cluster_) {
+        for (size_t i = 0; i < nprobed; ++i) {
             candidates[i] = AnnCandidate<float>(static_cast<PID>(i), exact_distance(i));
         }
         std::sort(candidates.begin(), candidates.end());
     } else {
-        SplitBatchQuery<float> q_obj(query, dim_, 0, metric_type_, false);
+        SplitBatchQuery<float> query_wrapper(query, dim_, 0, metric_type_, false);
         const float norm = std::sqrt(euclidean_sqr(query, global_centroid_.data(), dim_));
-        q_obj.set_g_add(
+        query_wrapper.set_g_add(
             norm,
             metric_type_ == METRIC_IP ? dot_product(query, global_centroid_.data(), dim_)
                                       : 0.0F
@@ -108,7 +111,7 @@ void FlatRaBitQInitializer::centroids_distances(
             split_batch_estdist(
                 reinterpret_cast<const char*>(batch_data_.data()) +
                     (first / fastscan::kBatchSize) * batch_bytes,
-                q_obj,
+                query_wrapper,
                 dim_,
                 estimates.data(),
                 lows.data(),
@@ -126,21 +129,21 @@ void FlatRaBitQInitializer::centroids_distances(
             }
         }
         std::nth_element(
-            upper.begin(), upper.begin() + static_cast<std::ptrdiff_t>(topk), upper.end()
+            upper.begin(), upper.begin() + static_cast<std::ptrdiff_t>(nprobed), upper.end()
         );
-        buffer::SearchBuffer<float> knns(topk);
+        buffer::SearchBuffer<float> result_pool(nprobed);
         // Seed with exact distances: an estimated upper bound need not hold for
         // every vector. Always fill the result before pruning other candidates.
-        for (size_t i = 0; i < topk; ++i) {
-            knns.insert(upper[i].id, exact_distance(upper[i].id));
+        for (size_t i = 0; i < nprobed; ++i) {
+            result_pool.insert(upper[i].id, exact_distance(upper[i].id));
         }
-        for (size_t i = topk; i < num_cluster_; ++i) {
+        for (size_t i = nprobed; i < num_cluster_; ++i) {
             const PID id = upper[i].id;
-            if (lower[id] <= knns.top_dist()) {
-                knns.insert(id, exact_distance(id));
+            if (lower[id] <= result_pool.top_dist()) {
+                result_pool.insert(id, exact_distance(id));
             }
         }
-        std::copy_n(knns.data().begin(), topk, candidates.begin());
+        std::copy_n(result_pool.data().begin(), nprobed, candidates.begin());
     }
     if (metric_type_ == METRIC_L2) {
         for (auto& candidate : candidates) {

@@ -16,7 +16,7 @@ using SearchKnnFn =
 // The core variant uses AVX2 warmup; the popcount variant has its own stricter tier.
 }  // namespace
 std::vector<std::pair<float, PID>> search_knn_sorted(
-    HierarchicalNSW& index, const float* query, size_t topk, size_t ef
+    HierarchicalNSW& index, const float* query, size_t k, size_t ef_search
 ) {
 #if defined(__x86_64__) || defined(_M_X64)
     static const SearchKnnFn kSearchKnnFn =
@@ -33,12 +33,12 @@ std::vector<std::pair<float, PID>> search_knn_sorted(
     );
 #endif
 
-    return kSearchKnnFn(index, query, topk, ef);
+    return kSearchKnnFn(index, query, k, ef_search);
 }
 std::priority_queue<std::pair<float, PID>> search_knn(
-    HierarchicalNSW& index, const float* query, size_t topk, size_t ef
+    HierarchicalNSW& index, const float* query, size_t k, size_t ef_search
 ) {
-    auto results = search_knn_sorted(index, query, topk, ef);
+    auto results = search_knn_sorted(index, query, k, ef_search);
     return {results.begin(), results.end()};
 }
 }  // namespace rabitqlib::hnsw::detail

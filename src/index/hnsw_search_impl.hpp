@@ -25,14 +25,14 @@ inline void HierarchicalNSW::get_bin_est_direct(
     const std::vector<float>& q_to_centroids,
     const SplitSingleQuery<float>& query_wrapper,
     PID candidate_id,
-    HierarchicalNSW::EstimateRecord& res
+    HierarchicalNSW::EstimateRecord& estimate
 ) const {
     if (metric_type_ == METRIC_IP) {
         const float query_centroid_ip =
             q_to_centroids[get_clusterid_by_internalid(candidate_id)];
         const float residual_norm =
             q_to_centroids[get_clusterid_by_internalid(candidate_id) + num_clusters_];
-        res = estimate_split_single_direct<Kernel>(
+        estimate = estimate_split_single_direct<Kernel>(
             get_bindata_by_internalid(candidate_id),
             query_wrapper,
             padded_dim_,
@@ -43,7 +43,7 @@ inline void HierarchicalNSW::get_bin_est_direct(
         // L2 distance
         const float residual_norm =
             q_to_centroids[get_clusterid_by_internalid(candidate_id)];
-        res = estimate_split_single_direct<Kernel>(
+        estimate = estimate_split_single_direct<Kernel>(
             get_bindata_by_internalid(candidate_id),
             query_wrapper,
             padded_dim_,
@@ -58,14 +58,14 @@ inline void HierarchicalNSW::get_full_est_direct(
     const std::vector<float>& q_to_centroids,
     const SplitSingleQuery<float>& query_wrapper,
     PID candidate_id,
-    HierarchicalNSW::EstimateRecord& res
+    HierarchicalNSW::EstimateRecord& estimate
 ) const {
     if (metric_type_ == METRIC_IP) {
         const float query_centroid_ip =
             q_to_centroids[get_clusterid_by_internalid(candidate_id)];
         const float residual_norm =
             q_to_centroids[get_clusterid_by_internalid(candidate_id) + num_clusters_];
-        res = estimate_split_single_full_direct<Kernel>(
+        estimate = estimate_split_single_full_direct<Kernel>(
             get_bindata_by_internalid(candidate_id),
             get_exdata_by_internalid(candidate_id),
             ip_func_,
@@ -79,7 +79,7 @@ inline void HierarchicalNSW::get_full_est_direct(
         // L2 distance
         const float residual_norm =
             q_to_centroids[get_clusterid_by_internalid(candidate_id)];
-        res = estimate_split_single_full_direct<Kernel>(
+        estimate = estimate_split_single_full_direct<Kernel>(
             get_bindata_by_internalid(candidate_id),
             get_exdata_by_internalid(candidate_id),
             ip_func_,
@@ -94,10 +94,10 @@ inline void HierarchicalNSW::get_full_est_direct(
 
 template <class Kernel>
 inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_direct(
-    const float* rotated_query, size_t k, size_t ef
+    const float* rotated_query, size_t k, size_t ef_search
 ) const {
     std::vector<std::pair<float, PID>> result;
-    if (cur_element_count_ == 0) {
+    if (num_stored_points_ == 0) {
         return result;
     }
 
@@ -134,9 +134,9 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
     }
 
     PID current_id = entry_point_id_;
-    EstimateRecord curest;
+    EstimateRecord current_estimate;
 
-    get_bin_est_direct<Kernel>(q_to_centroids, query_wrapper, current_id, curest);
+    get_bin_est_direct<Kernel>(q_to_centroids, query_wrapper, current_id, current_estimate);
 
     for (int level = max_level_; level > 0; level--) {
         bool changed = true;
@@ -156,11 +156,13 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
                     );
                 }
 
-                EstimateRecord candest;
-                get_bin_est_direct<Kernel>(q_to_centroids, query_wrapper, cand, candest);
+                EstimateRecord candidate_estimate;
+                get_bin_est_direct<Kernel>(
+                    q_to_centroids, query_wrapper, cand, candidate_estimate
+                );
 
-                if (candest.distance < curest.distance) {
-                    curest = candest;
+                if (candidate_estimate.distance < current_estimate.distance) {
+                    current_estimate = candidate_estimate;
                     current_id = cand;
                     changed = true;
                 }
@@ -171,7 +173,7 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
     BoundedKNN nearest_candidates(k);
     search_base_layer_direct<Kernel>(
         current_id,
-        std::max(ef, k),
+        std::max(ef_search, k),
         k,
         query_wrapper,
         q_to_centroids,
@@ -197,48 +199,48 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
 
 template <class Kernel>
 inline void HierarchicalNSW::search_base_layer_direct(
-    PID ep_id,
-    size_t ef,
+    PID entry_point_id,
+    size_t ef_search,
     size_t k,
     const SplitSingleQuery<float>& query_wrapper,
     const std::vector<float>& q_to_centroids,
     [[maybe_unused]] const float* query,
     BoundedKNN& nearest_candidates
 ) const {
-    auto vl = visited_list_pool_->get_free_vislist();
+    auto visited = visited_list_pool_->get_free_vislist();
 
     // Use our bounded priority queue instead of the maxheap.
-    buffer::SearchBuffer<float> candidate_set(ef);
+    buffer::SearchBuffer<float> search_pool(ef_search);
 
-    float distk = 1e10;
+    float dist_k = 1e10;
 
     EstimateRecord start_estimate_record;
     if (ex_bits_ > 0) {
         get_full_est_direct<Kernel>(
-            q_to_centroids, query_wrapper, ep_id, start_estimate_record
+            q_to_centroids, query_wrapper, entry_point_id, start_estimate_record
         );
     } else {
         get_bin_est_direct<Kernel>(
-            q_to_centroids, query_wrapper, ep_id, start_estimate_record
+            q_to_centroids, query_wrapper, entry_point_id, start_estimate_record
         );
     }
     float est_dist = start_estimate_record.distance;
 
     // Insert initial candidate. A removed point is still explored, never returned.
-    if (!is_removed(ep_id)) {
-        nearest_candidates.insert({est_dist, ep_id});
-        distk = est_dist;
+    if (!is_removed(entry_point_id)) {
+        nearest_candidates.insert({est_dist, entry_point_id});
+        dist_k = est_dist;
     }
-    candidate_set.insert(ep_id, est_dist);
+    search_pool.insert(entry_point_id, est_dist);
 
-    vl->set(ep_id);
+    visited->set(entry_point_id);
 
     const size_t prefetch_size = (((padded_dim_ / 8) + 63) / 64) + 1;
     const size_t prefetch_lookahead = 4;  // Number of neighbors to prefetch in advance.
 
-    while (candidate_set.has_next()) {
+    while (search_pool.has_next()) {
         // Step 1 - get the next node to explore.
-        PID current_node_id = candidate_set.pop();
+        PID current_node_id = search_pool.pop();
         const PID* data = get_linklist0(current_node_id);
         const size_t size = get_list_count(data);
 
@@ -258,44 +260,44 @@ inline void HierarchicalNSW::search_base_layer_direct(
                 );
             }
 
-            if (vl->get(candidate_id)) {
+            if (visited->get(candidate_id)) {
                 continue;
             }
-            vl->set(candidate_id);
+            visited->set(candidate_id);
 
-            EstimateRecord candest;
+            EstimateRecord candidate_estimate;
             get_bin_est_direct<Kernel>(
-                q_to_centroids, query_wrapper, candidate_id, candest
+                q_to_centroids, query_wrapper, candidate_id, candidate_estimate
             );
 
-            // A removed neighbor keeps its binary estimate and stays in candidate_set.
+            // A removed neighbor keeps its binary estimate and stays in search_pool.
             bool update_results =
                 !is_removed(candidate_id) &&
-                (nearest_candidates.size() < k || candest.lower_bound < distk);
+                (nearest_candidates.size() < k || candidate_estimate.lower_bound < dist_k);
 
             if (update_results) {
                 // Compute the full estimate if promising.
                 if (ex_bits_ > 0) {
                     get_full_est_direct<Kernel>(
-                        q_to_centroids, query_wrapper, candidate_id, candest
+                        q_to_centroids, query_wrapper, candidate_id, candidate_estimate
                     );
                 }
-                Candidate cand{candest.distance, candidate_id};
+                Candidate cand{candidate_estimate.distance, candidate_id};
                 nearest_candidates.insert(cand);
-                distk = nearest_candidates.worst().est_dist;
+                dist_k = nearest_candidates.worst().est_dist;
             }
 
-            if (!candidate_set.is_full(candest.distance)) {
-                candidate_set.insert(candidate_id, candest.distance);
+            if (!search_pool.is_full(candidate_estimate.distance)) {
+                search_pool.insert(candidate_id, candidate_estimate.distance);
             }
 
             rabitqlib::memory::mem_prefetch_l2(
-                reinterpret_cast<const char*>(get_linklist0(candidate_set.next_id())), 2
+                reinterpret_cast<const char*>(get_linklist0(search_pool.next_id())), 2
             );
         }
     }
 
-    visited_list_pool_->release_vis_list(std::move(vl));
+    visited_list_pool_->release_vis_list(std::move(visited));
 }
 
 }  // namespace rabitqlib::hnsw

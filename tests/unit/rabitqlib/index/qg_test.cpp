@@ -57,7 +57,7 @@ struct QGConstructionTestAccess {
 
     static CandidateList record_collinear_prune(QGBuilder& builder) {
         CandidateList pool;
-        for (PID id = 1; id < builder.num_nodes_; ++id) {
+        for (PID id = 1; id < builder.num_points_; ++id) {
             pool.emplace_back(id, build_distance(builder, 0, id));
         }
         CandidateList result;
@@ -71,7 +71,7 @@ struct QGConstructionTestAccess {
         for (auto& row : builder.new_neighbors_) {
             row.clear();
         }
-        for (PID id = 1; id < builder.num_nodes_; ++id) {
+        for (PID id = 1; id < builder.num_points_; ++id) {
             builder.new_neighbors_[id].emplace_back(0, build_distance(builder, id, 0));
         }
     }
@@ -134,7 +134,7 @@ struct QGConstructionTestAccess {
             // Only one slot is missing; independently reproduce its seeded choice.
             std::mt19937 random(builder.seed_ ^ 0x80000000U);
             std::uniform_int_distribution<PID> distribution(
-                0, static_cast<PID>(builder.num_nodes_) - 1
+                0, static_cast<PID>(builder.num_points_) - 1
             );
             PID selected = 0;
             do {
@@ -172,9 +172,9 @@ struct QGConstructionTestAccess {
 
     static auto rows(const QuantizedGraph<float>& graph) {
         std::vector<char> result;
-        for (PID id = 0; id < graph.num_points_; ++id) {
+        for (PID id = 0; id < graph.max_elements_; ++id) {
             const char* row = graph.get_quantized_vector(id);
-            result.insert(result.end(), row, row + graph.row_offset_);
+            result.insert(result.end(), row, row + graph.record_bytes_);
         }
         return result;
     }
@@ -187,11 +187,11 @@ struct QGConstructionTestAccess {
                 ? ExDataMap<float>::data_bytes(graph.padded_dim_, graph.quantization_bits_)
                 : graph.dim_ * sizeof(float);
         const size_t batch_bytes = QGBatchDataMap<float>::data_bytes(graph.padded_dim_) *
-                                   (graph.degree_bound_ / fastscan::kBatchSize);
+                                   (graph.max_degree_ / fastscan::kBatchSize);
         const size_t row_bytes =
-            vector_bytes + batch_bytes + (graph.degree_bound_ * sizeof(PID));
+            vector_bytes + batch_bytes + (graph.max_degree_ * sizeof(PID));
         const char* base = graph.get_row_data(0);
-        for (PID id = 0; id < graph.num_points_; ++id) {
+        for (PID id = 0; id < graph.max_elements_; ++id) {
             const char* row = graph.get_row_data(id);
             EXPECT_EQ(row, base + (id * row_bytes));
             EXPECT_EQ(graph.get_batch_data(id), row + vector_bytes);
@@ -207,7 +207,7 @@ struct QGConstructionTestAccess {
             EXPECT_EQ(stored_id, id);
         }
         if (!graph.is_quantized()) {
-            for (PID id = 0; id < graph.num_points_; ++id) {
+            for (PID id = 0; id < graph.max_elements_; ++id) {
                 EXPECT_FLOAT_EQ(
                     graph.get_vector(id)[graph.dim_ - 1], static_cast<float>(id)
                 );
@@ -229,7 +229,7 @@ struct QGConstructionTestAccess {
     }
     static auto codes(const QuantizedGraph<float>& graph) {
         std::vector<char> result;
-        for (PID id = 0; id < graph.num_points_; ++id) {
+        for (PID id = 0; id < graph.max_elements_; ++id) {
             const char* code = graph.is_quantized()
                                    ? graph.get_quantized_vector(id)
                                    : reinterpret_cast<const char*>(graph.get_vector(id));
@@ -243,7 +243,7 @@ struct QGConstructionTestAccess {
     static const auto& degrees(const QGBuilder& builder) { return builder.degrees_; }
     static void retain_seed_scores(QGBuilder& builder) {
         auto& graph = builder.qg_;
-        for (PID i = 0; i < builder.num_nodes_; ++i) {
+        for (PID i = 0; i < builder.num_points_; ++i) {
             QGBuilder::BuildQuery query(graph);
             query.reset(i);
             for (size_t j = 0; j < builder.degrees_[i]; ++j) {

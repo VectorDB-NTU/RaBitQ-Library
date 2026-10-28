@@ -203,23 +203,27 @@ class HnswIndex {
 
         const auto shape = std::vector<py::ssize_t>{
             static_cast<py::ssize_t>(query_array.shape(0)), static_cast<py::ssize_t>(k)};
-        auto ids = py::array_t<rabitqlib::PID>(shape);
-        auto dists = py::array_t<float>(shape);
-        std::fill(ids.mutable_data(), ids.mutable_data() + ids.size(), rabitqlib::kPidMax);
+        auto result_ids = py::array_t<rabitqlib::PID>(shape);
+        auto distances = py::array_t<float>(shape);
         std::fill(
-            dists.mutable_data(),
-            dists.mutable_data() + dists.size(),
+            result_ids.mutable_data(),
+            result_ids.mutable_data() + result_ids.size(),
+            rabitqlib::kPidMax
+        );
+        std::fill(
+            distances.mutable_data(),
+            distances.mutable_data() + distances.size(),
             std::numeric_limits<float>::infinity()
         );
-        auto ids_buf = ids.mutable_unchecked<2>();
-        auto dists_buf = dists.mutable_unchecked<2>();
+        auto result_ids_view = result_ids.mutable_unchecked<2>();
+        auto distances_view = distances.mutable_unchecked<2>();
 
         const auto* queries_data = query_array.data();
-        const auto nq = static_cast<size_t>(query_array.shape(0));
+        const auto num_queries = static_cast<size_t>(query_array.shape(0));
         std::vector<std::vector<std::pair<float, rabitqlib::PID>>> results;
         {
             py::gil_scoped_release release;
-            results = index_->search(queries_data, nq, k, ef, num_threads);
+            results = index_->search(queries_data, num_queries, k, ef, num_threads);
         }
 
         for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(results.size()); ++i) {
@@ -227,13 +231,13 @@ class HnswIndex {
                                             k, results[static_cast<size_t>(i)].size()
                                         ));
                  ++j) {
-                ids_buf(i, j) =
+                result_ids_view(i, j) =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].second;
-                dists_buf(i, j) =
+                distances_view(i, j) =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].first;
             }
         }
-        return py::make_tuple(ids, dists);
+        return py::make_tuple(result_ids, distances);
     }
 
     void save(py::handle path) const {

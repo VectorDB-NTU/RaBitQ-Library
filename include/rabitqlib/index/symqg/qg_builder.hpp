@@ -52,11 +52,11 @@ class QGBuilder {
     };
 
     QuantizedGraph<float>& qg_;
-    size_t ef_build_;  // size of search pool for indexing
-    size_t num_threads_;
-    size_t num_nodes_;
+    size_t ef_construction_;  // size of search pool for indexing
+    size_t num_workers_;
+    size_t num_points_;
     size_t dim_;
-    size_t degree_bound_;  // degree bound for qg, multiple of 32
+    size_t max_degree_;  // degree bound for qg, multiple of 32
     bool seeded_ = true;
     static constexpr size_t kMaxCandidatePoolSize = 750;
     static constexpr size_t kMaxPrunedSize = 300;
@@ -74,7 +74,7 @@ class QGBuilder {
         std::vector<float> rotated_neighbors;
         std::vector<PID> neighbor_ids;
 
-        BuildWorker(size_t num_nodes, size_t visited_capacity);
+        BuildWorker(size_t num_points, size_t visited_capacity);
     };
     std::vector<BuildWorker> workers_;
 
@@ -103,7 +103,7 @@ class QGBuilder {
 
     QGBuilder(
         QuantizedGraph<float>& index,
-        uint32_t ef_build,
+        uint32_t ef_construction,
         size_t num_threads,
         uint32_t seed = std::random_device{}(),
         bool cache_vectors = false
@@ -112,7 +112,7 @@ class QGBuilder {
    public:
     explicit QGBuilder(
         QuantizedGraph<float>& index,
-        uint32_t ef_build,
+        uint32_t ef_construction,
         const float* data,
         size_t num_threads = std::numeric_limits<size_t>::max(),
         QGInitialization init = QGInitialization::PiPNN,
@@ -123,7 +123,7 @@ class QGBuilder {
     // Preserve the seeded random-initialization overload used before PiPNN.
     QGBuilder(
         QuantizedGraph<float>& index,
-        uint32_t ef_build,
+        uint32_t ef_construction,
         const float* data,
         size_t num_threads,
         uint32_t seed,

@@ -20,7 +20,7 @@ InitialGraph build_initial_graph(
     size_t count,
     size_t dim,
     size_t degree,
-    MetricType metric = METRIC_L2,
+    MetricType metric_type = METRIC_L2,
     size_t num_threads = std::numeric_limits<size_t>::max()
 );
 

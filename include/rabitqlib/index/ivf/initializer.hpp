@@ -47,7 +47,8 @@ class Initializer {
     size_t num_cluster_;
 
    public:
-    explicit Initializer(size_t d, size_t k) : dim_(d), num_cluster_(k) {}
+    explicit Initializer(size_t dim, size_t num_clusters)
+        : dim_(dim), num_cluster_(num_clusters) {}
     virtual ~Initializer() = 0;
     [[nodiscard]] virtual const float* centroid(PID) const = 0;
     virtual void add_vectors(const float*, size_t) = 0;
@@ -66,9 +67,11 @@ class FlatInitializer : public Initializer {
 
    public:
     explicit FlatInitializer(
-        size_t d, size_t k, MetricType metric_type = MetricType::METRIC_L2
+        size_t dim, size_t num_clusters, MetricType metric_type = MetricType::METRIC_L2
     )
-        : Initializer(d, k), centroids_(num_cluster_ * dim_), metric_type_(metric_type) {
+        : Initializer(dim, num_clusters)
+        , centroids_(num_cluster_ * dim_)
+        , metric_type_(metric_type) {
         validate_metric_type(metric_type_);
     }
 
@@ -78,29 +81,31 @@ class FlatInitializer : public Initializer {
         return &centroids_[id * dim_];
     }
 
-    void add_vectors(const float* cent, size_t) override {
-        std::memcpy(centroids_.data(), cent, sizeof(float) * num_cluster_ * dim_);
+    void add_vectors(const float* centroids, size_t) override {
+        std::memcpy(centroids_.data(), centroids, sizeof(float) * num_cluster_ * dim_);
     }
 
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
-        std::vector<AnnCandidate<float>> centroid_dist(this->num_cluster_);
+        std::vector<AnnCandidate<float>> centroid_candidates(this->num_cluster_);
         for (PID i = 0; i < num_cluster_; ++i) {
-            centroid_dist[i].id = i;
-            centroid_dist[i].distance =
+            centroid_candidates[i].id = i;
+            centroid_candidates[i].distance =
                 metric_type_ == METRIC_IP
                     ? dot_product_dis(query, centroid(i), dim_)
                     : std::sqrt(euclidean_sqr(query, centroid(i), dim_));
         }
         std::partial_sort(
-            centroid_dist.begin(),
-            centroid_dist.begin() + static_cast<long>(nprobe),
-            centroid_dist.end()
+            centroid_candidates.begin(),
+            centroid_candidates.begin() + static_cast<long>(nprobe),
+            centroid_candidates.end()
         );
 
         std::memcpy(
-            candidates.data(), centroid_dist.data(), sizeof(AnnCandidate<float>) * nprobe
+            candidates.data(),
+            centroid_candidates.data(),
+            sizeof(AnnCandidate<float>) * nprobe
         );
     }
 
@@ -130,7 +135,9 @@ class FlatRaBitQInitializer : public Initializer {
     MetricType metric_type_;
 
    public:
-    explicit FlatRaBitQInitializer(size_t d, size_t k, MetricType metric = METRIC_L2);
+    explicit FlatRaBitQInitializer(
+        size_t dim, size_t num_clusters, MetricType metric = METRIC_L2
+    );
     [[nodiscard]] const float* centroid(PID id) const override;
     void add_vectors(const float* centroids, size_t num_threads) override;
     void centroids_distances(
@@ -214,11 +221,11 @@ class HNSWInitializer : public Initializer {
 
    public:
     explicit HNSWInitializer(
-        size_t d, size_t k, MetricType metric_type = MetricType::METRIC_L2
+        size_t dim, size_t num_clusters, MetricType metric_type = MetricType::METRIC_L2
     )
-        : Initializer(d, k)
-        , l2_space_(d)
-        , ip_space_(d)
+        : Initializer(dim, num_clusters)
+        , l2_space_(dim)
+        , ip_space_(dim)
         , space_(
               metric_type == METRIC_IP
                   ? static_cast<hnswlib::SpaceInterface<float>*>(&ip_space_)
@@ -231,12 +238,12 @@ class HNSWInitializer : public Initializer {
         );
     }
 
-    void add_vectors(const float* cent, size_t num_threads) override {
+    void add_vectors(const float* centroids, size_t num_threads) override {
         size_t start = 0;
         size_t rows = num_cluster_;
         rabitqlib::index_detail::parallel_for(
             start, rows, num_threads, [&](size_t row, size_t /*thread_id*/) {
-                alg_hnsw_->addPoint(cent + (row * dim_), row);
+                alg_hnsw_->addPoint(centroids + (row * dim_), row);
             }
         );
         rebuild_label_lookup();

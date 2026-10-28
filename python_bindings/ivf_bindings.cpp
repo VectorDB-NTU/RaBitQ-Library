@@ -232,16 +232,18 @@ class IvfIndex {
             throw std::invalid_argument("nprobe must be positive");
         }
 
-        const size_t nq = static_cast<size_t>(query_array.shape(0));
+        const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         const auto shape = std::vector<py::ssize_t>{
-            static_cast<py::ssize_t>(nq), static_cast<py::ssize_t>(k)};
-        auto ids = py::array_t<rabitqlib::PID>(shape);
-        auto dists = py::array_t<float>(shape);
-        auto* ids_data = ids.mutable_data();
-        auto* dists_data = dists.mutable_data();
-        std::fill(ids_data, ids_data + ids.size(), rabitqlib::kPidMax);
+            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
+        auto result_ids = py::array_t<rabitqlib::PID>(shape);
+        auto distances = py::array_t<float>(shape);
+        auto* ids_data = result_ids.mutable_data();
+        auto* distances_data = distances.mutable_data();
+        std::fill(ids_data, ids_data + result_ids.size(), rabitqlib::kPidMax);
         std::fill(
-            dists_data, dists_data + dists.size(), std::numeric_limits<float>::infinity()
+            distances_data,
+            distances_data + distances.size(),
+            std::numeric_limits<float>::infinity()
         );
 
         const auto* queries_data = query_array.data();
@@ -249,17 +251,17 @@ class IvfIndex {
             py::gil_scoped_release release;
             index_->search_batch(
                 queries_data,
-                nq,
+                num_queries,
                 k,
                 nprobe,
                 ids_data,
-                dists_data,
+                distances_data,
                 high_accuracy,
                 num_threads
             );
         }
 
-        return py::make_tuple(ids, dists);
+        return py::make_tuple(result_ids, distances);
     }
 
     void save(py::handle path) const {

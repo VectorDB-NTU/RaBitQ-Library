@@ -36,7 +36,7 @@ class SymqgIndex {
     )
         : dim_(dim)
         , max_degree_(max_degree)
-        , metric_(metric_from_string(metric))
+        , metric_type_(metric_from_string(metric))
         , quantization_bits_(quantization_bits) {
         if (max_degree == 0 || max_degree % rabitqlib::fastscan::kBatchSize != 0) {
             throw std::invalid_argument("max_degree must be a positive multiple of 32");
@@ -68,7 +68,7 @@ class SymqgIndex {
             num_points,
             dim_,
             max_degree_,
-            metric_,
+            metric_type_,
             rabitqlib::RotatorType::FhtKacRotator,
             quantization_bits_
         );
@@ -108,28 +108,28 @@ class SymqgIndex {
         }
         ensure_dimension(query_array, dim_, "query dimension does not match index dim");
 
-        const size_t nq = static_cast<size_t>(query_array.shape(0));
+        const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         const auto shape = std::vector<py::ssize_t>{
-            static_cast<py::ssize_t>(nq), static_cast<py::ssize_t>(k)};
-        auto ids = py::array_t<rabitqlib::PID>(shape);
-        auto dists = py::array_t<float>(shape);
-        auto* ids_data = ids.mutable_data();
-        auto* dists_data = dists.mutable_data();
+            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
+        auto result_ids = py::array_t<rabitqlib::PID>(shape);
+        auto distances = py::array_t<float>(shape);
+        auto* ids_data = result_ids.mutable_data();
+        auto* distances_data = distances.mutable_data();
         const auto* queries_data = query_array.data();
         {
             py::gil_scoped_release release;
             index_->search_batch_with_ef(
                 queries_data,
-                nq,
+                num_queries,
                 static_cast<uint32_t>(k),
                 ids_data,
-                dists_data,
+                distances_data,
                 ef,
                 num_threads
             );
         }
 
-        return py::make_tuple(ids, dists);
+        return py::make_tuple(result_ids, distances);
     }
 
     void save(py::handle path) const {
@@ -152,7 +152,7 @@ class SymqgIndex {
         }
         wrapper.dim_ = wrapper.index_->dimension();
         wrapper.max_degree_ = wrapper.index_->degree_bound();
-        wrapper.metric_ = wrapper.index_->metric_type();
+        wrapper.metric_type_ = wrapper.index_->metric_type();
         wrapper.quantization_bits_ = wrapper.index_->quantization_bits();
         wrapper.built_ = true;
         return wrapper;
@@ -161,7 +161,7 @@ class SymqgIndex {
     [[nodiscard]] std::string repr() const {
         const auto operation = access_.read();
         return "SymqgIndex(dim=" + std::to_string(dim_) + ", metric='" +
-               metric_to_string(metric_) +
+               metric_to_string(metric_type_) +
                "', quantization_bits=" + std::to_string(quantization_bits_) +
                ", num_points=" + std::to_string(index_ ? index_->num_points() : 0) +
                ", max_degree=" + std::to_string(max_degree_) +
@@ -194,7 +194,7 @@ class SymqgIndex {
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
-        return metric_to_string(metric_);
+        return metric_to_string(metric_type_);
     }
     [[nodiscard]] size_t quantization_bits() const {
         const auto operation = access_.read();
@@ -206,7 +206,7 @@ class SymqgIndex {
 
     size_t dim_ = 0;
     size_t max_degree_ = 0;
-    rabitqlib::MetricType metric_ = rabitqlib::METRIC_L2;
+    rabitqlib::MetricType metric_type_ = rabitqlib::METRIC_L2;
     size_t quantization_bits_ = 0;
     bool built_ = false;
     mutable IndexAccess access_;

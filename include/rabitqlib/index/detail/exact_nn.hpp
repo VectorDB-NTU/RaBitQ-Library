@@ -20,7 +20,7 @@ inline PID exact_nn(
     T (*dist_func)(const T*, const T*, size_t)
 ) {
 #if RABITQ_USE_OPENMP
-    const auto thread_count = static_cast<int>(std::max<size_t>(
+    const auto num_workers = static_cast<int>(std::max<size_t>(
         1,
         std::min(
             {resolve_num_threads(num_threads),
@@ -30,12 +30,12 @@ inline PID exact_nn(
     ));
 #else
     (void)num_threads;
-    constexpr int thread_count = 1;
+    constexpr int num_workers = 1;
 #endif
-    std::vector<AnnCandidate<T, PID>> best_entries(thread_count);
+    std::vector<AnnCandidate<T, PID>> best_entries(num_workers);
 
 #if RABITQ_USE_OPENMP
-#pragma omp parallel for schedule(dynamic) num_threads(thread_count)
+#pragma omp parallel for schedule(dynamic) num_threads(num_workers)
 #endif
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points);
          ++index) {
