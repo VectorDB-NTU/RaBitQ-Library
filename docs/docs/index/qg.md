@@ -94,21 +94,22 @@ class template argument deduction:
 
 ```cpp
 QuantizedGraph<float>(
-    size_t num, size_t dim, size_t max_deg,
+    size_t max_elements, size_t dim, size_t max_degree,
     MetricType metric_type = METRIC_L2,
     RotatorType rotator_type = RotatorType::FhtKacRotator,
     size_t quantization_bits = 0, uint32_t seed = std::random_device{}()
 );
 QGBuilder(
-    QuantizedGraph<float>& index, uint32_t ef_build, const float* data,
+    QuantizedGraph<float>& index, uint32_t ef_construction, const float* data,
     size_t num_threads = std::numeric_limits<size_t>::max(),
     QGInitialization init = QGInitialization::PiPNN,
     uint32_t seed = std::random_device{}(), bool cache_vectors = false
 );
 ```
 
-`data` contains `num * dim` floats; `max_deg` has Python's `max_degree`
-constraints. C++ defaults to all available threads. `build()` runs one refinement
+`data` contains `max_elements * dim` floats. This is the configured point count;
+QG has no spare capacity for later appends. `max_degree` has the same constraints
+as Python's parameter. C++ defaults to all available threads. `build()` runs one refinement
 for PiPNN or three passes for `QGInitialization::Random`; `build(n)` requests
 `n >= 2` passes. The older overload with a numeric fifth argument uses that value
 as the random-initialization seed.
@@ -125,7 +126,7 @@ Input may be released after reset returns; rebuild before querying or saving.
 ### Vector cache
 
 `cache_vectors=true` retains transformed vectors and query factors
-(`4 * num * padded_dim` bytes plus factors). [QGKMeans](../clustering.md#qgkmeans) enables
+(`4 * max_elements * padded_dim` bytes plus factors). [QGKMeans](../clustering.md#qgkmeans) enables
 this for its centroid graph; the cache is not persisted.
 
 ### Random seeds
@@ -162,8 +163,8 @@ qg.search_batch(
 );
 ```
 
-The C++ signature is `search_batch(queries, num_queries, k, ids, distances,
-num_threads=1)`. Set `ef >= k` with `set_ef()` before searching. Both output
+The C++ signature is `search_batch(queries, num_queries, k, result_ids, distances,
+num_threads=1)`. Set `ef_search >= k` with `set_ef()` before searching. Both output
 buffers are required and contain `num_queries * k` elements. Empty C++ batches
 do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
@@ -179,7 +180,7 @@ Python searches use per-call `ef` values. For access rules, see the
 [concurrency contract](usage.md#threading-and-file-paths).
 
 For C++, use
-`search_batch_with_ef(queries, num_queries, k, ids, distances, ef, num_threads=1)`
+`search_batch_with_ef(queries, num_queries, k, result_ids, distances, ef_search, num_threads=1)`
 to run concurrent calls with independent windows:
 
 ```cpp

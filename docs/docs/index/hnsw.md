@@ -88,40 +88,44 @@ input pointer and search candidate helpers are private implementation details;
 see the [C++ migration guide](../modular_migration.md#public-and-implementation-interfaces).
 
 ```cpp
-HierarchicalNSW::construct(size_t cluster_num,
-                          const float* centroids,
-                          size_t data_num,
-                          const float* data,
-                          PID* cluster_ids,
-                          size_t num_threads = 0,
-                          bool faster = false);
+void HierarchicalNSW::construct(
+    size_t num_clusters,
+    const float* centroids,
+    size_t num_points,
+    const float* data,
+    PID* cluster_ids,
+    size_t num_threads = 0,
+    bool fast_quantization = false
+);
 ```
 
 - **data**: Vectors in the original input coordinates.
-- **data_num**: The number of data vectors.
-- **centroids**: Centroids computed by [RaBitQKMeans](../clustering.md#rabitqkmeans); the examples use `cluster_num = 16`.
-- **cluster_ids**: Array of length `data_num`; every entry must be in the range `[0, cluster_num)`.
+- **num_points**: The number of data vectors.
+- **centroids**: Centroids computed by [RaBitQKMeans](../clustering.md#rabitqkmeans); the examples use `num_clusters = 16`.
+- **cluster_ids**: Array of length `num_points`; every entry must be in the range `[0, num_clusters)`.
 - **num_threads**: Number of threads to use (default: 0, which auto-selects).
-- **faster**: Use calibrated scaling instead of per-vector scale search; see [encoding paths](../rabitq/quantizer.md#implementations).
+- **fast_quantization**: Use calibrated scaling instead of per-vector scale search; see [encoding paths](../rabitq/quantizer.md#implementations).
 
 ## Querying
 
 ```cpp
-std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(const float* queries,
-                                                                        size_t query_num,
-                                                                        size_t TOPK,
-                                                                        size_t efSearch,
-                                                                        size_t thread_num);
+std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
+    const float* queries,
+    size_t num_queries,
+    size_t k,
+    size_t ef_search,
+    size_t num_threads
+);
 ```
 
 - **queries**: Query vectors in the original input coordinates.
--  **query_num**: The number of query vectors.
--  **TOPK**: The number of nearest neighbors to search.
--  **efSearch**: The size of the candidate set for searching HNSW-RaBitQ base layer.
--  **thread_num**: Number of threads to use. Each query is processed by one thread.
+- **num_queries**: The number of query vectors.
+- **k**: The number of nearest neighbors to search.
+- **ef_search**: The size of the candidate set for searching HNSW-RaBitQ base layer.
+- **num_threads**: Number of threads to use. Each query is processed by one thread.
 
 The search window belongs to each call, so concurrent C++ searches can use
-different `efSearch` values and separate outputs while the index is unchanged.
+different `ef_search` values and separate outputs while the index is unchanged.
 Python follows the shared [concurrency contract](usage.md#threading-and-file-paths).
 
 ## Updating an index
@@ -134,21 +138,21 @@ the index file format; files with removals have
 ```c++
 std::vector<PID> HierarchicalNSW::add(
     const float* data,
-    size_t n,
+    size_t num_points,
     const PID* cluster_ids = nullptr,
-    bool faster = false,
+    bool fast_quantization = false,
     size_t num_threads = 1
 );
 
 void HierarchicalNSW::resize(size_t new_max_elements);
 ```
 
-- **data**, **n**: `n` new vectors in the original coordinates. Vector `i` receives
+- **data**, **num_points**: `num_points` new vectors in the original coordinates. Vector `i` receives
   the label `num_stored_points() + i`, so labels stay dense, and `add` returns them.
 - **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When it
   is `nullptr`, each vector goes to its nearest centroid, chosen the same way a
   query is routed.
-- **faster**, **num_threads**: Same meaning as in `construct`, but `add` defaults
+- **fast_quantization**, **num_threads**: Same meaning as in `construct`, but `add` defaults
   to one thread; pass `0` to auto-select. A point keeps the label
   `num_stored_points() + i` whatever order the threads finish in, because the slots are
   reserved as one block before the inserts start.
@@ -203,10 +207,10 @@ of a rebuild.
 ### Removing points
 
 ```c++
-size_t HierarchicalNSW::remove(const PID* labels, size_t n);
+size_t HierarchicalNSW::remove(const PID* labels, size_t num_points);
 ```
 
-- **labels**, **n**: Labels of the points to remove, as returned by `add` and
+- **labels**, **num_points**: `num_points` labels of the points to remove, as returned by `add` and
   `search`. Every label must be in the index; nothing is removed if one is not.
   `remove` returns how many points were newly removed, so repeating a label or a
   call is safe.
@@ -227,15 +231,15 @@ exclusive access as other updates.
 
 #### Choosing `ef` after removals
 
-Removed points still take slots in the `efSearch` candidate set, so a search with
-`efSearch` close to `k` finds fewer live points as removals accumulate. C++ search
-uses `max(efSearch, k)`. Python uses `max(k, 10)` when `ef` is omitted or zero;
+Removed points still take slots in the `ef_search` candidate set, so a search with
+`ef_search` close to `k` finds fewer live points as removals accumulate. C++ search
+uses `max(ef_search, k)`. Python uses `max(k, 10)` when `ef` is omitted or zero;
 an explicit positive `ef` is also raised to at least `k`.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points:
 
 ```text
-max(efSearch, k) * num_stored_points() / (num_stored_points() - removed points)
+max(ef_search, k) * num_stored_points() / (num_stored_points() - removed points)
 ```
 
 Callers that track how many points they removed can apply this directly.
@@ -298,9 +302,9 @@ In the upper layers of HNSW-RaBitQ, we compute the 1-bit estimated distance (usi
 
 In the base layer, we apply an adaptive re-ranking strategy:
 
-- **candidate_set**: A distance-sorted exploration window with capacity
-  `max(efSearch, TOPK)`, containing both expanded and unexpanded candidates.
-- **boundedKNN**: Current best TOPK candidates.
+- **search_pool**: A distance-sorted exploration window with capacity
+  `max(ef_search, k)`, containing both expanded and unexpanded candidates.
+- **nearest_candidates**: Current best k candidates.
 
 Repeat while the exploration window has an unexpanded candidate:
 
@@ -309,21 +313,21 @@ Repeat while the exploration window has an unexpanded candidate:
 2. Visit all unvisited neighbors of `e`.
 3. For each neighbor:
    - Compute the 1-bit lower-bound distance (along with 1-bit estimated distance) using `BinData`.
-   - For a nonremoved neighbor, if `boundedKNN` has fewer than TOPK elements
+   - For a nonremoved neighbor, if `nearest_candidates` has fewer than k elements
      or the neighbor's lower bound is smaller than the worst result's estimated distance:
      1. Refine the distance estimate using `ExData` when extra bits are present.
-     2. Update `boundedKNN`.
-   - Insert the neighbor into `candidate_set` only if the window has space or
+     2. Update `nearest_candidates`.
+   - Insert the neighbor into `search_pool` only if the window has space or
      its (possibly refined) estimated distance is no greater than the worst
      distance in the window. Inserting into a full window displaces its last entry.
 
 The search stops when no unexpanded candidates remain in the window, even though
-the window still contains entries. `efSearch` controls this exploration budget
-separately from the TOPK result count; increasing it allows a wider search at
+the window still contains entries. `ef_search` controls this exploration budget
+separately from the k result count; increasing it allows a wider search at
 additional cost, rather than requiring traversal of the entire graph.
 
-A point hidden by `remove` never enters `boundedKNN`, so search never returns it,
-but it can still enter `candidate_set` under the same window admission rule,
+A point hidden by `remove` never enters `nearest_candidates`, so search never returns it,
+but it can still enter `search_pool` under the same window admission rule,
 allowing search to walk through it. A removed entry point keeps the estimate
 already computed for it (the full-bits one when nbits > 1). A removed neighbor
 is not refined and uses its 1-bit estimate for window admission.

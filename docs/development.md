@@ -71,6 +71,44 @@ To format only lines changed in the staged files, use:
 The complete-file formatter remains useful before the initial formatting pass
 or after changing `.clang-format`; CI always checks complete files.
 
+## Index variable names
+
+Use the same name for the same role across IVF, HNSW and SymphonyQG. Choose the
+role and unit first; similar-looking parameters can have different contracts.
+These conventions apply to new internal variables and compatible renaming work.
+
+| Concept | Name and meaning |
+| --- | --- |
+| Dimensions | `dim` is the original dimension at an index boundary; `padded_dim` is the rotated, padded dimension. A lower-level helper's `dim` describes its own input shape. |
+| Counts | `num_points` for an input batch or a builder's point set; `num_queries` and `num_clusters` for those input counts. A partial encoding batch uses `batch_size`. |
+| Index state | `max_elements_` for configured logical capacity; `num_stored_points_` for stored records, including removals. The public `num_points()` counts live records. QG has no removal and derives both counts from capacity only after construction completes. |
+| Point identity | `internal_id` or `node_id` for graph slots; `label` for a caller-visible HNSW label; `cluster_id` for centroid routing. Never assume an external label equals an internal slot. |
+| Search outputs | `k` for requested result count, `result_ids` for ID-only output arrays, `distances` for their scores. `results` may hold complete distance/ID records. |
+| Search state | `candidate_set` for indexing traversal candidates and `search_pool` for querying traversal candidates, `result_pool` for retained results (HNSW retains `nearest_candidates` for query results and `top_candidates` for construction/pruning candidates), `query_wrapper` for query preprocessing objects, `visited` for visited state. |
+| Search windows | `ef_search` for a per-call graph window, `default_ef_search_` for a stored default, and `ef_construction` for graph-building search breadth. IVF's `nprobe` counts clusters and remains distinct. |
+| Distances | `query_centroid_ip` for a dot product, `residual_norm` for a residual norm, `estimated_distances` for estimated score arrays, `lower_bounds` for pruning bounds, and `dist_k` for the current result cutoff. Do not conflate squared L2 with L2 or an IP distance with a dot product. |
+| Storage | Name byte sizes after the stored object: HNSW's `level0_record_bytes_` is one complete level-0 record; `upper_layer_links_bytes_` and `level0_links_bytes_` are one node's adjacency-list sizes at the respective levels, including their headers. QG uses `record_bytes_` for one complete record. Storage offsets use `*_offset_`: bytes are implicit, so do not add a `_bytes` suffix. PiPNN scratch uses `points_buffer_size`, `distances_buffer_size` and `worker_buffer_size`, with a declaration comment specifying float-element counts. |
+| Threads and encoding | `num_threads` for a requested limit, `num_workers` for the resolved worker count requested from the runtime (OpenMP may use fewer threads), and `fast_quantization` for the fixed-scale encoding option. |
+
+Keep short loop indices and conventional mathematical symbols where their role
+is local and unambiguous. HNSW's `M` remains its algorithm-specific configuration;
+its upper and base layers use `upper_layer_max_degree_` and
+`base_layer_max_degree_`. QG's `max_degree_` is its fixed row degree, a multiple
+of 32. These settings are not interchangeable.
+
+Public names and Python keywords are compatibility contracts. For example,
+`Cluster::num()`, the protected `Initializer::num_cluster_`, QG's
+`degree_bound()`/`set_ef()`, Python's `ef`, and `QGKMeansParameters::ef_build`
+retain their existing spellings. C++ parameter names may be clarified without
+changing types, order or defaults. Keep declarations, definitions and comments
+in agreement; do not rename methods or literals by textual substitution.
+
+Storage-mode parameters also retain their contracts: IVF/HNSW use `nbits()`
+with separate internal `ex_bits_`; IVF additionally accepts 32 for raw-vector
+reranking. QG uses `quantization_bits()` with 0 for raw storage and 4/8 for packed
+vectors. Naming work does not change these values, allocation sizes, numeric
+operations, serialized field order, or ownership.
+
 ## Static analysis
 
 clang-tidy performs semantic checks and is kept separate from clang-format.
