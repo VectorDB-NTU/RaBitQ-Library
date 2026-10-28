@@ -183,6 +183,9 @@ listed above.
     <td align="center" width="16%">
       <a href="https://docs.weaviate.io/weaviate/concepts/vector-quantization#rotational-quantization"><img src="https://github.com/weaviate.png?size=96" width="40" height="40" alt="Weaviate logo"><br>Weaviate</a>
     </td>
+    <td align="center" width="16%">
+      <a href="https://github.com/pinecone-io/pg_pinecone"><img src="https://github.com/pinecone-io.png?size=96" width="40" height="40" alt="pg_pinecone logo"><br>pg_pinecone</a>
+    </td>
   </tr>
 </table>
 
