@@ -245,9 +245,9 @@ Requirements requirements(const Parameters& p, CodeLayout layout) {
         return sizing;
     }();
     Requirements r{0, 0, budget.bytes(p.dim), kWorkspaceAlignment};
-    const auto sizes = code_sizes(p, layout);
-    r.code_bytes = sizes.first;
-    r.extra_bytes = sizes.second;
+    const auto [code_bytes, extra_bytes] = code_sizes(p, layout);
+    r.code_bytes = code_bytes;
+    r.extra_bytes = extra_bytes;
     return r;
 }
 
@@ -376,9 +376,9 @@ float QueryState::compute_checked(
         throw std::invalid_argument("QueryState has not been prepared");
     }
     const Parameters p{query.dim_, query.total_bits_, query.metric_};
-    const auto sizes = code_sizes(p, code.layout);
-    check_buffer(code.codes, sizes.first);
-    check_buffer(code.extra, sizes.second);
+    const auto [code_bytes, extra_bytes] = code_sizes(p, code.layout);
+    check_buffer(code.codes, code_bytes);
+    check_buffer(code.extra, extra_bytes);
     if (!std::isfinite(factors.add) || !std::isfinite(factors.rescale) ||
         !std::isfinite(factors.error)) {
         throw std::invalid_argument("Quantization factors must be finite");
