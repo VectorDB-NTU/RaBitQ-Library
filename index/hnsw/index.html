@@ -2145,38 +2145,42 @@ supported.</p>
 the index retains no pointers to them after it returns or throws. The borrowed
 input pointer and search candidate helpers are private implementation details;
 see the <a href="../../modular_migration/#public-and-implementation-interfaces">C++ migration guide</a>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">construct</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">cluster_num</span><span class="p">,</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">                          </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">centroids</span><span class="p">,</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">                          </span><span class="kt">size_t</span><span class="w"> </span><span class="n">data_num</span><span class="p">,</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">                          </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">                          </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="p">,</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">                          </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">                          </span><span class="kt">bool</span><span class="w"> </span><span class="n">faster</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HierarchicalNSW::construct</span><span class="p">(</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_clusters</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">centroids</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">fast_quantization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">);</span>
 </code></pre></div>
 <ul>
 <li><strong>data</strong>: Vectors in the original input coordinates.</li>
-<li><strong>data_num</strong>: The number of data vectors.</li>
-<li><strong>centroids</strong>: Centroids computed by <a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>; the examples use <code>cluster_num = 16</code>.</li>
-<li><strong>cluster_ids</strong>: Array of length <code>data_num</code>; every entry must be in the range <code>[0, cluster_num)</code>.</li>
+<li><strong>num_points</strong>: The number of data vectors.</li>
+<li><strong>centroids</strong>: Centroids computed by <a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>; the examples use <code>num_clusters = 16</code>.</li>
+<li><strong>cluster_ids</strong>: Array of length <code>num_points</code>; every entry must be in the range <code>[0, num_clusters)</code>.</li>
 <li><strong>num_threads</strong>: Number of threads to use (default: 0, which auto-selects).</li>
-<li><strong>faster</strong>: Use calibrated scaling instead of per-vector scale search; see <a href="../../rabitq/quantizer/#implementations">encoding paths</a>.</li>
+<li><strong>fast_quantization</strong>: Use calibrated scaling instead of per-vector scale search; see <a href="../../rabitq/quantizer/#implementations">encoding paths</a>.</li>
 </ul>
 <h2 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">PID</span><span class="o">&gt;&gt;&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">search</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">queries</span><span class="p">,</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">                                                                        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">query_num</span><span class="p">,</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">                                                                        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">TOPK</span><span class="p">,</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">                                                                        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">efSearch</span><span class="p">,</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">                                                                        </span><span class="kt">size_t</span><span class="w"> </span><span class="n">thread_num</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">PID</span><span class="o">&gt;&gt;&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">search</span><span class="p">(</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">queries</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">k</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">ef_search</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">);</span>
 </code></pre></div>
 <ul>
 <li><strong>queries</strong>: Query vectors in the original input coordinates.</li>
-<li><strong>query_num</strong>: The number of query vectors.</li>
-<li><strong>TOPK</strong>: The number of nearest neighbors to search.</li>
-<li><strong>efSearch</strong>: The size of the candidate set for searching HNSW-RaBitQ base layer.</li>
-<li><strong>thread_num</strong>: Number of threads to use. Each query is processed by one thread.</li>
+<li><strong>num_queries</strong>: The number of query vectors.</li>
+<li><strong>k</strong>: The number of nearest neighbors to search.</li>
+<li><strong>ef_search</strong>: The size of the candidate set for searching HNSW-RaBitQ base layer.</li>
+<li><strong>num_threads</strong>: Number of threads to use. Each query is processed by one thread.</li>
 </ul>
 <p>The search window belongs to each call, so concurrent C++ searches can use
-different <code>efSearch</code> values and separate outputs while the index is unchanged.
+different <code>ef_search</code> values and separate outputs while the index is unchanged.
 Python follows the shared <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <h2 id="updating-an-index">Updating an index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
 <p>A constructed or loaded index supports <code>add()</code>, <code>resize()</code>,
@@ -2185,21 +2189,21 @@ the index file format; files with removals have
 <a href="#how-removal-is-stored">compatibility restrictions</a>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">PID</span><span class="o">&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">add</span><span class="p">(</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">faster</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">fast_quantization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
 <a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">);</span>
 <a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
 <a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HierarchicalNSW::resize</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">new_max_elements</span><span class="p">);</span>
 </code></pre></div>
 <ul>
-<li><strong>data</strong>, <strong>n</strong>: <code>n</code> new vectors in the original coordinates. Vector <code>i</code> receives
+<li><strong>data</strong>, <strong>num_points</strong>: <code>num_points</code> new vectors in the original coordinates. Vector <code>i</code> receives
   the label <code>num_stored_points() + i</code>, so labels stay dense, and <code>add</code> returns them.</li>
 <li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, num_clusters)</code>. When it
   is <code>nullptr</code>, each vector goes to its nearest centroid, chosen the same way a
   query is routed.</li>
-<li><strong>faster</strong>, <strong>num_threads</strong>: Same meaning as in <code>construct</code>, but <code>add</code> defaults
+<li><strong>fast_quantization</strong>, <strong>num_threads</strong>: Same meaning as in <code>construct</code>, but <code>add</code> defaults
   to one thread; pass <code>0</code> to auto-select. A point keeps the label
   <code>num_stored_points() + i</code> whatever order the threads finish in, because the slots are
   reserved as one block before the inserts start.</li>
@@ -2241,10 +2245,10 @@ the index grows many times beyond its original size, recall can drop. Rebuild
 from the original data with new centroids when recall matters more than the cost
 of a rebuild.</p>
 <h3 id="removing-points">Removing points<a class="headerlink" href="#removing-points" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">HierarchicalNSW::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">labels</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">HierarchicalNSW::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">labels</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">);</span>
 </code></pre></div>
 <ul>
-<li><strong>labels</strong>, <strong>n</strong>: Labels of the points to remove, as returned by <code>add</code> and
+<li><strong>labels</strong>, <strong>num_points</strong>: <code>num_points</code> labels of the points to remove, as returned by <code>add</code> and
   <code>search</code>. Every label must be in the index; nothing is removed if one is not.
   <code>remove</code> returns how many points were newly removed, so repeating a label or a
   call is safe.</li>
@@ -2260,13 +2264,13 @@ connected, as in hnswlib. Search never returns it, so a query can get fewer than
 <code>num_stored_points()</code> and cannot be restored. Removal requires the same
 exclusive access as other updates.</p>
 <h4 id="choosing-ef-after-removals">Choosing <code>ef</code> after removals<a class="headerlink" href="#choosing-ef-after-removals" title="Permanent link">&para;</a></h4>
-<p>Removed points still take slots in the <code>efSearch</code> candidate set, so a search with
-<code>efSearch</code> close to <code>k</code> finds fewer live points as removals accumulate. C++ search
-uses <code>max(efSearch, k)</code>. Python uses <code>max(k, 10)</code> when <code>ef</code> is omitted or zero;
+<p>Removed points still take slots in the <code>ef_search</code> candidate set, so a search with
+<code>ef_search</code> close to <code>k</code> finds fewer live points as removals accumulate. C++ search
+uses <code>max(ef_search, k)</code>. Python uses <code>max(k, 10)</code> when <code>ef</code> is omitted or zero;
 an explicit positive <code>ef</code> is also raised to at least <code>k</code>.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>max(efSearch, k) * num_stored_points() / (num_stored_points() - removed points)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>max(ef_search, k) * num_stored_points() / (num_stored_points() - removed points)
 </code></pre></div>
 <p>Callers that track how many points they removed can apply this directly.</p>
 <h2 id="persistence">Persistence<a class="headerlink" href="#persistence" title="Permanent link">&para;</a></h2>
@@ -2312,9 +2316,9 @@ files whose padded dimension is not a multiple of 64.</p>
 <h4 id="base-layer">Base Layer<a class="headerlink" href="#base-layer" title="Permanent link">&para;</a></h4>
 <p>In the base layer, we apply an adaptive re-ranking strategy:</p>
 <ul>
-<li><strong>candidate_set</strong>: A distance-sorted exploration window with capacity
-  <code>max(efSearch, TOPK)</code>, containing both expanded and unexpanded candidates.</li>
-<li><strong>boundedKNN</strong>: Current best TOPK candidates.</li>
+<li><strong>search_pool</strong>: A distance-sorted exploration window with capacity
+  <code>max(ef_search, k)</code>, containing both expanded and unexpanded candidates.</li>
+<li><strong>nearest_candidates</strong>: Current best k candidates.</li>
 </ul>
 <p>Repeat while the exploration window has an unexpanded candidate:</p>
 <ol>
@@ -2323,22 +2327,22 @@ files whose padded dimension is not a multiple of 64.</p>
 <li>Visit all unvisited neighbors of <code>e</code>.</li>
 <li>For each neighbor:</li>
 <li>Compute the 1-bit lower-bound distance (along with 1-bit estimated distance) using <code>BinData</code>.</li>
-<li>For a nonremoved neighbor, if <code>boundedKNN</code> has fewer than TOPK elements
+<li>For a nonremoved neighbor, if <code>nearest_candidates</code> has fewer than k elements
      or the neighbor's lower bound is smaller than the worst result's estimated distance:<ol>
 <li>Refine the distance estimate using <code>ExData</code> when extra bits are present.</li>
-<li>Update <code>boundedKNN</code>.</li>
+<li>Update <code>nearest_candidates</code>.</li>
 </ol>
 </li>
-<li>Insert the neighbor into <code>candidate_set</code> only if the window has space or
+<li>Insert the neighbor into <code>search_pool</code> only if the window has space or
      its (possibly refined) estimated distance is no greater than the worst
      distance in the window. Inserting into a full window displaces its last entry.</li>
 </ol>
 <p>The search stops when no unexpanded candidates remain in the window, even though
-the window still contains entries. <code>efSearch</code> controls this exploration budget
-separately from the TOPK result count; increasing it allows a wider search at
+the window still contains entries. <code>ef_search</code> controls this exploration budget
+separately from the k result count; increasing it allows a wider search at
 additional cost, rather than requiring traversal of the entire graph.</p>
-<p>A point hidden by <code>remove</code> never enters <code>boundedKNN</code>, so search never returns it,
-but it can still enter <code>candidate_set</code> under the same window admission rule,
+<p>A point hidden by <code>remove</code> never enters <code>nearest_candidates</code>, so search never returns it,
+but it can still enter <code>search_pool</code> under the same window admission rule,
 allowing search to walk through it. A removed entry point keeps the estimate
 already computed for it (the full-bits one when nbits &gt; 1). A removed neighbor
 is not refined and uses its 1-bit estimate for window admission.</p>

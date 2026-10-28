@@ -1944,20 +1944,21 @@ and link <code>rabitqlib::index</code>. The C++ API provides
 Only float vectors are supported; C++17 declarations may omit <code>&lt;float&gt;</code> through
 class template argument deduction:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">max_deg</span><span class="p">,</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">max_elements</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">max_degree</span><span class="p">,</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="n">MetricType</span><span class="w"> </span><span class="n">metric_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">METRIC_L2</span><span class="p">,</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="n">RotatorType</span><span class="w"> </span><span class="n">rotator_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RotatorType</span><span class="o">::</span><span class="n">FhtKacRotator</span><span class="p">,</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">quantization_bits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">seed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="p">{}()</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">);</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">QGBuilder</span><span class="p">(</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">index</span><span class="p">,</span><span class="w"> </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">ef_build</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="n">QuantizedGraph</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">index</span><span class="p">,</span><span class="w"> </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">ef_construction</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">(),</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="n">QGInitialization</span><span class="w"> </span><span class="n">init</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">QGInitialization</span><span class="o">::</span><span class="n">PiPNN</span><span class="p">,</span>
 <a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="kt">uint32_t</span><span class="w"> </span><span class="n">seed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">random_device</span><span class="p">{}(),</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">cache_vectors</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span>
 <a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="p">);</span>
 </code></pre></div>
-<p><code>data</code> contains <code>num * dim</code> floats; <code>max_deg</code> has Python's <code>max_degree</code>
-constraints. C++ defaults to all available threads. <code>build()</code> runs one refinement
+<p><code>data</code> contains <code>max_elements * dim</code> floats. This is the configured point count;
+QG has no spare capacity for later appends. <code>max_degree</code> has the same constraints
+as Python's parameter. C++ defaults to all available threads. <code>build()</code> runs one refinement
 for PiPNN or three passes for <code>QGInitialization::Random</code>; <code>build(n)</code> requests
 <code>n &gt;= 2</code> passes. The older overload with a numeric fifth argument uses that value
 as the random-initialization seed.</p>
@@ -1969,7 +1970,7 @@ querying or saving.</p>
 Input may be released after reset returns; rebuild before querying or saving.</p>
 <h3 id="vector-cache">Vector cache<a class="headerlink" href="#vector-cache" title="Permanent link">&para;</a></h3>
 <p><code>cache_vectors=true</code> retains transformed vectors and query factors
-(<code>4 * num * padded_dim</code> bytes plus factors). <a href="../../clustering/#qgkmeans">QGKMeans</a> enables
+(<code>4 * max_elements * padded_dim</code> bytes plus factors). <a href="../../clustering/#qgkmeans">QGKMeans</a> enables
 this for its centroid graph; the cache is not persisted.</p>
 <h3 id="random-seeds">Random seeds<a class="headerlink" href="#random-seeds" title="Permanent link">&para;</a></h3>
 <p>The graph seed controls FHT/Kac rotation; MatrixRotator samples its own matrix.
@@ -1996,8 +1997,8 @@ independent <code>search()</code> calls:</p>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="n">queries</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="n">batch_ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">batch_distances</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="mi">4</span>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">);</span>
 </code></pre></div>
-<p>The C++ signature is <code>search_batch(queries, num_queries, k, ids, distances,
-num_threads=1)</code>. Set <code>ef &gt;= k</code> with <code>set_ef()</code> before searching. Both output
+<p>The C++ signature is <code>search_batch(queries, num_queries, k, result_ids, distances,
+num_threads=1)</code>. Set <code>ef_search &gt;= k</code> with <code>set_ef()</code> before searching. Both output
 buffers are required and contain <code>num_queries * k</code> elements. Empty C++ batches
 do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
@@ -2010,7 +2011,7 @@ Queries use the original dimension, including when the internal rotation pads it
 <p>Python searches use per-call <code>ef</code> values. For access rules, see the
 <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <p>For C++, use
-<code>search_batch_with_ef(queries, num_queries, k, ids, distances, ef, num_threads=1)</code>
+<code>search_batch_with_ef(queries, num_queries, k, result_ids, distances, ef_search, num_threads=1)</code>
 to run concurrent calls with independent windows:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">qg</span><span class="p">.</span><span class="n">search_batch_with_ef</span><span class="p">(</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="n">queries</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="n">batch_ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">batch_distances</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span>
