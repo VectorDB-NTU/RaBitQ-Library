@@ -73,7 +73,14 @@ jobs:
       - name: Build and install wheel
         run: pip install ".[test,typing]" -v
 
-      - name: Check installed Python types and editor metadata
+      # PR wheels own mypy and the full editor suite. Non-release branch pushes
+      # may skip wheels, so source installs must retain those checks on pushes.
+      - name: Check source-installed Python declarations
+        if: github.event_name == 'pull_request'
+        run: python -m pytest tests/python/test_editor_support.py::test_installed_public_declarations --tb=short -q
+
+      - name: Check installed Python types and editor metadata on pushes
+        if: github.event_name == 'push'
         env:
           OMP_NUM_THREADS: "2"
         run: python -m pytest tests/python/test_editor_support.py tests/test_mypy.py --tb=short -q

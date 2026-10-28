@@ -17,6 +17,81 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class WorkflowContractsTest(unittest.TestCase):
+    def test_wheels_preserve_abi_coverage_and_release_gates(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        config = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        wheels = config["tool"]["cibuildwheel"]
+        # Keep the full installed-wheel suite and platform repair hooks.
+        self.assertIn("pytest {project}/tests/python", wheels["test-command"])
+        self.assertIn("delocate-wheel", wheels["macos"]["repair-wheel-command"])
+        self.assertIn("delvewheel repair", wheels["windows"]["repair-wheel-command"])
+        self.assertIn("scripts/build-macos-openmp.sh", wheels["macos"]["before-all"])
+        self.assertEqual(workflow.count("pattern: '*-wheels'"), 2)
+        artifacts = set()
+        for prefix, tag, check_name in (
+            ("linux", "manylinux_x86_64", "Linux x86-64 wheels"),
+            (
+                "linux-arm64",
+                "manylinux_aarch64",
+                "Linux ARM64 wheels (CPython 3.11–3.14)",
+            ),
+            ("windows", "win_amd64", "Windows x86-64 wheels"),
+            ("macos", "macosx_arm64", "macOS arm64 wheels (CPython 3.11–3.14)"),
+        ):
+            with self.subTest(platform=prefix):
+                build = workflow.split(f"  {prefix}-wheel-build:\n", 1)[1].split(
+                    f"  {prefix}-wheels:\n", 1
+                )[0]
+                selection = re.search(
+                    r"CIBW_BUILD: \$\{\{ github.event_name == 'pull_request' "
+                    r"&& '([^']+)' \|\| '([^']+)' \}\}",
+                    build,
+                )
+                self.assertIsNotNone(selection)
+                supported = {
+                    identifier
+                    for identifier in wheels["build"].split()
+                    if identifier.endswith(f"-{tag}")
+                }
+                for patterns, abis in zip(
+                    selection.groups(), ((311, 314), (311, 312, 313, 314)), strict=True
+                ):
+                    selected = {
+                        identifier
+                        for identifier in supported
+                        if any(
+                            fnmatch.fnmatchcase(identifier, p) for p in patterns.split()
+                        )
+                    }
+                    self.assertEqual(selected, {f"cp{abi}-{tag}" for abi in abis})
+                self.assertNotIn("CIBW_TEST", build)
+                self.assertNotIn("continue-on-error", build)
+                self.assertNotIn("matrix", build)
+                artifact = re.search(r"          name: (\S+)", build).group(1)
+                self.assertTrue(fnmatch.fnmatchcase(artifact, "*-wheels"))
+                self.assertNotIn(artifact, artifacts)
+                artifacts.add(artifact)
+                gate = re.search(
+                    rf"^  {prefix}-wheels:\n(.*?)(?=^  [\w-]+:|\Z)",
+                    workflow,
+                    re.MULTILINE | re.DOTALL,
+                ).group(1)
+                self.assertIn(f"name: {check_name}", gate)
+                self.assertIn(f"needs: {prefix}-wheel-build", gate)
+                self.assertIn(
+                    f"BUILD_RESULT: ${{{{ needs.{prefix}-wheel-build.result }}}}", gate
+                )
+                command = gate.split("        run: ", 1)[1].strip()
+                for result in ("success", "failure", "cancelled", "skipped", ""):
+                    with self.subTest(result=result):
+                        verdict = subprocess.run(
+                            ["bash", "-e", "-c", command],
+                            env=dict(os.environ, BUILD_RESULT=result),
+                            capture_output=True,
+                            check=False,
+                        )
+                        self.assertEqual(verdict.returncode == 0, result == "success")
+
     def test_installed_typing_checks_are_required(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text())
         test_dependencies = config["project"]["optional-dependencies"]["test"]
@@ -54,7 +129,7 @@ class WorkflowContractsTest(unittest.TestCase):
         )[0]
         self.assertIn('pip install ".[test,typing]"', build)
         self.assertIn(
-            "python -m pytest tests/python/test_editor_support.py tests/test_mypy.py",
+            "python -m pytest tests/python/test_editor_support.py::test_installed_public_declarations",
             build,
         )
         self.assertNotIn("continue-on-error", build)
@@ -69,12 +144,49 @@ class WorkflowContractsTest(unittest.TestCase):
         for path in (
             "python_bindings/__init__.pyi",
             "tests/python/typing/public_api.py",
-            "tests/test_mypy.py",
         ):
             with self.subTest(path=path):
                 self.assertLessEqual(
                     {"python_build", "python_quality", "wheels"}, classify([path])
                 )
+        self.assertEqual(
+            {"python_quality", "python_build", "wheels"},
+            classify(["tests/test_mypy.py"]),
+        )
+
+    def test_nonrelease_push_keeps_typing_checks_when_wheels_skip(self):
+        from test_prepare_release import ReleaseTest
+
+        release = ReleaseTest().run_prepare(tags="v0.3.3", tag_sha="b" * 40)
+        self.assertEqual(release["build"], "false")
+        workflow = (ROOT / ".github/workflows/python.yml").read_text()
+        build = workflow.split("  python-build:\n", 1)[1].split(
+            "  python-result:\n", 1
+        )[0]
+        steps = re.findall(
+            r"^      - name: (.*?)(?=^      - |\Z)",
+            build,
+            re.MULTILINE | re.DOTALL,
+        )
+        typing_steps = [step for step in steps if "tests/test_mypy.py" in step]
+        self.assertEqual(len(typing_steps), 1)
+        self.assertIn("if: github.event_name == 'push'", typing_steps[0])
+        self.assertIn(
+            "run: python -m pytest tests/python/test_editor_support.py tests/test_mypy.py",
+            typing_steps[0],
+        )
+        declaration_steps = [
+            step for step in steps if "::test_installed_public_declarations" in step
+        ]
+        self.assertEqual(len(declaration_steps), 1)
+        self.assertIn("if: github.event_name == 'pull_request'", declaration_steps[0])
+        for path in (
+            "tests/test_mypy.py",
+            "tests/python/test_editor_support.py",
+            "python_bindings/__init__.pyi",
+        ):
+            with self.subTest(path=path):
+                self.assertIn("python_build", classify([path]))
 
     def test_pyright_checks_are_required_and_scoped(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text())
