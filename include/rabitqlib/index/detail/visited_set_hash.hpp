@@ -42,11 +42,12 @@ class HashBasedVisitedSet {
     [[nodiscard]] auto hash1(const PID value) const { return value & mask_; }
 
     void initialize_table(const size_t table_size) {
+        // Allocate before changing the mask so failure preserves the previous table.
+        table_ = std::vector<PID, memory::AlignedAllocator<PID>>(table_size);
         table_size_ = table_size;
         mask_ = static_cast<PID>(table_size_ - 1);
         assert(hash1(static_cast<PID>(table_size)) == 0);
 
-        table_ = std::vector<PID, memory::AlignedAllocator<PID>>(table_size);
         std::fill(table_.begin(), table_.end(), kPidMax);
         stl_hash_.clear();
     }

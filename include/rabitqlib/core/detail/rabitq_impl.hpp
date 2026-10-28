@@ -820,9 +820,9 @@ static inline void rabitq_scalar_impl(
     RowMajorArrayMap<TP> total_code_arr(total_code, 1, dim);
     RowMajorArray<T> u_cb = total_code_arr.template cast<T>() + cb;
 
-    float norm_data = std::sqrt(l2norm_sqr(residual_arr.data(), dim));
-    float norm_quan = std::sqrt(l2norm_sqr(u_cb.data(), dim));
-    float cos_similarity =
+    T norm_data = std::sqrt(l2norm_sqr(residual_arr.data(), dim));
+    T norm_quan = std::sqrt(l2norm_sqr(u_cb.data(), dim));
+    T cos_similarity =
         dot_product<T>(residual_arr.data(), u_cb.data(), dim) / (norm_data * norm_quan);
 
     if (scalar_quantizer_type == ScalarQuantizerType::RECONSTRUCTION) {
