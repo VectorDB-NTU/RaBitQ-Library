@@ -165,19 +165,9 @@ class HierarchicalNSW {
     // Borrows construct() input only while its workers run; cleared on success or failure.
     const float* construction_data_{nullptr};
 
-    struct ResultRecord {
-        float est_dist;
-        float low_dist;
-        ResultRecord(float est_dist, float low_dist)
-            : est_dist(est_dist), low_dist(low_dist) {}
-        bool operator<(const ResultRecord& other) const {
-            return this->est_dist < other.est_dist;
-        }
-    };
-
     // Bounded priority queue implemented as a sorted vector.
     struct Candidate {
-        HierarchicalNSW::ResultRecord record;
+        float est_dist;
         PID id;
     };
 
@@ -192,7 +182,7 @@ class HierarchicalNSW {
                 queue_.end(),
                 cand,
                 [](const Candidate& a, const Candidate& b) {
-                    return a.record.est_dist < b.record.est_dist;
+                    return a.est_dist < b.est_dist;
                 }
             );
             queue_.insert(it, cand);
@@ -211,7 +201,7 @@ class HierarchicalNSW {
 
        private:
         size_t capacity_;
-        // Sorted in ascending order by record.est_dist so that the worst is at the back.
+        // Sorted in ascending order by est_dist so that the worst is at the back.
         std::vector<Candidate> queue_;
     };
 
@@ -304,8 +294,6 @@ class HierarchicalNSW {
     float (*raw_dist_func_)(const float* __restrict__, const float* __restrict__, size_t){
         nullptr};
 
-    void set_ef(size_t ef) { ef_ = ef; }
-
     std::mutex& get_label_op_mutex(PID label) const {
         size_t lock_id = label & (kMaxLabelOperationLock - 1);
         return label_op_locks_[lock_id];
@@ -322,7 +310,7 @@ class HierarchicalNSW {
         return return_label;
     }
 
-    void set_external_label(PID internal_id, PID label) const {
+    void set_external_label(PID internal_id, PID label) {
         memcpy(
             (data_level0_memory_.get() + (internal_id * size_data_per_element_) +
              label_offset_),
@@ -331,30 +319,36 @@ class HierarchicalNSW {
         );
     }
 
-    PID* get_external_label_pt(PID internal_id) const {
+    PID* get_external_label_pt(PID internal_id) {
         return reinterpret_cast<PID*>(
             data_level0_memory_.get() + (internal_id * size_data_per_element_) +
             label_offset_
         );
     }
 
-    char* get_bindata_by_internalid(PID internal_id) const {
-        return reinterpret_cast<char*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            bin_data_offset_
-        );
+    char* get_bindata_by_internalid(PID internal_id) {
+        return data_level0_memory_.get() + (internal_id * size_data_per_element_) +
+               bin_data_offset_;
     }
 
-    char* get_exdata_by_internalid(PID internal_id) const {
-        return reinterpret_cast<char*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            ex_data_offset_
-        );
+    const char* get_bindata_by_internalid(PID internal_id) const {
+        return data_level0_memory_.get() + (internal_id * size_data_per_element_) +
+               bin_data_offset_;
+    }
+
+    char* get_exdata_by_internalid(PID internal_id) {
+        return data_level0_memory_.get() + (internal_id * size_data_per_element_) +
+               ex_data_offset_;
+    }
+
+    const char* get_exdata_by_internalid(PID internal_id) const {
+        return data_level0_memory_.get() + (internal_id * size_data_per_element_) +
+               ex_data_offset_;
     }
 
     // The stored cluster ID with the removal mark, as save and load see it.
     PID get_raw_clusterid(PID internal_id) const {
-        return *(reinterpret_cast<PID*>(
+        return *(reinterpret_cast<const PID*>(
             data_level0_memory_.get() + (internal_id * size_data_per_element_) +
             size_links_level0_
         ));
@@ -368,7 +362,7 @@ class HierarchicalNSW {
         return (get_raw_clusterid(internal_id) & kRemovedMask) != 0;
     }
 
-    char* get_clusterid_pt(PID internal_id) const {
+    char* get_clusterid_pt(PID internal_id) {
         return reinterpret_cast<char*>(
             data_level0_memory_.get() + (internal_id * size_data_per_element_) +
             size_links_level0_
@@ -377,18 +371,26 @@ class HierarchicalNSW {
 
     int get_random_level(double reverse_size);
 
-    size_t get_max_elements() const { return max_elements_; }
-
-    size_t get_current_element_count() const { return cur_element_count_; }
-
-    PID* get_linklist(PID internal_id, int level) const {
+    PID* get_linklist(PID internal_id, int level) {
         return reinterpret_cast<PID*>(
             link_lists_[internal_id].get() + ((level - 1) * size_links_per_element_)
         );
     }
 
-    PID* get_linklist0(PID internal_id) const {
+    const PID* get_linklist(PID internal_id, int level) const {
+        return reinterpret_cast<const PID*>(
+            link_lists_[internal_id].get() + ((level - 1) * size_links_per_element_)
+        );
+    }
+
+    PID* get_linklist0(PID internal_id) {
         return reinterpret_cast<PID*>(
+            data_level0_memory_.get() + (internal_id * size_data_per_element_)
+        );
+    }
+
+    const PID* get_linklist0(PID internal_id) const {
+        return reinterpret_cast<const PID*>(
             data_level0_memory_.get() + (internal_id * size_data_per_element_)
         );
     }
@@ -404,33 +406,39 @@ class HierarchicalNSW {
     // ANN Search
     template <class Kernel>
     void get_bin_est_direct(
-        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
-    );
+        const std::vector<float>&,
+        const SplitSingleQuery<float>&,
+        PID,
+        HierarchicalNSW::EstimateRecord&
+    ) const;
 
     template <class Kernel>
     void get_full_est_direct(
-        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
+        const std::vector<float>&,
+        const SplitSingleQuery<float>&,
+        PID,
+        HierarchicalNSW::EstimateRecord&
     ) const;
 
     template <class Kernel>
     std::vector<std::pair<float, PID>> search_knn_sorted_direct(
         const float*, size_t, size_t
-    );
+    ) const;
 
     template <class Kernel>
     void search_base_layer_direct(
         PID ep_id,
         size_t ef,
         size_t k,
-        SplitSingleQuery<float>& query_wrapper,
-        std::vector<float>& q_to_centroids,
+        const SplitSingleQuery<float>& query_wrapper,
+        const std::vector<float>& q_to_centroids,
         const float* query,
         BoundedKNN& nearest_candidates
-    );
+    ) const;
 
     // Construction
     // Currently only support index construction with non-quantized vectors
-    float get_data_dist(PID obj1, PID obj2) {
+    float get_data_dist(PID obj1, PID obj2) const {
         PID label1 = get_external_label(obj1);
         PID label2 = get_external_label(obj2);
         return raw_dist_func_(

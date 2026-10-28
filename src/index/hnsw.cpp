@@ -16,6 +16,7 @@
 #include <queue>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -667,16 +668,21 @@ void HierarchicalNSW::add_point(
                 bool changed = true;
                 while (changed) {
                     changed = false;
-                    unsigned int* data;
                     std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-                    data = get_linklist(current_id, level);
-                    int size = get_list_count(data);
+                    const PID* data = get_linklist(current_id, level);
+                    const size_t size = get_list_count(data);
 
-                    auto* datal = static_cast<PID*>(data + 1);
-                    for (int i = 0; i < size; i++) {
+                    const PID* datal = data + 1;
+                    for (size_t i = 0; i < size; i++) {
                         PID cand = datal[i];
                         if (cand > max_elements_) {
-                            throw std::runtime_error("cand error");
+                            throw std::runtime_error(
+                                "HNSW construct upper-layer traversal: invalid candidate "
+                                "ID " +
+                                std::to_string(cand) + " at level " +
+                                std::to_string(level) +
+                                " (capacity=" + std::to_string(max_elements_) + ")"
+                            );
                         }
                         float d = get_data_dist(cand, cur_c);
                         if (d < curdist) {
@@ -731,14 +737,10 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
 
         std::unique_lock<std::mutex> lock(link_list_locks_[cur_node_num]);
 
-        int* data;
-        if (layer == 0) {
-            data = reinterpret_cast<int*>(get_linklist0(cur_node_num));
-        } else {
-            data = reinterpret_cast<int*>(get_linklist(cur_node_num, layer));
-        }
-        size_t size = get_list_count(reinterpret_cast<PID*>(data));
-        auto* datal = reinterpret_cast<PID*>(data + 1);
+        const PID* data =
+            (layer == 0) ? get_linklist0(cur_node_num) : get_linklist(cur_node_num, layer);
+        const size_t size = get_list_count(data);
+        const PID* datal = data + 1;
 
         rabitqlib::memory::mem_prefetch_l1(
             reinterpret_cast<const char*>(
@@ -1124,15 +1126,19 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
         PID cur_node_num = curr_el_pair.second;
         std::unique_lock<std::mutex> lock(link_list_locks_[cur_node_num]);
 
-        PID* data =
+        const PID* data =
             (layer == 0) ? get_linklist0(cur_node_num) : get_linklist(cur_node_num, layer);
-        size_t size = get_list_count(data);
-        auto* datal = data + 1;
+        const size_t size = get_list_count(data);
+        const PID* datal = data + 1;
 
         for (size_t j = 0; j < size; j++) {
             PID candidate_id = datal[j];
             if (candidate_id >= cur_element_count_) {
-                throw std::runtime_error("cand error");
+                throw std::runtime_error(
+                    "HNSW add layer search: invalid candidate ID " +
+                    std::to_string(candidate_id) + " at level " + std::to_string(layer) +
+                    " (stored_points=" + std::to_string(cur_element_count_.load()) + ")"
+                );
             }
             if (vl->get(candidate_id)) {
                 continue;
@@ -1203,13 +1209,19 @@ void HierarchicalNSW::add_point_quant(
                     while (changed) {
                         changed = false;
                         std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-                        PID* data = get_linklist(current_id, level);
-                        int size = get_list_count(data);
-                        auto* datal = data + 1;
-                        for (int i = 0; i < size; i++) {
+                        const PID* data = get_linklist(current_id, level);
+                        const size_t size = get_list_count(data);
+                        const PID* datal = data + 1;
+                        for (size_t i = 0; i < size; i++) {
                             PID cand = datal[i];
                             if (cand >= cur_element_count_) {
-                                throw std::runtime_error("cand error");
+                                throw std::runtime_error(
+                                    "HNSW add upper-layer traversal: invalid candidate "
+                                    "ID " +
+                                    std::to_string(cand) + " at level " +
+                                    std::to_string(level) + " (stored_points=" +
+                                    std::to_string(cur_element_count_.load()) + ")"
+                                );
                             }
                             float d = get_quant_dist(cand, cur_c, query);
                             if (d < curdist) {
