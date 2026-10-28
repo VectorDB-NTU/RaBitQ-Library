@@ -129,6 +129,19 @@ class Lut {
     explicit Lut(const T* rotated_query, size_t padded_dim, bool use_hacc = false)
         : Lut(rotated_query, padded_dim, use_hacc, checked_shape(padded_dim, use_hacc)) {}
 
+    Lut(const Lut&) = default;
+    Lut(Lut&&) noexcept = default;
+    Lut& operator=(Lut&&) noexcept = default;
+
+    Lut& operator=(const Lut& other) {
+        // Copy bytes before metadata: allocation failure must preserve the old shape.
+        lut_ = other.lut_;
+        table_length_ = other.table_length_;
+        delta_ = other.delta_;
+        sum_vl_lut_ = other.sum_vl_lut_;
+        return *this;
+    }
+
     /**
      * Reinitialize owned LUT bytes while reusing their allocation. Scratch buffers
      * are borrowed only for this call and may be overwritten/released afterwards.

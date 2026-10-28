@@ -131,6 +131,22 @@ class SplitBatchQuery {
    public:
     explicit SplitBatchQuery() = default;
 
+    SplitBatchQuery(const SplitBatchQuery&) = default;
+    SplitBatchQuery(SplitBatchQuery&&) noexcept = default;
+    SplitBatchQuery& operator=(SplitBatchQuery&&) noexcept = default;
+
+    SplitBatchQuery& operator=(const SplitBatchQuery& other) {
+        // Keep the borrowed query and corrections paired with the LUT if copying fails.
+        lookup_table_ = other.lookup_table_;
+        rotated_query_ = other.rotated_query_;
+        G_add_ = other.G_add_;
+        G_error_ = other.G_error_;
+        G_k1xSumq_ = other.G_k1xSumq_;
+        G_kbxSumq_ = other.G_kbxSumq_;
+        metric_type_ = other.metric_type_;
+        return *this;
+    }
+
     explicit SplitBatchQuery(
         const T* rotated_query,
         size_t padded_dim,

@@ -119,11 +119,16 @@ class IvfIndex {
         const auto* data_ptr = data_array.data();
         const auto* centroids_ptr = centroids_array.data();
         const auto* cluster_ids_ptr = cluster_ids_vec.data();
-        {
+        try {
             py::gil_scoped_release release;
             index_->construct(
                 data_ptr, centroids_ptr, cluster_ids_ptr, fast_quantization, num_threads
             );
+        } catch (...) {
+            // Early failures preserve the old index; allocation can invalidate it.
+            // Stored count remains nonzero even when every point was removed.
+            built_ = index_->num_stored_points() != 0;
+            throw;
         }
         built_ = true;
     }
