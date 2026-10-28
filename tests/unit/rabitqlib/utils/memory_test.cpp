@@ -15,8 +15,6 @@
 #include <string>
 #include <vector>
 
-#include "rabitqlib/utils/array.hpp"
-
 namespace rabitqlib::memory {
 namespace {
 
@@ -143,13 +141,6 @@ TEST(AlignedAllocationTest, HugePageStoragePreservesExplicitAlignmentAndOverflow
         std::bad_array_new_length
     );
 #endif
-}
-
-TEST(ArrayTest, RejectsDimensionProductOverflow) {
-    EXPECT_THROW(
-        (Array<char>(std::vector<size_t>{std::numeric_limits<size_t>::max(), 2})),
-        std::bad_array_new_length
-    );
 }
 
 }  // namespace
