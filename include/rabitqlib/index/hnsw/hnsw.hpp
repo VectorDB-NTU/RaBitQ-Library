@@ -68,9 +68,9 @@ class HierarchicalNSW {
     // Logical capacity, nonremoved points, and stored records (including removals).
     [[nodiscard]] size_t max_elements() const { return max_elements_; }
     [[nodiscard]] size_t num_points() const {
-        return cur_element_count_.load() - num_removed_;
+        return num_stored_points_.load() - num_removed_;
     }
-    [[nodiscard]] size_t num_stored_points() const { return cur_element_count_; }
+    [[nodiscard]] size_t num_stored_points() const { return num_stored_points_; }
     [[nodiscard]] PID cluster_id_of(PID internal_id) const {
         return get_clusterid_by_internalid(internal_id);
     }
@@ -81,8 +81,8 @@ class HierarchicalNSW {
     // Centroids and data use the original dimension; cluster_ids has num_points entries.
     // Input buffers must remain valid until this synchronous call returns or throws;
     // the index retains no pointers to them afterward.
-    // faster selects fixed-scale extra-bit quantization instead of exact scale search,
-    // trading quantization accuracy for speed. One-bit storage is unaffected.
+    // fast_quantization selects fixed-scale extra-bit quantization instead of exact scale
+    // search, trading quantization accuracy for speed. One-bit storage is unaffected.
     void construct(
         size_t num_clusters,
         const float* centroids,
@@ -90,7 +90,7 @@ class HierarchicalNSW {
         const float* data,
         PID* cluster_ids,
         size_t num_threads = 0,
-        bool faster = false
+        bool fast_quantization = false
     );
 
     /**
@@ -104,20 +104,20 @@ class HierarchicalNSW {
      * during linking may leave a partially linked batch counted in the index,
      * which remains safe to search, save, load, and destroy.
      *
-     * @param data New points, `n * dim` floats in the original coordinates
-     * @param n Number of new points
+     * @param data New points, `num_points * dim` floats in the original coordinates
+     * @param num_points Number of new points
      * @param cluster_ids Cluster of each point in `[0, num_clusters)`, or nullptr to
      * route each one to its nearest centroid
-     * @param faster Use fixed-scale extra-bit quantization for speed at a possible
-     * loss of accuracy; has no effect on one-bit storage
+     * @param fast_quantization Use fixed-scale extra-bit quantization for speed at a
+     * possible loss of accuracy; has no effect on one-bit storage
      * @param num_threads Threads used to route and insert
      * @return The label given to each new point
      */
     std::vector<PID> add(
         const float* data,
-        size_t n,
+        size_t num_points,
         const PID* cluster_ids = nullptr,
-        bool faster = false,
+        bool fast_quantization = false,
         size_t num_threads = 1
     );
 
@@ -146,10 +146,10 @@ class HierarchicalNSW {
      * before anything changes. Not safe to call while another thread searches or adds.
      *
      * @param labels Labels of the points to remove, as returned by `add` or `search`
-     * @param n Number of labels
+     * @param num_points Number of labels
      * @return Number of points newly removed
      */
-    size_t remove(const PID* labels, size_t n);
+    size_t remove(const PID* labels, size_t num_points);
 
     // Queries use the original dimension. Each result is (distance, external label),
     // where distance estimates squared L2 or 1 - dot according to the index metric.
@@ -165,19 +165,9 @@ class HierarchicalNSW {
     // Borrows construct() input only while its workers run; cleared on success or failure.
     const float* construction_data_{nullptr};
 
-    struct ResultRecord {
-        float est_dist;
-        float low_dist;
-        ResultRecord(float est_dist, float low_dist)
-            : est_dist(est_dist), low_dist(low_dist) {}
-        bool operator<(const ResultRecord& other) const {
-            return this->est_dist < other.est_dist;
-        }
-    };
-
     // Bounded priority queue implemented as a sorted vector.
     struct Candidate {
-        HierarchicalNSW::ResultRecord record;
+        float est_dist;
         PID id;
     };
 
@@ -192,7 +182,7 @@ class HierarchicalNSW {
                 queue_.end(),
                 cand,
                 [](const Candidate& a, const Candidate& b) {
-                    return a.record.est_dist < b.record.est_dist;
+                    return a.est_dist < b.est_dist;
                 }
             );
             queue_.insert(it, cand);
@@ -211,7 +201,7 @@ class HierarchicalNSW {
 
        private:
         size_t capacity_;
-        // Sorted in ascending order by record.est_dist so that the worst is at the back.
+        // Sorted in ascending order by est_dist so that the worst is at the back.
         std::vector<Candidate> queue_;
     };
 
@@ -237,15 +227,15 @@ class HierarchicalNSW {
     // keep num_clusters_ at or below 2^31, so a real cluster ID never has it.
     static constexpr PID kRemovedMask = 0x80000000U;
     size_t max_elements_{0};
-    mutable std::atomic<size_t> cur_element_count_{0};
+    mutable std::atomic<size_t> num_stored_points_{0};
     size_t num_removed_{0};  // Recovered from stored cluster-ID markers when loading.
-    size_t size_data_per_element_{0};
-    size_t size_links_per_element_{0};
+    size_t level0_record_bytes_{0};      // One complete level-0 record.
+    size_t upper_layer_links_bytes_{0};  // One node's adjacency list at one upper level.
     size_t M_{0};
-    size_t maxM_{0};
-    size_t maxM0_{0};
+    size_t upper_layer_max_degree_{0};
+    size_t base_layer_max_degree_{0};
     size_t ef_construction_{0};
-    size_t ef_{0};
+    size_t default_ef_search_{0};
     MetricType metric_type_{METRIC_L2};
 
     double mult_{0.0};
@@ -259,10 +249,11 @@ class HierarchicalNSW {
 
     PID entry_point_id_{0};
 
-    size_t size_links_level0_{0};
+    size_t level0_links_bytes_{
+        0};  // One node's level-0 adjacency list, including its header.
 
     size_t bin_data_offset_{0}, ex_data_offset_{0}, label_offset_{0};
-    size_t size_bin_data_{0}, size_ex_data_{0};
+    size_t bin_data_bytes_{0}, ex_data_bytes_{0};
     size_t ex_bits_{0};
 
     struct AlignedDeleter {
@@ -304,8 +295,6 @@ class HierarchicalNSW {
     float (*raw_dist_func_)(const float* __restrict__, const float* __restrict__, size_t){
         nullptr};
 
-    void set_ef(size_t ef) { ef_ = ef; }
-
     std::mutex& get_label_op_mutex(PID label) const {
         size_t lock_id = label & (kMaxLabelOperationLock - 1);
         return label_op_locks_[lock_id];
@@ -315,48 +304,53 @@ class HierarchicalNSW {
         PID return_label;
         memcpy(
             &return_label,
-            (data_level0_memory_.get() + (internal_id * size_data_per_element_) +
+            (data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
              label_offset_),
             sizeof(PID)
         );
         return return_label;
     }
 
-    void set_external_label(PID internal_id, PID label) const {
+    void set_external_label(PID internal_id, PID label) {
         memcpy(
-            (data_level0_memory_.get() + (internal_id * size_data_per_element_) +
+            (data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
              label_offset_),
             &label,
             sizeof(PID)
         );
     }
 
-    PID* get_external_label_pt(PID internal_id) const {
+    PID* get_external_label_pt(PID internal_id) {
         return reinterpret_cast<PID*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            label_offset_
+            data_level0_memory_.get() + (internal_id * level0_record_bytes_) + label_offset_
         );
     }
 
-    char* get_bindata_by_internalid(PID internal_id) const {
-        return reinterpret_cast<char*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            bin_data_offset_
-        );
+    char* get_bindata_by_internalid(PID internal_id) {
+        return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
+               bin_data_offset_;
     }
 
-    char* get_exdata_by_internalid(PID internal_id) const {
-        return reinterpret_cast<char*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            ex_data_offset_
-        );
+    const char* get_bindata_by_internalid(PID internal_id) const {
+        return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
+               bin_data_offset_;
+    }
+
+    char* get_exdata_by_internalid(PID internal_id) {
+        return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
+               ex_data_offset_;
+    }
+
+    const char* get_exdata_by_internalid(PID internal_id) const {
+        return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
+               ex_data_offset_;
     }
 
     // The stored cluster ID with the removal mark, as save and load see it.
     PID get_raw_clusterid(PID internal_id) const {
-        return *(reinterpret_cast<PID*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            size_links_level0_
+        return *(reinterpret_cast<const PID*>(
+            data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
+            level0_links_bytes_
         ));
     }
 
@@ -368,28 +362,36 @@ class HierarchicalNSW {
         return (get_raw_clusterid(internal_id) & kRemovedMask) != 0;
     }
 
-    char* get_clusterid_pt(PID internal_id) const {
+    char* get_clusterid_pt(PID internal_id) {
         return reinterpret_cast<char*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_) +
-            size_links_level0_
+            data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
+            level0_links_bytes_
         );
     }
 
     int get_random_level(double reverse_size);
 
-    size_t get_max_elements() const { return max_elements_; }
-
-    size_t get_current_element_count() const { return cur_element_count_; }
-
-    PID* get_linklist(PID internal_id, int level) const {
+    PID* get_linklist(PID internal_id, int level) {
         return reinterpret_cast<PID*>(
-            link_lists_[internal_id].get() + ((level - 1) * size_links_per_element_)
+            link_lists_[internal_id].get() + ((level - 1) * upper_layer_links_bytes_)
         );
     }
 
-    PID* get_linklist0(PID internal_id) const {
+    const PID* get_linklist(PID internal_id, int level) const {
+        return reinterpret_cast<const PID*>(
+            link_lists_[internal_id].get() + ((level - 1) * upper_layer_links_bytes_)
+        );
+    }
+
+    PID* get_linklist0(PID internal_id) {
         return reinterpret_cast<PID*>(
-            data_level0_memory_.get() + (internal_id * size_data_per_element_)
+            data_level0_memory_.get() + (internal_id * level0_record_bytes_)
+        );
+    }
+
+    const PID* get_linklist0(PID internal_id) const {
+        return reinterpret_cast<const PID*>(
+            data_level0_memory_.get() + (internal_id * level0_record_bytes_)
         );
     }
 
@@ -404,33 +406,39 @@ class HierarchicalNSW {
     // ANN Search
     template <class Kernel>
     void get_bin_est_direct(
-        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
-    );
+        const std::vector<float>&,
+        const SplitSingleQuery<float>&,
+        PID,
+        HierarchicalNSW::EstimateRecord&
+    ) const;
 
     template <class Kernel>
     void get_full_est_direct(
-        std::vector<float>&, SplitSingleQuery<float>&, PID, HierarchicalNSW::EstimateRecord&
+        const std::vector<float>&,
+        const SplitSingleQuery<float>&,
+        PID,
+        HierarchicalNSW::EstimateRecord&
     ) const;
 
     template <class Kernel>
     std::vector<std::pair<float, PID>> search_knn_sorted_direct(
         const float*, size_t, size_t
-    );
+    ) const;
 
     template <class Kernel>
     void search_base_layer_direct(
-        PID ep_id,
-        size_t ef,
+        PID entry_point_id,
+        size_t ef_search,
         size_t k,
-        SplitSingleQuery<float>& query_wrapper,
-        std::vector<float>& q_to_centroids,
+        const SplitSingleQuery<float>& query_wrapper,
+        const std::vector<float>& q_to_centroids,
         const float* query,
         BoundedKNN& nearest_candidates
-    );
+    ) const;
 
     // Construction
     // Currently only support index construction with non-quantized vectors
-    float get_data_dist(PID obj1, PID obj2) {
+    float get_data_dist(PID obj1, PID obj2) const {
         PID label1 = get_external_label(obj1);
         PID label2 = get_external_label(obj2);
         return raw_dist_func_(

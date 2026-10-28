@@ -45,11 +45,13 @@ struct HnswPruningTestAccess {
 
     static std::vector<PID> connect(HierarchicalNSW& index, PID incoming) {
         PID* neighbors = index.get_linklist0(0);
-        index.set_list_count(neighbors, index.maxM0_);
-        for (size_t i = 0; i < index.maxM0_; ++i) {
+        index.set_list_count(neighbors, index.base_layer_max_degree_);
+        for (size_t i = 0; i < index.base_layer_max_degree_; ++i) {
             neighbors[i + 1] = static_cast<PID>(i + 1);
         }
-        std::fill_n(index.get_linklist0(incoming), index.maxM0_ + 1, PID{0});
+        std::fill_n(
+            index.get_linklist0(incoming), index.base_layer_max_degree_ + 1, PID{0}
+        );
         detail::QuantQuery cached;
         maxheap<std::pair<float, PID>> candidates;
         candidates.emplace(index.get_quant_dist(0, incoming, cached), 0);

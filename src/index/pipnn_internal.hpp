@@ -23,12 +23,13 @@ struct Workspace {
 };
 
 struct ScratchPool {
-    size_t point_size;
-    size_t distance_size;
-    size_t stride;
+    // Buffer sizes in float elements.
+    size_t points_buffer_size;
+    size_t distances_buffer_size;
+    size_t worker_buffer_size;
     std::unique_ptr<float[]> storage;
 
-    ScratchPool(size_t count, size_t dim, size_t threads);
+    ScratchPool(size_t count, size_t dim, size_t num_workers);
     Workspace worker(size_t id);
 };
 

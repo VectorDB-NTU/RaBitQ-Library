@@ -57,9 +57,9 @@ struct SearchScratchView;
 void search_with_workspace(
     QuantizedGraph<float>& graph,
     const float* query,
-    uint32_t knn,
-    uint32_t* results,
-    float* dists,
+    uint32_t k,
+    uint32_t* result_ids,
+    float* distances,
     SearchScratchView scratch,
     PID hint = kPidMax,
     const float* k1xsumq = nullptr
@@ -82,12 +82,12 @@ class QuantizedGraph<float> {
     friend struct QGConstructionTestAccess;
 
    private:
-    size_t num_points_ = 0;
-    size_t degree_bound_ = 0;
+    size_t max_elements_ = 0;
+    size_t max_degree_ = 0;
     size_t dim_ = 0;
     size_t padded_dim_ = 0;
     float (*raw_dist_func_)(const float*, const float*, size_t) = nullptr;
-    PID entry_point_ = 0;
+    PID entry_point_id_ = 0;
     MetricType metric_type_ = MetricType::METRIC_L2;
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
@@ -106,12 +106,12 @@ class QuantizedGraph<float> {
     std::unique_ptr<Rotator<float>> rotator_;
 
     // Position of row data (raw vector or packed qg-quant vector), neighbor
-    // quantization data, and neighbor IDs. Since every degree equals degree_bound_
+    // quantization data, and neighbor IDs. Since every degree equals max_degree_
     // (a multiple of 32), the degree does not need to be stored per vertex.
     size_t batch_data_offset_ = 0;
     size_t neighbor_offset_ = 0;
-    size_t row_offset_ = 0;  // length of entire row
-    size_t ef_ = 0;
+    size_t record_bytes_ = 0;  // length of entire row
+    size_t default_ef_search_ = 0;
     bool ready_ = false;
     uint32_t seed_ = 42;
 
@@ -140,11 +140,11 @@ class QuantizedGraph<float> {
     }
 
     [[nodiscard]] float* get_vector(PID data_id) {
-        return data_.data() + ((row_offset_ / sizeof(float)) * data_id);
+        return data_.data() + ((record_bytes_ / sizeof(float)) * data_id);
     }
 
     [[nodiscard]] const float* get_vector(PID data_id) const {
-        return data_.data() + ((row_offset_ / sizeof(float)) * data_id);
+        return data_.data() + ((record_bytes_ / sizeof(float)) * data_id);
     }
 
     [[nodiscard]] char* get_quantized_vector(PID data_id) { return get_row_data(data_id); }
@@ -221,9 +221,9 @@ class QuantizedGraph<float> {
 
    public:
     explicit QuantizedGraph(
-        size_t num,
+        size_t max_elements,
         size_t dim,
-        size_t max_deg,
+        size_t max_degree,
         MetricType metric_type = METRIC_L2,
         RotatorType rotator_type = RotatorType::FhtKacRotator,
         size_t quantization_bits = 0,
@@ -270,15 +270,15 @@ class QuantizedGraph<float> {
 
     void search(
         const float* __restrict__ query,
-        uint32_t knn,
-        uint32_t* __restrict__ results,
-        float* __restrict__ dists
+        uint32_t k,
+        uint32_t* __restrict__ result_ids,
+        float* __restrict__ distances
     );
 
     /**
      * Search contiguous row-major queries, using the window set by set_ef().
-     * queries contains num_queries * dimension() floats; results and dists
-     * each hold num_queries * knn elements. Empty batches do no work.
+     * queries contains num_queries * dimension() floats; result_ids and distances
+     * each hold num_queries * k elements. Empty batches do no work.
      * Scratch is reused within each worker. num_threads defaults to one;
      * zero selects the available logical CPU count, capped by the batch.
      * Input and output buffers must not overlap. Concurrent searches require
@@ -287,21 +287,21 @@ class QuantizedGraph<float> {
     void search_batch(
         const float* queries,
         size_t num_queries,
-        uint32_t knn,
-        uint32_t* results,
-        float* dists,
+        uint32_t k,
+        uint32_t* result_ids,
+        float* distances,
         size_t num_threads = 1
     );
 
-    // Like search_batch, but ef belongs to this call and never reads or changes
+    // Like search_batch, but ef_search belongs to this call and never reads or changes
     // the default set by set_ef(). Concurrent calls may use different windows.
     void search_batch_with_ef(
         const float* queries,
         size_t num_queries,
-        uint32_t knn,
-        uint32_t* results,
-        float* dists,
-        size_t ef,
+        uint32_t k,
+        uint32_t* result_ids,
+        float* distances,
+        size_t ef_search,
         size_t num_threads = 1
     );
 
@@ -311,7 +311,7 @@ class QuantizedGraph<float> {
      * Reuses scratch and can use a previous result as a warm-start hint.
      * BatchQuery may allocate LUT storage on its first use or when its shape changes;
      * this is not the stable core v1 zero-allocation interface. Search and result
-     * buffers must be sized for ef and knn respectively. rotated_query_scratch and
+     * buffers must be sized for ef_search and k respectively. rotated_query_scratch and
      * lut_float_scratch need D and 4 * D floats, where D is the graph's stored padded
      * dimension; this advanced caller must already know D. dimension() is the original
      * input dimension. est_dist_scratch needs degree_bound() floats. The visited set must
@@ -324,9 +324,9 @@ class QuantizedGraph<float> {
      */
     void search_with_scratch(
         const float* __restrict__ query,
-        uint32_t knn,
-        uint32_t* __restrict__ results,
-        float* __restrict__ dists,
+        uint32_t k,
+        uint32_t* __restrict__ result_ids,
+        float* __restrict__ distances,
         float* __restrict__ rotated_query_scratch,
         float* __restrict__ est_dist_scratch,
         float* __restrict__ lut_float_scratch,

@@ -11,14 +11,16 @@ class Cluster {
    private:
     friend class IVF;
 
-    size_t num_;                  // Num of vectors in this cluster
+    size_t num_stored_points_;    // Num of vectors in this cluster
     char* batch_data_ = nullptr;  // RaBitQ code and factors
     char* ex_data_ = nullptr;     // Extra-bit codes/factors or original float32 vectors
     PID* ids_ = nullptr;          // PID of vectors
 
     // The owning index refreshes only views whose storage or count changed.
-    void reset(size_t num, char* batch_data, char* ex_data, PID* ids) noexcept {
-        num_ = num;
+    void reset(
+        size_t num_stored_points, char* batch_data, char* ex_data, PID* ids
+    ) noexcept {
+        num_stored_points_ = num_stored_points;
         batch_data_ = batch_data;
         ex_data_ = ex_data;
         ids_ = ids;
@@ -38,10 +40,13 @@ class Cluster {
 
     [[nodiscard]] PID* ids() const { return this->ids_; }
 
-    [[nodiscard]] size_t num() const { return num_; }
+    [[nodiscard]] size_t num() const { return num_stored_points_; }
 };
 
-inline Cluster::Cluster(size_t num, char* batch_data, char* ex_data, PID* ids)
-    : num_(num), batch_data_(batch_data), ex_data_(ex_data), ids_(ids) {}
+inline Cluster::Cluster(size_t num_stored_points, char* batch_data, char* ex_data, PID* ids)
+    : num_stored_points_(num_stored_points)
+    , batch_data_(batch_data)
+    , ex_data_(ex_data)
+    , ids_(ids) {}
 
 }  // namespace rabitqlib::ivf

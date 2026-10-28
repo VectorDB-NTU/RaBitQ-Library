@@ -113,9 +113,9 @@ using index_type = rabitqlib::ivf::IVF;
 
 size_t num_points = data.rows();
 size_t dim = data.cols();
-size_t k = centroids.rows();
+size_t num_clusters = centroids.rows();
 
-index_type ivf(num_points, dim, k, total_bits);
+index_type ivf(num_points, dim, num_clusters, total_bits);
 ```
 
 ### Centroid routing
@@ -131,7 +131,7 @@ print(index.initializer)  # resolved routing type
 ```
 
 ```c++
-index_type ivf(num_points, dim, k, total_bits, rabitqlib::METRIC_L2,
+index_type ivf(num_points, dim, num_clusters, total_bits, rabitqlib::METRIC_L2,
                rabitqlib::RotatorType::FhtKacRotator,
                rabitqlib::ivf::InitializerType::FlatRaBitQ);
 auto routing = ivf.initializer_type();
@@ -174,10 +174,10 @@ Finally, call the construct API:
 
 ```c++
 void IVF::construct(
-    const float* data, 
-    const float* centroids, 
-    const PID* cluster_ids, 
-    bool faster = false,
+    const float* data,
+    const float* centroids,
+    const PID* cluster_ids,
+    bool fast_quantization = false,
     size_t num_threads = std::numeric_limits<size_t>::max()
 );
 ```
@@ -185,7 +185,7 @@ void IVF::construct(
 - **data**: Vectors in the original input coordinates.
 - **centroids**: One centroid per configured cluster, in the original input coordinates.
 - **cluster_ids**: One ID per input vector, in `[0, num_clusters())`.
-- **faster**: Use a calibrated scaling factor instead of per-vector scale search; defaults to `false`. See [encoding paths](../rabitq/quantizer.md#implementations).
+- **fast_quantization**: Use a calibrated scaling factor instead of per-vector scale search; defaults to `false`. See [encoding paths](../rabitq/quantizer.md#implementations).
 - **num_threads**: Maximum number of OpenMP threads used to quantize clusters.
 
 For example:
@@ -207,19 +207,19 @@ Search a constructed or loaded index with:
 
 ```c++
 void IVF::search(
-    const float* __restrict__ query, 
-    size_t k, 
-    size_t nprobe, 
-    PID* __restrict__ results,
-    float* dists = nullptr
+    const float* query,
+    size_t k,
+    size_t nprobe,
+    PID* result_ids,
+    float* distances = nullptr
 ) const;
 ```
 
 - **query**: Query vector.
 - **k**: Top-k.
 - **nprobe**: The number of closest clusters to search.
-- **results**: Result buffer, size of k.
-- **dists**: Optional distance buffer, size of `k`.
+- **result_ids**: Output ID buffer, size of `k`.
+- **distances**: Optional distance buffer, size of `k`.
 
 FastScan precision is selected automatically: HACC for 4–9 quantized bits, and
 standard FastScan for 1–3 bits or raw vectors (`32`). HACC reduces lookup-table
@@ -271,25 +271,25 @@ or loaded index without the original dataset. Updates preserve the file format.
 ```c++
 void IVF::add(
     const float* data,
-    size_t n,
+    size_t num_points,
     const PID* cluster_ids = nullptr,
-    bool faster = false,
+    bool fast_quantization = false,
     size_t num_threads = std::numeric_limits<size_t>::max()
 );
 
-size_t IVF::remove(const PID* ids_to_remove, size_t n);
+size_t IVF::remove(const PID* ids_to_remove, size_t num_points);
 
 void IVF::reserve(PID cluster_id, size_t num_points);
 ```
 
-- **data**, **n**: `n` new vectors, quantized like `construct` does. Vector `i`
+- **data**, **num_points**: `num_points` new vectors, quantized like `construct` does. Vector `i`
   receives the PID `num_stored_points() + i`, using the count before the call. Existing
   IDs stay unchanged, and removed IDs are never reused.
-- **cluster_ids**: The cluster of each new vector, in `[0, cluster_num)`. When
+- **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When
   it is `nullptr`, vectors use the same centroid routing as queries. Routing uses
   the initializer selected at construction or restored from the index file.
-- **faster**, **num_threads**: Same as in `construct`.
-- **ids_to_remove**: PIDs to remove. Every PID must be below `num_stored_points()`; nothing is
+- **fast_quantization**, **num_threads**: Same as in `construct`.
+- **ids_to_remove**: `num_points` PIDs to remove. Every PID must be below `num_stored_points()`; nothing is
   removed if one is not. `remove` returns how many were newly removed and can be
   repeated safely.
 - **cluster_id**, **num_points**: `reserve` preallocates room for cluster `cluster_id`

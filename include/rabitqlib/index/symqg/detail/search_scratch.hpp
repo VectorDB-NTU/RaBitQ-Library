@@ -30,11 +30,11 @@ struct SearchScratch {
     buffer::SearchBuffer<float> search_pool;
     buffer::SearchBuffer<float> result_pool;
 
-    SearchScratch(size_t padded_dim, size_t degree, size_t ef, size_t k)
+    SearchScratch(size_t padded_dim, size_t degree, size_t ef_search, size_t k)
         : rotated_query(padded_dim)
         , estimated_distances(degree)
         , lookup_table(padded_dim * 4)
-        , search_pool(ef)
+        , search_pool(ef_search)
         , result_pool(k) {}
 
     SearchScratchView view(VisitedSet& visited) {

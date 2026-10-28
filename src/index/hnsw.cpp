@@ -16,6 +16,7 @@
 #include <queue>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -108,25 +109,25 @@ HierarchicalNSW::HierarchicalNSW(
         M_ = 10000;
     }
 
-    maxM_ = M_;
-    maxM0_ = M_ * 2;
+    upper_layer_max_degree_ = M_;
+    base_layer_max_degree_ = M_ * 2;
     ef_construction_ = std::max(ef_construction, M_);
-    ef_ = 10;
+    default_ef_search_ = 10;
 
-    size_bin_data_ = BinDataMap<float>::data_bytes(padded_dim_);
-    size_ex_data_ = ExDataMap<float>::data_bytes(padded_dim_, ex_bits_);
-    size_links_level0_ = maxM0_ * sizeof(PID) + sizeof(PID);
+    bin_data_bytes_ = BinDataMap<float>::data_bytes(padded_dim_);
+    ex_data_bytes_ = ExDataMap<float>::data_bytes(padded_dim_, ex_bits_);
+    level0_links_bytes_ = base_layer_max_degree_ * sizeof(PID) + sizeof(PID);
     label_offset_ =
-        size_links_level0_ + sizeof(PID);  // (# of edges + edges) + (cluster_id)
+        level0_links_bytes_ + sizeof(PID);  // (# of edges + edges) + (cluster_id)
     bin_data_offset_ =
         label_offset_ +
         sizeof(PID);  // (# of edges + edges) + (cluster_id) + (external label)
     ex_data_offset_ =
-        bin_data_offset_ + size_bin_data_;  // (# of edges + edges) + (cluster_id)
-                                            // + (external label) + (BinData)
-    size_data_per_element_ = ex_data_offset_ + size_ex_data_;
+        bin_data_offset_ + bin_data_bytes_;  // (# of edges + edges) + (cluster_id)
+                                             // + (external label) + (BinData)
+    level0_record_bytes_ = ex_data_offset_ + ex_data_bytes_;
     data_level0_memory_.reset(
-        memory::huge_page_allocate<char>(max_elements_ * size_data_per_element_)
+        memory::huge_page_allocate<char>(max_elements_ * level0_record_bytes_)
     );
     if (data_level0_memory_ == nullptr) {
         throw std::runtime_error("Not enough memory");
@@ -134,7 +135,7 @@ HierarchicalNSW::HierarchicalNSW(
 
     level_generator_.seed(random_seed);
 
-    cur_element_count_ = 0;
+    num_stored_points_ = 0;
 
     visited_list_pool_ = std::make_unique<VisitedListPool>(1, max_elements_);
 
@@ -143,7 +144,7 @@ HierarchicalNSW::HierarchicalNSW(
     max_level_ = -1;
 
     link_lists_.reserve(max_elements_);
-    size_links_per_element_ = maxM_ * sizeof(PID) + sizeof(PID);
+    upper_layer_links_bytes_ = upper_layer_max_degree_ * sizeof(PID) + sizeof(PID);
     mult_ = 1 / log(1.0 * static_cast<double>(M_));
 
     this->query_config_ =
@@ -157,7 +158,7 @@ void HierarchicalNSW::save(const char* filename) const {
     }
 
     output.write(reinterpret_cast<const char*>(&max_elements_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&cur_element_count_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&num_stored_points_), sizeof(size_t));
 
     output.write(reinterpret_cast<const char*>(&dim_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&padded_dim_), sizeof(size_t));
@@ -165,21 +166,21 @@ void HierarchicalNSW::save(const char* filename) const {
     output.write(reinterpret_cast<const char*>(&ex_bits_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&metric_type_), sizeof(metric_type_));
 
-    output.write(reinterpret_cast<const char*>(&size_bin_data_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&size_ex_data_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&size_links_level0_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&bin_data_bytes_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&ex_data_bytes_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&level0_links_bytes_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&bin_data_offset_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&ex_data_offset_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&label_offset_), sizeof(PID));
-    output.write(reinterpret_cast<const char*>(&size_data_per_element_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&size_links_per_element_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&level0_record_bytes_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&upper_layer_links_bytes_), sizeof(size_t));
 
     output.write(reinterpret_cast<const char*>(&max_level_), sizeof(int));
     output.write(reinterpret_cast<const char*>(&entry_point_id_), sizeof(PID));
 
     output.write(reinterpret_cast<const char*>(&M_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&maxM_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&maxM0_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&upper_layer_max_degree_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&base_layer_max_degree_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&mult_), sizeof(double));
     output.write(reinterpret_cast<const char*>(&ef_construction_), sizeof(size_t));
 
@@ -190,12 +191,12 @@ void HierarchicalNSW::save(const char* filename) const {
 
     output.write(
         reinterpret_cast<const char*>(data_level0_memory_.get()),
-        static_cast<std::streamsize>(cur_element_count_ * size_data_per_element_)
+        static_cast<std::streamsize>(num_stored_points_ * level0_record_bytes_)
     );
 
-    for (size_t i = 0; i < cur_element_count_; i++) {
+    for (size_t i = 0; i < num_stored_points_; i++) {
         unsigned int link_list_size =
-            element_levels_[i] > 0 ? size_links_per_element_ * element_levels_[i] : 0;
+            element_levels_[i] > 0 ? upper_layer_links_bytes_ * element_levels_[i] : 0;
         output.write(reinterpret_cast<const char*>(&link_list_size), sizeof(unsigned int));
         if (link_list_size != 0) {
             output.write(link_lists_[i].get(), link_list_size);
@@ -245,20 +246,20 @@ void HierarchicalNSW::load(const char* filename) {
     read_header(loaded.num_clusters_);
     read_header(loaded.ex_bits_);
     read_header(loaded.metric_type_);
-    read_header(loaded.size_bin_data_);
-    read_header(loaded.size_ex_data_);
-    read_header(loaded.size_links_level0_);
+    read_header(loaded.bin_data_bytes_);
+    read_header(loaded.ex_data_bytes_);
+    read_header(loaded.level0_links_bytes_);
     read_header(loaded.bin_data_offset_);
     read_header(loaded.ex_data_offset_);
     read_header(label_offset);
     loaded.label_offset_ = label_offset;
-    read_header(loaded.size_data_per_element_);
-    read_header(loaded.size_links_per_element_);
+    read_header(loaded.level0_record_bytes_);
+    read_header(loaded.upper_layer_links_bytes_);
     read_header(loaded.max_level_);
     read_header(loaded.entry_point_id_);
     read_header(loaded.M_);
-    read_header(loaded.maxM_);
-    read_header(loaded.maxM0_);
+    read_header(loaded.upper_layer_max_degree_);
+    read_header(loaded.base_layer_max_degree_);
     read_header(loaded.mult_);
     read_header(loaded.ef_construction_);
 
@@ -271,8 +272,9 @@ void HierarchicalNSW::load(const char* filename) {
         loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
         loaded.padded_dim_ > rotator_impl::FhtKacRotator::kMaxDim || loaded.ex_bits_ > 8 ||
         (loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
-        loaded.M_ < 2 || loaded.M_ > 10000 || loaded.maxM_ != loaded.M_ ||
-        loaded.maxM0_ != 2 * loaded.M_ || loaded.ef_construction_ < loaded.M_ ||
+        loaded.M_ < 2 || loaded.M_ > 10000 || loaded.upper_layer_max_degree_ != loaded.M_ ||
+        loaded.base_layer_max_degree_ != 2 * loaded.M_ ||
+        loaded.ef_construction_ < loaded.M_ ||
         (element_count == 0 &&
          (loaded.max_level_ != -1 || loaded.entry_point_id_ != kPidMax)) ||
         (element_count != 0 &&
@@ -280,21 +282,22 @@ void HierarchicalNSW::load(const char* filename) {
         invalid_file();
     }
 
-    const size_t expected_level0 = (loaded.maxM0_ + 1) * sizeof(PID);
+    const size_t expected_level0 = (loaded.base_layer_max_degree_ + 1) * sizeof(PID);
     const size_t expected_bin = BinDataMap<float>::data_bytes(loaded.padded_dim_);
     const size_t expected_ex =
         ExDataMap<float>::data_bytes(loaded.padded_dim_, loaded.ex_bits_);
     const size_t expected_label = expected_level0 + sizeof(PID);
     const size_t expected_bin_offset = expected_label + sizeof(PID);
     const size_t expected_ex_offset = expected_bin_offset + expected_bin;
-    const size_t expected_stride = expected_ex_offset + expected_ex;
-    if (loaded.size_bin_data_ != expected_bin || loaded.size_ex_data_ != expected_ex ||
-        loaded.size_links_level0_ != expected_level0 ||
+    const size_t expected_level0_record_bytes = expected_ex_offset + expected_ex;
+    if (loaded.bin_data_bytes_ != expected_bin || loaded.ex_data_bytes_ != expected_ex ||
+        loaded.level0_links_bytes_ != expected_level0 ||
         loaded.label_offset_ != expected_label ||
         loaded.bin_data_offset_ != expected_bin_offset ||
         loaded.ex_data_offset_ != expected_ex_offset ||
-        loaded.size_data_per_element_ != expected_stride ||
-        loaded.size_links_per_element_ != (loaded.maxM_ + 1) * sizeof(PID) ||
+        loaded.level0_record_bytes_ != expected_level0_record_bytes ||
+        loaded.upper_layer_links_bytes_ !=
+            (loaded.upper_layer_max_degree_ + 1) * sizeof(PID) ||
         !std::isfinite(loaded.mult_) || loaded.mult_ <= 0.0) {
         invalid_file();
     }
@@ -303,8 +306,8 @@ void HierarchicalNSW::load(const char* filename) {
         checked_product(loaded.num_clusters_, loaded.padded_dim_), sizeof(float)
     );
     const size_t data_capacity_bytes =
-        checked_product(loaded.max_elements_, loaded.size_data_per_element_);
-    const size_t data_bytes = checked_product(element_count, loaded.size_data_per_element_);
+        checked_product(loaded.max_elements_, loaded.level0_record_bytes_);
+    const size_t data_bytes = checked_product(element_count, loaded.level0_record_bytes_);
     // Validate pointer-table capacity before allocating it.
     (void)checked_product(loaded.max_elements_, sizeof(LinkStorage));
     const size_t link_headers_bytes = checked_product(element_count, sizeof(unsigned int));
@@ -360,15 +363,15 @@ void HierarchicalNSW::load(const char* filename) {
     loaded.link_lists_.resize(element_count);
     for (size_t i = 0; i < element_count; ++i) {
         const char* row =
-            loaded.data_level0_memory_.get() + i * loaded.size_data_per_element_;
+            loaded.data_level0_memory_.get() + i * loaded.level0_record_bytes_;
         PID cluster_id = 0;
         PID label = 0;
         unsigned short level0_degree = 0;
         std::memcpy(&level0_degree, row, sizeof(level0_degree));
-        std::memcpy(&cluster_id, row + loaded.size_links_level0_, sizeof(cluster_id));
+        std::memcpy(&cluster_id, row + loaded.level0_links_bytes_, sizeof(cluster_id));
         std::memcpy(&label, row + loaded.label_offset_, sizeof(label));
         if ((cluster_id & ~kRemovedMask) >= loaded.num_clusters_ ||
-            level0_degree > loaded.maxM0_) {
+            level0_degree > loaded.base_layer_max_degree_) {
             invalid_file();
         }
         loaded.num_removed_ += (cluster_id & kRemovedMask) != 0;
@@ -386,8 +389,8 @@ void HierarchicalNSW::load(const char* filename) {
         unsigned int link_list_size = 0;
         read_payload(reinterpret_cast<char*>(&link_list_size), sizeof(link_list_size));
         if (link_list_size != 0) {
-            if (link_list_size % loaded.size_links_per_element_ != 0 ||
-                link_list_size / loaded.size_links_per_element_ >
+            if (link_list_size % loaded.upper_layer_links_bytes_ != 0 ||
+                link_list_size / loaded.upper_layer_links_bytes_ >
                     static_cast<size_t>(loaded.max_level_) ||
                 link_list_size > remaining) {
                 invalid_file();
@@ -397,17 +400,17 @@ void HierarchicalNSW::load(const char* filename) {
                 throw std::bad_alloc();
             }
             loaded.element_levels_[i] =
-                static_cast<int>(link_list_size / loaded.size_links_per_element_);
+                static_cast<int>(link_list_size / loaded.upper_layer_links_bytes_);
         }
-        loaded.cur_element_count_ = i + 1;
+        loaded.num_stored_points_ = i + 1;
         if (link_list_size != 0) {
             read_payload(loaded.link_lists_[i].get(), link_list_size);
             for (int level = 0; level < loaded.element_levels_[i]; ++level) {
                 const char* link =
-                    loaded.link_lists_[i].get() + level * loaded.size_links_per_element_;
+                    loaded.link_lists_[i].get() + level * loaded.upper_layer_links_bytes_;
                 unsigned short degree = 0;
                 std::memcpy(&degree, link, sizeof(degree));
-                if (degree > loaded.maxM_) {
+                if (degree > loaded.upper_layer_max_degree_) {
                     invalid_file();
                 }
                 for (size_t edge = 0; edge < degree; ++edge) {
@@ -426,7 +429,7 @@ void HierarchicalNSW::load(const char* filename) {
         for (int level = 1; level <= loaded.element_levels_[i]; ++level) {
             const char* link =
                 loaded.link_lists_[i].get() +
-                (static_cast<size_t>(level) - 1) * loaded.size_links_per_element_;
+                (static_cast<size_t>(level) - 1) * loaded.upper_layer_links_bytes_;
             unsigned short degree = 0;
             std::memcpy(&degree, link, sizeof(degree));
             for (size_t edge = 0; edge < degree; ++edge) {
@@ -461,7 +464,7 @@ void HierarchicalNSW::load(const char* filename) {
     loaded.raw_dist_func_ =
         (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
     loaded.ip_func_ = select_excode_ipfunc(loaded.ex_bits_);
-    loaded.ef_ = 10;
+    loaded.default_ef_search_ = 10;
     loaded.query_config_ =
         quant::faster_config(loaded.padded_dim_, SplitSingleQuery<float>::kNumBits);
 
@@ -469,29 +472,29 @@ void HierarchicalNSW::load(const char* filename) {
     using std::swap;
     swap(construction_data_, loaded.construction_data_);
     swap(max_elements_, loaded.max_elements_);
-    const size_t old_count = cur_element_count_.load();
-    cur_element_count_ = loaded.cur_element_count_.load();
-    loaded.cur_element_count_ = old_count;
+    const size_t old_count = num_stored_points_.load();
+    num_stored_points_ = loaded.num_stored_points_.load();
+    loaded.num_stored_points_ = old_count;
     swap(num_removed_, loaded.num_removed_);
-    swap(size_data_per_element_, loaded.size_data_per_element_);
-    swap(size_links_per_element_, loaded.size_links_per_element_);
+    swap(level0_record_bytes_, loaded.level0_record_bytes_);
+    swap(upper_layer_links_bytes_, loaded.upper_layer_links_bytes_);
     swap(M_, loaded.M_);
-    swap(maxM_, loaded.maxM_);
-    swap(maxM0_, loaded.maxM0_);
+    swap(upper_layer_max_degree_, loaded.upper_layer_max_degree_);
+    swap(base_layer_max_degree_, loaded.base_layer_max_degree_);
     swap(ef_construction_, loaded.ef_construction_);
-    swap(ef_, loaded.ef_);
+    swap(default_ef_search_, loaded.default_ef_search_);
     swap(metric_type_, loaded.metric_type_);
     swap(mult_, loaded.mult_);
     swap(max_level_, loaded.max_level_);
     label_op_locks_.swap(loaded.label_op_locks_);
     link_list_locks_.swap(loaded.link_list_locks_);
     swap(entry_point_id_, loaded.entry_point_id_);
-    swap(size_links_level0_, loaded.size_links_level0_);
+    swap(level0_links_bytes_, loaded.level0_links_bytes_);
     swap(bin_data_offset_, loaded.bin_data_offset_);
     swap(ex_data_offset_, loaded.ex_data_offset_);
     swap(label_offset_, loaded.label_offset_);
-    swap(size_bin_data_, loaded.size_bin_data_);
-    swap(size_ex_data_, loaded.size_ex_data_);
+    swap(bin_data_bytes_, loaded.bin_data_bytes_);
+    swap(ex_data_bytes_, loaded.ex_data_bytes_);
     swap(ex_bits_, loaded.ex_bits_);
     swap(data_level0_memory_, loaded.data_level0_memory_);
     swap(link_lists_, loaded.link_lists_);
@@ -515,9 +518,9 @@ void HierarchicalNSW::construct(
     const float* data,
     PID* cluster_ids,
     size_t num_threads,
-    bool faster
+    bool fast_quantization
 ) {
-    if (num_clusters_ != 0 || cur_element_count_ != 0) {
+    if (num_clusters_ != 0 || num_stored_points_ != 0) {
         throw std::logic_error("HNSW index is already constructed or loaded");
     }
     if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
@@ -557,7 +560,7 @@ void HierarchicalNSW::construct(
         }
 
         quant::RabitqConfig config;
-        if (faster) {
+        if (fast_quantization) {
             config = quant::faster_config(padded_dim_, ex_bits_ + 1);
         }
 
@@ -570,9 +573,9 @@ void HierarchicalNSW::construct(
     } catch (...) {
         // parallel_for joins every worker before propagating an exception.
         // Discard the partial graph, retaining capacity and rotation for a retry.
-        std::fill_n(element_levels_.begin(), cur_element_count_.load(), 0);
+        std::fill_n(element_levels_.begin(), num_stored_points_.load(), 0);
         link_lists_.clear();
-        cur_element_count_ = 0;
+        num_stored_points_ = 0;
         num_removed_ = 0;
         label_lookup_.clear();
         entry_point_id_ = kPidMax;
@@ -588,12 +591,12 @@ void HierarchicalNSW::construct(
 void HierarchicalNSW::add_point(
     PID label, PID cluster_id, const quant::RabitqConfig& config
 ) {
-    std::unique_lock<std::mutex> lock_label(get_label_op_mutex(label));
+    std::unique_lock<std::mutex> label_lock(get_label_op_mutex(label));
 
     int node_level = 0;
-    PID cur_c = 0;
+    PID new_node_id = 0;
     {
-        std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
+        std::unique_lock<std::mutex> label_lookup_lock(label_lookup_lock_);
         if (label_lookup_.find(label) != label_lookup_.end()) {
             throw std::runtime_error(
                 "Currently not support replacement of existing elements, only support "
@@ -601,37 +604,37 @@ void HierarchicalNSW::add_point(
             );
         }
 
-        if (cur_element_count_ >= max_elements_) {
+        if (num_stored_points_ >= max_elements_) {
             throw std::runtime_error("The number of elements exceeds the specified limit");
         }
 
-        cur_c = cur_element_count_;
+        new_node_id = num_stored_points_;
         link_lists_.emplace_back();
-        cur_element_count_++;
-        label_lookup_[label] = cur_c;
+        num_stored_points_++;
+        label_lookup_[label] = new_node_id;
         node_level = get_random_level(mult_);
     }
 
-    std::unique_lock<std::mutex> lock_el(link_list_locks_[cur_c]);
+    std::unique_lock<std::mutex> node_lock(link_list_locks_[new_node_id]);
 
-    element_levels_[cur_c] = node_level;
-    std::unique_lock<std::mutex> templock(global_);
+    element_levels_[new_node_id] = node_level;
+    std::unique_lock<std::mutex> entry_point_lock(global_);
     int previous_max_level = max_level_;
     PID current_id = entry_point_id_;
     if (node_level <= previous_max_level) {
-        templock.unlock();
+        entry_point_lock.unlock();
     }
 
     // initialize the current memory.
     memset(
-        data_level0_memory_.get() + (cur_c * size_data_per_element_),
+        data_level0_memory_.get() + (new_node_id * level0_record_bytes_),
         0,
-        size_data_per_element_
+        level0_record_bytes_
     );
 
     // Initialisation of label and cluster id
-    memcpy(get_external_label_pt(cur_c), &label, sizeof(PID));
-    memcpy(get_clusterid_pt(cur_c), &cluster_id, sizeof(PID));
+    memcpy(get_external_label_pt(new_node_id), &label, sizeof(PID));
+    memcpy(get_clusterid_pt(new_node_id), &cluster_id, sizeof(PID));
 
     // Quantize raw data and initialize quantized data
     std::vector<float> rotated_data(padded_dim_);
@@ -641,46 +644,53 @@ void HierarchicalNSW::add_point(
         reinterpret_cast<float*>(centroids_memory_.get()) + (cluster_id * padded_dim_),
         padded_dim_,
         ex_bits_,
-        get_bindata_by_internalid(cur_c),
-        get_exdata_by_internalid(cur_c),
+        get_bindata_by_internalid(new_node_id),
+        get_exdata_by_internalid(new_node_id),
         metric_type_,
         config
     );
 
     // If the current vertex is at level >0, it needs some space to store the extra edges.
     if (node_level > 0) {
-        link_lists_[cur_c].reset(
-            static_cast<char*>(std::malloc((size_links_per_element_ * node_level) + 1))
+        link_lists_[new_node_id].reset(
+            static_cast<char*>(std::malloc((upper_layer_links_bytes_ * node_level) + 1))
         );
-        if (link_lists_[cur_c] == nullptr) {
+        if (link_lists_[new_node_id] == nullptr) {
             throw std::runtime_error(
                 "Not enough memory: add_point failed to allocate linklist"
             );
         }
-        memset(link_lists_[cur_c].get(), 0, (size_links_per_element_ * node_level) + 1);
+        memset(
+            link_lists_[new_node_id].get(), 0, (upper_layer_links_bytes_ * node_level) + 1
+        );
     }
 
     if (static_cast<signed>(current_id) != -1) {
         if (node_level < previous_max_level) {
-            float curdist = get_data_dist(current_id, cur_c);
+            float current_distance = get_data_dist(current_id, new_node_id);
             for (int level = previous_max_level; level > node_level; level--) {
                 bool changed = true;
                 while (changed) {
                     changed = false;
-                    unsigned int* data;
                     std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-                    data = get_linklist(current_id, level);
-                    int size = get_list_count(data);
+                    const PID* data = get_linklist(current_id, level);
+                    const size_t size = get_list_count(data);
 
-                    auto* datal = static_cast<PID*>(data + 1);
-                    for (int i = 0; i < size; i++) {
+                    const PID* datal = data + 1;
+                    for (size_t i = 0; i < size; i++) {
                         PID cand = datal[i];
                         if (cand > max_elements_) {
-                            throw std::runtime_error("cand error");
+                            throw std::runtime_error(
+                                "HNSW construct upper-layer traversal: invalid candidate "
+                                "ID " +
+                                std::to_string(cand) + " at level " +
+                                std::to_string(level) +
+                                " (capacity=" + std::to_string(max_elements_) + ")"
+                            );
                         }
-                        float d = get_data_dist(cand, cur_c);
-                        if (d < curdist) {
-                            curdist = d;
+                        float d = get_data_dist(cand, new_node_id);
+                        if (d < current_distance) {
+                            current_distance = d;
                             current_id = cand;
                             changed = true;
                         }
@@ -691,8 +701,8 @@ void HierarchicalNSW::add_point(
 
         for (int level = std::min(node_level, previous_max_level); level >= 0; level--) {
             maxheap<std::pair<float, PID>> top_candidates =
-                search_base_layer(current_id, cur_c, level);
-            current_id = mutually_connect_new_element(cur_c, top_candidates, level);
+                search_base_layer(current_id, new_node_id, level);
+            current_id = mutually_connect_new_element(new_node_id, top_candidates, level);
         }
     } else {
         // Do nothing for the first element
@@ -702,23 +712,23 @@ void HierarchicalNSW::add_point(
 
     // Releasing lock for the maximum level
     if (node_level > previous_max_level) {
-        entry_point_id_ = cur_c;
+        entry_point_id_ = new_node_id;
         max_level_ = node_level;
     }
 }
 
 maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
-    PID ep_id, PID cur_c, int layer
+    PID entry_point_id, PID new_node_id, int layer
 ) {
-    auto vl = visited_list_pool_->get_free_vislist();
+    auto visited = visited_list_pool_->get_free_vislist();
 
     maxheap<std::pair<float, PID>> top_candidates;
     minheap<std::pair<float, PID>> candidate_set;
 
-    float lower_bound = get_data_dist(ep_id, cur_c);
-    top_candidates.emplace(lower_bound, ep_id);
-    candidate_set.emplace(lower_bound, ep_id);
-    vl->set(ep_id);
+    float lower_bound = get_data_dist(entry_point_id, new_node_id);
+    top_candidates.emplace(lower_bound, entry_point_id);
+    candidate_set.emplace(lower_bound, entry_point_id);
+    visited->set(entry_point_id);
 
     while (!candidate_set.empty()) {
         std::pair<float, PID> curr_el_pair = candidate_set.top();
@@ -727,18 +737,14 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
         }
         candidate_set.pop();
 
-        PID cur_node_num = curr_el_pair.second;
+        PID current_id = curr_el_pair.second;
 
-        std::unique_lock<std::mutex> lock(link_list_locks_[cur_node_num]);
+        std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
 
-        int* data;
-        if (layer == 0) {
-            data = reinterpret_cast<int*>(get_linklist0(cur_node_num));
-        } else {
-            data = reinterpret_cast<int*>(get_linklist(cur_node_num, layer));
-        }
-        size_t size = get_list_count(reinterpret_cast<PID*>(data));
-        auto* datal = reinterpret_cast<PID*>(data + 1);
+        const PID* data =
+            (layer == 0) ? get_linklist0(current_id) : get_linklist(current_id, layer);
+        const size_t size = get_list_count(data);
+        const PID* datal = data + 1;
 
         rabitqlib::memory::mem_prefetch_l1(
             reinterpret_cast<const char*>(
@@ -756,10 +762,10 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
 
         for (size_t j = 0; j < size; j++) {
             PID candidate_id = *(datal + j);
-            if (vl->get(candidate_id)) {
+            if (visited->get(candidate_id)) {
                 continue;
             }
-            vl->set(candidate_id);
+            visited->set(candidate_id);
 
             if (j < size - 1) {
                 rabitqlib::memory::mem_prefetch_l1(
@@ -770,10 +776,11 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
                 );
             }
 
-            float dist1 = get_data_dist(candidate_id, cur_c);
-            if (top_candidates.size() < ef_construction_ || lower_bound > dist1) {
-                candidate_set.emplace(dist1, candidate_id);
-                top_candidates.emplace(dist1, candidate_id);
+            float candidate_distance = get_data_dist(candidate_id, new_node_id);
+            if (top_candidates.size() < ef_construction_ ||
+                lower_bound > candidate_distance) {
+                candidate_set.emplace(candidate_distance, candidate_id);
+                top_candidates.emplace(candidate_distance, candidate_id);
                 if (top_candidates.size() > ef_construction_) {
                     top_candidates.pop();
                 }
@@ -783,7 +790,7 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
             }
         }
     }
-    visited_list_pool_->release_vis_list(std::move(vl));
+    visited_list_pool_->release_vis_list(std::move(visited));
     return top_candidates;
 }
 
@@ -808,13 +815,13 @@ void prune_neighbors(
             break;
         }
         std::pair<float, PID> current_pair = queue_closest.top();
-        float dist_to_query = current_pair.first;
+        float query_distance = current_pair.first;
         queue_closest.pop();
         bool good = true;
 
         for (std::pair<float, PID> second_pair : return_list) {
-            float curdist = distance(second_pair.second, current_pair.second);
-            if (curdist < dist_to_query) {
+            float current_distance = distance(second_pair.second, current_pair.second);
+            if (current_distance < query_distance) {
                 good = false;
                 break;
             }
@@ -832,13 +839,13 @@ void prune_neighbors(
 
 template <class Distance, class ReverseEdgeDistance>
 PID HierarchicalNSW::mutually_connect(
-    PID cur_c,
+    PID new_node_id,
     maxheap<std::pair<float, PID>>& top_candidates,
     int level,
     Distance distance,
     ReverseEdgeDistance reverse_edge_distance
 ) {
-    size_t max_m = level > 0 ? maxM_ : maxM0_;
+    size_t max_m = level > 0 ? upper_layer_max_degree_ : base_layer_max_degree_;
     detail::prune_neighbors(top_candidates, M_, distance);
     if (top_candidates.size() > M_) {
         throw std::runtime_error(
@@ -858,7 +865,8 @@ PID HierarchicalNSW::mutually_connect(
     PID next_closest_entry_point = selected_neighbors.back();
 
     {
-        PID* ll_cur = (level == 0) ? get_linklist0(cur_c) : get_linklist(cur_c, level);
+        PID* ll_cur =
+            (level == 0) ? get_linklist0(new_node_id) : get_linklist(new_node_id, level);
         if (*ll_cur > 0) {
             throw std::runtime_error(
                 "The newly inserted element should have blank link list"
@@ -888,7 +896,7 @@ PID HierarchicalNSW::mutually_connect(
         if (sz_link_list_other > max_m) {
             throw std::runtime_error("Bad value of sz_link_list_other");
         }
-        if (selected_neighbor == cur_c) {
+        if (selected_neighbor == new_node_id) {
             throw std::runtime_error("Trying to connect an element to itself");
         }
         if (level > element_levels_[selected_neighbor]) {
@@ -899,7 +907,7 @@ PID HierarchicalNSW::mutually_connect(
 
         bool is_cur_c_present = false;
         for (size_t j = 0; j < sz_link_list_other; j++) {
-            if (data[j] == cur_c) {
+            if (data[j] == new_node_id) {
                 is_cur_c_present = true;
                 break;
             }
@@ -907,12 +915,12 @@ PID HierarchicalNSW::mutually_connect(
 
         if (!is_cur_c_present) {
             if (sz_link_list_other < max_m) {
-                data[sz_link_list_other] = cur_c;
+                data[sz_link_list_other] = new_node_id;
                 set_list_count(ll_other, sz_link_list_other + 1);
             } else {
-                float d_max = reverse_edge_distance(selected_neighbor);
+                float new_neighbor_distance = reverse_edge_distance(selected_neighbor);
                 maxheap<std::pair<float, PID>> candidates;
-                candidates.emplace(d_max, cur_c);
+                candidates.emplace(new_neighbor_distance, new_node_id);
                 for (size_t j = 0; j < sz_link_list_other; j++) {
                     candidates.emplace(distance(data[j], selected_neighbor), data[j]);
                 }
@@ -934,15 +942,15 @@ PID HierarchicalNSW::mutually_connect(
 }
 
 PID HierarchicalNSW::mutually_connect_new_element(
-    PID cur_c, maxheap<std::pair<float, PID>>& top_candidates, int level
+    PID new_node_id, maxheap<std::pair<float, PID>>& top_candidates, int level
 ) {
     return mutually_connect(
-        cur_c,
+        new_node_id,
         top_candidates,
         level,
         [this](PID target, PID query) { return get_data_dist(target, query); },
         // Preserve the original operand order for a newly proposed reverse edge.
-        [this, cur_c](PID neighbor) { return get_data_dist(neighbor, cur_c); }
+        [this, new_node_id](PID neighbor) { return get_data_dist(neighbor, new_node_id); }
     );
 }
 
@@ -969,12 +977,12 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     return results;
 }
 
-size_t HierarchicalNSW::remove(const PID* labels, size_t n) {
+size_t HierarchicalNSW::remove(const PID* labels, size_t num_points) {
     if (data_level0_memory_ == nullptr || centroids_memory_ == nullptr ||
         rotator_ == nullptr || num_clusters_ == 0) {
         throw std::logic_error("HNSW index must be constructed or loaded before remove");
     }
-    if (n == 0) {
+    if (num_points == 0) {
         return 0;
     }
     if (labels == nullptr) {
@@ -983,10 +991,10 @@ size_t HierarchicalNSW::remove(const PID* labels, size_t n) {
 
     // Resolve every label before marking any point, so an unknown label removes
     // nothing.
-    std::vector<PID> internal_ids(n);
+    std::vector<PID> internal_ids(num_points);
     {
-        std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
-        for (size_t i = 0; i < n; ++i) {
+        std::unique_lock<std::mutex> label_lookup_lock(label_lookup_lock_);
+        for (size_t i = 0; i < num_points; ++i) {
             const auto found = label_lookup_.find(labels[i]);
             if (found == label_lookup_.end()) {
                 throw std::invalid_argument("HNSW remove label is not in the index");
@@ -1102,17 +1110,17 @@ float HierarchicalNSW::get_quant_dist(
 }
 
 maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
-    PID ep_id, PID cur_c, int layer, detail::QuantQuery& query
+    PID entry_point_id, PID new_node_id, int layer, detail::QuantQuery& query
 ) {
-    auto vl = visited_list_pool_->get_free_vislist();
+    auto visited = visited_list_pool_->get_free_vislist();
 
     maxheap<std::pair<float, PID>> top_candidates;
     minheap<std::pair<float, PID>> candidate_set;
 
-    float lower_bound = get_quant_dist(ep_id, cur_c, query);
-    top_candidates.emplace(lower_bound, ep_id);
-    candidate_set.emplace(lower_bound, ep_id);
-    vl->set(ep_id);
+    float lower_bound = get_quant_dist(entry_point_id, new_node_id, query);
+    top_candidates.emplace(lower_bound, entry_point_id);
+    candidate_set.emplace(lower_bound, entry_point_id);
+    visited->set(entry_point_id);
 
     while (!candidate_set.empty()) {
         std::pair<float, PID> curr_el_pair = candidate_set.top();
@@ -1121,28 +1129,33 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
         }
         candidate_set.pop();
 
-        PID cur_node_num = curr_el_pair.second;
-        std::unique_lock<std::mutex> lock(link_list_locks_[cur_node_num]);
+        PID current_id = curr_el_pair.second;
+        std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
 
-        PID* data =
-            (layer == 0) ? get_linklist0(cur_node_num) : get_linklist(cur_node_num, layer);
-        size_t size = get_list_count(data);
-        auto* datal = data + 1;
+        const PID* data =
+            (layer == 0) ? get_linklist0(current_id) : get_linklist(current_id, layer);
+        const size_t size = get_list_count(data);
+        const PID* datal = data + 1;
 
         for (size_t j = 0; j < size; j++) {
             PID candidate_id = datal[j];
-            if (candidate_id >= cur_element_count_) {
-                throw std::runtime_error("cand error");
+            if (candidate_id >= num_stored_points_) {
+                throw std::runtime_error(
+                    "HNSW add layer search: invalid candidate ID " +
+                    std::to_string(candidate_id) + " at level " + std::to_string(layer) +
+                    " (stored_points=" + std::to_string(num_stored_points_.load()) + ")"
+                );
             }
-            if (vl->get(candidate_id)) {
+            if (visited->get(candidate_id)) {
                 continue;
             }
-            vl->set(candidate_id);
+            visited->set(candidate_id);
 
-            float dist1 = get_quant_dist(candidate_id, cur_c, query);
-            if (top_candidates.size() < ef_construction_ || lower_bound > dist1) {
-                candidate_set.emplace(dist1, candidate_id);
-                top_candidates.emplace(dist1, candidate_id);
+            float candidate_distance = get_quant_dist(candidate_id, new_node_id, query);
+            if (top_candidates.size() < ef_construction_ ||
+                lower_bound > candidate_distance) {
+                candidate_set.emplace(candidate_distance, candidate_id);
+                top_candidates.emplace(candidate_distance, candidate_id);
                 if (top_candidates.size() > ef_construction_) {
                     top_candidates.pop();
                 }
@@ -1152,26 +1165,26 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
             }
         }
     }
-    visited_list_pool_->release_vis_list(std::move(vl));
+    visited_list_pool_->release_vis_list(std::move(visited));
     return top_candidates;
 }
 
 PID HierarchicalNSW::mutually_connect_quant(
-    PID cur_c,
+    PID new_node_id,
     maxheap<std::pair<float, PID>>& top_candidates,
     int level,
     detail::QuantQuery& query
 ) {
     return mutually_connect(
-        cur_c,
+        new_node_id,
         top_candidates,
         level,
         [this, &query](PID target, PID source) {
             return get_quant_dist(target, source, query);
         },
         // Quantized scoring is directional: reconstruct the existing neighbor.
-        [this, cur_c, &query](PID neighbor) {
-            return get_quant_dist(cur_c, neighbor, query);
+        [this, new_node_id, &query](PID neighbor) {
+            return get_quant_dist(new_node_id, neighbor, query);
         }
     );
 }
@@ -1179,41 +1192,47 @@ PID HierarchicalNSW::mutually_connect_quant(
 // The slot, the level and the link list are all decided by the caller, so this
 // can run on many threads at once and the labels do not depend on their order.
 void HierarchicalNSW::add_point_quant(
-    PID cur_c, int node_level, LinkStorage& link_list, detail::QuantQuery& query
+    PID new_node_id, int node_level, LinkStorage& link_list, detail::QuantQuery& query
 ) {
-    std::unique_lock<std::mutex> lock_el(link_list_locks_[cur_c]);
+    std::unique_lock<std::mutex> node_lock(link_list_locks_[new_node_id]);
 
-    std::unique_lock<std::mutex> templock(global_);
+    std::unique_lock<std::mutex> entry_point_lock(global_);
     int previous_max_level = max_level_;
     PID current_id = entry_point_id_;
     if (node_level <= previous_max_level) {
-        templock.unlock();
+        entry_point_lock.unlock();
     }
     const PID previous_entry_point = current_id;
 
-    link_lists_[cur_c] = std::move(link_list);
-    element_levels_[cur_c] = node_level;
+    link_lists_[new_node_id] = std::move(link_list);
+    element_levels_[new_node_id] = node_level;
 
     try {
         if (static_cast<signed>(current_id) != -1) {
             if (node_level < previous_max_level) {
-                float curdist = get_quant_dist(current_id, cur_c, query);
+                float current_distance = get_quant_dist(current_id, new_node_id, query);
                 for (int level = previous_max_level; level > node_level; level--) {
                     bool changed = true;
                     while (changed) {
                         changed = false;
                         std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-                        PID* data = get_linklist(current_id, level);
-                        int size = get_list_count(data);
-                        auto* datal = data + 1;
-                        for (int i = 0; i < size; i++) {
+                        const PID* data = get_linklist(current_id, level);
+                        const size_t size = get_list_count(data);
+                        const PID* datal = data + 1;
+                        for (size_t i = 0; i < size; i++) {
                             PID cand = datal[i];
-                            if (cand >= cur_element_count_) {
-                                throw std::runtime_error("cand error");
+                            if (cand >= num_stored_points_) {
+                                throw std::runtime_error(
+                                    "HNSW add upper-layer traversal: invalid candidate "
+                                    "ID " +
+                                    std::to_string(cand) + " at level " +
+                                    std::to_string(level) + " (stored_points=" +
+                                    std::to_string(num_stored_points_.load()) + ")"
+                                );
                             }
-                            float d = get_quant_dist(cand, cur_c, query);
-                            if (d < curdist) {
-                                curdist = d;
+                            float d = get_quant_dist(cand, new_node_id, query);
+                            if (d < current_distance) {
+                                current_distance = d;
                                 current_id = cand;
                                 changed = true;
                             }
@@ -1225,22 +1244,23 @@ void HierarchicalNSW::add_point_quant(
             for (int level = std::min(node_level, previous_max_level); level >= 0;
                  level--) {
                 maxheap<std::pair<float, PID>> top_candidates =
-                    search_base_layer_quant(current_id, cur_c, level, query);
-                current_id = mutually_connect_quant(cur_c, top_candidates, level, query);
+                    search_base_layer_quant(current_id, new_node_id, level, query);
+                current_id =
+                    mutually_connect_quant(new_node_id, top_candidates, level, query);
             }
         } else {
-            entry_point_id_ = cur_c;
+            entry_point_id_ = new_node_id;
             max_level_ = node_level;
         }
 
         if (node_level > previous_max_level) {
-            entry_point_id_ = cur_c;
+            entry_point_id_ = new_node_id;
             max_level_ = node_level;
         }
     } catch (...) {
         // Upper layers may already expose this node. Keep a route to the old
         // graph if base-layer linking was interrupted before choosing neighbors.
-        PID* base_links = get_linklist0(cur_c);
+        PID* base_links = get_linklist0(new_node_id);
         if (previous_entry_point != kPidMax && get_list_count(base_links) == 0) {
             base_links[1] = previous_entry_point;
             set_list_count(base_links, 1);
@@ -1248,9 +1268,9 @@ void HierarchicalNSW::add_point_quant(
         // An interrupted promotion has no incoming links above the previous
         // maximum level. Discard those levels so save/load sees a valid graph.
         if (node_level > previous_max_level) {
-            element_levels_[cur_c] = std::max(0, previous_max_level);
-            if (element_levels_[cur_c] == 0) {
-                link_lists_[cur_c].reset();
+            element_levels_[new_node_id] = std::max(0, previous_max_level);
+            if (element_levels_[new_node_id] == 0) {
+                link_lists_[new_node_id].reset();
             }
         }
         throw;
@@ -1260,10 +1280,10 @@ void HierarchicalNSW::add_point_quant(
 // A capacity change reallocates the level-0 block, invalidating pointers into it.
 // This must not run while another thread searches; equal capacity is a no-op.
 void HierarchicalNSW::resize(size_t new_max_elements) {
-    if (size_data_per_element_ == 0) {
+    if (level0_record_bytes_ == 0) {
         throw std::logic_error("HNSW index must be initialized before resize");
     }
-    if (new_max_elements < cur_element_count_) {
+    if (new_max_elements < num_stored_points_) {
         throw std::invalid_argument("HNSW resize: capacity below the element count");
     }
     if (new_max_elements > buffer::kSearchBufferMaxPointCount) {
@@ -1272,21 +1292,21 @@ void HierarchicalNSW::resize(size_t new_max_elements) {
     if (new_max_elements == max_elements_) {
         return;
     }
-    if (new_max_elements > std::numeric_limits<size_t>::max() / size_data_per_element_) {
+    if (new_max_elements > std::numeric_limits<size_t>::max() / level0_record_bytes_) {
         throw std::invalid_argument("HNSW resize: capacity exceeds addressable storage");
     }
 
     // Everything new is built before anything old is released, so a failure
     // leaves the index as it was. realloc is not an option: the level-0 block
     // comes from aligned_alloc, which realloc does not keep aligned.
-    const size_t level0_bytes = new_max_elements * size_data_per_element_;
+    const size_t level0_bytes = new_max_elements * level0_record_bytes_;
     AlignedStorage level0(memory::huge_page_allocate<char>(level0_bytes));
     if (level0 == nullptr) {
         throw std::bad_alloc();
     }
     std::memset(level0.get(), 0, level0_bytes);
     std::memcpy(
-        level0.get(), data_level0_memory_.get(), cur_element_count_ * size_data_per_element_
+        level0.get(), data_level0_memory_.get(), num_stored_points_ * level0_record_bytes_
     );
 
     std::vector<LinkStorage> links;
@@ -1311,30 +1331,34 @@ void HierarchicalNSW::resize(size_t new_max_elements) {
 }
 
 std::vector<PID> HierarchicalNSW::add(
-    const float* data, size_t n, const PID* cluster_ids, bool faster, size_t num_threads
+    const float* data,
+    size_t num_points,
+    const PID* cluster_ids,
+    bool fast_quantization,
+    size_t num_threads
 ) {
     if (data_level0_memory_ == nullptr || centroids_memory_ == nullptr ||
         rotator_ == nullptr || num_clusters_ == 0) {
         throw std::logic_error("HNSW index must be constructed or loaded before add");
     }
-    if (n == 0) {
+    if (num_points == 0) {
         return {};
     }
     if (data == nullptr) {
         throw std::invalid_argument("HNSW add inputs must not be null");
     }
-    if (n > max_elements_ - cur_element_count_) {
+    if (num_points > max_elements_ - num_stored_points_) {
         throw std::invalid_argument("HNSW add: not enough capacity");
     }
-    if (n > buffer::kSearchBufferMaxPointCount - cur_element_count_) {
+    if (num_points > buffer::kSearchBufferMaxPointCount - num_stored_points_) {
         throw std::invalid_argument("HNSW add: point count exceeds the supported ID range");
     }
-    std::vector<PID> labels(n);
+    std::vector<PID> labels(num_points);
     // Either the caller names the cluster of every point, or each one goes to its
     // nearest centroid, ordered the way a query is routed.
-    std::vector<PID> assigned(n, 0);
+    std::vector<PID> assigned(num_points, 0);
     if (cluster_ids != nullptr) {
-        for (size_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < num_points; ++i) {
             if (cluster_ids[i] >= num_clusters_) {
                 throw std::invalid_argument("HNSW cluster ID is out of range");
             }
@@ -1342,43 +1366,45 @@ std::vector<PID> HierarchicalNSW::add(
         }
     } else {
         const auto* centroids = reinterpret_cast<const float*>(centroids_memory_.get());
-        rabitqlib::index_detail::parallel_for(0, n, num_threads, [&](size_t i, size_t) {
-            std::vector<float> rotated(padded_dim_);
-            rotator_->rotate(data + (i * dim_), rotated.data());
-            float best = std::numeric_limits<float>::max();
-            for (size_t c = 0; c < num_clusters_; ++c) {
-                const float dist = raw_dist_func_(
-                    rotated.data(), centroids + (c * padded_dim_), padded_dim_
-                );
-                if (dist < best) {
-                    best = dist;
-                    assigned[i] = static_cast<PID>(c);
+        rabitqlib::index_detail::parallel_for(
+            0, num_points, num_threads, [&](size_t i, size_t) {
+                std::vector<float> rotated(padded_dim_);
+                rotator_->rotate(data + (i * dim_), rotated.data());
+                float best = std::numeric_limits<float>::max();
+                for (size_t c = 0; c < num_clusters_; ++c) {
+                    const float dist = raw_dist_func_(
+                        rotated.data(), centroids + (c * padded_dim_), padded_dim_
+                    );
+                    if (dist < best) {
+                        best = dist;
+                        assigned[i] = static_cast<PID>(c);
+                    }
                 }
             }
-        });
+        );
     }
 
     quant::RabitqConfig config;
-    if (faster) {
+    if (fast_quantization) {
         config = quant::faster_config(padded_dim_, ex_bits_ + 1);
     }
 
     // Drawn here because the generator is shared: the inserts below run in
     // parallel and must not touch it.
-    std::vector<int> levels(n);
-    for (size_t i = 0; i < n; ++i) {
+    std::vector<int> levels(num_points);
+    for (size_t i = 0; i < num_points; ++i) {
         levels[i] = get_random_level(mult_);
     }
 
     // Every link list is allocated before any of them is installed, so running
     // out of memory leaves the index untouched.
     std::vector<LinkStorage> link_lists;
-    link_lists.reserve(n);
-    for (size_t i = 0; i < n; ++i) {
+    link_lists.reserve(num_points);
+    for (size_t i = 0; i < num_points; ++i) {
         char* raw = nullptr;
         if (levels[i] > 0) {
             raw = static_cast<char*>(
-                std::calloc(1, (size_links_per_element_ * levels[i]) + 1)
+                std::calloc(1, (upper_layer_links_bytes_ * levels[i]) + 1)
             );
             if (raw == nullptr) {
                 throw std::runtime_error(
@@ -1389,44 +1415,46 @@ std::vector<PID> HierarchicalNSW::add(
         link_lists.emplace_back(raw);
     }
 
-    const size_t workers = std::min(resolve_num_threads(num_threads), n);
-    std::vector<detail::QuantQuery> queries(workers);
+    const size_t num_workers = std::min(resolve_num_threads(num_threads), num_points);
+    std::vector<detail::QuantQuery> queries(num_workers);
 
     // Prepare every code before publishing the slots. If quantization or worker
     // creation fails, the graph and point count are unchanged.
     {
-        std::unique_lock<std::mutex> lock_table(label_lookup_lock_);
-        if (cur_element_count_ + n > max_elements_) {
+        std::unique_lock<std::mutex> label_lookup_lock(label_lookup_lock_);
+        if (num_stored_points_ + num_points > max_elements_) {
             throw std::runtime_error("The number of elements exceeds the specified limit");
         }
-        const auto first = static_cast<PID>(cur_element_count_.load());
-        rabitqlib::index_detail::parallel_for(0, n, num_threads, [&](size_t i, size_t) {
-            const auto id = static_cast<PID>(first + i);
-            labels[i] = id;
-            std::memset(
-                data_level0_memory_.get() + (id * size_data_per_element_),
-                0,
-                size_data_per_element_
-            );
-            std::memcpy(get_external_label_pt(id), &id, sizeof(PID));
-            std::memcpy(get_clusterid_pt(id), &assigned[i], sizeof(PID));
-            std::vector<float> rotated_data(padded_dim_);
-            rotator_->rotate(data + (i * dim_), rotated_data.data());
-            quant::quantize_split_single(
-                rotated_data.data(),
-                reinterpret_cast<float*>(centroids_memory_.get()) +
-                    (assigned[i] * padded_dim_),
-                padded_dim_,
-                ex_bits_,
-                get_bindata_by_internalid(id),
-                get_exdata_by_internalid(id),
-                metric_type_,
-                config
-            );
-        });
+        const auto first = static_cast<PID>(num_stored_points_.load());
+        rabitqlib::index_detail::parallel_for(
+            0, num_points, num_threads, [&](size_t i, size_t) {
+                const auto id = static_cast<PID>(first + i);
+                labels[i] = id;
+                std::memset(
+                    data_level0_memory_.get() + (id * level0_record_bytes_),
+                    0,
+                    level0_record_bytes_
+                );
+                std::memcpy(get_external_label_pt(id), &id, sizeof(PID));
+                std::memcpy(get_clusterid_pt(id), &assigned[i], sizeof(PID));
+                std::vector<float> rotated_data(padded_dim_);
+                rotator_->rotate(data + (i * dim_), rotated_data.data());
+                quant::quantize_split_single(
+                    rotated_data.data(),
+                    reinterpret_cast<float*>(centroids_memory_.get()) +
+                        (assigned[i] * padded_dim_),
+                    padded_dim_,
+                    ex_bits_,
+                    get_bindata_by_internalid(id),
+                    get_exdata_by_internalid(id),
+                    metric_type_,
+                    config
+                );
+            }
+        );
         size_t registered = 0;
         try {
-            for (; registered < n; ++registered) {
+            for (; registered < num_points; ++registered) {
                 label_lookup_[labels[registered]] = labels[registered];
             }
         } catch (...) {
@@ -1437,16 +1465,18 @@ std::vector<PID> HierarchicalNSW::add(
         }
         // Unstarted inserts are valid level-0 nodes with owned codes. Their
         // upper-layer lists remain under RAII until an insert takes ownership.
-        link_lists_.resize(cur_element_count_ + n);
-        for (size_t i = 0; i < n; ++i) {
+        link_lists_.resize(num_stored_points_ + num_points);
+        for (size_t i = 0; i < num_points; ++i) {
             element_levels_[labels[i]] = 0;
         }
-        cur_element_count_ += n;
+        num_stored_points_ += num_points;
     }
 
-    rabitqlib::index_detail::parallel_for(0, n, workers, [&](size_t i, size_t worker) {
-        add_point_quant(labels[i], levels[i], link_lists[i], queries[worker]);
-    });
+    rabitqlib::index_detail::parallel_for(
+        0, num_points, num_workers, [&](size_t i, size_t worker) {
+            add_point_quant(labels[i], levels[i], link_lists[i], queries[worker]);
+        }
+    );
 
     return labels;
 }

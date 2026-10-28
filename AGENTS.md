@@ -135,6 +135,12 @@ Required:
 
 - Follow `.clang-format`, `.clang-tidy`, `.editorconfig`, and surrounding naming conventions:
   `PascalCase` types, `snake_case` functions/variables/members, and `kPascalCase` constants.
+- Across indexes, use the [index naming glossary](docs/development.md#index-variable-names)
+  for shared concepts. Distinguish capacity, stored/live counts, internal IDs/external labels,
+  original/padded dimensions, and storage sizes/offsets. Storage offsets default to bytes;
+  keep `*_offset_` names without a redundant `_bytes` suffix. Naming-only work must preserve
+  public/protected names, Python keywords, types, defaults, and serialized layouts unless
+  a compatibility change is explicitly approved.
 - Public API misuse must produce descriptive exceptions rather than `exit()`, `abort()`, or
   unconditional diagnostics. Assertions are for internal invariants. Keep library output opt-in.
 - Make ownership and non-owning pointer lifetimes explicit. Wrap legacy owning factory pointers
