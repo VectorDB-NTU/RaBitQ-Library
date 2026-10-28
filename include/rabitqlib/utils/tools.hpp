@@ -46,12 +46,23 @@ inline T rand_integer(T min, T max) {
     return distribution(generator);
 }
 
+template <typename T>
+constexpr T div_round_up(T x, T divisor) {
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
+    return (x / divisor) + static_cast<T>((x % divisor) != 0);
+}
+
 constexpr size_t div_round_up(size_t val, size_t div) {
-    return (val / div) + static_cast<size_t>((val % div) != 0);
+    return div_round_up<size_t>(val, div);
 }
 
 constexpr size_t round_up_to_multiple(size_t val, size_t multiple_of) {
-    return multiple_of * (div_round_up(val, multiple_of));
+    return multiple_of * div_round_up(val, multiple_of);
+}
+
+template <typename T>
+constexpr T round_up_to_multiple_of(size_t x, size_t multiple_of) {
+    return round_up_to_multiple(x, multiple_of);
 }
 
 inline size_t floor_log2(size_t x) {
@@ -69,17 +80,6 @@ inline size_t ceil_log2(size_t x) {
 }
 
 inline bool is_powerof2(size_t n) { return n > 0 && (n & (n - 1)) == 0; }
-
-template <typename T>
-constexpr T div_round_up(T x, T divisor) {
-    static_assert(std::is_integral_v<T>, "T must be an integral type");
-    return (x / divisor) + static_cast<T>((x % divisor) != 0);
-}
-
-template <typename T>
-constexpr T round_up_to_multiple_of(size_t x, size_t multiple_of) {
-    return multiple_of * (div_round_up(x, multiple_of));
-}
 
 // Available logical CPUs in the calling context, with a hardware-count fallback.
 size_t total_threads();

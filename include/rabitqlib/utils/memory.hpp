@@ -151,29 +151,6 @@ class DefaultInitAlignedAllocator : public AlignedAllocator<T, Alignment, HugePa
     }
 };
 
-template <typename T>
-struct Allocator {
-   public:
-    using value_type = T;
-
-    constexpr Allocator() noexcept = default;
-
-    template <typename U>
-    explicit constexpr Allocator(const Allocator<U>&) noexcept {}
-
-    [[nodiscard]] constexpr T* allocate(std::size_t n) { return ::new T[n]; }
-
-    constexpr void deallocate(T* ptr, [[maybe_unused]] size_t n) noexcept {
-        ::delete[] ptr;
-    }
-
-    // Intercept zero-argument construction to do default initialization.
-    template <typename U>
-    void construct(U* ptr) noexcept(std::is_nothrow_default_constructible_v<U>) {
-        ::new (static_cast<void*>(ptr)) U;
-    }
-};
-
 // Use the same size-aware policy as huge-page-enabled STL storage. Advice is
 // best-effort; actual page sizes remain under the operating system's control.
 template <typename T>

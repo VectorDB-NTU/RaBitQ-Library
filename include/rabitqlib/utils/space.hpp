@@ -58,29 +58,13 @@ void scalar_quantize_optimized(
     float lo,
     float delta
 ) {
-    scalar_quantize_normal(result, vec0, dim, lo, delta);
-}
-
-template <>
-inline void scalar_quantize_optimized<uint8_t>(
-    uint8_t* __restrict__ result,
-    const float* __restrict__ vec0,
-    size_t dim,
-    float lo,
-    float delta
-) {
-    simd::scalar_quantize_uint8(result, vec0, dim, lo, delta);
-}
-
-template <>
-inline void scalar_quantize_optimized<uint16_t>(
-    uint16_t* __restrict__ result,
-    const float* __restrict__ vec0,
-    size_t dim,
-    float lo,
-    float delta
-) {
-    simd::scalar_quantize_uint16(result, vec0, dim, lo, delta);
+    if constexpr (std::is_same_v<T, uint8_t>) {
+        simd::scalar_quantize_uint8(result, vec0, dim, lo, delta);
+    } else if constexpr (std::is_same_v<T, uint16_t>) {
+        simd::scalar_quantize_uint16(result, vec0, dim, lo, delta);
+    } else {
+        scalar_quantize_normal(result, vec0, dim, lo, delta);
+    }
 }
 }  // namespace scalar_impl
 
@@ -197,7 +181,7 @@ template <typename T, typename TD>
 void scalar_quantize(
     T* __restrict__ result, const TD* __restrict__ vec0, size_t dim, TD lo, TD delta
 ) {
-    assert_integral<T>();
+    static_assert(std::is_integral_v<T>, "T must be an integral type");
     scalar_impl::scalar_quantize_optimized(result, vec0, dim, lo, delta);
 }
 

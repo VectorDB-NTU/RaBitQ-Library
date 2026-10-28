@@ -112,23 +112,23 @@ class MatrixRotator : public Rotator<T> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(rand_mat_.data()),
-            static_cast<std::streamsize>(sizeof(T) * this->dim_ * this->padded_dim_)
+            static_cast<std::streamsize>(MatrixRotator<T>::dump_bytes())
         );
     }
 
     void save(std::ofstream& output) const override {
         output.write(
             reinterpret_cast<const char*>(rand_mat_.data()),
-            (sizeof(T) * this->dim_ * this->padded_dim_)
+            static_cast<std::streamsize>(MatrixRotator<T>::dump_bytes())
         );
     }
 
     void load(const char* data) override {
-        std::memcpy(rand_mat_.data(), data, sizeof(T) * this->dim_ * this->padded_dim_);
+        std::memcpy(rand_mat_.data(), data, MatrixRotator<T>::dump_bytes());
     }
 
     void save(char* data) const override {
-        std::memcpy(data, rand_mat_.data(), sizeof(T) * this->dim_ * this->padded_dim_);
+        std::memcpy(data, rand_mat_.data(), MatrixRotator<T>::dump_bytes());
     }
 
     size_t dump_bytes() const override {
@@ -193,35 +193,28 @@ class FhtKacRotator : public Rotator<float> {
     void load(std::ifstream& input) override {
         input.read(
             reinterpret_cast<char*>(flip_.data()),
-            static_cast<std::streamsize>(sizeof(uint8_t) * flip_.size())
+            static_cast<std::streamsize>(FhtKacRotator::dump_bytes())
         );
     }
 
     void save(std::ofstream& output) const override {
         output.write(
             reinterpret_cast<const char*>(flip_.data()),
-            static_cast<std::streamsize>(sizeof(uint8_t) * flip_.size())
+            static_cast<std::streamsize>(FhtKacRotator::dump_bytes())
         );
     }
 
     void load(const char* data) override {
-        std::memcpy(flip_.data(), data, sizeof(uint8_t) * flip_.size());
+        std::memcpy(flip_.data(), data, FhtKacRotator::dump_bytes());
     }
 
     void save(char* data) const override {
-        std::memcpy(data, flip_.data(), sizeof(uint8_t) * flip_.size());
+        std::memcpy(data, flip_.data(), FhtKacRotator::dump_bytes());
     }
 
     size_t dump_bytes() const override { return sizeof(uint8_t) * flip_.size(); }
 
-    FhtKacRotator& operator=(const FhtKacRotator& other) {
-        this->dim_ = other.dim_;
-        this->padded_dim_ = other.padded_dim_;
-        this->flip_ = other.flip_;
-        this->trunc_dim_ = other.trunc_dim_;
-        this->fac_ = other.fac_;
-        return *this;
-    }
+    FhtKacRotator& operator=(const FhtKacRotator&) = default;
 
     static void kacs_walk(float* data, size_t len) { simd::kacs_walk(data, len); }
 

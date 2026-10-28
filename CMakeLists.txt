@@ -296,7 +296,7 @@ endif()
 if(RABITQ_BUILD_INDEX)
     install(DIRECTORY include/rabitqlib/index include/rabitqlib/clustering
         DESTINATION "${rabitq_include_dir}")
-    install(FILES include/rabitqlib/utils/array.hpp include/rabitqlib/utils/io.hpp
+    install(FILES include/rabitqlib/utils/io.hpp
         include/rabitqlib/utils/stopw.hpp DESTINATION "${rabitq_include_dir}/utils")
     install(DIRECTORY include/rabitqlib/third/hnswlib
         DESTINATION "${rabitq_include_dir}/third")
