@@ -33,7 +33,7 @@ constexpr static std::array<int, 16> kPos = {
 // Requires AVX2/FMA, AVX-512, or ARM NEON; otherwise throws std::runtime_error.
 void accumulate(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 );

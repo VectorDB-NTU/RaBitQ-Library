@@ -140,27 +140,33 @@ class QGAssigner {
         MetricType metric_type = METRIC_L2,
         uint32_t quantization_bits = 0
     )
-        : d_(d)
-        , k_(k)
-        , M_(M)
+        : dim_(d)
+        , num_clusters_(k)
+        , max_degree_(M)
         , ef_construction_(ef_construction)
         , ef_search_(ef_search)
         , niter_(niter)
-        , num_threads_(num_threads)
+        , num_workers_(num_threads)
         , seed_(seed) {
         validate_configuration();
-        num_threads_ = static_cast<uint32_t>(resolve_num_threads(num_threads_));
+        num_workers_ = static_cast<uint32_t>(resolve_num_threads(num_workers_));
 
         graph_ = std::make_unique<symqg::QuantizedGraph<float>>(
-            k_, d_, M_, metric_type, RotatorType::FhtKacRotator, quantization_bits, seed_
+            num_clusters_,
+            dim_,
+            max_degree_,
+            metric_type,
+            RotatorType::FhtKacRotator,
+            quantization_bits,
+            seed_
         );
         graph_->set_ef(ef_search_);
 
-        scratch_.reserve(num_threads_);
-        for (uint32_t thread = 0; thread < num_threads_; ++thread) {
+        scratch_.reserve(num_workers_);
+        for (uint32_t thread = 0; thread < num_workers_; ++thread) {
             scratch_.emplace_back(
                 std::make_unique<symqg::detail::SearchScratch>(
-                    graph_->padded_dim(), M_, ef_search_, 1
+                    graph_->padded_dim(), max_degree_, ef_search_, 1
                 )
             );
         }
@@ -192,7 +198,8 @@ class QGAssigner {
             // Amortize their short phases without reducing assignment parallelism.
             constexpr size_t kMinVerticesPerBuildThread = 128;
             const size_t build_threads = std::min<size_t>(
-                num_threads_, std::max<size_t>(1, k_ / kMinVerticesPerBuildThread)
+                num_workers_,
+                std::max<size_t>(1, num_clusters_ / kMinVerticesPerBuildThread)
             );
             builder_ = std::make_unique<symqg::QGBuilder>(
                 *graph_,
@@ -226,7 +233,7 @@ class QGAssigner {
             );
         }
 
-        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d_) {
+        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / dim_) {
             throw std::invalid_argument("QGAssigner input dimensions overflow ptrdiff_t");
         }
 
@@ -239,7 +246,7 @@ class QGAssigner {
         std::vector<uint32_t> query_order;
         if (previous_labels_.size() == n && n <= std::numeric_limits<uint32_t>::max()) {
             query_order.resize(n);
-            std::vector<size_t> offsets(k_ + 1, 0);
+            std::vector<size_t> offsets(num_clusters_ + 1, 0);
             for (PID label : previous_labels_) {
                 ++offsets[label + 1];
             }
@@ -249,8 +256,8 @@ class QGAssigner {
                     static_cast<uint32_t>(point);
             }
         }
-        std::vector<std::exception_ptr> errors(num_threads_);
-#pragma omp parallel for num_threads(num_threads_) schedule(dynamic, 64)
+        std::vector<std::exception_ptr> errors(num_workers_);
+#pragma omp parallel for num_threads(num_workers_) schedule(dynamic, 64)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n);
              ++loop_index) {
             const size_t i = query_order.empty()
@@ -266,18 +273,19 @@ class QGAssigner {
                 thread_local VisitedSet visited;
                 thread_local size_t visited_size = 0;
                 thread_local size_t visited_capacity = 0;
-                const size_t capacity =
-                    std::min(static_cast<size_t>(ef_search_) * ef_search_, k_ / 10);
-                if (visited_size != k_ || visited_capacity != capacity) {
-                    visited.initialize(k_, capacity);
-                    visited_size = k_;
+                const size_t capacity = std::min(
+                    static_cast<size_t>(ef_search_) * ef_search_, num_clusters_ / 10
+                );
+                if (visited_size != num_clusters_ || visited_capacity != capacity) {
+                    visited.initialize(num_clusters_, capacity);
+                    visited_size = num_clusters_;
                     visited_capacity = capacity;
                 }
                 const PID hint =
                     previous_labels_.size() == n ? previous_labels_[i] : kPidMax;
                 symqg::detail::search_with_workspace(
                     *graph_,
-                    x + i * d_,
+                    x + i * dim_,
                     1,
                     labels + i,
                     distances + i,
@@ -290,7 +298,7 @@ class QGAssigner {
                     // Keep objectives and returned distances relative to the original
                     // centroids; graph search scores are quantized estimates.
                     distances[i] =
-                        distance_func(x + i * d_, centroids + labels[i] * d_, d_);
+                        distance_func(x + i * dim_, centroids + labels[i] * dim_, dim_);
                 }
             } catch (...) {
                 errors[static_cast<size_t>(thread_id)] = std::current_exception();
@@ -308,20 +316,20 @@ class QGAssigner {
     }
 
     void validate_configuration() const {
-        if (num_threads_ > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        if (num_workers_ > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
             throw std::invalid_argument("QGAssigner num_threads must fit in an OpenMP int");
         }
-        if (d_ < 64 || d_ > rotator_impl::FhtKacRotator::kMaxDim) {
+        if (dim_ < 64 || dim_ > rotator_impl::FhtKacRotator::kMaxDim) {
             throw std::invalid_argument(
                 "QGKMeans currently requires dimensions in the range [64, 65536]"
             );
         }
-        if (M_ == 0 || M_ % fastscan::kBatchSize != 0) {
+        if (max_degree_ == 0 || max_degree_ % fastscan::kBatchSize != 0) {
             throw std::invalid_argument(
                 "QGKMeans graph degree must be a positive multiple of 32"
             );
         }
-        if (k_ <= M_) {
+        if (num_clusters_ <= max_degree_) {
             throw std::invalid_argument(
                 "QGKMeans requires more centroids than the graph degree"
             );
@@ -334,13 +342,13 @@ class QGAssigner {
         }
     }
 
-    size_t d_;
-    size_t k_;
-    uint32_t M_;
+    size_t dim_;
+    size_t num_clusters_;
+    uint32_t max_degree_;
     uint32_t ef_construction_;
     uint32_t ef_search_;
     uint32_t niter_;
-    uint32_t num_threads_;
+    uint32_t num_workers_;
     uint32_t seed_;
     std::unique_ptr<symqg::QuantizedGraph<float>> graph_;
     std::unique_ptr<symqg::QGBuilder> builder_;
@@ -352,10 +360,10 @@ namespace detail {
 
 // Retain graph-specific state for one synchronous training call.
 class QGAssignment {
-    size_t d_;
-    const float* x_;
-    size_t n_;
-    uint32_t num_threads_;
+    size_t dim_;
+    const float* data_;
+    size_t num_points_;
+    uint32_t num_workers_;
     MetricType metric_type_;
     bool quantized_;
     QGAssigner assigner_;
@@ -379,10 +387,10 @@ class QGAssignment {
         uint32_t num_threads,
         const QGKMeansParameters& cp
     )
-        : d_(d)
-        , x_(x)
-        , n_(n)
-        , num_threads_(num_threads)
+        : dim_(d)
+        , data_(x)
+        , num_points_(n)
+        , num_workers_(num_threads)
         , metric_type_(cp.spherical ? METRIC_IP : METRIC_L2)
         , quantized_(cp.quantization_bits != 0)
         , assigner_(
@@ -400,12 +408,14 @@ class QGAssignment {
         , query_sums_(assigner_.graph_->padded_dim(), cp) {}
 
     void assign(const float* centroids, PID* labels, float* distances, bool final = false) {
-        query_sums_.prepare(n_);
+        query_sums_.prepare(num_points_);
         std::vector<PID> previous_labels;
         if (final && quantized_) {
-            previous_labels.assign(labels, labels + n_);
+            previous_labels.assign(labels, labels + num_points_);
         }
-        assigner_.assign_with_cache(centroids, x_, n_, labels, distances, query_sums_);
+        assigner_.assign_with_cache(
+            centroids, data_, num_points_, labels, distances, query_sums_
+        );
         if (previous_labels.empty()) {
             return;
         }
@@ -414,8 +424,9 @@ class QGAssignment {
         // Lloyd iterations: uphill approximate moves can improve final centroids.
         const auto distance_func =
             metric_type_ == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
-#pragma omp parallel for num_threads(num_threads_) schedule(static)
-        for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n_);
+#pragma omp parallel for num_threads(num_workers_) schedule(static)
+        for (std::ptrdiff_t loop_index = 0;
+             loop_index < static_cast<std::ptrdiff_t>(num_points_);
              ++loop_index) {
             const size_t point = static_cast<size_t>(loop_index);
             const PID previous = previous_labels[point];
@@ -423,7 +434,7 @@ class QGAssignment {
                 continue;
             }
             const float distance =
-                distance_func(x_ + point * d_, centroids + previous * d_, d_);
+                distance_func(data_ + point * dim_, centroids + previous * dim_, dim_);
             if (distance < distances[point]) {
                 labels[point] = previous;
                 distances[point] = distance;

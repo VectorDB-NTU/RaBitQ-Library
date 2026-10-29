@@ -179,11 +179,11 @@ double best_rescale_factor_with_workspace(
 
 void fht_rotate(
     const float* data,
-    float* rotated_vec,
+    float* rotated_data,
     size_t dim,
     size_t padded_dim,
     size_t trunc_dim,
-    float fac,
+    float scale_factor,
     const uint8_t* flip
 ) {
 #if defined(__aarch64__) || defined(_M_ARM64)
@@ -194,7 +194,7 @@ void fht_rotate(
         RABITQ_RESOLVE(fht_rotate_avx512, fht_rotate_avx2, fht_rotate_generic);
 #endif
 
-    kFhtRotateFn(data, rotated_vec, dim, padded_dim, trunc_dim, fac, flip);
+    kFhtRotateFn(data, rotated_data, dim, padded_dim, trunc_dim, scale_factor, flip);
 }
 
 ExcodeIpTable resolve_excode_ip_table() {

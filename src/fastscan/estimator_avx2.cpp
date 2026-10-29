@@ -24,28 +24,34 @@ uint32_t candidate_mask_impl(const float* distances, float threshold) {
 
 void split_batch_estdist_avx2(
     const char* batch_data,
-    const SplitBatchQuery<float>& q_obj,
+    const SplitBatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance,
-    float* low_distance,
+    float* estimated_distances,
+    float* lower_bounds,
     float* ip_x0_qr,
     bool use_hacc
 ) {
     // Explicit backend entry points also accept query LUTs prepared by the host
     // backend. In particular, AVX2 correction can receive AVX-512 HACC bytes.
     split_batch_estdist_impl<fastscan::accumulate, fastscan::accumulate_hacc>(
-        batch_data, q_obj, padded_dim, est_distance, low_distance, ip_x0_qr, use_hacc
+        batch_data,
+        query_wrapper,
+        padded_dim,
+        estimated_distances,
+        lower_bounds,
+        ip_x0_qr,
+        use_hacc
     );
 }
 
 void qg_batch_estdist_avx2(
     const char* batch_data,
-    const BatchQuery<float>& q_obj,
+    const BatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance
+    float* estimated_distances
 ) {
     qg_batch_estdist_impl<fastscan::accumulate>(
-        batch_data, q_obj, padded_dim, est_distance
+        batch_data, query_wrapper, padded_dim, estimated_distances
     );
 }
 
@@ -55,15 +61,15 @@ uint32_t qg_candidate_mask_avx2(const float* distances, float threshold) {
 
 uint32_t qg_batch_estdist_mask_avx2(
     const char* batch_data,
-    const BatchQuery<float>& q_obj,
+    const BatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance,
+    float* estimated_distances,
     float threshold
 ) {
     qg_batch_estdist_impl<fastscan::accumulate>(
-        batch_data, q_obj, padded_dim, est_distance
+        batch_data, query_wrapper, padded_dim, estimated_distances
     );
-    return candidate_mask_impl(est_distance, threshold);
+    return candidate_mask_impl(estimated_distances, threshold);
 }
 
 }  // namespace rabitqlib::simd

@@ -25,7 +25,7 @@ inline void one_bit_batch_code(
     size_t padded_dim,
     uint8_t* packed_code,
     FAdd f_add,
-    FRescale f_recale,
+    FRescale f_rescale,
     FError f_error,
     MetricType metric_type = METRIC_L2
 ) {
@@ -38,7 +38,7 @@ inline void one_bit_batch_code(
         padded_dim,
         compact_codes.data(),
         f_add,
-        f_recale,
+        f_rescale,
         f_error,
         metric_type
     );

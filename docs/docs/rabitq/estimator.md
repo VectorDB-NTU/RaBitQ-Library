@@ -151,15 +151,15 @@ when $B=1$.
 
 // Compute the estimated distance
 // Note that G_add is dependent on the centroid.
-float est_dist = F_add + G_add + F_rescale * (ip + G_kBxSumq);
+float estimated_distance = F_add + G_add + F_rescale * (ip + G_kBxSumq);
 
 // Compute the error bound 
 // Note that G_error is dependent on the centroid.
 float error_bound = F_error * G_error;
 
 // Compute the lower and upper bounds of the estimated distance
-float lb_dist = est_dist - error_bound;
-float ub_dist = est_dist + error_bound;
+float lb_dist = estimated_distance - error_bound;
+float ub_dist = estimated_distance + error_bound;
 ```
 
 ### Incremental distance estimation
@@ -187,10 +187,10 @@ that additional error.
 
 ```cpp
 // 1-bit dist
-float est_dist = F_add + G_add + F_rescale * (ip_bin + G_k1xSumq);
+float estimated_distance = F_add + G_add + F_rescale * (ip_bin + G_k1xSumq);
 float bound = F_error * G_error;
-float ub_dist = est_dist + bound;
-float lb_dist = est_dist - bound;
+float ub_dist = estimated_distance + bound;
+float lb_dist = estimated_distance - bound;
 
 // boost to full-bit dist
 float ex_scale = static_cast<float>(1 << (bits - 1));

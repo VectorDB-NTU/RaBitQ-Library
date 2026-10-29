@@ -81,12 +81,12 @@ inline void exact_assign(
             : 64;
     constexpr size_t kCentroidBlock = 256;
     const size_t blocks = 1 + (n - 1) / point_block;
-    const auto threads = static_cast<uint32_t>(std::min<size_t>(num_threads, blocks));
+    const auto num_workers = static_cast<uint32_t>(std::min<size_t>(num_threads, blocks));
     std::vector<double> centroid_norms(k);
     std::vector<std::vector<float>> products(
-        threads, std::vector<float>(point_block * std::min(k, kCentroidBlock))
+        num_workers, std::vector<float>(point_block * std::min(k, kCentroidBlock))
     );
-    std::vector<std::exception_ptr> errors(threads);
+    std::vector<std::exception_ptr> errors(num_workers);
 
     const auto exact_distance = [d, spherical](const float* vector, const float* centroid) {
         double distance = 0.0;
@@ -112,7 +112,7 @@ inline void exact_assign(
     const double error_floor =
         8.0 * static_cast<double>(d) * std::numeric_limits<float>::min() +
         8.0 * std::numeric_limits<double>::epsilon();
-#pragma omp parallel num_threads(threads)
+#pragma omp parallel num_threads(num_workers)
     {
         // Set only this OpenMP task's ICV, not Eigen's process-global thread limit.
         // This also prevents nested GEMM teams when the outer team has one worker.
@@ -244,8 +244,8 @@ class LloydKMeans : public Parameters {
                 std::string(Assignment::kName) + " input dimensions overflow size_t"
             );
         }
-        const uint32_t threads = effective_num_threads();
-        static_cast<void>(threads);
+        const uint32_t num_workers = effective_num_threads();
+        static_cast<void>(num_workers);
         // Leave headroom for products of squared distances in graph pruning,
         // as well as quantized reconstruction and rotated residuals.
         const double max_coordinate = std::sqrt(
@@ -254,7 +254,7 @@ class LloydKMeans : public Parameters {
         );
         bool in_range = true;
         bool finite = true;
-#pragma omp parallel for num_threads(threads) reduction(&& : finite, in_range) \
+#pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
     schedule(static)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n * d);
              ++loop_index) {
@@ -289,7 +289,7 @@ class LloydKMeans : public Parameters {
             x = input_copy.data();
         }
 
-        Assignment assigner(d, k, x, n, threads, *this);
+        Assignment assigner(d, k, x, n, num_workers, *this);
 
         centroids.resize(k * d);
         assignments.resize(n);
@@ -304,7 +304,7 @@ class LloydKMeans : public Parameters {
         std::vector<float> previous_centroids(centroids.size());
         std::vector<size_t> cluster_sizes(k);
         std::vector<double> sums(centroids.size());
-        const size_t update_workers = std::min(k, static_cast<size_t>(threads));
+        const size_t update_workers = std::min(k, static_cast<size_t>(num_workers));
         std::vector<UpdatePartition> update_partitions(update_workers);
         std::vector<size_t> update_worker_for_cluster(k);
         for (size_t worker = 0; worker < update_workers; ++worker) {
@@ -360,7 +360,7 @@ class LloydKMeans : public Parameters {
                 d,
                 k,
                 spherical,
-                threads,
+                num_workers,
                 assignments.data(),
                 distances.data(),
                 assignments.data()
@@ -447,9 +447,9 @@ class LloydKMeans : public Parameters {
         for (size_t point = 0; point < n; ++point) {
             partitions[worker_for_cluster[assignments[point]]].points.push_back(point);
         }
-        const uint32_t threads = effective_num_threads();
-        static_cast<void>(threads);
-#pragma omp parallel for num_threads(threads) schedule(static)
+        const uint32_t num_workers = effective_num_threads();
+        static_cast<void>(num_workers);
+#pragma omp parallel for num_threads(num_workers) schedule(static)
         for (std::ptrdiff_t loop_worker = 0;
              loop_worker < static_cast<std::ptrdiff_t>(partitions.size());
              ++loop_worker) {
@@ -485,8 +485,8 @@ class LloydKMeans : public Parameters {
         std::vector<size_t>& cluster_sizes,
         const std::vector<float>& previous_centroids
     ) {
-        const uint32_t threads = effective_num_threads();
-        static_cast<void>(threads);
+        const uint32_t num_workers = effective_num_threads();
+        static_cast<void>(num_workers);
         // Means, normalization, and displacement share one worker team. Preserve
         // the per-centroid arithmetic; empty rows are measured after refilling.
         const auto cluster_shift = [&](size_t cluster) {
@@ -500,7 +500,7 @@ class LloydKMeans : public Parameters {
             return result;
         };
         double shift = 0;
-#pragma omp parallel for num_threads(threads) reduction(+ : shift)
+#pragma omp parallel for num_threads(num_workers) reduction(+ : shift)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(k);
              ++loop_index) {
             const size_t cluster = static_cast<size_t>(loop_index);
@@ -548,8 +548,8 @@ class LloydKMeans : public Parameters {
         };
         if (nsplit == 1) {
             // A single empty centroid needs only one eligible maximum per worker.
-            std::vector<size_t> best_points(threads, n);
-#pragma omp parallel num_threads(threads)
+            std::vector<size_t> best_points(num_workers, n);
+#pragma omp parallel num_threads(num_workers)
             {
                 size_t best = n;
 #pragma omp for schedule(static)
@@ -584,7 +584,7 @@ class LloydKMeans : public Parameters {
             return {1, shift};
         }
 
-#pragma omp parallel for num_threads(threads) schedule(static)
+#pragma omp parallel for num_threads(num_workers) schedule(static)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n);
              ++loop_index) {
             const size_t point = static_cast<size_t>(loop_index);
@@ -624,9 +624,9 @@ class LloydKMeans : public Parameters {
     }
 
     void normalize_centroids() {
-        const uint32_t threads = effective_num_threads();
-        static_cast<void>(threads);
-#pragma omp parallel for num_threads(threads)
+        const uint32_t num_workers = effective_num_threads();
+        static_cast<void>(num_workers);
+#pragma omp parallel for num_threads(num_workers)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(k);
              ++loop_index) {
             const size_t cluster = static_cast<size_t>(loop_index);

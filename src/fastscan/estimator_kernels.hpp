@@ -16,10 +16,10 @@ namespace {
 template <auto Accumulate, auto AccumulateHacc>
 inline void split_batch_estdist_impl(
     const char* batch_data,
-    const SplitBatchQuery<float>& q_obj,
+    const SplitBatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance,
-    float* low_distance,
+    float* estimated_distances,
+    float* lower_bounds,
     float* ip_x0_qr,
     bool use_hacc
 ) {
@@ -27,9 +27,13 @@ inline void split_batch_estdist_impl(
     std::array<int32_t, fastscan::kBatchSize> accu_values{};
     RowMajorArrayMap<int32_t> accu_arr(accu_values.data(), 1, fastscan::kBatchSize);
     if (use_hacc) {
-        AccumulateHacc(cur_batch.bin_code(), q_obj.lut(), accu_values.data(), padded_dim);
+        AccumulateHacc(
+            cur_batch.bin_code(), query_wrapper.lut(), accu_values.data(), padded_dim
+        );
     } else {
-        Accumulate(cur_batch.bin_code(), q_obj.lut(), accu_values.data(), padded_dim);
+        Accumulate(
+            cur_batch.bin_code(), query_wrapper.lut(), accu_values.data(), padded_dim
+        );
     }
 
     std::array<float, fastscan::kBatchSize> f_add_values;
@@ -46,29 +50,30 @@ inline void split_batch_estdist_impl(
         f_error_values.data(), 1, fastscan::kBatchSize
     );
 
-    RowMajorArrayMap<float> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
+    RowMajorArrayMap<float> est_dist_arr(estimated_distances, 1, fastscan::kBatchSize);
     RowMajorArrayMap<float> ip_x0_qr_arr(ip_x0_qr, 1, fastscan::kBatchSize);
-    RowMajorArrayMap<float> low_dist_arr(low_distance, 1, fastscan::kBatchSize);
+    RowMajorArrayMap<float> low_dist_arr(lower_bounds, 1, fastscan::kBatchSize);
 
-    ip_x0_qr_arr = q_obj.delta() * (accu_arr.template cast<float>()) + q_obj.sum_vl_lut();
+    ip_x0_qr_arr = query_wrapper.delta() * (accu_arr.template cast<float>()) +
+                   query_wrapper.sum_vl_lut();
 
-    est_dist_arr =
-        f_add_arr + q_obj.g_add() + f_rescale_arr * (ip_x0_qr_arr + q_obj.k1xsumq());
+    est_dist_arr = f_add_arr + query_wrapper.g_add() +
+                   f_rescale_arr * (ip_x0_qr_arr + query_wrapper.k1xsumq());
 
-    low_dist_arr = est_dist_arr - f_error_arr * q_obj.g_error();
+    low_dist_arr = est_dist_arr - f_error_arr * query_wrapper.g_error();
 }
 
 template <auto Accumulate>
 inline void qg_batch_estdist_impl(
     const char* batch_data,
-    const BatchQuery<float>& q_obj,
+    const BatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance
+    float* estimated_distances
 ) {
     using T = float;
     ConstQGBatchDataMap<T> cur_batch(batch_data, padded_dim);
     std::array<int32_t, fastscan::kBatchSize> accu_values{};
-    Accumulate(cur_batch.bin_code(), q_obj.lut(), accu_values.data(), padded_dim);
+    Accumulate(cur_batch.bin_code(), query_wrapper.lut(), accu_values.data(), padded_dim);
 
     ConstRowMajorArrayMap<int32_t> ip_arr(accu_values.data(), 1, fastscan::kBatchSize);
     std::array<T, fastscan::kBatchSize> f_add_values;
@@ -80,11 +85,11 @@ inline void qg_batch_estdist_impl(
         f_rescale_values.data(), 1, fastscan::kBatchSize
     );
 
-    RowMajorArrayMap<T> est_dist_arr(est_distance, 1, fastscan::kBatchSize);
+    RowMajorArrayMap<T> est_dist_arr(estimated_distances, 1, fastscan::kBatchSize);
 
-    est_dist_arr = f_add_arr + q_obj.g_add() +
-                   (f_rescale_arr * (q_obj.delta() * (ip_arr.template cast<T>()) +
-                                     q_obj.sum_vl_lut() + q_obj.k1xsumq()));
+    est_dist_arr = f_add_arr + query_wrapper.g_add() +
+                   (f_rescale_arr * (query_wrapper.delta() * (ip_arr.template cast<T>()) +
+                                     query_wrapper.sum_vl_lut() + query_wrapper.k1xsumq()));
 }
 
 }  // namespace

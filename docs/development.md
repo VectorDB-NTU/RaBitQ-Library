@@ -109,6 +109,30 @@ reranking. QG uses `quantization_bits()` with 0 for raw storage and 4/8 for pack
 vectors. Naming work does not change these values, allocation sizes, numeric
 operations, serialized field order, or ownership.
 
+## Numerical module variable names
+
+Apply the same role-based naming to Core, FastScan, clustering and SIMD. Preserve
+public and protected names, Python keywords, field order and numerical operations.
+
+- Use `query_wrapper` for prepared query objects. Retain the existing `G_*`
+  private correction-field names where they identify mathematical coefficients.
+- Distinguish a scalar `estimated_distance` or `lower_bound` from batch outputs
+  `estimated_distances` and `lower_bounds`. Keep `ip_x0_qr` where it identifies the
+  mathematical intermediate used by refinement.
+- Use `lookup_table` for FastScan table pointers and `accumulated_values` for
+  integer accumulation outputs. Retain `lut` in compact local kernels where its
+  role is clear.
+- Clustering's private state uses `dim_`, `num_points_`, `num_clusters_`,
+  `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and graph parameter
+  names compatible. Retain the existing private `niter_` graph iteration name.
+- FHT backend arguments use `rotated_data`, `padded_dim`, `trunc_dim` and
+  `scale_factor` consistently across declarations, dispatch and implementations.
+  A lower-level kernel's `dim` still denotes that kernel's own input shape.
+
+Keep short mathematical symbols, loop indices and SIMD register names when their
+meaning is local and clear. Naming cleanup must not alter formulas, arithmetic
+order, packed layouts, ISA selection or runtime behavior.
+
 ## Static analysis
 
 clang-tidy performs semantic checks and is kept separate from clang-format.

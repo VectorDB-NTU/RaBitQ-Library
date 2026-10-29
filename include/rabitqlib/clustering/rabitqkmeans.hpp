@@ -47,12 +47,12 @@ namespace detail {
 // Encode immutable training points once; each moving centroid supplies one LUT.
 // RaBitQKMeans validates inputs and keeps the borrowed x buffer alive through training.
 class RaBitQAssigner {
-    size_t d_;
-    size_t k_;
-    const float* x_;
-    size_t n_;
+    size_t dim_;
+    size_t num_clusters_;
+    const float* data_;
+    size_t num_points_;
     size_t num_batches_;
-    uint32_t num_threads_;
+    uint32_t num_workers_;
     MetricType metric_type_;
     size_t padded_dim_;
     rotator_impl::FhtKacRotator rotator_;
@@ -81,12 +81,12 @@ class RaBitQAssigner {
         uint32_t num_threads,
         const RaBitQKMeansParameters& cp
     )
-        : d_(d)
-        , k_(k)
-        , x_(x)
-        , n_(n)
+        : dim_(d)
+        , num_clusters_(k)
+        , data_(x)
+        , num_points_(n)
         , num_batches_(1 + (n - 1) / fastscan::kBatchSize)
-        , num_threads_(static_cast<uint32_t>(std::min<size_t>(num_threads, num_batches_)))
+        , num_workers_(static_cast<uint32_t>(std::min<size_t>(num_threads, num_batches_)))
         , metric_type_(cp.spherical ? METRIC_IP : METRIC_L2)
         , padded_dim_(rotator_impl::padding_requirement(d, RotatorType::FhtKacRotator))
         , rotator_(d, padded_dim_, cp.seed)
@@ -97,36 +97,37 @@ class RaBitQAssigner {
         , lookup_table_(padded_dim_ * 4) {
         {
             std::vector<std::vector<double>> partial_sums(
-                num_threads_, std::vector<double>(d_, 0.0)
+                num_workers_, std::vector<double>(dim_, 0.0)
             );
-#pragma omp parallel num_threads(num_threads_)
+#pragma omp parallel num_threads(num_workers_)
             {
                 auto& sums = partial_sums[static_cast<size_t>(omp_get_thread_num())];
 #pragma omp for schedule(static)
-                for (std::ptrdiff_t point = 0; point < static_cast<std::ptrdiff_t>(n_);
+                for (std::ptrdiff_t point = 0;
+                     point < static_cast<std::ptrdiff_t>(num_points_);
                      ++point) {
-                    const float* vector = x_ + static_cast<size_t>(point) * d_;
-                    for (size_t dim = 0; dim < d_; ++dim) {
+                    const float* vector = data_ + static_cast<size_t>(point) * dim_;
+                    for (size_t dim = 0; dim < dim_; ++dim) {
                         sums[dim] += static_cast<double>(vector[dim]);
                     }
                 }
             }
-            for (size_t dim = 0; dim < d_; ++dim) {
+            for (size_t dim = 0; dim < dim_; ++dim) {
                 double sum = 0.0;
                 for (const auto& partial : partial_sums) {
                     sum += partial[dim];
                 }
-                center_[dim] = static_cast<float>(sum / static_cast<double>(n_));
+                center_[dim] = static_cast<float>(sum / static_cast<double>(num_points_));
             }
         }
 
         std::vector<float> rotated_center(padded_dim_);
         rotator_.rotate(center_.data(), rotated_center.data());
         std::vector<std::vector<float>> rotated_blocks(
-            num_threads_, std::vector<float>(fastscan::kBatchSize * padded_dim_)
+            num_workers_, std::vector<float>(fastscan::kBatchSize * padded_dim_)
         );
-        std::vector<std::exception_ptr> errors(num_threads_);
-#pragma omp parallel for num_threads(num_threads_) schedule(static)
+        std::vector<std::exception_ptr> errors(num_workers_);
+#pragma omp parallel for num_threads(num_workers_) schedule(static)
         for (std::ptrdiff_t batch = 0; batch < static_cast<std::ptrdiff_t>(num_batches_);
              ++batch) {
             const auto thread = static_cast<size_t>(omp_get_thread_num());
@@ -136,11 +137,11 @@ class RaBitQAssigner {
             try {
                 const auto block = static_cast<size_t>(batch);
                 const size_t first = block * fastscan::kBatchSize;
-                const size_t count = std::min(fastscan::kBatchSize, n_ - first);
+                const size_t count = std::min(fastscan::kBatchSize, num_points_ - first);
                 auto& rotated = rotated_blocks[thread];
                 for (size_t point = 0; point < count; ++point) {
                     rotator_.rotate(
-                        x_ + (first + point) * d_, rotated.data() + point * padded_dim_
+                        data_ + (first + point) * dim_, rotated.data() + point * padded_dim_
                     );
                 }
                 quant::quantize_qg_batch(
@@ -164,18 +165,18 @@ class RaBitQAssigner {
     void assign(const float* centroids, PID* labels, float* distances, bool = false) {
         const auto distance_func =
             metric_type_ == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
-        for (size_t cluster = 0; cluster < k_; ++cluster) {
-            const float* centroid = centroids + cluster * d_;
+        for (size_t cluster = 0; cluster < num_clusters_; ++cluster) {
+            const float* centroid = centroids + cluster * dim_;
             rotator_.rotate(centroid, rotated_query_.data());
             auto& query = centroid_queries_[cluster];
             query.reset(
                 rotated_query_.data(), padded_dim_, lookup_table_.data(), metric_type_
             );
-            query.set_g_add(distance_func(centroid, center_.data(), d_));
+            query.set_g_add(distance_func(centroid, center_.data(), dim_));
         }
 
-        std::vector<std::exception_ptr> errors(num_threads_);
-#pragma omp parallel for num_threads(num_threads_) schedule(static)
+        std::vector<std::exception_ptr> errors(num_workers_);
+#pragma omp parallel for num_threads(num_workers_) schedule(static)
         for (std::ptrdiff_t batch = 0; batch < static_cast<std::ptrdiff_t>(num_batches_);
              ++batch) {
             const auto thread = static_cast<size_t>(omp_get_thread_num());
@@ -185,14 +186,14 @@ class RaBitQAssigner {
             try {
                 const auto block = static_cast<size_t>(batch);
                 const size_t first = block * fastscan::kBatchSize;
-                const size_t count = std::min(fastscan::kBatchSize, n_ - first);
+                const size_t count = std::min(fastscan::kBatchSize, num_points_ - first);
                 const char* codes = batch_data_.data() +
                                     block * QGBatchDataMap<float>::data_bytes(padded_dim_);
                 std::array<float, fastscan::kBatchSize> estimated_distances{};
                 std::array<float, fastscan::kBatchSize> best_distances;
                 best_distances.fill(std::numeric_limits<float>::infinity());
                 std::array<PID, fastscan::kBatchSize> best_labels{};
-                for (size_t cluster = 0; cluster < k_; ++cluster) {
+                for (size_t cluster = 0; cluster < num_clusters_; ++cluster) {
                     qg_batch_estdist(
                         codes,
                         centroid_queries_[cluster],
@@ -214,7 +215,7 @@ class RaBitQAssigner {
                     // Scores choose the centroid; objectives retain original-space
                     // distances.
                     distances[id] = distance_func(
-                        x_ + id * d_, centroids + best_labels[point] * d_, d_
+                        data_ + id * dim_, centroids + best_labels[point] * dim_, dim_
                     );
                 }
             } catch (...) { errors[thread] = std::current_exception(); }

@@ -43,7 +43,7 @@ constexpr size_t kBatchSize = 32;
 
 void accumulate_chunk_avx2(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 ) {
@@ -58,7 +58,7 @@ void accumulate_chunk_avx2(
 
     for (size_t i = 0; i < code_length; i += 64) {
         c = _mm256_loadu_si256((__m256i*)&codes[i]);
-        lut = _mm256_loadu_si256((__m256i*)&lp_table[i]);
+        lut = _mm256_loadu_si256((__m256i*)&lookup_table[i]);
         lo = _mm256_and_si256(c, low_mask);
         hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
@@ -71,7 +71,7 @@ void accumulate_chunk_avx2(
         accu3 = _mm256_add_epi16(accu3, _mm256_srli_epi16(res_hi, 8));
 
         c = _mm256_loadu_si256((__m256i*)&codes[i + 32]);
-        lut = _mm256_loadu_si256((__m256i*)&lp_table[i + 32]);
+        lut = _mm256_loadu_si256((__m256i*)&lookup_table[i + 32]);
         lo = _mm256_and_si256(c, low_mask);
         hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
@@ -113,12 +113,12 @@ void accumulate_chunk_avx2(
 
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_chunk_avx2(codes, lp_table, result, dim);
+        accumulate_chunk_avx2(codes, lookup_table, result, dim);
         return;
     }
 
@@ -127,7 +127,7 @@ void accumulate_avx2(
     for (size_t offset = 0; offset < dim;) {
         const size_t chunk_dim = std::min(kChunkDim, dim - offset);
         accumulate_chunk_avx2(
-            codes + offset * 4, lp_table + offset * 4, chunk_result.data(), chunk_dim
+            codes + offset * 4, lookup_table + offset * 4, chunk_result.data(), chunk_dim
         );
         for (size_t lane = 0; lane < kBatchSize; ++lane) {
             totals[lane] += chunk_result[lane];
@@ -176,7 +176,7 @@ namespace {
 void accumulate_hacc_chunk_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 ) {
     __m256i low_mask = _mm256_set1_epi8(0xf);
@@ -243,10 +243,10 @@ void accumulate_hacc_chunk_avx2(
     add_shiftl8(dis0[0], dis0[1], res[0], res[1]);  // res for vec 0 to 15
     add_shiftl8(dis1[0], dis1[1], res[2], res[3]);  // res for vec 16 to 31
 
-    _mm256_storeu_si256((__m256i*)(accu_res), res[0]);
-    _mm256_storeu_si256((__m256i*)(accu_res + 8), res[1]);
-    _mm256_storeu_si256((__m256i*)(accu_res + 16), res[2]);
-    _mm256_storeu_si256((__m256i*)(accu_res + 24), res[3]);
+    _mm256_storeu_si256((__m256i*)(accumulated_values), res[0]);
+    _mm256_storeu_si256((__m256i*)(accumulated_values + 8), res[1]);
+    _mm256_storeu_si256((__m256i*)(accumulated_values + 16), res[2]);
+    _mm256_storeu_si256((__m256i*)(accumulated_values + 24), res[3]);
 }
 
 }  // namespace
@@ -254,11 +254,11 @@ void accumulate_hacc_chunk_avx2(
 void accumulate_hacc_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_hacc_chunk_avx2(codes, hc_lut, accu_res, dim);
+        accumulate_hacc_chunk_avx2(codes, hc_lut, accumulated_values, dim);
         return;
     }
 
@@ -280,7 +280,7 @@ void accumulate_hacc_avx2(
         }
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {
-        accu_res[lane] = static_cast<int32_t>(totals[lane]);
+        accumulated_values[lane] = static_cast<int32_t>(totals[lane]);
     }
 }
 
