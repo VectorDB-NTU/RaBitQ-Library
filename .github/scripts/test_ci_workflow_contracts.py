@@ -24,7 +24,10 @@ class WorkflowContractsTest(unittest.TestCase):
         # Keep the full installed-wheel suite and platform repair hooks.
         self.assertIn("pytest {project}/tests/python", wheels["test-command"])
         self.assertIn("delocate-wheel", wheels["macos"]["repair-wheel-command"])
-        self.assertIn("delvewheel repair", wheels["windows"]["repair-wheel-command"])
+        self.assertIn(
+            ".github/scripts/repair_windows_wheel.py",
+            wheels["windows"]["repair-wheel-command"],
+        )
         self.assertIn("scripts/build-macos-openmp.sh", wheels["macos"]["before-all"])
         self.assertEqual(workflow.count("pattern: '*-wheels'"), 2)
         artifacts = set()

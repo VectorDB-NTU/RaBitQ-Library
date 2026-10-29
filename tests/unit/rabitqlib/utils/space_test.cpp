@@ -219,16 +219,15 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
 
             const float expected = delta * static_cast<float>(weighted_intersection) +
                                    vl * static_cast<float>(data_popcount);
+            EXPECT_FLOAT_EQ(
+                warmup_ip_x0_q_512(codes, query.data(), delta, vl, dim, b_query), expected
+            );
 #if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2()) {
                 EXPECT_FLOAT_EQ(
                     simd::warmup_ip_x0_q_512_avx2(
                         codes, query.data(), delta, vl, dim, b_query
                     ),
-                    expected
-                );
-                EXPECT_FLOAT_EQ(
-                    warmup_ip_x0_q_512(codes, query.data(), delta, vl, dim, b_query),
                     expected
                 );
             }
@@ -250,6 +249,10 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
 TEST(WarmupIpX0Q, RejectsQueryWidthsBeyondByte) {
     const std::array<uint8_t, 8> data{};
     const std::array<uint64_t, 9> query{};
+    EXPECT_THROW(
+        warmup_ip_x0_q_512(data.data(), query.data(), 1.0F, 0.0F, 64, 9),
+        std::invalid_argument
+    );
 #if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         EXPECT_THROW(

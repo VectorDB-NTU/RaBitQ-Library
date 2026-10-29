@@ -949,7 +949,10 @@ TEST(QGEstimatorTest, CandidateMaskBackendsMatchScalarOrdering) {
     distances[29] = -std::numeric_limits<float>::infinity();
 
     constexpr float kThreshold = 2.0F;
-    const uint32_t expected = simd::qg_candidate_mask_generic(distances.data(), kThreshold);
+    // Keep residues 0..4 in each group of seven, except +inf at lane 17.
+    // Unordered NaN at lane 3 and -inf at lane 29 remain candidates.
+    constexpr uint32_t expected = 0xF3E5CF9FU;
+    EXPECT_EQ(simd::qg_candidate_mask_generic(distances.data(), kThreshold), expected);
 #if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         EXPECT_EQ(simd::qg_candidate_mask_avx2(distances.data(), kThreshold), expected);

@@ -75,6 +75,11 @@ class ChangeSelectionTest(unittest.TestCase):
             "python/utils/io.py": {"python_quality", "python_build", "wheels"},
             "tests/core_consumer/run.cmake": {"cpp", "python_quality"},
             "tests/fixtures/core_api_v1/consumer.cpp": {"cpp"},
+            ".github/scripts/repair_windows_wheel.py": {"python_quality", "wheels"},
+            ".github/scripts/test_repair_windows_wheel.py": {
+                "python_quality",
+                "wheels",
+            },
         }
         for path, expected in cases.items():
             with self.subTest(path=path):
