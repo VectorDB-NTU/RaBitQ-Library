@@ -17,6 +17,26 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class WorkflowContractsTest(unittest.TestCase):
+    def test_ctest_invocations_reject_empty_selections(self):
+        workflow = (ROOT / ".github/workflows/test.yaml").read_text()
+        commands = re.findall(r"\bctest\s+[^\n]+", workflow)
+        self.assertTrue(commands)
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(
+                    re.findall(r"--no-tests(?:=|\s+)(\w+)", command), ["error"]
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                ["ctest", "--test-dir", directory, "--no-tests=error"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No tests were found", result.stdout + result.stderr)
+
     def test_wheels_preserve_abi_coverage_and_release_gates(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         config = tomllib.loads((ROOT / "pyproject.toml").read_text())

@@ -152,14 +152,14 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$PWD/rabitqlib-native-install"
           cmake --build build-native-consumer
-          ctest --test-dir build-native-consumer --output-on-failure
+          ctest --test-dir build-native-consumer --output-on-failure --no-tests=error
       - name: Test add_subdirectory isolation
         run: |
           cmake -S tests/consumer -B build-source-consumer -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DRABITQ_SOURCE_DIR="$PWD" \
             -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=ON
           cmake --build build-source-consumer
-          ctest --test-dir build-source-consumer --output-on-failure
+          ctest --test-dir build-source-consumer --output-on-failure --no-tests=error
 
   clang:
     name: Clang 23 (OpenMP ${{ matrix.openmp }})
@@ -256,14 +256,14 @@ jobs:
       - name: Build
         run: cmake --build build-windows --config Release --parallel 2
       - name: Test
-        run: ctest --test-dir build-windows -C Release --output-on-failure
+        run: ctest --test-dir build-windows -C Release --output-on-failure --no-tests=error
       - name: Test installed CMake package and header requirements
         run: |
           cmake --install build-windows --config Release --prefix "$PWD/rabitqlib-install"
           cmake -S tests/consumer -B build-consumer -G "Visual Studio 18 2026" -A x64 `
             "-DCMAKE_PREFIX_PATH=$PWD/rabitqlib-install"
           cmake --build build-consumer --config Release --parallel 2
-          ctest --test-dir build-consumer -C Release --output-on-failure
+          ctest --test-dir build-consumer -C Release --output-on-failure --no-tests=error
 
   sanitizers:
     needs: changes
@@ -305,7 +305,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$PWD/rabitqlib-sanitized-install" \
             -DRABITQ_EXPECT_SANITIZERS=ON
           cmake --build build-sanitized-consumer
-          ctest --test-dir build-sanitized-consumer --output-on-failure
+          ctest --test-dir build-sanitized-consumer --output-on-failure --no-tests=error
 
   downstream-consumer:
     needs: changes
@@ -330,7 +330,7 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="$PWD/rabitqlib-install"
           cmake --build build-install
       - name: Test portable Release build
-        run: ctest --test-dir build-install --output-on-failure
+        run: ctest --test-dir build-install --output-on-failure --no-tests=error
       - name: Download pinned Intel SDE
         run: |
           curl --fail --location --retry 3 --max-time 120 \
@@ -365,7 +365,7 @@ jobs:
             -DCMAKE_PREFIX_PATH="$PWD/rabitqlib-install"
           cmake --build build-consumer
       - name: Test downstream consumer
-        run: ctest --test-dir build-consumer --output-on-failure
+        run: ctest --test-dir build-consumer --output-on-failure --no-tests=error
 
   core-consumer:
     name: Core and FastScan consumers (${{ matrix.os }}, OpenMP ${{ matrix.openmp }}${{ matrix.component && format(', {0}', matrix.component) || '' }})
@@ -483,14 +483,14 @@ jobs:
       - name: Build and run C++ tests
         run: |
           cmake --build build --parallel 2
-          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure --no-tests=error
       - name: Test installed CMake package
         run: |
           cmake --install build --prefix "$RUNNER_TEMP/rabitq-install"
           cmake -S tests/consumer -B build-consumer -G Ninja \
             -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/rabitq-install"
           cmake --build build-consumer --parallel 2
-          ctest --test-dir build-consumer --output-on-failure
+          ctest --test-dir build-consumer --output-on-failure --no-tests=error
 
   macos-arm64:
     name: Native Apple Silicon C++
@@ -515,7 +515,7 @@ jobs:
       - name: Build and run C++ reference and index tests
         run: |
           cmake --build build --parallel 3
-          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure --no-tests=error
       - name: Test installed CMake package
         run: |
           cmake --install build --prefix "$RUNNER_TEMP/rabitq-install"
@@ -523,4 +523,4 @@ jobs:
             -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/rabitq-install" \
             -DOpenMP_ROOT="$(brew --prefix libomp)"
           cmake --build build-consumer --parallel 3
-          ctest --test-dir build-consumer --output-on-failure
+          ctest --test-dir build-consumer --output-on-failure --no-tests=error
