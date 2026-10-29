@@ -1,16 +1,13 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <type_traits>
 
-#include "rabitqlib/core/detail/eigen.hpp"
-#include "rabitqlib/fastscan/data_layout.hpp"
 #include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/detail/qg_estimator.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
-#include "rabitqlib/fastscan/pack_codes.hpp"
 #include "rabitqlib/fastscan/query.hpp"
 
 namespace rabitqlib {
@@ -81,26 +78,9 @@ inline void qg_batch_estdist(
         return;
     }
 
-    ConstQGBatchDataMap<T> cur_batch(batch_data, padded_dim);
-    std::array<TA, fastscan::kBatchSize> accumulated_values{};
-    fastscan::accumulate(
-        cur_batch.bin_code(), query_wrapper.lut(), accumulated_values.data(), padded_dim
+    fastscan::detail::qg_batch_estdist_impl<T, fastscan::accumulate>(
+        batch_data, query_wrapper, padded_dim, estimated_distances
     );
-    ConstRowMajorArrayMap<TA> ip_arr(accumulated_values.data(), 1, fastscan::kBatchSize);
-    std::array<T, fastscan::kBatchSize> f_add_values;
-    std::array<T, fastscan::kBatchSize> f_rescale_values;
-    cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
-    cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
-    ConstRowMajorArrayMap<T> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<T> f_rescale_arr(
-        f_rescale_values.data(), 1, fastscan::kBatchSize
-    );
-
-    RowMajorArrayMap<T> est_dist_arr(estimated_distances, 1, fastscan::kBatchSize);
-
-    est_dist_arr = f_add_arr + query_wrapper.g_add() +
-                   (f_rescale_arr * (query_wrapper.delta() * (ip_arr.template cast<T>()) +
-                                     query_wrapper.sum_vl_lut() + query_wrapper.k1xsumq()));
 }
 
 }  // namespace rabitqlib

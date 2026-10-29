@@ -34,7 +34,6 @@ class HashBasedVisitedSet {
     static constexpr size_t kNoSizeHint = std::numeric_limits<size_t>::max();
 
    private:
-    size_t table_size_ = 0;
     PID mask_ = 0;
     std::vector<PID, memory::AlignedAllocator<PID>> table_;
     std::unordered_set<PID> stl_hash_;
@@ -44,8 +43,7 @@ class HashBasedVisitedSet {
     void initialize_table(const size_t table_size) {
         // Allocate before changing the mask so failure preserves the previous table.
         table_ = std::vector<PID, memory::AlignedAllocator<PID>>(table_size);
-        table_size_ = table_size;
-        mask_ = static_cast<PID>(table_size_ - 1);
+        mask_ = static_cast<PID>(table_size - 1);
         assert(hash1(static_cast<PID>(table_size)) == 0);
 
         std::fill(table_.begin(), table_.end(), kPidMax);

@@ -432,7 +432,6 @@ class HierarchicalNSW {
         size_t k,
         const SplitSingleQuery<float>& query_wrapper,
         const std::vector<float>& q_to_centroids,
-        const float* query,
         BoundedKNN& nearest_candidates
     ) const;
 

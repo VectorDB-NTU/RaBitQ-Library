@@ -177,7 +177,6 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
         k,
         query_wrapper,
         q_to_centroids,
-        rotated_query,
         nearest_candidates
     );
     result.reserve(nearest_candidates.size());
@@ -204,7 +203,6 @@ inline void HierarchicalNSW::search_base_layer_direct(
     size_t k,
     const SplitSingleQuery<float>& query_wrapper,
     const std::vector<float>& q_to_centroids,
-    [[maybe_unused]] const float* query,
     BoundedKNN& nearest_candidates
 ) const {
     auto visited = visited_list_pool_->get_free_vislist();
