@@ -25,14 +25,16 @@ float warmup_ip_x0_q_512(
     size_t b_query
 );
 
-template <uint32_t b_query>
-inline float warmup_ip_x0_q(
+namespace detail {
+// Scalar word-interleaved query planes; distinct from the 512-coordinate layout.
+// Keep the shared loop local to each translation unit's ISA configuration.
+static inline float ip_x0_q_impl(
     const uint64_t* data,
     const uint64_t* query,
     float delta,
     float vl,
     size_t padded_dim,
-    [[maybe_unused]] size_t unused_query_bits = 0  // not used
+    size_t b_query
 ) {
     auto num_blk = padded_dim / 64;
     const auto* it_data = reinterpret_cast<const uint8_t*>(data);
@@ -63,6 +65,19 @@ inline float warmup_ip_x0_q(
     }
 
     return (delta * static_cast<float>(ip)) + (vl * static_cast<float>(ppc));
+}
+}  // namespace detail
+
+template <uint32_t b_query>
+inline float warmup_ip_x0_q(
+    const uint64_t* data,
+    const uint64_t* query,
+    float delta,
+    float vl,
+    size_t padded_dim,
+    [[maybe_unused]] size_t unused_query_bits = 0  // not used
+) {
+    return detail::ip_x0_q_impl(data, query, delta, vl, padded_dim, b_query);
 }
 
 }  // namespace rabitqlib

@@ -3,6 +3,7 @@
 
 #include "estimator_kernels.hpp"
 #include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/detail/qg_estimator.hpp"
 #include "rabitqlib/fastscan/detail/simd.hpp"
 
 namespace rabitqlib::simd {
@@ -45,7 +46,7 @@ void qg_batch_estdist_avx512(
     if (padded_dim == 0 || padded_dim % 16 != 0) {
         throw std::invalid_argument("FastScan dimension must be a positive multiple of 16");
     }
-    qg_batch_estdist_impl<fastscan::simd::accumulate_avx512>(
+    fastscan::detail::qg_batch_estdist_impl<float, fastscan::simd::accumulate_avx512>(
         batch_data, query_wrapper, padded_dim, estimated_distances
     );
 }

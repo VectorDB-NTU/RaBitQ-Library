@@ -63,34 +63,5 @@ inline void split_batch_estdist_impl(
     low_dist_arr = est_dist_arr - f_error_arr * query_wrapper.g_error();
 }
 
-template <auto Accumulate>
-inline void qg_batch_estdist_impl(
-    const char* batch_data,
-    const BatchQuery<float>& query_wrapper,
-    size_t padded_dim,
-    float* estimated_distances
-) {
-    using T = float;
-    ConstQGBatchDataMap<T> cur_batch(batch_data, padded_dim);
-    std::array<int32_t, fastscan::kBatchSize> accu_values{};
-    Accumulate(cur_batch.bin_code(), query_wrapper.lut(), accu_values.data(), padded_dim);
-
-    ConstRowMajorArrayMap<int32_t> ip_arr(accu_values.data(), 1, fastscan::kBatchSize);
-    std::array<T, fastscan::kBatchSize> f_add_values;
-    std::array<T, fastscan::kBatchSize> f_rescale_values;
-    cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
-    cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
-    ConstRowMajorArrayMap<T> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<T> f_rescale_arr(
-        f_rescale_values.data(), 1, fastscan::kBatchSize
-    );
-
-    RowMajorArrayMap<T> est_dist_arr(estimated_distances, 1, fastscan::kBatchSize);
-
-    est_dist_arr = f_add_arr + query_wrapper.g_add() +
-                   (f_rescale_arr * (query_wrapper.delta() * (ip_arr.template cast<T>()) +
-                                     query_wrapper.sum_vl_lut() + query_wrapper.k1xsumq()));
-}
-
 }  // namespace
 }  // namespace rabitqlib::simd

@@ -5,6 +5,7 @@
 
 #include "estimator_kernels.hpp"
 #include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/detail/qg_estimator.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
 
@@ -50,7 +51,7 @@ void qg_batch_estdist_avx2(
     size_t padded_dim,
     float* estimated_distances
 ) {
-    qg_batch_estdist_impl<fastscan::accumulate>(
+    fastscan::detail::qg_batch_estdist_impl<float, fastscan::accumulate>(
         batch_data, query_wrapper, padded_dim, estimated_distances
     );
 }
@@ -66,7 +67,7 @@ uint32_t qg_batch_estdist_mask_avx2(
     float* estimated_distances,
     float threshold
 ) {
-    qg_batch_estdist_impl<fastscan::accumulate>(
+    fastscan::detail::qg_batch_estdist_impl<float, fastscan::accumulate>(
         batch_data, query_wrapper, padded_dim, estimated_distances
     );
     return candidate_mask_impl(estimated_distances, threshold);

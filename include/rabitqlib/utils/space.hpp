@@ -15,6 +15,7 @@
 #include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/openmp.hpp"  // IWYU pragma: keep (configuration macros)
 #include "rabitqlib/utils/tools.hpp"
+#include "rabitqlib/utils/warmup_space.hpp"
 
 #if RABITQ_USE_OPENMP
 #include <limits>
@@ -319,35 +320,7 @@ inline float ip_x0_q(
     size_t padded_dim,
     size_t b_query
 ) {
-    auto num_blk = padded_dim / 64;
-    const auto* it_data = reinterpret_cast<const uint8_t*>(data);
-    const auto* it_query = query;
-
-    size_t ip = 0;
-    size_t ppc = 0;
-
-    for (size_t i = 0; i < num_blk; ++i) {
-        const uint64_t x = rabitqlib::bitops::load_word(it_data, sizeof(uint64_t));
-        ppc += bitops::popcount64(x);
-
-        for (size_t j = 0; j < b_query; ++j) {
-            uint64_t y = *static_cast<const uint64_t*>(it_query);
-            ip += (bitops::popcount64(x & y) << j);
-            it_query++;
-        }
-        it_data += sizeof(uint64_t);
-    }
-
-    if (padded_dim % 64 != 0) {
-        const uint64_t x = rabitqlib::bitops::load_word(it_data, (padded_dim % 64) / 8);
-        ppc += bitops::popcount64(x);
-        for (size_t j = 0; j < b_query; ++j) {
-            ip += (bitops::popcount64(x & *it_query) << j);
-            ++it_query;
-        }
-    }
-
-    return (delta * static_cast<float>(ip)) + (vl * static_cast<float>(ppc));
+    return detail::ip_x0_q_impl(data, query, delta, vl, padded_dim, b_query);
 }
 
 static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d, size_t padded_dim) {
