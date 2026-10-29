@@ -21,7 +21,6 @@
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/types.hpp"
-#include "rabitqlib/utils/packed.hpp"
 
 namespace py = pybind11;
 
@@ -199,18 +198,7 @@ class IvfIndex {
         if (!built_) {
             throw std::runtime_error("IvfIndex must be built or loaded before remove");
         }
-        std::vector<rabitqlib::PID> to_remove;
-        to_remove.reserve(static_cast<size_t>(ids_array.shape(0)));
-        const rabitqlib::detail::ConstPackedArrayView<int64_t> values(
-            reinterpret_cast<const char*>(ids_array.data())
-        );
-        for (py::ssize_t i = 0; i < ids_array.shape(0); ++i) {
-            const int64_t id = values[static_cast<size_t>(i)];
-            if (id < 0 || static_cast<uint64_t>(id) >= index_->num_stored_points()) {
-                throw std::invalid_argument("ids must be in [0, num_stored_points)");
-            }
-            to_remove.push_back(static_cast<rabitqlib::PID>(id));
-        }
+        auto to_remove = checked_removal_ids(ids_array, index_->num_stored_points());
         py::gil_scoped_release release;
         return index_->remove(to_remove.data(), to_remove.size());
     }
@@ -355,8 +343,8 @@ class IvfIndex {
 void register_ivf(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
-    py::class_<IvfIndex>(
-        m, "IvfIndex", R"doc(An approximate nearest-neighbor index using IVF.
+    static constexpr char kIndexDoc[] =
+        R"doc(An approximate nearest-neighbor index using IVF.
 
 Parameters
 ----------
@@ -390,8 +378,9 @@ Examples
 >>> index.build(x, x.mean(axis=0, keepdims=True), np.zeros(len(x), dtype=np.uint32))
 >>> ids, distances = index.search(x[:2], k=3, nprobe=1)
 >>> ids.shape, distances.shape
-((2, 3), (2, 3)))doc"
-    )
+((2, 3), (2, 3)))doc";
+
+    py::class_<IvfIndex>(m, "IvfIndex", kIndexDoc)
         .def(
             py::init<
                 size_t,
@@ -406,41 +395,7 @@ Examples
             py::arg("nbits"),
             py::arg("metric") = "l2",
             py::arg("initializer") = "auto",
-            R"doc(An approximate nearest-neighbor index using IVF.
-
-Parameters
-----------
-dim : int
-    Original vector dimension, from 64 through 65536.
-max_elements : int
-    Number of vectors required by the initial build. Later adds grow
-    storage.
-num_clusters : int
-    Number of supplied centroids.
-nbits : int
-    Total quantization bits, 1 through 9, or 32 for owned float32 vectors
-    with one-bit filtering and raw reranking.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-    automatically normalized for cosine similarity.
-initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
-    Centroid routing strategy. Default is 'auto'.
-
-Notes
------
-Build or load the index before searching or saving. Concurrent reads are
-supported; an overlapping mutation raises RuntimeError.
-
-Examples
---------
->>> import numpy as np
->>> from rabitqlib import IvfIndex
->>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
->>> index = IvfIndex(64, len(x), num_clusters=1, nbits=4)
->>> index.build(x, x.mean(axis=0, keepdims=True), np.zeros(len(x), dtype=np.uint32))
->>> ids, distances = index.search(x[:2], k=3, nprobe=1)
->>> ids.shape, distances.shape
-((2, 3), (2, 3)))doc"
+            kIndexDoc
         )
         .def(
             "build",
