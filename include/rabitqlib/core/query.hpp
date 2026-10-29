@@ -30,6 +30,26 @@ class SplitSingleQuery {
 
    public:
     static constexpr size_t kNumBits = 4;
+
+    SplitSingleQuery(const SplitSingleQuery&) = default;
+    SplitSingleQuery(SplitSingleQuery&&) noexcept = default;
+    SplitSingleQuery& operator=(SplitSingleQuery&&) noexcept = default;
+
+    SplitSingleQuery& operator=(const SplitSingleQuery& other) {
+        // Copy owned codes before changing their borrowed query and corrections.
+        query_bin_ = other.query_bin_;
+        rotated_query_ = other.rotated_query_;
+        G_add_ = other.G_add_;
+        G_k1xSumq_ = other.G_k1xSumq_;
+        G_kbaseSumq_ = other.G_kbaseSumq_;
+        G_kbxSumq_ = other.G_kbxSumq_;
+        G_error_ = other.G_error_;
+        delta_ = other.delta_;
+        vl_ = other.vl_;
+        metric_type_ = other.metric_type_;
+        return *this;
+    }
+
     explicit SplitSingleQuery(
         const T* rotated_query,
         size_t padded_dim,

@@ -214,7 +214,17 @@ class FhtKacRotator : public Rotator<float> {
 
     size_t dump_bytes() const override { return sizeof(uint8_t) * flip_.size(); }
 
-    FhtKacRotator& operator=(const FhtKacRotator&) = default;
+    FhtKacRotator(const FhtKacRotator&) = default;
+
+    FhtKacRotator& operator=(const FhtKacRotator& other) {
+        // Preserve the old dimensions if copying the sign storage fails.
+        flip_ = other.flip_;
+        this->dim_ = other.dim_;
+        this->padded_dim_ = other.padded_dim_;
+        trunc_dim_ = other.trunc_dim_;
+        fac_ = other.fac_;
+        return *this;
+    }
 
     static void kacs_walk(float* data, size_t len) { simd::kacs_walk(data, len); }
 
