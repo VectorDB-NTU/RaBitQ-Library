@@ -57,7 +57,13 @@ class HashBasedVisitedSet {
     ~HashBasedVisitedSet() = default;
 
     HashBasedVisitedSet(const HashBasedVisitedSet&) = default;
-    HashBasedVisitedSet& operator=(const HashBasedVisitedSet&) = default;
+    HashBasedVisitedSet& operator=(const HashBasedVisitedSet& other) {
+        if (this != &other) {
+            // Both containers may allocate; publish only a complete replacement.
+            *this = HashBasedVisitedSet(other);
+        }
+        return *this;
+    }
     HashBasedVisitedSet(HashBasedVisitedSet&&) noexcept = default;
     HashBasedVisitedSet& operator=(HashBasedVisitedSet&&) noexcept = default;
 
