@@ -2301,9 +2301,11 @@ files whose padded dimension is not a multiple of 64.</p>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>[edges]
 <a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>[cluster ID]       (its high bit marks a removed point, see Removing points)
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>[external label]
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>[BinData (1-bit * dim + factors)]
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>[ExData (ex-bits * dim + factors)]
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>[BinData (1-bit * padded_dim + factors)]
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>[ExData (ex-bits * padded_dim + factors)]
 </code></pre></div>
+<p>Here <code>padded_dim</code> is the stored rotated dimension, which may exceed the original
+input <code>dim</code>. Loading preserves the index's saved padded dimension.</p>
 <h3 id="search-algorithm">Search algorithm<a class="headerlink" href="#search-algorithm" title="Permanent link">&para;</a></h3>
 <p>We first pre-process the query:</p>
 <ol>

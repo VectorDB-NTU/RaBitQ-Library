@@ -2300,10 +2300,10 @@ Extra-bit layouts retain full 64-coordinate blocks and store any final
 32-coordinate tail compactly.</p>
 <h3 id="data-layout">Data layout<a class="headerlink" href="#data-layout" title="Permanent link">&para;</a></h3>
 <p>IVF-RaBitQ stores the following data:</p>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">[</span><span class="n">batch</span><span class="w"> </span><span class="n">data</span><span class="p">]</span><span class="w">    </span><span class="c1">// 1-bit code and factors</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="p">[</span><span class="n">ex_data</span><span class="p">]</span><span class="w">       </span><span class="c1">// code for remaining bits, or original float32 vectors</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="p">[</span><span class="n">ids</span><span class="p">]</span><span class="w">           </span><span class="c1">// PID of vectors (organized by clusters)</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">[</span><span class="n">cluster_lst</span><span class="p">]</span><span class="w">   </span><span class="c1">// List of clusters' metadata in IVF-RaBitQ</span>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">[</span><span class="n">batch</span><span class="w"> </span><span class="n">data</span><span class="p">]</span><span class="w">        </span><span class="c1">// 1-bit code and factors</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="p">[</span><span class="n">ex_data</span><span class="p">]</span><span class="w">           </span><span class="c1">// code for remaining bits, or original float32 vectors</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="p">[</span><span class="n">ids</span><span class="p">]</span><span class="w">               </span><span class="c1">// PID of vectors (organized by clusters)</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">[</span><span class="n">cluster</span><span class="w"> </span><span class="n">metadata</span><span class="p">]</span><span class="w">  </span><span class="c1">// List of clusters' metadata in IVF-RaBitQ</span>
 </code></pre></div>
 In raw mode, <code>ex_data</code> holds <code>4 * num_points * dim</code> bytes in cluster order,
 without padding or extra-bit factors. The one-bit filtering codes and factors
