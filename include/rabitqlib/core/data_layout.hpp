@@ -29,7 +29,8 @@ struct ExDataMap {
     explicit ExDataMap(char* data, size_t padded_dim, size_t ex_bits)
         : ex_code_(reinterpret_cast<uint8_t*>(data))
         , f_add_ex_(data + detail::SingleCodeOffsets<T>::add(padded_dim, ex_bits))
-        , f_recale_ex_(data + detail::SingleCodeOffsets<T>::rescale(padded_dim, ex_bits)) {}
+        , f_rescale_ex_(data + detail::SingleCodeOffsets<T>::rescale(padded_dim, ex_bits)) {
+    }
 
     static size_t data_bytes(size_t padded_dim, size_t ex_bits) {
         if (ex_bits == 0) {
@@ -49,12 +50,12 @@ struct ExDataMap {
 
     [[nodiscard]] uint8_t* ex_code() { return ex_code_; }
     [[nodiscard]] detail::PackedValueRef<T> f_add_ex() { return f_add_ex_; }
-    [[nodiscard]] detail::PackedValueRef<T> f_rescale_ex() { return f_recale_ex_; }
+    [[nodiscard]] detail::PackedValueRef<T> f_rescale_ex() { return f_rescale_ex_; }
 
    private:
     uint8_t* ex_code_;
     detail::PackedValueRef<T> f_add_ex_;
-    detail::PackedValueRef<T> f_recale_ex_;
+    detail::PackedValueRef<T> f_rescale_ex_;
 };
 
 template <typename T>
@@ -63,18 +64,19 @@ struct ConstExDataMap {
     explicit ConstExDataMap(const char* data, size_t padded_dim, size_t ex_bits)
         : ex_code_(reinterpret_cast<const uint8_t*>(data))
         , f_add_ex_(data + detail::SingleCodeOffsets<T>::add(padded_dim, ex_bits))
-        , f_recale_ex_(data + detail::SingleCodeOffsets<T>::rescale(padded_dim, ex_bits)) {}
+        , f_rescale_ex_(data + detail::SingleCodeOffsets<T>::rescale(padded_dim, ex_bits)) {
+    }
 
     [[nodiscard]] const uint8_t* ex_code() const { return ex_code_; }
     [[nodiscard]] T f_add_ex() const { return detail::load_packed_value<T>(f_add_ex_); }
     [[nodiscard]] T f_rescale_ex() const {
-        return detail::load_packed_value<T>(f_recale_ex_);
+        return detail::load_packed_value<T>(f_rescale_ex_);
     }
 
    private:
     const uint8_t* ex_code_;
     const char* f_add_ex_;
-    const char* f_recale_ex_;
+    const char* f_rescale_ex_;
 };
 
 template <typename T>

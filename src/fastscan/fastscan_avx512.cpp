@@ -37,7 +37,7 @@ constexpr size_t kBatchSize = 32;
 
 void accumulate_chunk_avx512(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 ) {
@@ -59,7 +59,7 @@ void accumulate_chunk_avx512(
     // ! multiple of 16
     for (size_t i = 0; i < code_length; i += 64) {
         c = _mm512_loadu_si512(&codes[i]);
-        lut = _mm512_loadu_si512(&lp_table[i]);
+        lut = _mm512_loadu_si512(&lookup_table[i]);
         lo = _mm512_and_si512(c, lo_mask);                        // code of vector 0 to 15
         hi = _mm512_and_si512(_mm512_srli_epi16(c, 4), lo_mask);  // code of vector 16 to 31
 
@@ -105,12 +105,12 @@ void accumulate_chunk_avx512(
 
 void accumulate_avx512(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_chunk_avx512(codes, lp_table, result, dim);
+        accumulate_chunk_avx512(codes, lookup_table, result, dim);
         return;
     }
 
@@ -119,7 +119,7 @@ void accumulate_avx512(
     for (size_t offset = 0; offset < dim;) {
         const size_t chunk_dim = std::min(kChunkDim, dim - offset);
         accumulate_chunk_avx512(
-            codes + offset * 4, lp_table + offset * 4, chunk_result.data(), chunk_dim
+            codes + offset * 4, lookup_table + offset * 4, chunk_result.data(), chunk_dim
         );
         for (size_t lane = 0; lane < kBatchSize; ++lane) {
             totals[lane] += chunk_result[lane];
@@ -168,7 +168,7 @@ namespace {
 void accumulate_hacc_chunk_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 ) {
     __m512i low_mask = _mm512_set1_epi8(0xf);
@@ -244,8 +244,8 @@ void accumulate_hacc_chunk_avx512(
     res[1] =
         _mm512_add_epi32(dis1[0], _mm512_slli_epi32(dis1[1], 8));  // res for vec 16 to 31
 
-    _mm512_storeu_epi32(accu_res, res[0]);
-    _mm512_storeu_epi32(accu_res + 16, res[1]);
+    _mm512_storeu_epi32(accumulated_values, res[0]);
+    _mm512_storeu_epi32(accumulated_values + 16, res[1]);
 }
 
 }  // namespace
@@ -253,11 +253,11 @@ void accumulate_hacc_chunk_avx512(
 void accumulate_hacc_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_hacc_chunk_avx512(codes, hc_lut, accu_res, dim);
+        accumulate_hacc_chunk_avx512(codes, hc_lut, accumulated_values, dim);
         return;
     }
 
@@ -279,7 +279,7 @@ void accumulate_hacc_avx512(
         }
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {
-        accu_res[lane] = static_cast<int32_t>(totals[lane]);
+        accumulated_values[lane] = static_cast<int32_t>(totals[lane]);
     }
 }
 

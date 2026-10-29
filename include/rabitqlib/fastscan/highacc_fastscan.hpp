@@ -16,7 +16,7 @@ void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 void accumulate_hacc(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 );
 }  // namespace rabitqlib::fastscan

@@ -415,10 +415,10 @@ Extra-bit layouts retain full 64-coordinate blocks and store any final
 IVF-RaBitQ stores the following data:
 
 ```c++
-[batch data]    // 1-bit code and factors
-[ex_data]       // code for remaining bits, or original float32 vectors
-[ids]           // PID of vectors (organized by clusters)
-[cluster_lst]   // List of clusters' metadata in IVF-RaBitQ
+[batch data]        // 1-bit code and factors
+[ex_data]           // code for remaining bits, or original float32 vectors
+[ids]               // PID of vectors (organized by clusters)
+[cluster metadata]  // List of clusters' metadata in IVF-RaBitQ
 ```
 In raw mode, `ex_data` holds `4 * num_points * dim` bytes in cluster order,
 without padding or extra-bit factors. The one-bit filtering codes and factors

@@ -11,11 +11,11 @@ void kacs_walk(float* data, size_t len);
 
 void fht_rotate(
     const float* data,
-    float* rotated_vec,
+    float* rotated_data,
     size_t dim,
     size_t padded_dim,
     size_t trunc_dim,
-    float fac,
+    float scale_factor,
     const uint8_t* flip
 );
 
@@ -23,11 +23,11 @@ void flip_sign_neon(const uint8_t* flip, float* data, size_t dim);
 void kacs_walk_neon(float* data, size_t len);
 void fht_rotate_neon(
     const float* data,
-    float* output,
+    float* rotated_data,
     size_t dim,
-    size_t padded,
-    size_t trunc,
-    float factor,
+    size_t padded_dim,
+    size_t trunc_dim,
+    float scale_factor,
     const uint8_t* flip
 );
 
@@ -39,20 +39,20 @@ void kacs_walk_avx2(float* data, size_t len);
 
 void fht_rotate_generic(
     const float* data,
-    float* output,
+    float* rotated_data,
     size_t dim,
-    size_t padded,
-    size_t trunc,
-    float factor,
+    size_t padded_dim,
+    size_t trunc_dim,
+    float scale_factor,
     const uint8_t* flip
 );
 void fht_rotate_avx2(
     const float* data,
-    float* rotated_vec,
+    float* rotated_data,
     size_t dim,
     size_t padded_dim,
     size_t trunc_dim,
-    float fac,
+    float scale_factor,
     const uint8_t* flip
 );
 
@@ -62,11 +62,11 @@ void kacs_walk_avx512(float* data, size_t len);
 
 void fht_rotate_avx512(
     const float* data,
-    float* rotated_vec,
+    float* rotated_data,
     size_t dim,
     size_t padded_dim,
     size_t trunc_dim,
-    float fac,
+    float scale_factor,
     const uint8_t* flip
 );
 

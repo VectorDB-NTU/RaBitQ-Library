@@ -159,7 +159,7 @@ class FhtKacRotator : public Rotator<float> {
    private:
     std::vector<uint8_t> flip_;
     size_t trunc_dim_ = 0;
-    float fac_ = 0;
+    float scale_factor_ = 0;
 
     static constexpr size_t kByteLen = 8;
 
@@ -185,7 +185,7 @@ class FhtKacRotator : public Rotator<float> {
         flip_.resize((padded_dim / kByteLen) * 4);
         size_t bottom_log_dim = floor_log2(dim);
         trunc_dim_ = size_t{1} << bottom_log_dim;
-        fac_ = 1.0F / std::sqrt(static_cast<float>(trunc_dim_));
+        scale_factor_ = 1.0F / std::sqrt(static_cast<float>(trunc_dim_));
     }
     FhtKacRotator() = default;
     ~FhtKacRotator() override = default;
@@ -222,7 +222,7 @@ class FhtKacRotator : public Rotator<float> {
         this->dim_ = other.dim_;
         this->padded_dim_ = other.padded_dim_;
         trunc_dim_ = other.trunc_dim_;
-        fac_ = other.fac_;
+        scale_factor_ = other.scale_factor_;
         return *this;
     }
 
@@ -230,7 +230,7 @@ class FhtKacRotator : public Rotator<float> {
 
     void rotate(const float* data, float* rotated_vec) const override {
         simd::fht_rotate(
-            data, rotated_vec, dim_, padded_dim_, trunc_dim_, fac_, flip_.data()
+            data, rotated_vec, dim_, padded_dim_, trunc_dim_, scale_factor_, flip_.data()
         );
     }
 };

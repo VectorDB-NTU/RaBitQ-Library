@@ -40,11 +40,11 @@ inline void kacs_walk_rescale(float* data, size_t dim, float factor) {
 template <auto flip_sign, auto kacs_walk, auto kacs_flip = nullptr>
 void fht_rotate_impl(
     const float* data,
-    float* rotated_vec,
+    float* rotated_data,
     size_t dim,
     size_t padded_dim,
     size_t trunc_dim,
-    float fac,
+    float scale_factor,
     const uint8_t* flip
 ) {
     void (*fht)(float*, float) = nullptr;
@@ -69,36 +69,36 @@ void fht_rotate_impl(
     }
 #undef RABITQ_FHT_CASE
 
-    std::memcpy(rotated_vec, data, sizeof(float) * dim);
-    std::fill(rotated_vec + dim, rotated_vec + padded_dim, 0.0F);
+    std::memcpy(rotated_data, data, sizeof(float) * dim);
+    std::fill(rotated_data + dim, rotated_data + padded_dim, 0.0F);
 
     if (trunc_dim == padded_dim) {
         for (size_t round = 0; round < 4; ++round) {
-            flip_sign(flip + round * (padded_dim / 8), rotated_vec, padded_dim);
-            fht(rotated_vec, fac);
+            flip_sign(flip + round * (padded_dim / 8), rotated_data, padded_dim);
+            fht(rotated_data, scale_factor);
         }
         return;
     }
 
     const auto walk_and_flip = [&](const uint8_t* signs) {
         if constexpr (kacs_flip != nullptr) {
-            kacs_flip(signs, rotated_vec, padded_dim);
+            kacs_flip(signs, rotated_data, padded_dim);
         } else {
-            kacs_walk(rotated_vec, padded_dim);
-            flip_sign(signs, rotated_vec, padded_dim);
+            kacs_walk(rotated_data, padded_dim);
+            flip_sign(signs, rotated_data, padded_dim);
         }
     };
     size_t start = padded_dim - trunc_dim;
 
-    flip_sign(flip, rotated_vec, padded_dim);
-    fht(rotated_vec, fac);
+    flip_sign(flip, rotated_data, padded_dim);
+    fht(rotated_data, scale_factor);
     walk_and_flip(flip + (padded_dim / 8));
-    fht(rotated_vec + start, fac);
+    fht(rotated_data + start, scale_factor);
     walk_and_flip(flip + (2 * padded_dim / 8));
-    fht(rotated_vec, fac);
+    fht(rotated_data, scale_factor);
     walk_and_flip(flip + (3 * padded_dim / 8));
-    fht(rotated_vec + start, fac);
-    kacs_walk_rescale(rotated_vec, padded_dim, 0.25F);
+    fht(rotated_data + start, scale_factor);
+    kacs_walk_rescale(rotated_data, padded_dim, 0.25F);
 }
 }  // namespace
 }  // namespace rabitqlib::simd

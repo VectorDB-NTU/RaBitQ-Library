@@ -31,18 +31,18 @@ template <class Query>
 inline float split_distance_boosting(
     const char* ex_data,
     float (*ip_func)(const float*, const uint8_t*, size_t),
-    const Query& q_obj,
+    const Query& query_wrapper,
     size_t padded_dim,
     size_t ex_bits,
     float ip_x0_qr
 ) {
     ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
 
-    float ex_dist =
-        cur_ex.f_add_ex() + q_obj.g_add() +
-        (cur_ex.f_rescale_ex() *
-         (static_cast<float>(1 << ex_bits) * ip_x0_qr +
-          ip_func(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) + q_obj.kbxsumq()));
+    float ex_dist = cur_ex.f_add_ex() + query_wrapper.g_add() +
+                    (cur_ex.f_rescale_ex() *
+                     (static_cast<float>(1 << ex_bits) * ip_x0_qr +
+                      ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim) +
+                      query_wrapper.kbxsumq()));
 
     return ex_dist;
 }
@@ -52,11 +52,11 @@ inline void split_single_fulldist_direct(
     const char* bin_data,
     const char* ex_data,
     float (*ip_func)(const float*, const uint8_t*, size_t),
-    const Query& q_obj,
+    const Query& query_wrapper,
     size_t padded_dim,
     size_t ex_bits,
-    float& est_dist,
-    float& low_dist,
+    float& estimated_distance,
+    float& lower_bound,
     float& ip_x0_qr,
     float g_add,
     float g_error
@@ -67,29 +67,31 @@ inline void split_single_fulldist_direct(
     // Direct HNSW kernels retain their legacy word-typed ABI. Generic kernels use the
     // byte-oriented overload and do not manufacture a typed view of packed storage.
     ip_x0_qr = Kernel::mask_ip_x0_q(
-        q_obj.rotated_query(),
+        query_wrapper.rotated_query(),
         reinterpret_cast<const uint64_t*>(cur_bin.bin_code()),
         padded_dim
     );
 
-    est_dist =
+    estimated_distance =
         cur_ex.f_add_ex() + g_add +
         (cur_ex.f_rescale_ex() *
          (static_cast<float>(1 << ex_bits) * ip_x0_qr +
-          ip_func(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) + q_obj.kbxsumq()));
+          ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim) +
+          query_wrapper.kbxsumq()));
 
-    low_dist = est_dist - (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
+    lower_bound = estimated_distance -
+                  (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
 }
 
 inline void split_single_fulldist(
     const char* bin_data,
     const char* ex_data,
     float (*ip_func)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     size_t ex_bits,
-    float& est_dist,
-    float& low_dist,
+    float& estimated_distance,
+    float& lower_bound,
     float& ip_x0_qr,
     float g_add,
     float g_error
@@ -97,24 +99,26 @@ inline void split_single_fulldist(
     ConstBinDataMap<float> cur_bin(bin_data, padded_dim);
     ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
 
-    ip_x0_qr = mask_ip_x0_q(q_obj.rotated_query(), cur_bin.bin_code(), padded_dim);
+    ip_x0_qr = mask_ip_x0_q(query_wrapper.rotated_query(), cur_bin.bin_code(), padded_dim);
 
-    est_dist =
+    estimated_distance =
         cur_ex.f_add_ex() + g_add +
         (cur_ex.f_rescale_ex() *
          (static_cast<float>(1 << ex_bits) * ip_x0_qr +
-          ip_func(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim) + q_obj.kbxsumq()));
+          ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim) +
+          query_wrapper.kbxsumq()));
 
-    low_dist = est_dist - (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
+    lower_bound = estimated_distance -
+                  (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
 }
 
 inline void split_single_estdist(
     const char* bin_data,
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     float& ip_x0_qr,
-    float& est_dist,
-    float& low_dist,
+    float& estimated_distance,
+    float& lower_bound,
     float g_add = 0,
     float g_error = 0
 ) {
@@ -122,27 +126,27 @@ inline void split_single_estdist(
 
     ip_x0_qr = warmup_ip_x0_q_512(
         cur_bin.bin_code(),
-        q_obj.query_bin(),
-        q_obj.delta(),
-        q_obj.vl(),
+        query_wrapper.query_bin(),
+        query_wrapper.delta(),
+        query_wrapper.vl(),
         padded_dim,
-        q_obj.num_bits()
+        query_wrapper.num_bits()
     );
 
-    est_dist =
-        cur_bin.f_add() + g_add + (cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq()));
+    estimated_distance = cur_bin.f_add() + g_add +
+                         (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.k1xsumq()));
 
-    low_dist = est_dist - (cur_bin.f_error() * g_error);
+    lower_bound = estimated_distance - (cur_bin.f_error() * g_error);
 };
 
 template <class Kernel>
 inline void split_single_estdist_direct(
     const char* bin_data,
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     float& ip_x0_qr,
-    float& est_dist,
-    float& low_dist,
+    float& estimated_distance,
+    float& lower_bound,
     float g_add = 0,
     float g_error = 0
 ) {
@@ -151,39 +155,39 @@ inline void split_single_estdist_direct(
     // Direct HNSW kernels retain their legacy word-typed ABI; see the note above.
     ip_x0_qr = Kernel::warmup_ip_x0_q_512(
         reinterpret_cast<const uint64_t*>(cur_bin.bin_code()),
-        q_obj.query_bin(),
-        q_obj.delta(),
-        q_obj.vl(),
+        query_wrapper.query_bin(),
+        query_wrapper.delta(),
+        query_wrapper.vl(),
         padded_dim,
-        q_obj.num_bits()
+        query_wrapper.num_bits()
     );
 
-    est_dist =
-        cur_bin.f_add() + g_add + (cur_bin.f_rescale() * (ip_x0_qr + q_obj.k1xsumq()));
+    estimated_distance = cur_bin.f_add() + g_add +
+                         (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.k1xsumq()));
 
-    low_dist = est_dist - (cur_bin.f_error() * g_error);
+    lower_bound = estimated_distance - (cur_bin.f_error() * g_error);
 };
 
 inline void xy_single_base_dist(
     const char* base_data,
     float (*base_ip_func)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     size_t base_bits,
     float& ip_base,
-    float& est_dist,
-    float& low_dist,
+    float& estimated_distance,
+    float& lower_bound,
     float g_add = 0,
     float g_error = 0
 ) {
     ConstBaseDataMap<float> cur_base(base_data, padded_dim, base_bits);
 
-    ip_base = base_ip_func(q_obj.rotated_query(), cur_base.base_code(), padded_dim);
+    ip_base = base_ip_func(query_wrapper.rotated_query(), cur_base.base_code(), padded_dim);
 
-    est_dist =
-        cur_base.f_add() + g_add + (cur_base.f_rescale() * (ip_base + q_obj.kbase_sumq()));
+    estimated_distance = cur_base.f_add() + g_add +
+                         (cur_base.f_rescale() * (ip_base + query_wrapper.kbase_sumq()));
 
-    low_dist = est_dist - (cur_base.f_error() * g_error);
+    lower_bound = estimated_distance - (cur_base.f_error() * g_error);
 }
 
 inline void xy_single_full_dist(
@@ -191,34 +195,37 @@ inline void xy_single_full_dist(
     const char* ex_data,
     float (*base_ip_func)(const float*, const uint8_t*, size_t),
     float (*ex_ip_func)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     size_t base_bits,
     size_t ex_bits,
-    float& est_dist,
-    float& low_dist,
+    float& estimated_distance,
+    float& lower_bound,
     float& ip_base,
     float g_add = 0,
     float g_error = 0
 ) {
     ConstBaseDataMap<float> cur_base(base_data, padded_dim, base_bits);
-    ip_base = base_ip_func(q_obj.rotated_query(), cur_base.base_code(), padded_dim);
+    ip_base = base_ip_func(query_wrapper.rotated_query(), cur_base.base_code(), padded_dim);
 
     if (ex_bits == 0) {
-        est_dist = cur_base.f_add() + g_add +
-                   (cur_base.f_rescale() * (ip_base + q_obj.kbase_sumq()));
-        low_dist = est_dist - (cur_base.f_error() * g_error);
+        estimated_distance =
+            cur_base.f_add() + g_add +
+            (cur_base.f_rescale() * (ip_base + query_wrapper.kbase_sumq()));
+        lower_bound = estimated_distance - (cur_base.f_error() * g_error);
         return;
     }
 
     ConstExDataMap<float> cur_ex(ex_data, padded_dim, ex_bits);
 
     float ip = (static_cast<float>(1 << ex_bits) * ip_base) +
-               ex_ip_func(q_obj.rotated_query(), cur_ex.ex_code(), padded_dim);
+               ex_ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim);
 
-    est_dist = cur_ex.f_add_ex() + g_add + (cur_ex.f_rescale_ex() * (ip + q_obj.kbxsumq()));
+    estimated_distance = cur_ex.f_add_ex() + g_add +
+                         (cur_ex.f_rescale_ex() * (ip + query_wrapper.kbxsumq()));
 
-    low_dist = est_dist - (cur_base.f_error() * g_error / static_cast<float>(1 << ex_bits));
+    lower_bound = estimated_distance -
+                  (cur_base.f_error() * g_error / static_cast<float>(1 << ex_bits));
 }
 
 // Named-result functions keep the numerical implementation and legacy output-reference
@@ -228,7 +235,7 @@ inline detail::DistanceEstimate estimate_split_single_full_direct(
     const char* bin_data,
     const char* ex_data,
     float (*ip_func)(const float*, const uint8_t*, size_t),
-    const Query& q_obj,
+    const Query& query_wrapper,
     size_t padded_dim,
     size_t ex_bits,
     float g_add,
@@ -239,7 +246,7 @@ inline detail::DistanceEstimate estimate_split_single_full_direct(
         bin_data,
         ex_data,
         ip_func,
-        q_obj,
+        query_wrapper,
         padded_dim,
         ex_bits,
         result.distance,
@@ -255,7 +262,7 @@ inline detail::DistanceEstimate estimate_split_single_full(
     const char* bin_data,
     const char* ex_data,
     float (*ip_func)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     size_t ex_bits,
     float g_add,
@@ -266,7 +273,7 @@ inline detail::DistanceEstimate estimate_split_single_full(
         bin_data,
         ex_data,
         ip_func,
-        q_obj,
+        query_wrapper,
         padded_dim,
         ex_bits,
         result.distance,
@@ -280,7 +287,7 @@ inline detail::DistanceEstimate estimate_split_single_full(
 
 inline detail::DistanceEstimate estimate_split_single(
     const char* bin_data,
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     float g_add = 0,
     float g_error = 0
@@ -288,7 +295,7 @@ inline detail::DistanceEstimate estimate_split_single(
     detail::DistanceEstimate result;
     split_single_estdist(
         bin_data,
-        q_obj,
+        query_wrapper,
         padded_dim,
         result.inner_product,
         result.distance,
@@ -302,7 +309,7 @@ inline detail::DistanceEstimate estimate_split_single(
 template <class Kernel>
 inline detail::DistanceEstimate estimate_split_single_direct(
     const char* bin_data,
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     float g_add = 0,
     float g_error = 0
@@ -310,7 +317,7 @@ inline detail::DistanceEstimate estimate_split_single_direct(
     detail::DistanceEstimate result;
     split_single_estdist_direct<Kernel>(
         bin_data,
-        q_obj,
+        query_wrapper,
         padded_dim,
         result.inner_product,
         result.distance,
@@ -324,7 +331,7 @@ inline detail::DistanceEstimate estimate_split_single_direct(
 inline detail::DistanceEstimate estimate_xy_base(
     const char* base_data,
     float (*base_ip_func)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     size_t base_bits,
     float g_add = 0,
@@ -334,7 +341,7 @@ inline detail::DistanceEstimate estimate_xy_base(
     xy_single_base_dist(
         base_data,
         base_ip_func,
-        q_obj,
+        query_wrapper,
         padded_dim,
         base_bits,
         result.inner_product,
@@ -351,7 +358,7 @@ inline detail::DistanceEstimate estimate_xy_full(
     const char* ex_data,
     float (*base_ip_func)(const float*, const uint8_t*, size_t),
     float (*ex_ip_func)(const float*, const uint8_t*, size_t),
-    const SplitSingleQuery<float>& q_obj,
+    const SplitSingleQuery<float>& query_wrapper,
     size_t padded_dim,
     size_t base_bits,
     size_t ex_bits,
@@ -364,7 +371,7 @@ inline detail::DistanceEstimate estimate_xy_full(
         ex_data,
         base_ip_func,
         ex_ip_func,
-        q_obj,
+        query_wrapper,
         padded_dim,
         base_bits,
         ex_bits,

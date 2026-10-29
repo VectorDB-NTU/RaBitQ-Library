@@ -282,9 +282,12 @@ Each indexed element is stored in the following layout:
 [edges]
 [cluster ID]       (its high bit marks a removed point, see Removing points)
 [external label]
-[BinData (1-bit * dim + factors)]
-[ExData (ex-bits * dim + factors)]
+[BinData (1-bit * padded_dim + factors)]
+[ExData (ex-bits * padded_dim + factors)]
 ```
+
+Here `padded_dim` is the stored rotated dimension, which may exceed the original
+input `dim`. Loading preserves the index's saved padded dimension.
 
 ### Search algorithm
 

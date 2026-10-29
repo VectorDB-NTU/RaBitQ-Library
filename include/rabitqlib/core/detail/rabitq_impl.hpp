@@ -225,7 +225,7 @@ inline void one_bit_compact_code_to_bytes(
     size_t padded_dim,
     uint8_t* compact_code,
     T& f_add,
-    T& f_recale,
+    T& f_rescale,
     T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
@@ -237,7 +237,7 @@ inline void one_bit_compact_code_to_bytes(
         padded_dim,
         binary_code.data(),
         f_add,
-        f_recale,
+        f_rescale,
         f_error,
         metric_type
     );
@@ -252,7 +252,7 @@ inline void one_bit_compact_code(
     size_t padded_dim,
     TC* compact_code,
     T& f_add,
-    T& f_recale,
+    T& f_rescale,
     T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
@@ -262,7 +262,7 @@ inline void one_bit_compact_code(
         padded_dim,
         reinterpret_cast<uint8_t*>(compact_code),
         f_add,
-        f_recale,
+        f_rescale,
         f_error,
         metric_type
     );

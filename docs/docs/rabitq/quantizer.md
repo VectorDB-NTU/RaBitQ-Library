@@ -187,7 +187,7 @@ Insert the following before `return 0` in the indexing example above.
     float k1xsumq = c_1 * std::accumulate(query.begin(), query.end(), 0.F);
     float g_add = rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim);
 
-    float est_dist = rabitqlib::quant::full_est_dist(
+    float estimated_distance = rabitqlib::quant::full_est_dist(
         code.data(),
         query.data(),
         rabitqlib::excode_ipimpl::ip_fxi,
@@ -200,7 +200,7 @@ Insert the following before `return 0` in the indexing example above.
     );
     float gt_dist = rabitqlib::euclidean_sqr(query.data(), vector.data(), dim);
 
-    std::cout << "Estimated distance: " << est_dist << '\n';
+    std::cout << "Estimated distance: " << estimated_distance << '\n';
     std::cout << "GT distance: " << gt_dist << '\n';
 
 ```
@@ -261,22 +261,22 @@ initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
     std::vector<float> query(dim, 1.0F);
 
-    rabitqlib::BatchQuery<float> processed_query(query.data(), dim);
+    rabitqlib::BatchQuery<float> query_wrapper(query.data(), dim);
 
     // G_add is the squared L2 distance between the query and the centroid.
     // This standalone example omits rotation, so both operands are raw vectors.
     // In an index that applies rotation, rotate both with the same transformation.
-    processed_query.set_g_add(
+    query_wrapper.set_g_add(
         rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim)
     );
 
-    std::vector<float> est_distance(batch_size);  // store the estimated distances
+    std::vector<float> estimated_distances(batch_size);  // store the estimated distances
 
     // QG scoring returns estimates only. Use the IVF-RaBitQ batch format below
     // when error intervals are needed.
 
     rabitqlib::qg_batch_estdist(
-        batch_data.data(), processed_query, dim, est_distance.data()
+        batch_data.data(), query_wrapper, dim, estimated_distances.data()
     );
 
 ```
@@ -361,7 +361,7 @@ Insert this before `return 0` in the indexing example, reusing its data and dime
         dim, rabitqlib::SplitSingleQuery<float>::kNumBits
     );
 
-    rabitqlib::SplitSingleQuery<float> processed_query(
+    rabitqlib::SplitSingleQuery<float> query_wrapper(
         query.data(), dim, bits - 1, query_config, rabitqlib::METRIC_L2
     );
 
@@ -372,16 +372,16 @@ Insert this before `return 0` in the indexing example, reusing its data and dime
 
     // Compute estimated distances based on binary codes
     float ip_x0_qr;
-    float est_dist;
-    float low_dist;
+    float estimated_distance;
+    float lower_bound;
 
     rabitqlib::split_single_estdist(
         bin_data.data(),
-        processed_query,
+        query_wrapper,
         dim,
         ip_x0_qr,
-        est_dist,
-        low_dist,
+        estimated_distance,
+        lower_bound,
         distance_sqr,
         distance_norm
     );
@@ -398,7 +398,7 @@ Insert this before `return 0` in the indexing example, reusing its data and dime
         bin_data.data(),
         ex_data.data(),
         ip_func,
-        processed_query,
+        query_wrapper,
         dim,
         bits - 1,
         est_dist_ex,
@@ -498,7 +498,7 @@ Insert this before `return 0` in the indexing example, reusing its buffers and d
     // IVF-RaBitQ instead selects HACC for 4-9 total bits and standard FastScan for
     // 1-3 total bits or raw-vector storage, unless the caller overrides it.
 
-    rabitqlib::SplitBatchQuery<float> processed_query(
+    rabitqlib::SplitBatchQuery<float> query_wrapper(
         query.data(), dim, bits - 1, rabitqlib::METRIC_L2, true
     );
 
@@ -506,10 +506,10 @@ Insert this before `return 0` in the indexing example, reusing its buffers and d
     // This example omits rotation, so query and centroid are both raw vectors.
     float distance_norm =
         std::sqrt(rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim));
-    processed_query.set_g_add(distance_norm);
+    query_wrapper.set_g_add(distance_norm);
 
-    std::vector<float> est_distance(batch_size);  // store the estimated distances
-    std::vector<float> low_distance(batch_size);  // store the lower bound
+    std::vector<float> estimated_distances(batch_size);  // store the estimated distances
+    std::vector<float> lower_bounds(batch_size);  // store the lower bound
     std::vector<float> ip_x0_qr(batch_size
     );  // store the intermediate result of inner product
 
@@ -517,10 +517,10 @@ Insert this before `return 0` in the indexing example, reusing its buffers and d
 
     rabitqlib::split_batch_estdist(
         batch_data.data(),
-        processed_query,
+        query_wrapper,
         dim,
-        est_distance.data(),
-        low_distance.data(),
+        estimated_distances.data(),
+        lower_bounds.data(),
         ip_x0_qr.data(),
         true
     );
@@ -530,10 +530,10 @@ Insert this before `return 0` in the indexing example, reusing its buffers and d
 
     size_t i = 15;
     // Replace this candidate's one-bit estimate with the refined distance.
-    est_distance[i] = rabitqlib::split_distance_boosting(
+    estimated_distances[i] = rabitqlib::split_distance_boosting(
         ex_data.data() + (i * rabitqlib::ExDataMap<float>::data_bytes(dim, bits - 1)),
         ip_func,
-        processed_query,
+        query_wrapper,
         dim,
         bits - 1,
         ip_x0_qr[i]

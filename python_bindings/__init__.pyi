@@ -236,8 +236,9 @@ class IvfIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,), optional
-            Existing centroid IDs. None assigns each vector to its nearest
-            centroid. Centroids do not move.
+            Existing centroid IDs. None routes each vector using the index's
+            configured centroid initializer; routing may be approximate.
+            Centroids do not move.
         num_threads : int, optional
             Worker count. Default is 1; 0 selects the available CPU count.
         fast_quantization : bool, optional

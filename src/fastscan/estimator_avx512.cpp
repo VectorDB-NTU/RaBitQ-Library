@@ -8,10 +8,10 @@
 namespace rabitqlib::simd {
 void split_batch_estdist_avx512(
     const char* batch_data,
-    const SplitBatchQuery<float>& q_obj,
+    const SplitBatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance,
-    float* low_distance,
+    float* estimated_distances,
+    float* lower_bounds,
     float* ip_x0_qr,
     bool use_hacc
 ) {
@@ -26,21 +26,27 @@ void split_batch_estdist_avx512(
     split_batch_estdist_impl<
         fastscan::simd::accumulate_avx512,
         fastscan::simd::accumulate_hacc_avx512>(
-        batch_data, q_obj, padded_dim, est_distance, low_distance, ip_x0_qr, use_hacc
+        batch_data,
+        query_wrapper,
+        padded_dim,
+        estimated_distances,
+        lower_bounds,
+        ip_x0_qr,
+        use_hacc
     );
 }
 
 void qg_batch_estdist_avx512(
     const char* batch_data,
-    const BatchQuery<float>& q_obj,
+    const BatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance
+    float* estimated_distances
 ) {
     if (padded_dim == 0 || padded_dim % 16 != 0) {
         throw std::invalid_argument("FastScan dimension must be a positive multiple of 16");
     }
     qg_batch_estdist_impl<fastscan::simd::accumulate_avx512>(
-        batch_data, q_obj, padded_dim, est_distance
+        batch_data, query_wrapper, padded_dim, estimated_distances
     );
 }
 

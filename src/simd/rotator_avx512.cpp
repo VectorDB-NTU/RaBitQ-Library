@@ -110,15 +110,15 @@ void kacs_walk_avx512(float* data, size_t len) {
 
 void fht_rotate_avx512(
     const float* data,
-    float* rotated_vec,
+    float* rotated_data,
     size_t dim,
     size_t padded_dim,
     size_t trunc_dim,
-    float fac,
+    float scale_factor,
     const uint8_t* flip
 ) {
     fht_rotate_impl<flip_sign_avx512, kacs_walk_avx512, kacs_walk_flip>(
-        data, rotated_vec, dim, padded_dim, trunc_dim, fac, flip
+        data, rotated_data, dim, padded_dim, trunc_dim, scale_factor, flip
     );
 }
 

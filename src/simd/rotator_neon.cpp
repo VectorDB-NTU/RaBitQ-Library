@@ -124,29 +124,29 @@ void kacs_walk_neon(float* data, size_t len) {
 
 void fht_rotate_neon(
     const float* data,
-    float* output,
+    float* rotated_data,
     size_t dim,
-    size_t padded,
-    size_t trunc,
-    float factor,
+    size_t padded_dim,
+    size_t trunc_dim,
+    float scale_factor,
     const uint8_t* flip
 ) {
-    if (trunc < 64 || trunc > 65536 || (trunc & (trunc - 1)) != 0) {
+    if (trunc_dim < 64 || trunc_dim > 65536 || (trunc_dim & (trunc_dim - 1)) != 0) {
         throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
     }
-    std::memmove(output, data, dim * sizeof(float));
-    std::fill(output + dim, output + padded, 0.0F);
+    std::memmove(rotated_data, data, dim * sizeof(float));
+    std::fill(rotated_data + dim, rotated_data + padded_dim, 0.0F);
     for (size_t pass = 0; pass < 4; ++pass) {
-        flip_sign_neon(flip + pass * padded / 8, output, padded);
-        const size_t start = pass % 2 == 0 ? 0 : padded - trunc;
-        fht(output + start, trunc);
-        rescale(output + start, trunc, factor);
-        if (padded != trunc) {
-            kacs_walk_neon(output, padded);
+        flip_sign_neon(flip + pass * padded_dim / 8, rotated_data, padded_dim);
+        const size_t start = pass % 2 == 0 ? 0 : padded_dim - trunc_dim;
+        fht(rotated_data + start, trunc_dim);
+        rescale(rotated_data + start, trunc_dim, scale_factor);
+        if (padded_dim != trunc_dim) {
+            kacs_walk_neon(rotated_data, padded_dim);
         }
     }
-    if (padded != trunc) {
-        rescale(output, padded, 0.25F);
+    if (padded_dim != trunc_dim) {
+        rescale(rotated_data, padded_dim, 0.25F);
     }
 }
 }  // namespace rabitqlib::simd

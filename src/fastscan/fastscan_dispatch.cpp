@@ -78,40 +78,48 @@ namespace rabitqlib::simd {
 
 void qg_batch_estdist(
     const char* batch_data,
-    const BatchQuery<float>& q_obj,
+    const BatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance
+    float* estimated_distances
 ) {
     static const auto kQgBatchEstdistFn = fastscan::detail::selected_backend().qg;
 
-    kQgBatchEstdistFn(batch_data, q_obj, padded_dim, est_distance);
+    kQgBatchEstdistFn(batch_data, query_wrapper, padded_dim, estimated_distances);
 }
 
 uint32_t qg_batch_estdist_mask(
     const char* batch_data,
-    const BatchQuery<float>& q_obj,
+    const BatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance,
+    float* estimated_distances,
     float threshold
 ) {
     static const auto kQgBatchEstdistMaskFn = fastscan::detail::selected_backend().qg_mask;
 
-    return kQgBatchEstdistMaskFn(batch_data, q_obj, padded_dim, est_distance, threshold);
+    return kQgBatchEstdistMaskFn(
+        batch_data, query_wrapper, padded_dim, estimated_distances, threshold
+    );
 }
 
 void split_batch_estdist(
     const char* batch_data,
-    const SplitBatchQuery<float>& q_obj,
+    const SplitBatchQuery<float>& query_wrapper,
     size_t padded_dim,
-    float* est_distance,
-    float* low_distance,
+    float* estimated_distances,
+    float* lower_bounds,
     float* ip_x0_qr,
     bool use_hacc
 ) {
     static const auto kSplitBatchEstdistFn = fastscan::detail::selected_backend().split;
 
     kSplitBatchEstdistFn(
-        batch_data, q_obj, padded_dim, est_distance, low_distance, ip_x0_qr, use_hacc
+        batch_data,
+        query_wrapper,
+        padded_dim,
+        estimated_distances,
+        lower_bounds,
+        ip_x0_qr,
+        use_hacc
     );
 }
 
@@ -128,7 +136,7 @@ void pack_lut<float>(size_t dim, const float* __restrict__ query, float* __restr
 
 void accumulate(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 ) {
@@ -137,7 +145,7 @@ void accumulate(
     if (dim == 0 || dim % 16 != 0) {
         throw std::invalid_argument("FastScan dimension must be a positive multiple of 16");
     }
-    kAccumulateFn(codes, lp_table, result, dim);
+    kAccumulateFn(codes, lookup_table, result, dim);
 }
 
 void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
@@ -154,7 +162,7 @@ void transfer_lut_hacc(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
 void accumulate_hacc(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 ) {
     static const auto kAccumulateHaccFn = detail::selected_backend().accumulate_hacc;
@@ -164,7 +172,7 @@ void accumulate_hacc(
             "high-accuracy FastScan dimension must be a positive multiple of 16"
         );
     }
-    kAccumulateHaccFn(codes, hc_lut, accu_res, dim);
+    kAccumulateHaccFn(codes, hc_lut, accumulated_values, dim);
 }
 
 }  // namespace rabitqlib::fastscan

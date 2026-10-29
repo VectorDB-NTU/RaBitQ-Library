@@ -39,7 +39,7 @@ void accumulate_unsupported(
 );
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 );
@@ -54,13 +54,13 @@ void accumulate_hacc_generic(
 void accumulate_hacc_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 );
 
 void accumulate_avx512(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lp_table,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* __restrict__ result,
     size_t dim
 );
@@ -68,7 +68,7 @@ void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 void accumulate_hacc_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ hc_lut,
-    int32_t* accu_res,
+    int32_t* accumulated_values,
     size_t dim
 );
 
