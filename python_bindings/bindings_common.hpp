@@ -225,6 +225,26 @@ ensure_1d_integer_array(py::handle value, const char* name) {
     return ensure_1d_array<int64_t>(value, name);
 }
 
+// The caller has already validated rank/dtype. Removed points still occupy IDs.
+inline std::vector<PID> checked_removal_ids(
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast>& ids,
+    size_t num_stored_points
+) {
+    std::vector<PID> result;
+    result.reserve(static_cast<size_t>(ids.shape(0)));
+    const rabitqlib::detail::ConstPackedArrayView<int64_t> values(
+        reinterpret_cast<const char*>(ids.data())
+    );
+    for (py::ssize_t i = 0; i < ids.shape(0); ++i) {
+        const int64_t id = values[static_cast<size_t>(i)];
+        if (id < 0 || static_cast<uint64_t>(id) >= num_stored_points) {
+            throw std::invalid_argument("ids must be in [0, num_stored_points)");
+        }
+        result.push_back(static_cast<PID>(id));
+    }
+    return result;
+}
+
 // Validate before narrowing, and own the result for APIs that mutate assignments.
 inline std::vector<PID> checked_cluster_ids(
     py::handle value,

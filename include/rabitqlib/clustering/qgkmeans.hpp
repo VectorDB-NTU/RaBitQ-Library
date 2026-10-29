@@ -184,25 +184,7 @@ class QGAssigner {
     void clear_hints() { previous_labels_.clear(); }
 
    private:
-    void assign_with_cache(
-        const float* centroids,
-        const float* x,
-        size_t n,
-        PID* labels,
-        float* distances,
-        detail::QuerySumCache& query_sums
-    ) {
-        if (centroids == nullptr || x == nullptr || labels == nullptr ||
-            distances == nullptr) {
-            throw std::invalid_argument(
-                "QGAssigner input and output pointers must not be null"
-            );
-        }
-
-        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d_) {
-            throw std::invalid_argument("QGAssigner input dimensions overflow ptrdiff_t");
-        }
-
+    void rebuild_centroid_graph(const float* centroids) {
         if (builder_) {
             builder_->reset(centroids);
         } else {
@@ -227,6 +209,28 @@ class QGAssigner {
         } else {
             builder_->build(niter_);
         }
+    }
+
+    void assign_with_cache(
+        const float* centroids,
+        const float* x,
+        size_t n,
+        PID* labels,
+        float* distances,
+        detail::QuerySumCache& query_sums
+    ) {
+        if (centroids == nullptr || x == nullptr || labels == nullptr ||
+            distances == nullptr) {
+            throw std::invalid_argument(
+                "QGAssigner input and output pointers must not be null"
+            );
+        }
+
+        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d_) {
+            throw std::invalid_argument("QGAssigner input dimensions overflow ptrdiff_t");
+        }
+
+        rebuild_centroid_graph(centroids);
         const auto distance_func = graph_->metric_type() == METRIC_IP
                                        ? dot_product_dis<float>
                                        : euclidean_sqr<float>;

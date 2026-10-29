@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -18,7 +17,6 @@
 #include "bindings_common.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 #include "rabitqlib/index/types.hpp"
-#include "rabitqlib/utils/packed.hpp"
 
 namespace py = pybind11;
 
@@ -156,20 +154,7 @@ class HnswIndex {
         if (!built_) {
             throw std::runtime_error("HnswIndex must be built or loaded before remove");
         }
-        // Removed labels remain allocated; validate against the full stored ID range.
-        const size_t count = index_->num_stored_points();
-        std::vector<rabitqlib::PID> to_remove;
-        to_remove.reserve(static_cast<size_t>(ids_array.shape(0)));
-        const rabitqlib::detail::ConstPackedArrayView<int64_t> values(
-            reinterpret_cast<const char*>(ids_array.data())
-        );
-        for (py::ssize_t i = 0; i < ids_array.shape(0); ++i) {
-            const int64_t id = values[static_cast<size_t>(i)];
-            if (id < 0 || static_cast<uint64_t>(id) >= count) {
-                throw std::invalid_argument("ids must be in [0, num_stored_points)");
-            }
-            to_remove.push_back(static_cast<rabitqlib::PID>(id));
-        }
+        auto to_remove = checked_removal_ids(ids_array, index_->num_stored_points());
         py::gil_scoped_release release;
         return index_->remove(to_remove.data(), to_remove.size());
     }
@@ -314,8 +299,8 @@ class HnswIndex {
 void register_hnsw(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
-    py::class_<HnswIndex>(
-        m, "HnswIndex", R"doc(An approximate nearest-neighbor index using HNSW.
+    static constexpr char kIndexDoc[] =
+        R"doc(An approximate nearest-neighbor index using HNSW.
 
 Parameters
 ----------
@@ -338,8 +323,9 @@ random_seed : int, optional
 Notes
 -----
 Build or load the index before searching or saving. Concurrent reads are
-supported; an overlapping mutation raises RuntimeError.)doc"
-    )
+supported; an overlapping mutation raises RuntimeError.)doc";
+
+    py::class_<HnswIndex>(m, "HnswIndex", kIndexDoc)
         .def(
             py::init<size_t, size_t, size_t, size_t, size_t, const std::string&, size_t>(),
             py::arg("dim"),
@@ -349,30 +335,7 @@ supported; an overlapping mutation raises RuntimeError.)doc"
             py::arg("nbits") = 8,
             py::arg("metric") = "l2",
             py::arg("random_seed") = 100,
-            R"doc(An approximate nearest-neighbor index using HNSW.
-
-Parameters
-----------
-dim : int
-    Original vector dimension, from 64 through 65536.
-max_elements : int
-    Storage capacity, including removed points. Use resize to grow it.
-M : int, optional
-    Graph connectivity, at least 2. Default is 16.
-ef_construction : int, optional
-    Construction search breadth. Default is 200.
-nbits : int, optional
-    Total quantization bits, 1 through 9. Default is 8.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-    automatically normalized for cosine similarity.
-random_seed : int, optional
-    Graph random seed. Default is 100.
-
-Notes
------
-Build or load the index before searching or saving. Concurrent reads are
-supported; an overlapping mutation raises RuntimeError.)doc"
+            kIndexDoc
         )
         .def(
             "build",

@@ -39,6 +39,12 @@
 
 namespace rabitqlib::symqg {
 
+namespace {
+// Native-endian numeric tag; little-endian files contain the bytes "QTIBARGQ".
+constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;
+constexpr uint32_t kFormatVersion = 1;
+}  // namespace
+
 QuantizedQuery::QuantizedQuery(
     const float* rotated_query,
     const float* centroid,
@@ -261,9 +267,6 @@ void QuantizedGraph<float>::save(const char* filename) const {
     }
     output.exceptions(std::ios::badbit | std::ios::failbit);
 
-    // Native-endian numeric tag; little-endian files contain the bytes "QTIBARGQ".
-    constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;
-    constexpr uint32_t kFormatVersion = 1;
     if (quantization_bits_ != 0) {
         output.write(reinterpret_cast<const char*>(&kFormatMagic), sizeof(kFormatMagic));
         output.write(
@@ -333,9 +336,6 @@ void QuantizedGraph<float>::load(const char* filename) {
         read_exact(&value, sizeof(value), field);
     };
 
-    // Native-endian numeric tag; little-endian files contain the bytes "QTIBARGQ".
-    constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;
-    constexpr uint32_t kFormatVersion = 1;
     uint64_t magic = 0;
     read_value(magic, "format marker");
     if (magic == kFormatMagic) {

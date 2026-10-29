@@ -219,8 +219,8 @@ class SymqgIndex {
 void register_symqg(py::module_& m) {
     using namespace rabitqlib::python_bindings;
 
-    py::class_<SymqgIndex>(
-        m, "SymqgIndex", R"doc(An approximate nearest-neighbor index using SymphonyQG.
+    static constexpr char kIndexDoc[] =
+        R"doc(An approximate nearest-neighbor index using SymphonyQG.
 
 Parameters
 ----------
@@ -238,33 +238,43 @@ quantization_bits : {0, 4, 8}, optional
 Notes
 -----
 Build or load the index before searching or saving. Concurrent reads are
-supported; an overlapping mutation raises RuntimeError.)doc"
-    )
+supported; an overlapping mutation raises RuntimeError.)doc";
+
+    static constexpr char kSearchDoc[] = R"doc(Search a batch of query vectors.
+
+Parameters
+----------
+queries : array_like of float, shape (n_queries, dim)
+    Vectors in the original, unpadded coordinates. Converted to contiguous
+    float32; a copy may be made.
+k : int
+    Number of neighbors requested, between 1 and num_points.
+ef : int
+    Search breadth. Must be positive and at least k.
+num_threads : int, optional
+    Worker count. Default is 1; 0 selects the available CPU count.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n_queries, k)
+    Point IDs of the selected neighbors.
+distances : ndarray of float32, shape (n_queries, k)
+    Lower values are better; squared L2 estimates for l2 and inner-product
+    distance estimates for ip. These are distances, not similarity scores.
+
+Notes
+-----
+Returns (ids, distances), in that order. Array shapes and value ranges are
+checked at runtime, not by static type checkers.)doc";
+
+    py::class_<SymqgIndex>(m, "SymqgIndex", kIndexDoc)
         .def(
             py::init<size_t, size_t, const std::string&, size_t>(),
             py::arg("dim"),
             py::arg("max_degree"),
             py::arg("metric") = "l2",
             py::arg("quantization_bits") = 0,
-            R"doc(An approximate nearest-neighbor index using SymphonyQG.
-
-Parameters
-----------
-dim : int
-    Original vector dimension, from 64 through 65536.
-max_degree : int
-    Graph degree bound; a positive multiple of 32.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-    automatically normalized for cosine similarity.
-quantization_bits : {0, 4, 8}, optional
-    Centroid-relative RaBitQ storage at 4 or 8 bits, or raw float32 at 0
-    (default).
-
-Notes
------
-Build or load the index before searching or saving. Concurrent reads are
-supported; an overlapping mutation raises RuntimeError.)doc"
+            kIndexDoc
         )
         .def(
             "build",
@@ -299,32 +309,7 @@ synchronous call.)doc"
             py::arg("k"),
             py::arg("ef"),
             py::arg("num_threads") = 1,
-            R"doc(Search a batch of query vectors.
-
-Parameters
-----------
-queries : array_like of float, shape (n_queries, dim)
-    Vectors in the original, unpadded coordinates. Converted to contiguous
-    float32; a copy may be made.
-k : int
-    Number of neighbors requested, between 1 and num_points.
-ef : int
-    Search breadth. Must be positive and at least k.
-num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count.
-
-Returns
--------
-ids : ndarray of uint32, shape (n_queries, k)
-    Point IDs of the selected neighbors.
-distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
-
-Notes
------
-Returns (ids, distances), in that order. Array shapes and value ranges are
-checked at runtime, not by static type checkers.)doc"
+            kSearchDoc
         )
         .def(
             "search_batch",
@@ -333,32 +318,7 @@ checked at runtime, not by static type checkers.)doc"
             py::arg("k"),
             py::arg("ef"),
             py::arg("num_threads") = 1,
-            R"doc(Search a batch of query vectors.
-
-Parameters
-----------
-queries : array_like of float, shape (n_queries, dim)
-    Vectors in the original, unpadded coordinates. Converted to contiguous
-    float32; a copy may be made.
-k : int
-    Number of neighbors requested, between 1 and num_points.
-ef : int
-    Search breadth. Must be positive and at least k.
-num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count.
-
-Returns
--------
-ids : ndarray of uint32, shape (n_queries, k)
-    Point IDs of the selected neighbors.
-distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
-
-Notes
------
-Returns (ids, distances), in that order. Array shapes and value ranges are
-checked at runtime, not by static type checkers.)doc"
+            kSearchDoc
         )
         .def(
             "save",
