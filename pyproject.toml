@@ -75,7 +75,7 @@ CMAKE_ARGS = '-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF -DOpenMP_ROOT="$RABITQ_OPE
 
 [tool.cibuildwheel.windows]
 before-build = "python -m pip install delvewheel"
-repair-wheel-command = "delvewheel repair -w {dest_dir} {wheel}"
+repair-wheel-command = 'python "{project}/.github/scripts/repair_windows_wheel.py" "{wheel}" "{dest_dir}"'
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

@@ -164,6 +164,11 @@ def classify(paths):
                 selected.add("python_quality")
         elif path.startswith("sample/python/"):
             selected.update(("python_quality", "python_build", "wheels"))
+        elif path in (
+            ".github/scripts/repair_windows_wheel.py",
+            ".github/scripts/test_repair_windows_wheel.py",
+        ):
+            selected.update(("python_quality", "wheels"))
         elif path.startswith(".github/scripts/"):
             selected.add("python_quality")
         elif path == ".github/workflows/test.yaml":

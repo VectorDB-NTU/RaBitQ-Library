@@ -157,10 +157,12 @@ endif()
 
 # Run allocation replacement in a separate process; this also exercises core-only builds.
 add_executable(compact_codes_failure_test failures/compact_codes_failure_test.cpp)
-target_link_libraries(compact_codes_failure_test PRIVATE GTest::gtest_main rabitqlib::core)
+target_link_libraries(compact_codes_failure_test PRIVATE GTest::gtest_main)
 if(RABITQ_BUILD_FASTSCAN)
     target_link_libraries(compact_codes_failure_test PRIVATE rabitqlib::fastscan)
     target_compile_definitions(compact_codes_failure_test PRIVATE RABITQ_TEST_FASTSCAN)
+else()
+    target_link_libraries(compact_codes_failure_test PRIVATE rabitqlib::core)
 endif()
 rabitq_configure_target(compact_codes_failure_test)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
