@@ -555,6 +555,29 @@ TEST(HnswResizeTest, RejectsUninitializedIndex) {
     }
 }
 
+TEST(HnswUninitializedTest, RejectsSearchAndSave) {
+    HierarchicalNSW index;
+    const std::vector<float> query(64, 1.0F);
+    for (const size_t num_queries : {1U, 0U}) {
+        SCOPED_TRACE(num_queries);
+        try {
+            index.search(query.data(), num_queries, 1, 10, 1);
+            FAIL() << "Searching an uninitialized index must fail";
+        } catch (const std::logic_error& error) {
+            EXPECT_STREQ(error.what(), "HNSW index must be initialized before search");
+        }
+    }
+
+    const rabitq_test::TempFile path_file("rabitq_hnsw_uninitialized_save.index");
+    try {
+        index.save(path_file.path().c_str());
+        FAIL() << "Saving an uninitialized index must fail";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(error.what(), "HNSW index must be initialized before save");
+    }
+    EXPECT_FALSE(std::filesystem::exists(std::filesystem::u8path(path_file.path())));
+}
+
 TEST(HnswResizeTest, AllowsResizeBeforeConstruction) {
     constexpr size_t kBuilt = 64;
     constexpr size_t kCapacity = 128;
