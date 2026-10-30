@@ -93,28 +93,9 @@ inline CodeFactorTerms<T> code_factor_terms(
 namespace one_bit {
 
 /**
- * Return data - centroid and write its sign code: 1 for strictly positive
- * coordinates, 0 otherwise (including zero). All buffers contain dim elements.
- */
-template <typename T>
-inline RowMajorArray<T> one_bit_code(
-    const T* data, const T* centroid, size_t dim, int* binary_code
-) {
-    ConstRowMajorArrayMap<T> data_arr(data, 1, dim);
-    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, dim);
-
-    RowMajorArray<T> residual_arr = data_arr - cent_arr;
-
-    RowMajorArrayMap<int> x_u(binary_code, 1, static_cast<long>(dim));
-    x_u = (residual_arr > 0).template cast<int>();
-
-    return residual_arr;
-}
-
-/**
- * Write the sign code and estimation factors for data - centroid, using the
- * same zero convention as one_bit_code. Inputs, binary_code, residual and
- * centered scratch each contain dim elements.
+ * Write the sign code and estimation factors for data - centroid: 1 for strictly
+ * positive coordinates, 0 otherwise (including zero). Inputs, binary_code, residual
+ * and centered scratch each contain dim elements.
  * f_add/f_rescale supply the additive/scaling terms for squared L2 or 1 - dot.
  * f_error is query-independent: multiplying it by the query residual norm gives
  * a probabilistic error margin, not a deterministic bound for every query.

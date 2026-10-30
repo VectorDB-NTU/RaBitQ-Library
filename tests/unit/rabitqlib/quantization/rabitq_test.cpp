@@ -595,10 +595,10 @@ TEST(RabitqFullQuantizationTest, ReconstructsFromCodeAndEstimatorFactors) {
 }
 
 // An exactly-zero residual coordinate must be encoded consistently by both halves of
-// the split code. one_bit_code() uses (residual > 0) and so calls zero negative; if
-// ex_bits_code() calls it positive, the assembled code lands 2^ex_bits away from where
-// the factors assume it is. The <c*xu_cb, r> == ||r||^2 invariant cannot see this,
-// because a zero coordinate contributes nothing to that inner product.
+// the split code. one_bit_code_with_factor() uses (residual > 0) and so calls zero
+// negative; if ex_bits_code() calls it positive, the assembled code lands 2^ex_bits away
+// from where the factors assume it is. The <c*xu_cb, r> == ||r||^2 invariant cannot see
+// this, because a zero coordinate contributes nothing to that inner product.
 TEST(RabitqSignConventionTest, ZeroResidualCoordinateGetsSmallestMagnitudeCode) {
     constexpr size_t kDim = 64;
     constexpr size_t kTotalBits = 8;
