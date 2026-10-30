@@ -11,15 +11,20 @@ import tomllib
 import unittest
 from pathlib import Path
 
+import yaml
 from ci_changes import GROUPS, classify
-
-ROOT = Path(__file__).resolve().parents[2]
+from workflow_data import ROOT, job, load_workflow, needs, runs, step, steps, uses
 
 
 class WorkflowContractsTest(unittest.TestCase):
     def test_ctest_invocations_reject_empty_selections(self):
-        workflow = (ROOT / ".github/workflows/test.yaml").read_text()
-        commands = re.findall(r"\bctest\s+[^\n]+", workflow)
+        workflow = load_workflow("test.yaml")
+        commands = [
+            command
+            for job_data in workflow["jobs"].values()
+            for run in runs(job_data)
+            for command in re.findall(r"\bctest\s+[^\n]+", run)
+        ]
         self.assertTrue(commands)
         for command in commands:
             with self.subTest(command=command):
@@ -38,7 +43,7 @@ class WorkflowContractsTest(unittest.TestCase):
             self.assertIn("No tests were found", result.stdout + result.stderr)
 
     def test_wheels_preserve_abi_coverage_and_release_gates(self):
-        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        workflow = load_workflow("release.yml")
         config = tomllib.loads((ROOT / "pyproject.toml").read_text())
         wheels = config["tool"]["cibuildwheel"]
         # Keep the full installed-wheel suite and platform repair hooks.
@@ -49,7 +54,40 @@ class WorkflowContractsTest(unittest.TestCase):
             wheels["windows"]["repair-wheel-command"],
         )
         self.assertIn("scripts/build-macos-openmp.sh", wheels["macos"]["before-all"])
-        self.assertEqual(workflow.count("pattern: '*-wheels'"), 2)
+        patterns = [
+            entry["with"]["pattern"]
+            for job_data in workflow["jobs"].values()
+            for entry in uses(job_data, "actions/download-artifact")
+        ]
+        self.assertEqual(patterns, ["*-wheels*", "*-wheels*"])
+        pr_selection = (
+            r"github\.event_name == 'pull_request' && '([^']+)' \|\| '([^']+)'"
+        )
+
+        def selections(build, event):
+            """Return the cibuildwheel identifier patterns and artifact names."""
+            cibw = next(
+                entry
+                for entry in steps(build)
+                if "pypa/cibuildwheel" in entry.get("uses", "")
+            )["env"]["CIBW_BUILD"]
+            artifact = uses(build, "actions/upload-artifact")[0]["with"]["name"]
+            matrix = build.get("strategy", {}).get("matrix")
+            if matrix is None:
+                pr, release = re.search(pr_selection, cibw).groups()
+                return [(pr if event == "pull_request" else release, artifact)]
+            # One runner per ABI: the matrix itself carries the event-specific list.
+            self.assertFalse(build["strategy"]["fail-fast"])
+            pr, release = re.search(pr_selection, matrix["abi"]).groups()
+            values = json.loads(pr if event == "pull_request" else release)
+            return [
+                (
+                    cibw.replace("${{ matrix.abi }}", abi),
+                    artifact.replace("${{ matrix.abi }}", abi),
+                )
+                for abi in values
+            ]
+
         artifacts = set()
         for prefix, tag, check_name in (
             ("linux", "manylinux_x86_64", "Linux x86-64 wheels"),
@@ -62,53 +100,47 @@ class WorkflowContractsTest(unittest.TestCase):
             ("macos", "macosx_arm64", "macOS arm64 wheels (CPython 3.11–3.14)"),
         ):
             with self.subTest(platform=prefix):
-                build = workflow.split(f"  {prefix}-wheel-build:\n", 1)[1].split(
-                    f"  {prefix}-wheels:\n", 1
-                )[0]
-                selection = re.search(
-                    r"CIBW_BUILD: \$\{\{ github.event_name == 'pull_request' "
-                    r"&& '([^']+)' \|\| '([^']+)' \}\}",
-                    build,
-                )
-                self.assertIsNotNone(selection)
+                build = job(workflow, f"{prefix}-wheel-build")
                 supported = {
                     identifier
                     for identifier in wheels["build"].split()
                     if identifier.endswith(f"-{tag}")
                 }
-                for patterns, abis in zip(
-                    selection.groups(), ((311, 314), (311, 312, 313, 314)), strict=True
+                for event, abis in (
+                    ("pull_request", (311, 314)),
+                    ("push", (311, 312, 313, 314)),
                 ):
-                    selected = {
-                        identifier
-                        for identifier in supported
-                        if any(
-                            fnmatch.fnmatchcase(identifier, p) for p in patterns.split()
-                        )
-                    }
+                    selected = set()
+                    for patterns_text, artifact in selections(build, event):
+                        selected |= {
+                            identifier
+                            for identifier in supported
+                            if any(
+                                fnmatch.fnmatchcase(identifier, pattern)
+                                for pattern in patterns_text.split()
+                            )
+                        }
+                        self.assertTrue(fnmatch.fnmatchcase(artifact, "*-wheels*"))
+                        if event == "push":
+                            self.assertNotIn(artifact, artifacts)
+                            artifacts.add(artifact)
                     self.assertEqual(selected, {f"cp{abi}-{tag}" for abi in abis})
-                self.assertNotIn("CIBW_TEST", build)
                 self.assertNotIn("continue-on-error", build)
-                self.assertNotIn("matrix", build)
-                artifact = re.search(r"          name: (\S+)", build).group(1)
-                self.assertTrue(fnmatch.fnmatchcase(artifact, "*-wheels"))
-                self.assertNotIn(artifact, artifacts)
-                artifacts.add(artifact)
-                gate = re.search(
-                    rf"^  {prefix}-wheels:\n(.*?)(?=^  [\w-]+:|\Z)",
-                    workflow,
-                    re.MULTILINE | re.DOTALL,
-                ).group(1)
-                self.assertIn(f"name: {check_name}", gate)
-                self.assertIn(f"needs: {prefix}-wheel-build", gate)
-                self.assertIn(
-                    f"BUILD_RESULT: ${{{{ needs.{prefix}-wheel-build.result }}}}", gate
+                for entry in steps(build):
+                    self.assertNotIn("CIBW_TEST", " ".join(entry.get("env", {})))
+                    self.assertNotIn("continue-on-error", entry)
+                gate = job(workflow, f"{prefix}-wheels")
+                self.assertEqual(gate["name"], check_name)
+                self.assertEqual(needs(gate), [f"{prefix}-wheel-build"])
+                (verdict_step,) = steps(gate)
+                self.assertEqual(
+                    verdict_step["env"]["BUILD_RESULT"],
+                    f"${{{{ needs.{prefix}-wheel-build.result }}}}",
                 )
-                command = gate.split("        run: ", 1)[1].strip()
                 for result in ("success", "failure", "cancelled", "skipped", ""):
                     with self.subTest(result=result):
                         verdict = subprocess.run(
-                            ["bash", "-e", "-c", command],
+                            ["bash", "-e", "-c", verdict_step["run"]],
                             env=dict(os.environ, BUILD_RESULT=result),
                             capture_output=True,
                             check=False,
@@ -146,14 +178,15 @@ class WorkflowContractsTest(unittest.TestCase):
         self.assertFalse(
             any(value.startswith("mypy") for value in config["project"]["dependencies"])
         )
-        workflow = (ROOT / ".github/workflows/python.yml").read_text()
-        build = workflow.split("  python-build:\n", 1)[1].split(
-            "  python-result:\n", 1
-        )[0]
-        self.assertIn('pip install ".[test,typing]"', build)
-        self.assertIn(
-            "python -m pytest tests/python/test_editor_support.py::test_installed_public_declarations",
-            build,
+        build = job(load_workflow("python.yml"), "python-build")
+        commands = runs(build)
+        self.assertTrue(any('pip install ".[test,typing]"' in run for run in commands))
+        self.assertTrue(
+            any(
+                "python -m pytest tests/python/test_editor_support.py"
+                "::test_installed_public_declarations" in run
+                for run in commands
+            )
         )
         self.assertNotIn("continue-on-error", build)
         self.assertIn(
@@ -182,27 +215,28 @@ class WorkflowContractsTest(unittest.TestCase):
 
         release = ReleaseTest().run_prepare(tags="v0.3.3", tag_sha="b" * 40)
         self.assertEqual(release["build"], "false")
-        workflow = (ROOT / ".github/workflows/python.yml").read_text()
-        build = workflow.split("  python-build:\n", 1)[1].split(
-            "  python-result:\n", 1
-        )[0]
-        steps = re.findall(
-            r"^      - name: (.*?)(?=^      - |\Z)",
-            build,
-            re.MULTILINE | re.DOTALL,
-        )
-        typing_steps = [step for step in steps if "tests/test_mypy.py" in step]
+        build = job(load_workflow("python.yml"), "python-build")
+        typing_steps = [
+            entry
+            for entry in steps(build)
+            if "tests/test_mypy.py" in entry.get("run", "")
+        ]
         self.assertEqual(len(typing_steps), 1)
-        self.assertIn("if: github.event_name == 'push'", typing_steps[0])
-        self.assertIn(
-            "run: python -m pytest tests/python/test_editor_support.py tests/test_mypy.py",
-            typing_steps[0],
+        self.assertEqual(typing_steps[0]["if"], "github.event_name == 'push'")
+        self.assertTrue(
+            typing_steps[0]["run"].startswith(
+                "python -m pytest tests/python/test_editor_support.py tests/test_mypy.py"
+            )
         )
         declaration_steps = [
-            step for step in steps if "::test_installed_public_declarations" in step
+            entry
+            for entry in steps(build)
+            if "::test_installed_public_declarations" in entry.get("run", "")
         ]
         self.assertEqual(len(declaration_steps), 1)
-        self.assertIn("if: github.event_name == 'pull_request'", declaration_steps[0])
+        self.assertEqual(
+            declaration_steps[0]["if"], "github.event_name == 'pull_request'"
+        )
         for path in (
             "tests/test_mypy.py",
             "tests/python/test_editor_support.py",
@@ -240,14 +274,15 @@ class WorkflowContractsTest(unittest.TestCase):
                 for dependency in config["tool"]["cibuildwheel"]["test-requires"]
             )
         )
-        workflow = (ROOT / ".github/workflows/python.yml").read_text()
-        build = workflow.split("  python-build:\n", 1)[1].split(
-            "  python-result:\n", 1
-        )[0]
-        self.assertIn("actions/setup-node@v7", build)
-        self.assertIn('node-version: "24"', build)
-        self.assertIn('pip install ".[test,typing]"', build)
-        self.assertIn("python -m pytest tests/test_pyright.py", build)
+        build = job(load_workflow("python.yml"), "python-build")
+        (node,) = uses(build, "actions/setup-node")
+        self.assertEqual(node["uses"], "actions/setup-node@v7")
+        self.assertEqual(node["with"]["node-version"], "24")
+        commands = runs(build)
+        self.assertTrue(any('pip install ".[test,typing]"' in run for run in commands))
+        self.assertTrue(
+            any("python -m pytest tests/test_pyright.py" in run for run in commands)
+        )
         self.assertNotIn("continue-on-error", build)
         self.assertEqual(
             classify(["tests/test_pyright.py"]), {"python_quality", "python_build"}
@@ -388,14 +423,11 @@ class WorkflowContractsTest(unittest.TestCase):
             "cpp",
             classify(["benchmarks/build_indexes.py", "src/core/api.cpp"]),
         )
-        workflow = (ROOT / ".github/workflows/python.yml").read_text()
-        quality = workflow.split("  python-quality:\n", 1)[1].split(
-            "  python-build:\n", 1
-        )[0]
-        self.assertIn("tests/python/test_benchmark_protocol.py", quality)
-        self.assertIn("numpy", quality)
-        self.assertIn("pytest", quality)
-        self.assertNotIn("pip install .", quality)
+        commands = "\n".join(runs(job(load_workflow("python.yml"), "python-quality")))
+        self.assertIn("tests/python/test_benchmark_protocol.py", commands)
+        self.assertIn("numpy", commands)
+        self.assertIn("pytest", commands)
+        self.assertNotIn("pip install .", commands)
 
     def test_python_checker_covers_every_benchmark_python_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -451,8 +483,7 @@ class WorkflowContractsTest(unittest.TestCase):
             return re.sub(r"\$\{\{(.*?)\}\}", expand, template)
 
         for filename in ("test.yaml", "python.yml"):
-            text = (ROOT / ".github/workflows" / filename).read_text()
-            template = re.search(r"^  group: (.+)$", text, re.MULTILINE).group(1)
+            template = load_workflow(filename)["concurrency"]["group"]
             with self.subTest(workflow=filename):
                 self.assertNotEqual(
                     group(template, 201, "a", filename),
@@ -468,15 +499,12 @@ class WorkflowContractsTest(unittest.TestCase):
                 )
 
     def test_windows_consumers_cover_each_component_and_openmp_mode(self):
-        workflow = (ROOT / ".github/workflows/test.yaml").read_text()
-        block = workflow.split("  core-consumer:\n", 1)[1].split(
-            "  core-consumer-result:\n", 1
-        )[0]
-        variants = re.findall(
-            r'- os: windows-2025-vs2026\n\s+openmp: "(ON|OFF)"'
-            r"\n\s+component: (core|fastscan)",
-            block,
-        )
+        consumers = job(load_workflow("test.yaml"), "core-consumer")
+        variants = [
+            (entry["openmp"], entry["component"])
+            for entry in consumers["strategy"]["matrix"]["include"]
+            if entry["os"] == "windows-2025-vs2026"
+        ]
         self.assertCountEqual(
             variants,
             [
@@ -485,14 +513,84 @@ class WorkflowContractsTest(unittest.TestCase):
                 for component in ("core", "fastscan")
             ],
         )
-        windows = block.split(
-            "      - name: Test external core-only integrations (Windows)\n", 1
-        )[1].split("      - name: Report compiler cache statistics", 1)[0]
-        self.assertIn("-DRABITQ_COMPONENT=${{ matrix.component }}", windows)
+        windows = step(consumers, "Test external core-only integrations (Windows)")
+        self.assertIn("-DRABITQ_COMPONENT=${{ matrix.component }}", windows["run"])
         self.assertIn(
             "-DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && "
             "matrix.component != 'core' && 'ON' || 'OFF' }}",
-            windows,
+            windows["run"],
+        )
+
+    def test_source_integrations_keep_one_gcc_and_one_msvc_owner(self):
+        workflow = load_workflow("test.yaml")
+        consumers = job(workflow, "core-consumer")
+        selection = (
+            "-DRABITQ_INTEGRATIONS=${{ (matrix.os == 'ubuntu-latest' || "
+            "matrix.integrations == 'ALL') && 'ALL' || 'PACKAGE' }}"
+        )
+        for platform in ("Linux", "macOS", "Windows"):
+            with self.subTest(platform=platform):
+                entry = step(
+                    consumers, f"Test external core-only integrations ({platform})"
+                )
+                self.assertIn(selection, entry["run"])
+        matrix = consumers["strategy"]["matrix"]
+        owners = [
+            entry for entry in matrix["include"] if entry.get("integrations") == "ALL"
+        ]
+        self.assertEqual(
+            [(e["os"], e["openmp"], e["component"]) for e in owners],
+            [("windows-2025-vs2026", "ON", "core")],
+        )
+        self.assertIn("ubuntu-latest", matrix["os"])
+        self.assertEqual(matrix["openmp"], ["ON", "OFF"])
+        clang = step(job(workflow, "clang"), "Test core and FastScan integrations")
+        self.assertIn("-DRABITQ_INTEGRATIONS=PACKAGE", clang["run"])
+
+    def test_compiling_unix_jobs_restore_a_compiler_cache(self):
+        workflow = load_workflow("test.yaml")
+        action = yaml.safe_load(
+            (ROOT / ".github/actions/setup-ccache/action.yml").read_text()
+        )
+        (cache,) = [entry for entry in action["runs"]["steps"] if "uses" in entry]
+        self.assertTrue(cache["uses"].startswith("actions/cache@"))
+        self.assertIn("${{ github.sha }}", cache["with"]["key"])
+        self.assertTrue(cache["with"]["key"].startswith(cache["with"]["restore-keys"]))
+        keys = []
+        for name, job_data in workflow["jobs"].items():
+            commands = runs(job_data)
+            compiles = any(
+                "cmake --build" in run or "tests/core_consumer/run.cmake" in run
+                for run in commands
+            )
+            if not compiles or job_data["runs-on"].startswith("windows"):
+                continue
+            setups = uses(job_data, "./.github/actions/setup-ccache")
+            # run.cmake disables native tuning; direct source configurations must say so.
+            portable = all(
+                "-DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF" in run
+                for run in commands
+                if re.search(r"cmake\s+-S\s+\.\s", run)
+            )
+            with self.subTest(job=name):
+                if not portable:
+                    # ccache keys -march=native literally; another CPU could reuse it.
+                    self.assertEqual(setups, [])
+                    continue
+                self.assertEqual(len(setups), 1, "a compiling job must set up ccache")
+                setup = setups[0]
+                position = steps(job_data).index(setup)
+                first_build = next(
+                    index
+                    for index, entry in enumerate(steps(job_data))
+                    if "cmake" in entry.get("run", "")
+                    and ("-S " in entry["run"] or "run.cmake" in entry["run"])
+                )
+                self.assertLess(position, first_build)
+                keys.append((job_data["runs-on"], setup["with"]["key"]))
+        self.assertTrue(keys)
+        self.assertEqual(
+            uses(job(workflow, "ubuntu"), "./.github/actions/setup-ccache"), []
         )
 
     def test_consumer_reference_ownership_preserves_integration_checks(self):
@@ -527,19 +625,56 @@ done
 """
                 )
                 helper.chmod(0o755)
-            for index, (openmp, reference, component, expected, fail) in enumerate(
+            all_methods = {"ADD_SUBDIRECTORY", "FETCHCONTENT", "PACKAGE"}
+            for index, (
+                openmp,
+                reference,
+                component,
+                integrations,
+                expected,
+                fail,
+            ) in enumerate(
                 [
-                    ("ON", "OFF", None, {"core": "OFF", "fastscan": "OFF"}, False),
-                    ("OFF", "ON", None, {"core": "OFF", "fastscan": "ON"}, False),
-                    ("ON", None, None, {"core": "OFF", "fastscan": "ON"}, False),
-                    ("OFF", "OFF", "core", {"core": "OFF"}, False),
-                    ("ON", None, "core", {"core": "ON"}, False),
-                    ("OFF", "ON", "fastscan", {"fastscan": "ON"}, False),
-                    ("OFF", "ON", "fastscan", {"fastscan": "ON"}, True),
+                    (
+                        "ON",
+                        "OFF",
+                        None,
+                        None,
+                        {"core": "OFF", "fastscan": "OFF"},
+                        False,
+                    ),
+                    ("OFF", "ON", None, None, {"core": "OFF", "fastscan": "ON"}, False),
+                    ("ON", None, None, None, {"core": "OFF", "fastscan": "ON"}, False),
+                    ("OFF", "OFF", "core", None, {"core": "OFF"}, False),
+                    ("ON", None, "core", None, {"core": "ON"}, False),
+                    ("OFF", "ON", "fastscan", None, {"fastscan": "ON"}, False),
+                    ("OFF", "ON", "fastscan", None, {"fastscan": "ON"}, True),
+                    (
+                        "ON",
+                        "OFF",
+                        None,
+                        "ALL",
+                        {"core": "OFF", "fastscan": "OFF"},
+                        False,
+                    ),
+                    (
+                        "OFF",
+                        "ON",
+                        None,
+                        "PACKAGE",
+                        {"core": "OFF", "fastscan": "ON"},
+                        False,
+                    ),
+                    ("ON", "OFF", "core", "PACKAGE", {"core": "OFF"}, False),
                 ]
             ):
+                methods = {"PACKAGE"} if integrations == "PACKAGE" else all_methods
                 with self.subTest(
-                    openmp=openmp, reference=reference, component=component, fail=fail
+                    openmp=openmp,
+                    reference=reference,
+                    component=component,
+                    integrations=integrations,
+                    fail=fail,
                 ):
                     log.unlink(missing_ok=True)
                     command = [
@@ -554,6 +689,8 @@ done
                         command.append(f"-DRABITQ_RUN_REFERENCE_TESTS={reference}")
                     if component is not None:
                         command.append(f"-DRABITQ_COMPONENT={component}")
+                    if integrations is not None:
+                        command.append(f"-DRABITQ_INTEGRATIONS={integrations}")
                     result = subprocess.run(
                         [*command, "-P", str(ROOT / "tests/core_consumer/run.cmake")],
                         env=dict(
@@ -599,7 +736,7 @@ done
                                 for path in tests
                                 if path.parent.name == name and path.name != "producer"
                             },
-                            {"ADD_SUBDIRECTORY", "FETCHCONTENT", "PACKAGE"},
+                            methods,
                         )
                     self.assertEqual(
                         any(path.name == "benchmark" for path in tests),
@@ -608,14 +745,31 @@ done
 
     def test_component_partition_rejects_unknown_or_empty_selection(self):
         with tempfile.TemporaryDirectory() as directory:
-            for component in ("unknown", ""):
-                with self.subTest(component=component):
+            for option, value, message in (
+                (
+                    "RABITQ_COMPONENT",
+                    "unknown",
+                    "RABITQ_COMPONENT must be core or fastscan",
+                ),
+                ("RABITQ_COMPONENT", "", "RABITQ_COMPONENT must be core or fastscan"),
+                (
+                    "RABITQ_INTEGRATIONS",
+                    "FETCHCONTENT",
+                    "RABITQ_INTEGRATIONS must be ALL or PACKAGE",
+                ),
+                (
+                    "RABITQ_INTEGRATIONS",
+                    "",
+                    "RABITQ_INTEGRATIONS must be ALL or PACKAGE",
+                ),
+            ):
+                with self.subTest(option=option, value=value):
                     result = subprocess.run(
                         [
                             "cmake",
                             f"-DRABITQ_SOURCE_DIR={ROOT}",
                             f"-DWORK_DIR={directory}",
-                            f"-DRABITQ_COMPONENT={component}",
+                            f"-D{option}={value}",
                             "-P",
                             str(ROOT / "tests/core_consumer/run.cmake"),
                         ],
@@ -624,23 +778,25 @@ done
                         check=False,
                     )
                     self.assertNotEqual(result.returncode, 0)
-                    self.assertIn(
-                        "RABITQ_COMPONENT must be core or fastscan", result.stderr
-                    )
+                    self.assertIn(message, result.stderr)
                     self.assertFalse(list(Path(directory).iterdir()))
 
     def test_documentation_summary_is_available_for_non_doc_prs(self):
-        text = (ROOT / ".github/workflows/docs.yml").read_text()
-        triggers = text.split("concurrency:", 1)[0]
-        self.assertNotIn("paths:", triggers)
-        self.assertNotIn("paths-ignore:", triggers)
-        self.assertIn("  pull_request:", triggers)
-        self.assertIn("  workflow_dispatch:", triggers)
-        self.assertIn("uses: ./.github/workflows/changes.yml", text)
-        build = text.split("  build:\n", 1)[1].split("  docs-result:\n", 1)[0]
-        self.assertIn("needs: changes", build)
-        self.assertIn("needs.changes.outputs.docs == 'true'", build)
-        self.assertIn("needs.changes.result != 'success'", build)
+        workflow = load_workflow("docs.yml")
+        triggers = workflow["on"]
+        for event in triggers.values():
+            if isinstance(event, dict):
+                self.assertNotIn("paths", event)
+                self.assertNotIn("paths-ignore", event)
+        self.assertIn("pull_request", triggers)
+        self.assertIn("workflow_dispatch", triggers)
+        self.assertEqual(
+            job(workflow, "changes")["uses"], "./.github/workflows/changes.yml"
+        )
+        build = job(workflow, "build")
+        self.assertEqual(needs(build), ["changes"])
+        self.assertIn("needs.changes.outputs.docs == 'true'", build["if"])
+        self.assertIn("needs.changes.result != 'success'", build["if"])
         self.assertEqual(classify(["docs/docs/quick_start.md"]), {"docs"})
 
 

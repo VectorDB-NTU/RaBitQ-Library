@@ -1,0 +1,41 @@
+name: Set up ccache
+description: >-
+  Install ccache, route CMake compilations through it and keep its cache between runs
+  on Linux and macOS. Visual Studio generators do not support compiler launchers.
+inputs:
+  key:
+    description: Cache partition for one compiler and build configuration.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install ccache
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v ccache >/dev/null 2>&1; then
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ccache
+          else
+            brew install ccache
+          fi
+        fi
+        ccache --version | head -n 1
+        {
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
+          echo "CCACHE_MAXSIZE=500M"
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        } >> "$GITHUB_ENV"
+    # Each run saves under its commit; later runs restore the newest matching partition.
+    - name: Restore compiler cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.key }}-${{ github.sha }}
+        restore-keys: ccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.key }}-
+    - name: Reset compiler cache statistics
+      shell: bash
+      run: ccache --zero-stats

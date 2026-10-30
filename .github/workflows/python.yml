@@ -30,7 +30,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install validation dependencies
-        run: python -m pip install "ruff==0.16.1" numpy pytest
+        run: python -m pip install "ruff==0.16.1" numpy pytest pyyaml
       - name: Check Python
         run: ./scripts/check-python.sh
       - name: Check release automation
@@ -46,10 +46,12 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.python_build == 'true') }}
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    # Release wheel jobs build and fully test the oldest and newest ABIs on every PR, so
+    # one source build covers typing, editor metadata and source-installation smoke tests.
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.14"]
+        python-version: ["3.11"]
 
     steps:
       - uses: actions/checkout@v7
@@ -99,10 +101,8 @@ jobs:
           tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
       - name: Install FAISS comparison dependency
-        if: matrix.python-version == '3.11'
         run: python -m pip install faiss-cpu
       - name: Test comparison script
-        if: matrix.python-version == '3.11'
         env:
           OMP_NUM_THREADS: "2"
         run: python -m pytest tests/python/test_compare_with_faiss.py --tb=short -q

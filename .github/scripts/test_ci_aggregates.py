@@ -1,24 +1,21 @@
 """Execute the matrix verdict commands with success, skip and failure inputs."""
 
 import os
-import re
 import subprocess
-import textwrap
 import unittest
-from pathlib import Path
 
-WORKFLOWS = Path(__file__).resolve().parents[1] / "workflows"
+from workflow_data import job, load_workflow, needs, steps
 
 
 class MatrixSummaryTest(unittest.TestCase):
     def test_matrix_verdicts_and_dependencies(self):
-        for filename, job, dependency, output, selection_var in (
+        for filename, job_name, dependency, output, selection_var in (
             ("test.yaml", "clang-result", "clang", "cpp", "CPP_SELECTED"),
             (
                 "test.yaml",
                 "core-consumer-result",
                 "core-consumer",
-                "cpp",
+                "cpp_core",
                 "CPP_SELECTED",
             ),
             (
@@ -30,20 +27,19 @@ class MatrixSummaryTest(unittest.TestCase):
             ),
             ("docs.yml", "docs-result", "build", "docs", "DOCS_SELECTED"),
         ):
-            workflow = (WORKFLOWS / filename).read_text()
-            block = re.search(
-                rf"^  {job}:\n(.*?)(?=^  [\w-]+:|\Z)",
-                workflow,
-                re.MULTILINE | re.DOTALL,
-            ).group(1)
-            self.assertIn(f"needs: [changes, {dependency}]", block)
-            self.assertIn("if: ${{ always() }}", block)
-            self.assertIn(f"MATRIX_RESULT: ${{{{ needs.{dependency}.result }}}}", block)
-            self.assertIn("CHANGES_RESULT: ${{ needs.changes.result }}", block)
-            self.assertIn(
-                f"{selection_var}: ${{{{ needs.changes.outputs.{output} }}}}", block
+            summary = job(load_workflow(filename), job_name)
+            self.assertEqual(needs(summary), ["changes", dependency])
+            self.assertEqual(summary["if"], "${{ always() }}")
+            (verdict,) = steps(summary)
+            self.assertEqual(
+                verdict["env"],
+                {
+                    "CHANGES_RESULT": "${{ needs.changes.result }}",
+                    selection_var: f"${{{{ needs.changes.outputs.{output} }}}}",
+                    "MATRIX_RESULT": f"${{{{ needs.{dependency}.result }}}}",
+                },
             )
-            command = textwrap.dedent(block.split("        run: |\n", 1)[1])
+            command = verdict["run"]
             for detection in ("success", "failure", "cancelled", "skipped"):
                 for selected in ("true", "false", ""):
                     for matrix in ("success", "failure", "cancelled", "skipped", ""):
@@ -53,7 +49,7 @@ class MatrixSummaryTest(unittest.TestCase):
                             and matrix == "skipped"
                         )
                         with self.subTest(
-                            job=job,
+                            job=job_name,
                             detection=detection,
                             selected=selected,
                             matrix=matrix,

@@ -12,6 +12,7 @@ class ChangeSelectionTest(unittest.TestCase):
         cases = {
             ".github/workflows/test.yaml": {
                 "cpp",
+                "cpp_core",
                 "cpp_format",
                 "cpp_tidy",
                 "shell",
@@ -73,8 +74,8 @@ class ChangeSelectionTest(unittest.TestCase):
             "example_py.sh": {"shell"},
             "python/ivf.py": {"python_quality", "python_build", "wheels"},
             "python/utils/io.py": {"python_quality", "python_build", "wheels"},
-            "tests/core_consumer/run.cmake": {"cpp", "python_quality"},
-            "tests/fixtures/core_api_v1/consumer.cpp": {"cpp"},
+            "tests/core_consumer/run.cmake": {"cpp", "cpp_core", "python_quality"},
+            "tests/fixtures/core_api_v1/consumer.cpp": {"cpp", "cpp_core"},
             ".github/scripts/repair_windows_wheel.py": {"python_quality", "wheels"},
             ".github/scripts/test_repair_windows_wheel.py": {
                 "python_quality",
@@ -92,6 +93,7 @@ class ChangeSelectionTest(unittest.TestCase):
             {
                 "benchmarks",
                 "cpp",
+                "cpp_core",
                 "cpp_format",
                 "cpp_tidy",
                 "python_build",
@@ -103,25 +105,70 @@ class ChangeSelectionTest(unittest.TestCase):
         self.assertEqual(classify(["benchmarks/new_kernel.cpp"]), set(GROUPS))
 
     def test_shared_code_runs_cpp_and_python(self):
-        for path in ("include/rabitqlib/index/ivf/ivf.hpp", "src/simd/dispatch.cpp"):
+        library = {
+            "cpp",
+            "cpp_format",
+            "cpp_tidy",
+            "python_build",
+            "wheels",
+            "benchmarks",
+        }
+        for path, core in (
+            ("include/rabitqlib/index/ivf/ivf.hpp", False),
+            ("src/simd/dispatch.cpp", True),
+        ):
             with self.subTest(path=path):
                 self.assertEqual(
-                    classify([path]),
-                    {
-                        "cpp",
-                        "cpp_format",
-                        "cpp_tidy",
-                        "python_build",
-                        "wheels",
-                        "benchmarks",
-                    },
+                    classify([path]), library | ({"cpp_core"} if core else set())
                 )
+
+    def test_index_only_cpp_changes_skip_core_consumers(self):
+        for path in (
+            "src/index/ivf.cpp",
+            "include/rabitqlib/index/hnsw/hnsw.hpp",
+            "include/rabitqlib/clustering/qgkmeans.hpp",
+            "include/rabitqlib/third/hnswlib/hnswalg.h",
+            "tests/unit/rabitqlib/index/qg_test.cpp",
+            "tests/unit/rabitqlib/clustering/qgkmeans_test.cpp",
+            "tests/failures/construction_failure_test.cpp",
+            "tests/failures/hnsw_add_allocation_test.cpp",
+            "tests/consumer/main.cpp",
+            "tests/integration/cpp_example_index_check.cpp",
+            "sample/cpp/ivf_rabitq_querying.cpp",
+        ):
+            with self.subTest(path=path):
+                selected = classify([path])
+                self.assertIn("cpp", selected)
+                self.assertNotIn("cpp_core", selected)
+        for path in (
+            "src/core/api.cpp",
+            "src/fastscan/fastscan_avx2.cpp",
+            "include/rabitqlib/core/api.hpp",
+            "include/rabitqlib/utils/space.hpp",
+            "include/rabitqlib/third/Eigen/Core",
+            "tests/unit/rabitqlib/quantization/core_api_test.cpp",
+            "tests/unit/rabitqlib/utils/thread_count_test.cpp",
+            "tests/common/temp_file.hpp",
+            "tests/failures/compact_codes_failure_test.cpp",
+            "tests/CMakeLists.txt",
+            "tests/core_consumer/CMakeLists.txt",
+            "sample/cpp/core/main.cpp",
+            "sample/cpp/fastscan/main.cpp",
+            "CMakeLists.txt",
+        ):
+            with self.subTest(path=path):
+                self.assertLessEqual({"cpp", "cpp_core"}, classify([path]))
+        self.assertIn("cpp_core", classify(["src/index/ivf.cpp", "src/core/api.cpp"]))
 
     def test_language_specific_changes(self):
         cases = {
             "tests/unit/rabitqlib/index/ivf_test.cpp": {"cpp", "cpp_format"},
-            "tests/dispatch/fastscan_no_simd_test.cpp": {"cpp", "cpp_format"},
-            "tests/allocation/core_api_no_alloc.cpp": {"cpp", "cpp_format"},
+            "tests/dispatch/fastscan_no_simd_test.cpp": {
+                "cpp",
+                "cpp_core",
+                "cpp_format",
+            },
+            "tests/allocation/core_api_no_alloc.cpp": {"cpp", "cpp_core", "cpp_format"},
             "tests/failures/construction_failure_test.cpp": {"cpp", "cpp_format"},
             "sample/cpp/ivf_rabitq_querying.cpp": {"cpp", "cpp_format"},
             "python_bindings/ivf_bindings.cpp": {
@@ -179,6 +226,7 @@ class ChangeSelectionTest(unittest.TestCase):
             ".clang-tidy": {"cpp_tidy"},
             ".github/workflows/test.yaml": {
                 "cpp",
+                "cpp_core",
                 "cpp_format",
                 "cpp_tidy",
                 "python_quality",
@@ -199,14 +247,28 @@ class ChangeSelectionTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(
                     classify([path]),
-                    {"cpp", "cpp_tidy", "python_build", "wheels", "benchmarks"},
+                    {
+                        "cpp",
+                        "cpp_core",
+                        "cpp_tidy",
+                        "python_build",
+                        "wheels",
+                        "benchmarks",
+                    },
                 )
 
     def test_mixed_changes_and_renamed_source(self):
         self.assertIn("cpp", classify(["docs/new.md", "src/deleted.cpp"]))
         self.assertEqual(
             classify(["sample/python/tool.py", "tests/unit/example.cpp"]),
-            {"cpp", "cpp_format", "python_quality", "python_build", "wheels"},
+            {
+                "cpp",
+                "cpp_core",
+                "cpp_format",
+                "python_quality",
+                "python_build",
+                "wheels",
+            },
         )
 
     def test_unknown_inputs_and_filter_edits_run_everything(self):

@@ -66,10 +66,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install ShellCheck
+      - name: Use the runner's ShellCheck
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y shellcheck
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version
       - name: Check scripts
         run: |
           files=(scripts/*.sh)
@@ -94,6 +97,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - uses: ./.github/actions/setup-ccache
+        with:
+          key: gcc-benchmarks
       - name: Install build dependencies
         run: |
           cmake --version
@@ -126,6 +132,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      # No compiler cache: ccache keys -march=native literally, so objects built for one
+      # runner's CPU could be restored on another runner without those instructions.
       - name: Verify runner build tools
         run: |
           cmake --version
@@ -175,15 +183,14 @@ jobs:
       CC: clang-23
       CXX: clang++-23
       OMP_NUM_THREADS: "2"
-      CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-clang
-      - name: Install compiler cache
-        run: |
-          sudo apt-get install -y ccache
-          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
-      # OpenMP OFF runs the full core/FastScan suites in the integrations below.
+      - uses: ./.github/actions/setup-ccache
+        with:
+          key: clang-openmp-${{ matrix.openmp }}
+      # OpenMP OFF runs the full core/FastScan suites in the integrations below; the
+      # GCC core consumers own the add_subdirectory and FetchContent integrations.
       - name: Configure portable build
         if: matrix.openmp == 'ON'
         run: >-
@@ -213,6 +220,7 @@ jobs:
           -DWORK_DIR="$RUNNER_TEMP/rabitq-clang-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && 'ON' || 'OFF' }}
+          -DRABITQ_INTEGRATIONS=PACKAGE
           -P tests/core_consumer/run.cmake
       - name: Report compiler cache statistics
         if: ${{ always() }}
@@ -273,6 +281,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-ccache
+        with:
+          key: gcc-sanitizers
       - name: Verify runner build tools
         run: |
           cmake --version
@@ -315,6 +326,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-ccache
+        with:
+          key: gcc-portable
       - name: Verify runner build tools
         run: |
           cmake --version
@@ -370,16 +384,19 @@ jobs:
   core-consumer:
     name: Core and FastScan consumers (${{ matrix.os }}, OpenMP ${{ matrix.openmp }}${{ matrix.component && format(', {0}', matrix.component) || '' }})
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp == 'true') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.cpp_core == 'true') }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-15]
         openmp: ["ON", "OFF"]
         include:
+          # add_subdirectory and FetchContent run on GCC and on one MSVC partition;
+          # other partitions check the installed package and the reference suites.
           - os: windows-2025-vs2026
             openmp: "ON"
             component: core
+            integrations: ALL
           - os: windows-2025-vs2026
             openmp: "OFF"
             component: core
@@ -393,21 +410,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Install Linux compiler cache
-        if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y ccache
-      - name: Install Apple compiler cache and optional OpenMP
-        if: runner.os == 'macOS'
-        run: |
-          brew install ccache
-          if [ "${{ matrix.openmp }}" = ON ]; then
-            brew install libomp
-          fi
-      - name: Configure compiler cache
+      - uses: ./.github/actions/setup-ccache
         if: runner.os != 'Windows'
-        run: |
-          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> "$GITHUB_ENV"
-          echo "CCACHE_DIR=$RUNNER_TEMP/ccache" >> "$GITHUB_ENV"
+        with:
+          key: core-consumer-openmp-${{ matrix.openmp }}
+      - name: Install optional Apple OpenMP
+        if: runner.os == 'macOS' && matrix.openmp == 'ON'
+        run: brew install libomp
       - name: Test external core-only integrations (Linux)
         if: runner.os == 'Linux'
         run: >-
@@ -415,6 +424,7 @@ jobs:
           -DWORK_DIR="$RUNNER_TEMP/rabitq-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
+          -DRABITQ_INTEGRATIONS=${{ (matrix.os == 'ubuntu-latest' || matrix.integrations == 'ALL') && 'ALL' || 'PACKAGE' }}
           -P tests/core_consumer/run.cmake
       - name: Test external core-only integrations (macOS)
         if: runner.os == 'macOS'
@@ -423,6 +433,7 @@ jobs:
           -DWORK_DIR="$RUNNER_TEMP/rabitq-core"
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
+          -DRABITQ_INTEGRATIONS=${{ (matrix.os == 'ubuntu-latest' || matrix.integrations == 'ALL') && 'ALL' || 'PACKAGE' }}
           -DOpenMP_ROOT="$(brew --prefix)/opt/libomp"
           -P tests/core_consumer/run.cmake
       - name: Test external core-only integrations (Windows)
@@ -437,6 +448,7 @@ jobs:
           -DRABITQ_COMPONENT=${{ matrix.component }}
           -DRABITQ_USE_OPENMP=${{ matrix.openmp }}
           -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
+          -DRABITQ_INTEGRATIONS=${{ (matrix.os == 'ubuntu-latest' || matrix.integrations == 'ALL') && 'ALL' || 'PACKAGE' }}
           -P tests/core_consumer/run.cmake
       - name: Report compiler cache statistics
         if: ${{ always() && runner.os != 'Windows' }}
@@ -452,7 +464,7 @@ jobs:
       - name: Require selected matrix checks
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
-          CPP_SELECTED: ${{ needs.changes.outputs.cpp }}
+          CPP_SELECTED: ${{ needs.changes.outputs.cpp_core }}
           MATRIX_RESULT: ${{ needs.core-consumer.result }}
         run: |
           if [ "$CHANGES_RESULT" = success ] && [ "$CPP_SELECTED" = false ]; then
@@ -473,6 +485,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install build tools
         run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+      - uses: ./.github/actions/setup-ccache
+        with:
+          key: gcc-portable
       - name: Configure portable ARM64 build
         run: |
           test "$(uname -m)" = aarch64
@@ -504,6 +519,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install build tools and existing OpenMP dependency
         run: brew install cmake ninja libomp
+      - uses: ./.github/actions/setup-ccache
+        with:
+          key: appleclang-portable
       - name: Configure portable ARM64 source groups
         run: |
           test "$(uname -m)" = arm64
