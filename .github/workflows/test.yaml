@@ -120,6 +120,8 @@ jobs:
         run: cmake --build build-benchmarks --parallel 2
       - name: Run bounded benchmark smoke tests
         run: ctest --test-dir build-benchmarks --output-on-failure --no-tests=error --timeout 60
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() }}
 
   ubuntu:
     needs: changes
@@ -222,9 +224,8 @@ jobs:
           -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && 'ON' || 'OFF' }}
           -DRABITQ_INTEGRATIONS=PACKAGE
           -P tests/core_consumer/run.cmake
-      - name: Report compiler cache statistics
-        if: ${{ always() }}
-        run: ccache --show-stats
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() }}
 
   clang-result:
     name: Clang validation
@@ -317,6 +318,8 @@ jobs:
             -DRABITQ_EXPECT_SANITIZERS=ON
           cmake --build build-sanitized-consumer
           ctest --test-dir build-sanitized-consumer --output-on-failure --no-tests=error
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() }}
 
   downstream-consumer:
     needs: changes
@@ -380,6 +383,8 @@ jobs:
           cmake --build build-consumer
       - name: Test downstream consumer
         run: ctest --test-dir build-consumer --output-on-failure --no-tests=error
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() }}
 
   core-consumer:
     name: Core and FastScan consumers (${{ matrix.os }}, OpenMP ${{ matrix.openmp }}${{ matrix.component && format(', {0}', matrix.component) || '' }})
@@ -450,9 +455,8 @@ jobs:
           -DRABITQ_RUN_REFERENCE_TESTS=${{ matrix.openmp == 'OFF' && matrix.component != 'core' && 'ON' || 'OFF' }}
           -DRABITQ_INTEGRATIONS=${{ (matrix.os == 'ubuntu-latest' || matrix.integrations == 'ALL') && 'ALL' || 'PACKAGE' }}
           -P tests/core_consumer/run.cmake
-      - name: Report compiler cache statistics
-        if: ${{ always() && runner.os != 'Windows' }}
-        run: ccache --show-stats
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() && runner.os != 'Windows' }}
 
   core-consumer-result:
     name: Core and FastScan validation
@@ -506,6 +510,8 @@ jobs:
             -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/rabitq-install"
           cmake --build build-consumer --parallel 2
           ctest --test-dir build-consumer --output-on-failure --no-tests=error
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() }}
 
   macos-arm64:
     name: Native Apple Silicon C++
@@ -542,3 +548,5 @@ jobs:
             -DOpenMP_ROOT="$(brew --prefix libomp)"
           cmake --build build-consumer --parallel 3
           ctest --test-dir build-consumer --output-on-failure --no-tests=error
+      - uses: ./.github/actions/save-ccache
+        if: ${{ !cancelled() }}

@@ -51,9 +51,11 @@ change detection fails, so a detection error cannot silently waive a check.
 
 Every Linux and macOS job that compiles the library with native tuning disabled uses
 `ccache` through CMake's compiler launcher, set up by `.github/actions/setup-ccache`.
-Each job saves its cache under a per-configuration key and the commit, and later runs
-restore the newest matching cache, so unchanged translation units are not recompiled
-between runs. Identical compilations within one job also reuse each other's output.
+Every run restores the newest cache saved from `main` for its per-configuration key,
+so unchanged translation units are not recompiled. Only pushes to `main` save, in the
+job's final `.github/actions/save-ccache` step, so pull requests cannot evict that
+cache from the repository's cache quota. Identical compilations within one job also
+reuse each other's output.
 The native-tuned `Ubuntu` job has no compiler cache: ccache keys `-march=native`
 literally, so objects built for one runner's CPU could otherwise be restored on a
 runner without those instructions. Windows keeps its existing Visual Studio build

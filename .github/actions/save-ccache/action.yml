@@ -1,0 +1,16 @@
+name: Save ccache
+description: >-
+  Report the statistics of the cache set up by setup-ccache and save it on pushes to main.
+  Pull requests only restore, so they cannot evict the cache every pull request starts from.
+runs:
+  using: composite
+  steps:
+    - name: Report compiler cache statistics
+      shell: bash
+      run: ccache --show-stats
+    - name: Save compiler cache
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ${{ env.CCACHE_KEY_PREFIX }}${{ github.sha }}

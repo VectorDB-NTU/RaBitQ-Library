@@ -549,13 +549,34 @@ class WorkflowContractsTest(unittest.TestCase):
 
     def test_compiling_unix_jobs_restore_a_compiler_cache(self):
         workflow = load_workflow("test.yaml")
-        action = yaml.safe_load(
-            (ROOT / ".github/actions/setup-ccache/action.yml").read_text()
+        (restore,) = [
+            entry
+            for entry in yaml.safe_load(
+                (ROOT / ".github/actions/setup-ccache/action.yml").read_text()
+            )["runs"]["steps"]
+            if "uses" in entry
+        ]
+        (save,) = [
+            entry
+            for entry in yaml.safe_load(
+                (ROOT / ".github/actions/save-ccache/action.yml").read_text()
+            )["runs"]["steps"]
+            if "uses" in entry
+        ]
+        # Pull requests only restore, so they cannot evict the cache saved from main.
+        self.assertTrue(restore["uses"].startswith("actions/cache/restore@"))
+        self.assertTrue(save["uses"].startswith("actions/cache/save@"))
+        self.assertEqual(
+            save["if"], "github.event_name == 'push' && github.ref == 'refs/heads/main'"
         )
-        (cache,) = [entry for entry in action["runs"]["steps"] if "uses" in entry]
-        self.assertTrue(cache["uses"].startswith("actions/cache@"))
-        self.assertIn("${{ github.sha }}", cache["with"]["key"])
-        self.assertTrue(cache["with"]["key"].startswith(cache["with"]["restore-keys"]))
+        self.assertEqual(
+            save["with"],
+            {"path": restore["with"]["path"], "key": restore["with"]["key"]},
+        )
+        self.assertIn("${{ github.sha }}", restore["with"]["key"])
+        self.assertTrue(
+            restore["with"]["key"].startswith(restore["with"]["restore-keys"])
+        )
         keys = []
         for name, job_data in workflow["jobs"].items():
             commands = runs(job_data)
@@ -587,11 +608,18 @@ class WorkflowContractsTest(unittest.TestCase):
                     and ("-S " in entry["run"] or "run.cmake" in entry["run"])
                 )
                 self.assertLess(position, first_build)
+                # Saving after every build step keeps all of the job's compilations.
+                saves = uses(job_data, "./.github/actions/save-ccache")
+                self.assertEqual(saves, [steps(job_data)[-1]], "save ccache last")
+                self.assertIn("!cancelled()", saves[0]["if"])
                 keys.append((job_data["runs-on"], setup["with"]["key"]))
         self.assertTrue(keys)
         self.assertEqual(
             uses(job(workflow, "ubuntu"), "./.github/actions/setup-ccache"), []
         )
+        for workflow_path in (ROOT / ".github").rglob("*.y*ml"):
+            with self.subTest(file=workflow_path.name):
+                self.assertNotIn("actions/cache@", workflow_path.read_text())
 
     def test_consumer_reference_ownership_preserves_integration_checks(self):
         with tempfile.TemporaryDirectory() as directory:
