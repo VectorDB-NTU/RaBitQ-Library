@@ -219,6 +219,55 @@ TEST(XyQuantization, SignBitMatchesOneBitPathOnZeroResiduals) {
     }
 }
 
+// A residual whose squared norm is zero takes the zero-residual path of the other
+// encoders; the split code must reassemble to the same full code. The second case
+// has nonzero components whose float squares underflow to zero.
+TEST(XyQuantization, ZeroNormResidualMatchesFullCode) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kExtraBits = 3;
+
+    std::vector<float> data(kDim, 1.0F);
+    std::vector<float> tiny(kDim, 0.0F);
+    for (size_t j = 0; j < kDim; j += 2) {
+        tiny[j] = 1e-30F;
+    }
+    ASSERT_EQ(l2norm_sqr<float>(tiny.data(), kDim), 0.0F);
+    const std::vector<std::pair<std::vector<float>, std::vector<float>>> cases{
+        {data, data}, {tiny, std::vector<float>(kDim, 0.0F)}};
+
+    for (const auto& [input, centroid] : cases) {
+        for (size_t base_bits : {1U, 2U}) {
+            for (MetricType metric : {METRIC_L2, METRIC_IP}) {
+                SCOPED_TRACE(base_bits);
+                SCOPED_TRACE(metric);
+                XySplitResult res =
+                    SplitCode(input, centroid, kDim, base_bits, kExtraBits, metric);
+
+                std::vector<uint16_t> full_code(kDim);
+                float full_add = 0, full_rescale = 0, full_error = 0;
+                quant::quantize_full_single(
+                    input.data(),
+                    centroid.data(),
+                    kDim,
+                    base_bits + kExtraBits,
+                    full_code.data(),
+                    full_add,
+                    full_rescale,
+                    full_error,
+                    metric
+                );
+                for (size_t j = 0; j < kDim; ++j) {
+                    const uint32_t total =
+                        (static_cast<uint32_t>(res.base_code[j]) << kExtraBits) |
+                        static_cast<uint32_t>(res.extra_code[j]);
+                    EXPECT_EQ(total, full_code[j]) << "dim " << j;
+                }
+                EXPECT_EQ(res.f_rescale_full, 0.0F);
+            }
+        }
+    }
+}
+
 TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) {
     constexpr size_t kDim = 64;
     constexpr size_t kExtraBits = 3;

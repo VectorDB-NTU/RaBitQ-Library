@@ -584,7 +584,9 @@ inline T ex_bits_code_with_norm(
     ConstRowMajorArrayMap<T> res_arr(residual, 1, dim);
     T ipnorm_inv = 1;
     if (residual_norm == 0) {
+        // Match code_with_factor_from_residual(): no magnitude bits, so skip the revert.
         std::fill(ex_code, ex_code + dim, static_cast<TP>(0));
+        return ipnorm_inv;
     } else {
         RowMajorArray<T> owned_absolute;
         auto abs_res = scratch_array(
