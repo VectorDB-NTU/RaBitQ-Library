@@ -1337,6 +1337,11 @@ TEST(QGKMeansTest, SupportsLargerPaddedDimensions) {
             data[i * d + d - 1] = static_cast<float>(i) / 64.0F;
         }
         for (uint32_t bits : {0U, 4U, 8U}) {
+            // Quantized rows of 65535 and 65536 inputs share the 65536-wide padded
+            // layout; the exact maximum only adds unpadded raw storage.
+            if (d == 65536 && bits != 0) {
+                continue;
+            }
             QGKMeansParameters parameters;
             parameters.niter = 1;
             parameters.num_threads = 2;

@@ -23,6 +23,7 @@
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib::ivf {
 namespace {
@@ -186,7 +187,8 @@ TEST(HNSWInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload) {
             centroids[label * kDim + dim] = static_cast<float>(label * kDim + dim);
         }
     }
-    const std::string path = ::testing::TempDir() + "rabitq_initializer_labels";
+    const rabitq_test::TempFile path_file("rabitq_initializer_labels");
+    const std::string& path = path_file.path();
     HNSWInitializer initializer(kDim, kCount);
     initializer.add_vectors(centroids.data(), 4);
     std::ofstream ignored_output;
@@ -206,7 +208,6 @@ TEST(HNSWInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload) {
             );
         }
     }
-    std::remove((path + ".hnsw").c_str());
 }
 
 TEST(HNSWInitializerTest, ReloadsInnerProductGraphForRouting) {
@@ -215,7 +216,8 @@ TEST(HNSWInitializerTest, ReloadsInnerProductGraphForRouting) {
     std::vector<float> centroids(kCount * kDim, 0.0F);
     centroids[0] = 0.9F;
     centroids[kDim] = 100.0F;
-    const std::string path = ::testing::TempDir() + "rabitq_initializer_ip";
+    const rabitq_test::TempFile path_file("rabitq_initializer_ip");
+    const std::string& path = path_file.path();
     HNSWInitializer initializer(kDim, kCount, METRIC_IP);
     initializer.add_vectors(centroids.data(), 4);
     std::ofstream ignored_output;
@@ -230,7 +232,6 @@ TEST(HNSWInitializerTest, ReloadsInnerProductGraphForRouting) {
     loaded.centroids_distances(query.data(), 1, candidates);
     EXPECT_EQ(candidates[0].id, 1U);
     EXPECT_FLOAT_EQ(candidates[0].distance, -99.0F);
-    std::remove((path + ".hnsw").c_str());
 }
 
 TEST(HNSWInitializerTest, PerCallSearchWindowsPreserveDefaultAndLegacyResults) {

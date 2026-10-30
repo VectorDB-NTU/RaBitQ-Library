@@ -1,9 +1,12 @@
-# Fetch Google Test
+# Fetch Google Test from its checksummed release archive rather than cloning the repository.
 include(FetchContent)
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
 FetchContent_Declare(
   googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG        v1.14.0
+  URL      https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
+  URL_HASH SHA256=8ad598c73ad796e0d8280b082cebd82a630d73e73cd3c70057938a6501bba5d7
 )
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)

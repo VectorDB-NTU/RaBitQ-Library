@@ -21,6 +21,7 @@
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib::ivf {
 namespace {
@@ -65,7 +66,8 @@ TEST(IvfInitializerTest, MatrixRotationAndExplicitRoutingRoundTrip) {
     data[kDim + 1] = 1;
     data[kDim * 2 + 2] = 1;
     const std::array<PID, kCount> labels{0, 1, 2};
-    const std::string path = ::testing::TempDir() + "ivf_matrix_flat_rabitq.index";
+    const rabitq_test::TempFile path_file("ivf_matrix_flat_rabitq.index");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         IVF index(
             kCount,
@@ -89,7 +91,6 @@ TEST(IvfInitializerTest, MatrixRotationAndExplicitRoutingRoundTrip) {
             EXPECT_NEAR(distance, 0, 1e-5);
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex) {
@@ -103,7 +104,8 @@ TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex
         for (size_t j = 0; j < kDim; ++j)
             data[i * kDim + j] = normal(generator);
     }
-    const std::string path = ::testing::TempDir() + "ivf_initializer_reload.index";
+    const rabitq_test::TempFile path_file("ivf_initializer_reload.index");
+    const std::string& path = path_file.path();
     IVF target;
     for (auto type :
          {InitializerType::Flat,
@@ -136,8 +138,6 @@ TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex
         EXPECT_EQ(actual_ids, expected_ids);
         EXPECT_EQ(actual_distances, expected_distances);
     }
-    std::remove(path.c_str());
-    std::remove((path + ".hnsw").c_str());
 }
 
 TEST(FlatRaBitQInitializerTest, TailBatchesMetricsAndExactReturnedDistances) {
@@ -218,7 +218,8 @@ TEST(FlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
     std::vector<float> centroids(kDim * kCount), queries(8 * kDim);
     std::generate(centroids.begin(), centroids.end(), [&] { return normal(generator); });
     std::generate(queries.begin(), queries.end(), [&] { return normal(generator); });
-    const std::string path = ::testing::TempDir() + "flat_rabitq_initializer.bin";
+    const rabitq_test::TempFile path_file("flat_rabitq_initializer.bin");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         FlatRaBitQInitializer index(kDim, kCount, metric), loaded(kDim, kCount, metric);
         index.add_vectors(centroids.data(), 2);
@@ -262,7 +263,6 @@ TEST(FlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
         std::ifstream after(path, std::ios::binary);
         EXPECT_EQ((std::string{std::istreambuf_iterator<char>(after), {}}), bytes);
     }
-    std::remove(path.c_str());
 }
 }  // namespace
 }  // namespace rabitqlib::ivf

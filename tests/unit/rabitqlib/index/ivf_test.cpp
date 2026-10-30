@@ -27,6 +27,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib::ivf {
 
@@ -413,7 +414,8 @@ TEST(IvfPersistenceTest, ReloadsRawAndQuantizedStorage) {
     std::vector<float> data(kNum * kDim, 1.0F);
     std::vector<float> centroid(kDim, 0.0F);
     std::vector<PID> clusters(kNum, 0);
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_storage.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_storage.index");
+    const std::string& path = path_file.path();
     IVF loaded;
     for (auto rotator : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
         for (size_t bits : {32UL, 1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL}) {
@@ -436,7 +438,6 @@ TEST(IvfPersistenceTest, ReloadsRawAndQuantizedStorage) {
             EXPECT_EQ(distances, loaded_distances);
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(IvfPersistenceTest, FailedLoadPreservesExistingIndex) {
@@ -448,7 +449,8 @@ TEST(IvfPersistenceTest, FailedLoadPreservesExistingIndex) {
     std::fill(
         target_data.begin() + static_cast<ptrdiff_t>(kTargetDim), target_data.end(), 2.0F
     );
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_truncated.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_truncated.index");
+    const std::string& path = path_file.path();
 
     IVF target(kTargetNum, kTargetDim, 1, 32, METRIC_IP, RotatorType::MatrixRotator);
     target.construct(
@@ -500,8 +502,6 @@ TEST(IvfPersistenceTest, FailedLoadPreservesExistingIndex) {
     );
     EXPECT_EQ(actual_ids, expected_ids);
     EXPECT_EQ(actual_distances, expected_distances);
-
-    std::remove(path.c_str());
 }
 
 TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
@@ -510,7 +510,8 @@ TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
     std::vector<float> data(kNum * kDim, 0.25F);
     std::vector<float> centroid(kDim, 0.0F);
     std::vector<PID> clusters(kNum, 0);
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_bad_id.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_bad_id.index");
+    const std::string& path = path_file.path();
 
     IVF source(kNum, kDim, 1, 4);
     source.construct(data.data(), centroid.data(), clusters.data(), false, 1);
@@ -525,7 +526,6 @@ TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
 
     IVF loaded;
     EXPECT_THROW(loaded.load(path.c_str()), std::runtime_error);
-    std::remove(path.c_str());
 }
 
 // ── add / remove ────────────────────────────────────────────────────────────────────────
@@ -613,7 +613,8 @@ TEST(IvfLifecycleTest, BatchTailSurvivesAddRemoveAndReload) {
     const std::vector<float> centroid(kDynDim, 0.0F);
     const std::vector<PID> assigned(kCount, 0);
     const std::array<PID, 2> removed{0, kCount - 1};
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_lifecycle.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_lifecycle.index");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 4U, 9U, 32U}) {
             for (bool hacc : {false, true}) {
@@ -685,7 +686,6 @@ TEST(IvfLifecycleTest, BatchTailSurvivesAddRemoveAndReload) {
             }
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
@@ -694,8 +694,10 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
     const auto points = random_rows(kOld + kNew, 11);
     const auto centroids = random_rows(kDynClusters, 12);
     const float* extra = points.data() + (kOld * kDynDim);
-    const std::string base_path = ::testing::TempDir() + "rabitq_ivf_add_base.index";
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_add.index";
+    const rabitq_test::TempFile base_path_file("rabitq_ivf_add_base.index");
+    const std::string& base_path = base_path_file.path();
+    const rabitq_test::TempFile path_file("rabitq_ivf_add.index");
+    const std::string& path = path_file.path();
 
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         const auto assigned =
@@ -764,8 +766,6 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
             EXPECT_TRUE(saved_bytes(threaded, path) == expected) << "threaded";
         }
     }
-    std::remove(base_path.c_str());
-    std::remove(path.c_str());
 }
 
 TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
@@ -812,7 +812,8 @@ TEST(IvfAddTest, SparseInterleavedClustersPreserveRowOrderAndMatchRebuild) {
     const auto points = random_rows(kCount, 744);
     const auto centroids = random_rows(kClusters, 745);
     const std::array<PID, kCount> assigned{0, 128, 256, 256, 0, 256, 128, 0, 256};
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_sparse_add.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_sparse_add.index");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 4U, 32U}) {
             IVF index(kOld, kDynDim, kClusters, bits, metric);
@@ -847,7 +848,6 @@ TEST(IvfAddTest, SparseInterleavedClustersPreserveRowOrderAndMatchRebuild) {
             EXPECT_EQ(saved_bytes(rebuilt, path), expected);
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(IvfAddTest, UnreservedClustersGrowToExactlyTheirNewSize) {
@@ -906,7 +906,8 @@ TEST(IvfReserveTest, RejectsBadInputAndLeavesSavedBytesUnchanged) {
     const auto points = random_rows(kOld, 871);
     const auto centroids = random_rows(kDynClusters, 872);
     const std::vector<PID> assigned(kOld, 0);
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_reserve.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_reserve.index");
+    const std::string& path = path_file.path();
     const auto expect_message = [](const auto& call, const char* message) {
         try {
             call();
@@ -954,7 +955,6 @@ TEST(IvfReserveTest, RejectsBadInputAndLeavesSavedBytesUnchanged) {
     for (size_t i = 0; i < kDynClusters; ++i) {
         EXPECT_FALSE(IvfTestAccess::has_spare_capacity(loaded, i));
     }
-    std::remove(path.c_str());
 }
 
 // Delegates to a real rotator, but the call numbered `fail_at` throws.
@@ -993,8 +993,10 @@ TEST(IvfAddTest, FailedAddLeavesClustersGrowingInPlaceUnchanged) {
     std::fill(assigned.begin(), assigned.begin() + 40, PID{0});
     const std::array<PID, 6> new_clusters{0, 0, 0, 1, 1, 1};
     const float* extra = points.data() + (kOld * kDynDim);
-    const std::string base_path = ::testing::TempDir() + "rabitq_ivf_add_fail_base.index";
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_add_fail.index";
+    const rabitq_test::TempFile base_path_file("rabitq_ivf_add_fail_base.index");
+    const std::string& base_path = base_path_file.path();
+    const rabitq_test::TempFile path_file("rabitq_ivf_add_fail.index");
+    const std::string& path = path_file.path();
 
     for (size_t bits : {1UL, 4UL, 32UL}) {
         SCOPED_TRACE(::testing::Message() << "bits=" << bits);
@@ -1025,8 +1027,6 @@ TEST(IvfAddTest, FailedAddLeavesClustersGrowingInPlaceUnchanged) {
         reference.add(extra, new_clusters.size(), new_clusters.data(), false, 1);
         EXPECT_TRUE(saved_bytes(index, path) == saved_bytes(reference, path));
     }
-    std::remove(base_path.c_str());
-    std::remove(path.c_str());
 }
 
 TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAndTails) {
@@ -1037,7 +1037,8 @@ TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAnd
     std::vector<PID> assigned(kCount, 3);
     assigned[0] = 1;
     std::fill(assigned.begin() + 1, assigned.begin() + 33, PID{2});
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_rebuild.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_rebuild.index");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (auto rotation : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
             for (size_t bits : {1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL, 32UL}) {
@@ -1068,7 +1069,6 @@ TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAnd
             }
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(IvfAddTest, KeepsExistingDistancesAndQuantizesNewPointsAccurately) {
@@ -1159,8 +1159,10 @@ TEST(IvfAddTest, FasterQuantizationIsSupportedAndDeterministic) {
     const auto centroids = random_rows(kDynClusters, 42);
     const auto assigned =
         nearest_centroids(centroids, points.data(), kOld + kNew, METRIC_L2);
-    const std::string base_path = ::testing::TempDir() + "rabitq_ivf_add_faster_base.index";
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_add_faster.index";
+    const rabitq_test::TempFile base_path_file("rabitq_ivf_add_faster_base.index");
+    const std::string& base_path = base_path_file.path();
+    const rabitq_test::TempFile path_file("rabitq_ivf_add_faster.index");
+    const std::string& path = path_file.path();
 
     IVF base(kOld, kDynDim, kDynClusters, 5);
     base.construct(points.data(), centroids.data(), assigned.data(), true, 1);
@@ -1177,8 +1179,6 @@ TEST(IvfAddTest, FasterQuantizationIsSupportedAndDeterministic) {
     EXPECT_TRUE(std::none_of(hits.distances.begin(), hits.distances.end(), [](float x) {
         return std::isnan(x);
     }));
-    std::remove(base_path.c_str());
-    std::remove(path.c_str());
 }
 
 TEST(IvfAddTest, RoutesNewPointsWithHNSWCentroids) {
@@ -1217,7 +1217,8 @@ TEST(IvfAddTest, RejectsBadInputAndLeavesTheIndexUnchanged) {
     const auto points = random_rows(kNum + 1, 51);
     const auto centroids = random_rows(kDynClusters, 52);
     const auto assigned = nearest_centroids(centroids, points.data(), kNum, METRIC_L2);
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_add_reject.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_add_reject.index");
+    const std::string& path = path_file.path();
 
     IVF unbuilt(kNum, kDynDim, kDynClusters, 4);
     EXPECT_THROW(unbuilt.add(points.data(), 1), std::logic_error);
@@ -1239,7 +1240,6 @@ TEST(IvfAddTest, RejectsBadInputAndLeavesTheIndexUnchanged) {
     EXPECT_NO_THROW(index.add(points.data(), 0));
     EXPECT_EQ(index.max_elements(), kNum);
     EXPECT_TRUE(saved_bytes(index, path) == expected);
-    std::remove(path.c_str());
 }
 
 TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
@@ -1336,7 +1336,8 @@ TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
     const auto centroids = random_rows(kDynClusters, 72);
     const auto queries = random_rows(kQueries, 73);
     const std::vector<PID> removed{1, 33, 34, 98, 99};
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_remove.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_remove.index");
+    const std::string& path = path_file.path();
 
     // Counts the live results, checking that no removed point appears and that the unfilled
     // slots hold the sentinel with an infinite distance.
@@ -1397,7 +1398,6 @@ TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
             }
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
@@ -1405,7 +1405,8 @@ TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
     const auto points = random_rows(kNum, 81);
     const auto centroids = random_rows(kDynClusters, 82);
     const auto assigned = nearest_centroids(centroids, points.data(), kNum, METRIC_L2);
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_remove_reject.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_remove_reject.index");
+    const std::string& path = path_file.path();
 
     const PID id = 0;
     IVF unbuilt(kNum, kDynDim, kDynClusters, 4);
@@ -1431,7 +1432,6 @@ TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
     for (size_t r = 0; r < kNum; ++r) {
         EXPECT_EQ(hits.ids[r], kPidMax);
     }
-    std::remove(path.c_str());
 }
 
 }  // namespace
@@ -1441,7 +1441,8 @@ TEST(IVFSidecarValidation, RejectsMismatchedVectorStorage) {
     using namespace rabitqlib;
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         for (const size_t sidecar_dim : {64U, 128U}) {
-            const std::string path = ::testing::TempDir() + "rabitq_sidecar_layout";
+            const rabitq_test::TempFile path_file("rabitq_sidecar_layout");
+            const std::string& path = path_file.path();
             std::vector<float> data(96, 1.0F), center(128, 0.0F);
             PID cluster = 0;
             ivf::IVF original(
@@ -1467,8 +1468,6 @@ TEST(IVFSidecarValidation, RejectsMismatchedVectorStorage) {
             PID id = 0;
             float distance = 0;
             ASSERT_NO_THROW(loaded.search(data.data(), 1, 1, &id, &distance));
-            std::filesystem::remove(path);
-            std::filesystem::remove(path + ".hnsw");
         }
     }
 }
