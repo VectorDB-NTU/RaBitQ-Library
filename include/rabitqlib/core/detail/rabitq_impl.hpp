@@ -19,6 +19,7 @@
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/pack_excode.hpp"
 #include "rabitqlib/core/types.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/openmp.hpp"  // IWYU pragma: keep (configuration macros)
 #include "rabitqlib/utils/space.hpp"
 
@@ -90,6 +91,29 @@ inline CodeFactorTerms<T> code_factor_terms(
     throw std::invalid_argument(invalid_metric_message);
 }
 
+// Rescale factor for a code centered at its own width, given code_factor_terms() of
+// that centered code. Normalized ex-bit codes use their own rescale expression.
+template <typename T>
+inline T direct_rescale(T l2_sqr, T residual_code_ip, MetricType metric_type) {
+    return l2_sqr == 0                ? T{0}
+           : metric_type == METRIC_L2 ? -2 * l2_sqr / residual_code_ip
+                                      : -l2_sqr / residual_code_ip;
+}
+
+/**
+ * Inverse of pack_binary_to_bytes<uint64_t>: write each coordinate's sign bit (0 or
+ * 1) to signs. Full 64-coordinate words come first, followed by a final 32-bit word.
+ */
+inline void unpack_sign_bits(const uint8_t* packed, size_t dim, uint16_t* signs) {
+    for (size_t start = 0; start < dim; start += 64) {
+        const size_t width = std::min(size_t{64}, dim - start);
+        const uint64_t word = bitops::load_word(packed + start / 8, width / 8);
+        for (size_t i = 0; i < width; ++i) {
+            signs[start + i] = static_cast<uint16_t>((word >> (width - 1 - i)) & 1U);
+        }
+    }
+}
+
 namespace one_bit {
 
 /**
@@ -147,9 +171,7 @@ inline void one_bit_code_with_factor_into(
         "Unsupported metric type in quantization"
     );
     f_add = factors.add;
-    f_rescale = l2_sqr == 0                ? T{0}
-                : metric_type == METRIC_L2 ? -2 * l2_sqr / factors.residual_code_ip
-                                           : -l2_sqr / factors.residual_code_ip;
+    f_rescale = direct_rescale(l2_sqr, factors.residual_code_ip, metric_type);
     f_error = factors.error;
 }
 
@@ -976,9 +998,7 @@ inline void code_factors(
         "Unsupported metric type in code_factors()"
     );
     f_add = factors.add;
-    f_rescale = l2_sqr == 0                ? T{0}
-                : metric_type == METRIC_L2 ? -2 * l2_sqr / factors.residual_code_ip
-                                           : -l2_sqr / factors.residual_code_ip;
+    f_rescale = direct_rescale(l2_sqr, factors.residual_code_ip, metric_type);
     f_error = factors.error;
 }
 

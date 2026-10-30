@@ -1004,16 +1004,7 @@ void HierarchicalNSW::reconstruct_rotated(PID id, float* out) const {
     combined.resize(padded_dim_);
 
     const ConstBinDataMap<float> bin(get_bindata_by_internalid(id), padded_dim_);
-    const uint8_t* sign_code = bin.bin_code();
-    for (size_t word = 0; word * 64 < padded_dim_; ++word) {
-        uint64_t bits = 0;
-        const size_t base = word * 64;
-        const size_t span = std::min<size_t>(64, padded_dim_ - base);
-        std::memcpy(&bits, sign_code + (word * sizeof(uint64_t)), span / 8);
-        for (size_t j = 0; j < span; ++j) {
-            combined[base + j] = static_cast<uint16_t>((bits >> (span - 1 - j)) & 1ULL);
-        }
-    }
+    quant::rabitq_impl::unpack_sign_bits(bin.bin_code(), padded_dim_, combined.data());
 
     const auto* centroid = reinterpret_cast<const float*>(centroids_memory_.get()) +
                            (get_clusterid_by_internalid(id) * padded_dim_);
