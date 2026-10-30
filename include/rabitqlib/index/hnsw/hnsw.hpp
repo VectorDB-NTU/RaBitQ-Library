@@ -438,7 +438,12 @@ class HierarchicalNSW {
 
     void add_point(PID, PID, const quant::RabitqConfig&);
 
-    maxheap<std::pair<float, PID>> search_base_layer(PID, PID, int);
+    // Insertion steps shared by raw and quantized scoring. distance(id) scores an
+    // existing node against the node being inserted; prefetch(id) may warm its data.
+    template <class Distance>
+    PID greedy_descend(PID, int from_level, int to_level, Distance);
+    template <class Distance, class Prefetch>
+    maxheap<std::pair<float, PID>> search_layer(PID, int, Distance, Prefetch);
 
     PID mutually_connect_new_element(PID, maxheap<std::pair<float, PID>>&, int);
 
@@ -451,9 +456,6 @@ class HierarchicalNSW {
     void reconstruct_rotated(PID, float*) const;
     float get_quant_dist(PID target, PID query, detail::QuantQuery&) const;
     void add_point_quant(PID, int, LinkStorage&, detail::QuantQuery&);
-    maxheap<std::pair<float, PID>> search_base_layer_quant(
-        PID, PID, int, detail::QuantQuery&
-    );
     PID mutually_connect_quant(
         PID, maxheap<std::pair<float, PID>>&, int, detail::QuantQuery&
     );
