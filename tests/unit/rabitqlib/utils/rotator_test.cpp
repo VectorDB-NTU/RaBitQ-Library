@@ -242,6 +242,68 @@ TEST(FhtDispatchTest, BackendsMatchScalarButterfliesAndPadding) {
     }
 }
 
+// Rotators allow in-place calls, so every backend must accept an output that
+// overlaps its input. Run under ASan to catch overlapping memcpy.
+TEST(FhtDispatchTest, BackendsAcceptOverlappingInputAndOutput) {
+    std::vector<decltype(&simd::fht_rotate)> backends{
+        simd::fht_rotate_generic, simd::fht_rotate};
+#if defined(__x86_64__) || defined(_M_X64)
+    if (cpu::has_avx2()) {
+        backends.push_back(simd::fht_rotate_avx2);
+    }
+    if (cpu::has_avx512_core()) {
+        backends.push_back(simd::fht_rotate_avx512);
+    }
+#endif
+#if defined(__aarch64__) || defined(_M_ARM64)
+    if (cpu::has_neon()) {
+        backends.push_back(simd::fht_rotate_neon);
+    }
+#endif
+    for (size_t dim : {64U, 65U, 127U, 128U, 193U, 960U, 4097U}) {
+        SCOPED_TRACE(dim);
+        const size_t padded = (dim + 31) / 32 * 32;
+        size_t trunc = 64;
+        while (trunc * 2 <= dim) {
+            trunc *= 2;
+        }
+        const float fac = 1.0F / std::sqrt(static_cast<float>(trunc));
+        std::vector<uint8_t> flip(padded / 2);
+        for (size_t i = 0; i < flip.size(); ++i) {
+            flip[i] = static_cast<uint8_t>(i * 73 + i / 7);
+        }
+        std::vector<float> input(dim);
+        for (size_t i = 0; i < dim; ++i) {
+            input[i] = std::sin(static_cast<float>(i) * 0.13F);
+        }
+        for (auto backend : backends) {
+            std::vector<float> expected(padded);
+            backend(input.data(), expected.data(), dim, padded, trunc, fac, flip.data());
+            for (size_t offset : {0U, 1U}) {
+                SCOPED_TRACE(offset);
+                std::vector<float> actual(padded + 2, 12345);
+                std::copy(input.begin(), input.end(), actual.begin() + 1);
+                backend(
+                    actual.data() + 1,
+                    actual.data() + offset,
+                    dim,
+                    padded,
+                    trunc,
+                    fac,
+                    flip.data()
+                );
+                EXPECT_EQ(
+                    std::memcmp(
+                        actual.data() + offset, expected.data(), padded * sizeof(float)
+                    ),
+                    0
+                );
+                EXPECT_EQ(actual.back(), 12345);
+            }
+        }
+    }
+}
+
 TEST(FhtDispatchTest, PreservesZeroNormAndInnerProduct) {
     std::vector<decltype(&simd::fht_rotate)> backends{
         simd::fht_rotate_generic, simd::fht_rotate};

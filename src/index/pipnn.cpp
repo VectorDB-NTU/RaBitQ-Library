@@ -454,7 +454,7 @@ InitialGraph build_initial_graph(
 ) {
     validate_metric_type(metric_type);
     if (data == nullptr || dim == 0 || degree == 0 || degree >= count ||
-        count >= buffer::kSearchBufferMaxPointCount || degree % 32 != 0) {
+        count > buffer::kSearchBufferMaxPointCount || degree % 32 != 0) {
         throw std::invalid_argument(
             "PiPNN seed requires data, positive dim, and a degree multiple of 32 below "
             "count"

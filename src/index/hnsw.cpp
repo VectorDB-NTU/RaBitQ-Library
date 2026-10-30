@@ -152,6 +152,9 @@ HierarchicalNSW::HierarchicalNSW(
 }
 
 void HierarchicalNSW::save(const char* filename) const {
+    if (level0_record_bytes_ == 0) {
+        throw std::logic_error("HNSW index must be initialized before save");
+    }
     std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("HNSW: cannot open index file for writing");
@@ -957,6 +960,9 @@ PID HierarchicalNSW::mutually_connect_new_element(
 std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     const float* queries, size_t num_queries, size_t k, size_t ef_search, size_t num_threads
 ) {
+    if (level0_record_bytes_ == 0) {
+        throw std::logic_error("HNSW index must be initialized before search");
+    }
     if (k == 0) {
         throw std::invalid_argument("HNSW k must be greater than zero");
     }
