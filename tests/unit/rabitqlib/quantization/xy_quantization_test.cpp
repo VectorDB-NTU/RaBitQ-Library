@@ -175,7 +175,7 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
 // ip(base)*2^extra_bits + ip(extra) must equal ip(total_code) -- the
 // linearity the boosting step relies on.
 // The sign bit must be assigned the same way here as in the 1-bit path,
-// including for an exactly-zero residual component. one_bit_code() uses
+// including for an exactly-zero residual component. one_bit_code_with_factor() uses
 // `residual > 0`, so a zero lands on the 0 side; combined_code() has to agree
 // or the same vector gets different sign bits from the two paths.
 //
@@ -200,8 +200,11 @@ TEST(XyQuantization, SignBitMatchesOneBitPathOnZeroResiduals) {
     ASSERT_GT(zero_dims, 0U);
 
     std::vector<int> ref_bin(kDim, -1);
-    quant::rabitq_impl::one_bit::one_bit_code(
-        data.data(), centroid.data(), kDim, ref_bin.data()
+    float ref_add = 0;
+    float ref_rescale = 0;
+    float ref_error = 0;
+    quant::rabitq_impl::one_bit::one_bit_code_with_factor(
+        data.data(), centroid.data(), kDim, ref_bin.data(), ref_add, ref_rescale, ref_error
     );
 
     std::vector<float> residual(kDim);

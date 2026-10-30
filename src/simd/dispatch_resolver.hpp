@@ -22,14 +22,6 @@ Function resolve_kernel(
     return fallback;
 }
 
-template <typename Function>
-Function resolve_kernel(Function avx2, Function fallback) {
-    if (cpu::has_avx2()) {
-        return avx2;
-    }
-    return fallback;
-}
-
 // Use a distinct name: a fallback function pointer can implicitly convert to bool.
 // Overloading the x86 resolver would let MSVC select this overload when __restrict
 // makes the SIMD and scalar function-pointer types differ.
@@ -53,8 +45,6 @@ Function resolve_optional_kernel(Function preferred, Function fallback, bool sup
 // The calling function's local static still provides thread-safe initialization.
 #define RABITQ_RESOLVE(...) \
     [&]() RABITQ_COLD_INIT { return rabitqlib::simd::resolve_kernel(__VA_ARGS__); }()
-#define RABITQ_RESOLVE2(...) RABITQ_RESOLVE(__VA_ARGS__)
 #else
 #define RABITQ_RESOLVE(avx512, avx2, fallback, ...) fallback
-#define RABITQ_RESOLVE2(avx2, fallback) fallback
 #endif

@@ -1,9 +1,9 @@
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
 #include "dispatch_resolver.hpp"
-#include "excode_dispatch.hpp"
 #include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
 #include "rabitqlib/core/detail/simd/pack_excode_dispatch.hpp"
 #include "rabitqlib/core/detail/simd/quantization_dispatch.hpp"
@@ -197,7 +197,9 @@ void fht_rotate(
     kFhtRotateFn(data, rotated_data, dim, padded_dim, trunc_dim, scale_factor, flip);
 }
 
-ExcodeIpTable resolve_excode_ip_table() {
+using ExcodeIpTable = std::array<float (*)(const float*, const uint8_t*, size_t), 9>;
+
+static ExcodeIpTable resolve_excode_ip_table() {
     const auto generic = ExcodeIpTable{
         ip_fxu0,
         excode_ipimpl::ip16_fxu1_generic,

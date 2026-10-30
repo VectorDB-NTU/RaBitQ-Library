@@ -16,7 +16,6 @@
 #include <queue>
 #include <random>
 #include <stdexcept>
-#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -65,7 +64,6 @@ HierarchicalNSW::HierarchicalNSW(
     MetricType metric_type
 )
     : metric_type_(metric_type)
-    , label_op_locks_(kMaxLabelOperationLock)
     , link_list_locks_(max_elements)
     , element_levels_(max_elements)
     , raw_dist_func_(
@@ -361,7 +359,6 @@ void HierarchicalNSW::load(const char* filename) {
 
     loaded.element_levels_ = std::vector<int>(loaded.max_elements_);
     loaded.link_list_locks_ = std::vector<std::mutex>(loaded.max_elements_);
-    loaded.label_op_locks_ = std::vector<std::mutex>(kMaxLabelOperationLock);
     loaded.link_lists_.reserve(loaded.max_elements_);
     loaded.link_lists_.resize(element_count);
     for (size_t i = 0; i < element_count; ++i) {
@@ -489,7 +486,6 @@ void HierarchicalNSW::load(const char* filename) {
     swap(metric_type_, loaded.metric_type_);
     swap(mult_, loaded.mult_);
     swap(max_level_, loaded.max_level_);
-    label_op_locks_.swap(loaded.label_op_locks_);
     link_list_locks_.swap(loaded.link_list_locks_);
     swap(entry_point_id_, loaded.entry_point_id_);
     swap(level0_links_bytes_, loaded.level0_links_bytes_);
@@ -594,22 +590,13 @@ void HierarchicalNSW::construct(
 void HierarchicalNSW::add_point(
     PID label, PID cluster_id, const quant::RabitqConfig& config
 ) {
-    std::unique_lock<std::mutex> label_lock(get_label_op_mutex(label));
-
     int node_level = 0;
     PID new_node_id = 0;
     {
+        // construct passes distinct labels below its validated capacity.
         std::unique_lock<std::mutex> label_lookup_lock(label_lookup_lock_);
-        if (label_lookup_.find(label) != label_lookup_.end()) {
-            throw std::runtime_error(
-                "Currently not support replacement of existing elements, only support "
-                "inserting elements with distinct labels"
-            );
-        }
-
-        if (num_stored_points_ >= max_elements_) {
-            throw std::runtime_error("The number of elements exceeds the specified limit");
-        }
+        assert(label_lookup_.find(label) == label_lookup_.end());
+        assert(num_stored_points_ < max_elements_);
 
         new_node_id = num_stored_points_;
         link_lists_.emplace_back();
@@ -682,15 +669,7 @@ void HierarchicalNSW::add_point(
                     const PID* datal = data + 1;
                     for (size_t i = 0; i < size; i++) {
                         PID cand = datal[i];
-                        if (cand > max_elements_) {
-                            throw std::runtime_error(
-                                "HNSW construct upper-layer traversal: invalid candidate "
-                                "ID " +
-                                std::to_string(cand) + " at level " +
-                                std::to_string(level) +
-                                " (capacity=" + std::to_string(max_elements_) + ")"
-                            );
-                        }
+                        assert(cand < num_stored_points_);
                         float d = get_data_dist(cand, new_node_id);
                         if (d < current_distance) {
                             current_distance = d;
@@ -707,10 +686,6 @@ void HierarchicalNSW::add_point(
                 search_base_layer(current_id, new_node_id, level);
             current_id = mutually_connect_new_element(new_node_id, top_candidates, level);
         }
-    } else {
-        // Do nothing for the first element
-        entry_point_id_ = 0;
-        max_level_ = node_level;
     }
 
     // Releasing lock for the maximum level
@@ -1145,13 +1120,7 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
 
         for (size_t j = 0; j < size; j++) {
             PID candidate_id = datal[j];
-            if (candidate_id >= num_stored_points_) {
-                throw std::runtime_error(
-                    "HNSW add layer search: invalid candidate ID " +
-                    std::to_string(candidate_id) + " at level " + std::to_string(layer) +
-                    " (stored_points=" + std::to_string(num_stored_points_.load()) + ")"
-                );
-            }
+            assert(candidate_id < num_stored_points_);
             if (visited->get(candidate_id)) {
                 continue;
             }
@@ -1227,15 +1196,7 @@ void HierarchicalNSW::add_point_quant(
                         const PID* datal = data + 1;
                         for (size_t i = 0; i < size; i++) {
                             PID cand = datal[i];
-                            if (cand >= num_stored_points_) {
-                                throw std::runtime_error(
-                                    "HNSW add upper-layer traversal: invalid candidate "
-                                    "ID " +
-                                    std::to_string(cand) + " at level " +
-                                    std::to_string(level) + " (stored_points=" +
-                                    std::to_string(num_stored_points_.load()) + ")"
-                                );
-                            }
+                            assert(cand < num_stored_points_);
                             float d = get_quant_dist(cand, new_node_id, query);
                             if (d < current_distance) {
                                 current_distance = d;
@@ -1254,9 +1215,6 @@ void HierarchicalNSW::add_point_quant(
                 current_id =
                     mutually_connect_quant(new_node_id, top_candidates, level, query);
             }
-        } else {
-            entry_point_id_ = new_node_id;
-            max_level_ = node_level;
         }
 
         if (node_level > previous_max_level) {

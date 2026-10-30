@@ -313,9 +313,7 @@ void IVF::quantize_cluster(
     const quant::RabitqConfig& config
 ) {
     size_t num_points = point_ids.size();
-    if (cp.num() != num_points) {
-        throw std::invalid_argument("Cluster size and ID count differ");
-    }
+    assert(cp.num() == num_points);
     std::copy(point_ids.begin(), point_ids.end(), cp.ids());
     this->rotator_->rotate(cur_centroid, rotated_centroid);
 
@@ -361,8 +359,7 @@ void IVF::add(
     bool fast_quantization,
     size_t num_threads
 ) {
-    if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
+    if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before add");
     }
     if (num_points == 0) {
@@ -622,8 +619,7 @@ void IVF::extend_cluster(
 }
 
 void IVF::reserve(PID cluster_id, size_t num_points) {
-    if (!ready_ || clusters_.size() != num_clusters_ ||
-        cluster_storage_.size() != num_clusters_) {
+    if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before reserve");
     }
     if (cluster_id >= num_clusters_) {
@@ -662,8 +658,7 @@ void IVF::reserve(PID cluster_id, size_t num_points) {
 }
 
 size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
-    if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
+    if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before remove");
     }
     if (num_points == 0) {
@@ -709,8 +704,7 @@ size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
 }
 
 void IVF::save(const char* filename) const {
-    if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
+    if (!ready_) {
         throw std::logic_error("Cannot save an unconstructed IVF index");
     }
     if (filename == nullptr || filename[0] == '\0') {
@@ -1025,7 +1019,7 @@ void IVF::search(
 
         if (metric_type_ == METRIC_L2) {
             query_wrapper.set_g_add(dist);
-        } else if (metric_type_ == METRIC_IP) {
+        } else {
             const float residual_norm = std::sqrt(euclidean_sqr(
                 rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
             ));
@@ -1033,9 +1027,6 @@ void IVF::search(
                 rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
             );
             query_wrapper.set_g_add(residual_norm, query_centroid_ip);
-        } else {
-            // unsupported
-            throw std::invalid_argument("Quantization only supports L2 and IP metrics");
         }
         search_cluster(cluster, query_wrapper, result_pool, use_hacc, query);
     }
@@ -1113,8 +1104,7 @@ void IVF::search_batch(
 inline void IVF::validate_search(
     const float* query, size_t k, size_t nprobe, const PID* result_ids
 ) const {
-    if (!ready_ || initializer_ == nullptr || rotator_ == nullptr ||
-        clusters_.size() != num_clusters_ || cluster_storage_.size() != num_clusters_) {
+    if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before search");
     }
     if (query == nullptr) {

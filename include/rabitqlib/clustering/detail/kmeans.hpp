@@ -245,7 +245,6 @@ class LloydKMeans : public Parameters {
             );
         }
         const uint32_t num_workers = effective_num_threads();
-        static_cast<void>(num_workers);
         // Leave headroom for products of squared distances in graph pruning,
         // as well as quantized reconstruction and rotated residuals.
         const double max_coordinate = std::sqrt(
@@ -486,7 +485,6 @@ class LloydKMeans : public Parameters {
         const std::vector<float>& previous_centroids
     ) {
         const uint32_t num_workers = effective_num_threads();
-        static_cast<void>(num_workers);
         // Means, normalization, and displacement share one worker team. Preserve
         // the per-centroid arithmetic; empty rows are measured after refilling.
         const auto cluster_shift = [&](size_t cluster) {

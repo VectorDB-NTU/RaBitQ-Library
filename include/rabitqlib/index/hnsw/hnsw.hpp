@@ -222,7 +222,6 @@ class HierarchicalNSW {
         HierarchicalNSW&, const float*, size_t, size_t
     );
 
-    static constexpr PID kMaxLabelOperationLock = 65536;
     // `remove` sets the high bit of a point's stored cluster ID. construct and load
     // keep num_clusters_ at or below 2^31, so a real cluster ID never has it.
     static constexpr PID kRemovedMask = 0x80000000U;
@@ -240,9 +239,6 @@ class HierarchicalNSW {
 
     double mult_{0.0};
     int max_level_{0};
-
-    // Locks operations with element by label value
-    mutable std::vector<std::mutex> label_op_locks_;
 
     std::mutex global_;
     std::vector<std::mutex> link_list_locks_;
@@ -294,11 +290,6 @@ class HierarchicalNSW {
 
     float (*raw_dist_func_)(const float* __restrict__, const float* __restrict__, size_t){
         nullptr};
-
-    std::mutex& get_label_op_mutex(PID label) const {
-        size_t lock_id = label & (kMaxLabelOperationLock - 1);
-        return label_op_locks_[lock_id];
-    }
 
     PID get_external_label(PID internal_id) const {
         PID return_label;

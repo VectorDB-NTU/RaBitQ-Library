@@ -1,10 +1,9 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <stdexcept>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -148,13 +147,7 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
             const PID* datal = data + 1;
             for (size_t i = 0; i < size; i++) {
                 PID cand = datal[i];
-                if (cand > max_elements_) {
-                    throw std::runtime_error(
-                        "HNSW search upper-layer traversal: invalid candidate ID " +
-                        std::to_string(cand) + " at level " + std::to_string(level) +
-                        " (capacity=" + std::to_string(max_elements_) + ")"
-                    );
-                }
+                assert(cand < num_stored_points_);
 
                 EstimateRecord candidate_estimate;
                 get_bin_est_direct<Kernel>(
