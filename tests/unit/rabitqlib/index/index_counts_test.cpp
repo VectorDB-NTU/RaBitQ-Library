@@ -15,6 +15,7 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -43,7 +44,8 @@ TEST(IndexCounts, IvfTracksRemovalGrowthReloadAndRebuild) {
     const std::vector<float> centroid(kDim, 0.0F);
     const std::vector<PID> clusters(kCount + 4, 0);
     const std::array<PID, 3> removed{1, kCount - 1, 1};
-    const std::string path = ::testing::TempDir() + "rabitq_ivf_counts.index";
+    const rabitq_test::TempFile path_file("rabitq_ivf_counts.index");
+    const std::string& path = path_file.path();
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1UL, 4UL, 32UL}) {
             SCOPED_TRACE(::testing::Message() << "bits=" << bits << " metric=" << metric);
@@ -90,7 +92,6 @@ TEST(IndexCounts, IvfTracksRemovalGrowthReloadAndRebuild) {
             expect_counts(loaded, kCount + 4, kCount + 4, kCount + 4);
         }
     }
-    std::filesystem::remove(path);
 }
 
 TEST(IndexCounts, HnswSeparatesCapacityStoredLabelsAndActivePoints) {
@@ -99,7 +100,8 @@ TEST(IndexCounts, HnswSeparatesCapacityStoredLabelsAndActivePoints) {
     std::vector<PID> clusters(kCount, 0);
     constexpr size_t kCapacity = 64;
     const std::array<PID, 3> removed{1, kCount - 1, 1};
-    const std::string path = ::testing::TempDir() + "rabitq_hnsw_counts.index";
+    const rabitq_test::TempFile path_file("rabitq_hnsw_counts.index");
+    const std::string& path = path_file.path();
     hnsw::HierarchicalNSW index(kCapacity, kDim, 4, 8, 40);
     expect_counts(index, kCapacity, 0, 0);
     index.construct(1, centroid.data(), kCount, data.data(), clusters.data(), 1);
@@ -137,12 +139,12 @@ TEST(IndexCounts, HnswSeparatesCapacityStoredLabelsAndActivePoints) {
         std::vector<PID>{kCount + 3}
     );
     expect_counts(loaded, 2 * kCapacity, kCount + 4, 1);
-    std::filesystem::remove(path);
 }
 
 TEST(IndexCounts, SymphonyCountsOnlyCompletedBuilds) {
     const auto data = count_test_vectors();
-    const std::string path = ::testing::TempDir() + "rabitq_symqg_counts.index";
+    const rabitq_test::TempFile path_file("rabitq_symqg_counts.index");
+    const std::string& path = path_file.path();
     for (size_t bits : {0UL, 4UL, 8UL}) {
         symqg::QuantizedGraph<float> index(
             kCount, kDim, 32, METRIC_L2, RotatorType::FhtKacRotator, bits, 42
@@ -165,7 +167,6 @@ TEST(IndexCounts, SymphonyCountsOnlyCompletedBuilds) {
         builder.refine();
         expect_counts(index, kCount, kCount, kCount);
     }
-    std::filesystem::remove(path);
 }
 }  // namespace
 }  // namespace rabitqlib

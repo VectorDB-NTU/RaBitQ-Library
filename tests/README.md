@@ -139,8 +139,8 @@ These are correctness checks, not hardware performance measurements.
 
 Source-install Python jobs check imports, index persistence, and both clustering
 APIs. Repaired-wheel jobs run the full core Python suite. Large-dimension Python
-cases check representative binding/persistence paths; C++ retains the exhaustive
-clustering dimension/storage matrix.
+cases check representative binding/persistence paths; C++ covers each clustering
+dimension and storage layout.
 
 ## Python tests
 
@@ -230,8 +230,11 @@ cmake -DRABITQ_SOURCE_DIR=<checkout> -DWORK_DIR=<external-working-directory> -P 
 
 Use `-DRABITQ_RUN_REFERENCE_TESTS=OFF` for integration-only checks when references
 have already run in the matching full build. CI uses this for OpenMP ON; OpenMP OFF
-keeps one combined reference run per compiler/platform. Consumer tests, header/symbol
-checks, invalid-configuration checks and the core benchmark always remain enabled.
+keeps one combined reference run per compiler/platform. Pass
+`-DRABITQ_INTEGRATIONS=PACKAGE` to test only the relocated installed package when
+another job owns the `add_subdirectory` and FetchContent integrations; the default
+`ALL` runs all three. Consumer tests, header/symbol checks, invalid-configuration checks
+and the core benchmark always remain enabled.
 
 On macOS, also pass `-DOpenMP_ROOT=<OpenMP-prefix>`. On Windows, set
 `CMAKE_GENERATOR=Visual Studio 18 2026` and `CMAKE_GENERATOR_PLATFORM=x64` in the
@@ -280,7 +283,8 @@ See [the fixture policy](fixtures/core_api_v1/README.md).
 ## Test structure
 
 - `unit/`: C++ index, quantization, FastScan, and utility tests
-- `common/`: shared C++ test utilities
+- `common/`: shared C++ test utilities; use `rabitq_test::TempFile` for files a test
+  writes so they are removed even after a failed assertion
 - `python/`: Python binding tests and persistence fixtures
 - `consumer/`: installed CMake package test
 

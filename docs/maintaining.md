@@ -23,7 +23,7 @@ only the affected job groups:
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
 | `tests/core_consumer/run.cmake`, `scripts/check-format.sh`, `scripts/check-tidy.sh` | Their usual checks, plus Python quality to run their failure-path regression tests |
 | C++ headers or library sources | C++ formatting, clang-tidy, platform tests, sanitizers, consumer build, and Python builds/wheels |
-| C++ tests or examples | C++ formatting and platform tests; no clang-tidy |
+| C++ tests or examples | C++ formatting and platform tests; no clang-tidy. Index/clustering-only sources, tests and examples skip the core/FastScan consumer matrix |
 | `tests/allocation/`, `tests/failures/` | C++ formatting and platform tests, including sanitizer and allocation-failure coverage; no Python builds or wheels |
 | Compiled Python bindings | C++ formatting and clang-tidy, plus Python builds and wheel tests |
 | Python tests | Python lint, source-install smoke tests, and wheel tests |
@@ -49,21 +49,40 @@ Pushes compare the complete pushed range; pull requests compare against
 their base. Renames and deletions are included. Relevant jobs also run if
 change detection fails, so a detection error cannot silently waive a check.
 
-Linux and macOS core/FastScan consumer jobs and the Clang matrix use a job-local
-`ccache` through CMake's compiler launcher. Independent producer builds and
-installed-package, `add_subdirectory`, and FetchContent consumer checks are retained; identical
-compilations can reuse compiler output within the job. Cache statistics are printed
-after testing. Compiler caches are not uploaded or shared between workflow runs.
-Windows keeps its existing build path without a compiler cache.
+Every Linux and macOS job that compiles the library with native tuning disabled uses
+`ccache` through CMake's compiler launcher, set up by `.github/actions/setup-ccache`.
+Every run restores the newest cache saved from `main` for its per-configuration key,
+so unchanged translation units are not recompiled. Only pushes to `main` save, in the
+job's final `.github/actions/save-ccache` step, so pull requests cannot evict that
+cache from the repository's cache quota. Identical compilations within one job also
+reuse each other's output.
+The native-tuned `Ubuntu` job has no compiler cache: ccache keys `-march=native`
+literally, so objects built for one runner's CPU could otherwise be restored on a
+runner without those instructions. Windows keeps its existing Visual Studio build
+path, which does not support compiler launchers.
+
+The C++ change selection has a separate `cpp_core` output for the core/FastScan
+consumer matrix. Paths that only affect ANN indexes or clustering, such as
+`src/index/`, index/clustering headers and tests, the installed index consumer and
+the index examples, select the other C++ checks but not that matrix.
 
 Numerical reference suites have one owner per compiler/platform and OpenMP mode.
 The full C++ jobs own OpenMP ON references; component consumer jobs retain their
 build/install/header/symbol checks without rebuilding those suites. OpenMP OFF
 runs the combined core/FastScan reference suite in the FastScan producer only.
 Across the component and Clang consumer matrices, this reduces producer reference
-builds from 20 to 5 while preserving all 60 consumer integration configurations.
+builds from 20 to 5. The `add_subdirectory` and FetchContent source integrations run
+for both OpenMP modes on the GCC Ubuntu partition and on the MSVC core OpenMP ON
+partition; the other partitions pass `-DRABITQ_INTEGRATIONS=PACKAGE` and check only
+the relocated installed package. This keeps 30 of the former 60 consumer integration
+configurations, with every compiler/platform and OpenMP mode still consuming the
+installed package.
 `C++ static analysis` runs the complete configured library/binding compilation
 database in one job, replacing the two shards and their summary job.
+
+Windows wheels build one CPython ABI per runner because a single Windows job
+was the longest check in a pull request; the other platforms build their ABIs
+sequentially in one job, and every platform keeps its existing summary check.
 
 Release tags and manual wheel builds always run the full wheel build. CI
 routing edits run the full relevant matrix on pull requests. After an already
@@ -118,11 +137,12 @@ commit-specific groups, and release serialization is unchanged.
 
 `Clang validation`, `Core and FastScan validation`, and `Python validation`
 provide stable check names for the corresponding matrices. `Python validation`
-covers the Linux Python 3.11/3.14 source-install matrix; Windows Python and wheel
+covers the Linux Python 3.11 source-install job; the release wheel jobs build and fully
+test both the oldest and newest ABIs on pull requests. Windows Python and wheel
 checks retain their separate gates. They run even when a dependency fails or is
 skipped. A successful matrix passes. A skipped matrix passes only when change
 detection succeeded and explicitly selected no checks for that matrix
-(`cpp` or `python_build`); failure, cancellation,
+(`cpp`, `cpp_core` or `python_build`); failure, cancellation,
 or an unexpected skip fails the summary. If detection fails, the existing
 fallback runs the matrix and its success is required.
 
@@ -168,7 +188,9 @@ partial release, rerun the failed release jobs: existing tags must still point
 to the tested commit, and already uploaded PyPI files are skipped.
 
 From the repository root, using your activated project Python environment,
-validate automation changes locally with:
+validate automation changes locally with the command below. The workflow contract
+tests parse workflows with PyYAML, which the Python quality job installs alongside
+Ruff; install it in your environment if it is missing.
 
 ```bash
 python -m unittest discover -s .github/scripts -p 'test_*.py'

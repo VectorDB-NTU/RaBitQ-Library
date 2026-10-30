@@ -15,10 +15,8 @@
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/query.hpp"
 #include "rabitqlib/utils/space.hpp"
-#include "test_helpers.hpp"
 
 using namespace rabitqlib;
-using namespace rabitq_test;
 
 namespace {
 
@@ -164,12 +162,12 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
         EXPECT_EQ(res.extra_code[i], ref_ex_code[i]) << "dim " << i;
     }
 
-    EXPECT_FLOAT_NEARLY_EQUAL(res.f_add_base, ref_f_add_bin, 1e-4F);
-    EXPECT_FLOAT_NEARLY_EQUAL(res.f_rescale_base, ref_f_rescale_bin, 1e-4F);
-    EXPECT_FLOAT_NEARLY_EQUAL(res.f_error_base, ref_f_error_bin, 1e-4F);
+    EXPECT_NEAR(res.f_add_base, ref_f_add_bin, 1e-4F);
+    EXPECT_NEAR(res.f_rescale_base, ref_f_rescale_bin, 1e-4F);
+    EXPECT_NEAR(res.f_error_base, ref_f_error_bin, 1e-4F);
 
-    EXPECT_FLOAT_NEARLY_EQUAL(res.f_add_full, ref_f_add, 1e-4F);
-    EXPECT_FLOAT_NEARLY_EQUAL(res.f_rescale_full, ref_f_rescale, 1e-4F);
+    EXPECT_NEAR(res.f_add_full, ref_f_add, 1e-4F);
+    EXPECT_NEAR(res.f_rescale_full, ref_f_rescale, 1e-4F);
     // The combined code's f_error is not exposed by the function, so it is not
     // asserted here; ref_f_error stays as documentation of the reference value.
 }
@@ -273,11 +271,11 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) 
             EXPECT_EQ(result.base_code[dim], reference_base_code[dim]);
             EXPECT_EQ(result.extra_code[dim], reference_extra_code[dim]);
         }
-        EXPECT_FLOAT_NEARLY_EQUAL(result.f_add_base, reference_base_add, 1e-4F);
-        EXPECT_FLOAT_NEARLY_EQUAL(result.f_rescale_base, reference_base_rescale, 1e-4F);
-        EXPECT_FLOAT_NEARLY_EQUAL(result.f_error_base, reference_base_error, 1e-4F);
-        EXPECT_FLOAT_NEARLY_EQUAL(result.f_add_full, reference_full_add, 1e-4F);
-        EXPECT_FLOAT_NEARLY_EQUAL(result.f_rescale_full, reference_full_rescale, 1e-4F);
+        EXPECT_NEAR(result.f_add_base, reference_base_add, 1e-4F);
+        EXPECT_NEAR(result.f_rescale_base, reference_base_rescale, 1e-4F);
+        EXPECT_NEAR(result.f_error_base, reference_base_error, 1e-4F);
+        EXPECT_NEAR(result.f_add_full, reference_full_add, 1e-4F);
+        EXPECT_NEAR(result.f_rescale_full, reference_full_rescale, 1e-4F);
     }
 }
 
@@ -494,9 +492,9 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
         kGError
     );
 
-    EXPECT_FLOAT_NEARLY_EQUAL(ip_base, static_cast<float>(ip_x0_qr), 1e-3F);
-    EXPECT_FLOAT_NEARLY_EQUAL(base_est, ref_base_est, 1e-2F);
-    EXPECT_FLOAT_NEARLY_EQUAL(base_low, base_est - (ref_f_error_bin * kGError), 1e-4F);
+    EXPECT_NEAR(ip_base, static_cast<float>(ip_x0_qr), 1e-3F);
+    EXPECT_NEAR(base_est, ref_base_est, 1e-2F);
+    EXPECT_NEAR(base_low, base_est - (ref_f_error_bin * kGError), 1e-4F);
 
     // split_distance_boosting reads g_add off the query rather than taking
     // it as a parameter; there is no x+y-specific boosting function.
@@ -505,7 +503,7 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
         extra_data.data(), extra_ip_func, q_obj, kDim, kExtraBits, ip_base
     );
 
-    EXPECT_FLOAT_NEARLY_EQUAL(boosted_est, ref_full_est, 1e-2F);
+    EXPECT_NEAR(boosted_est, ref_full_est, 1e-2F);
 
     // The one-shot path recomputes ip_base itself and must agree exactly with
     // the boosted path, plus supply the lower bound boosting omits.
@@ -530,7 +528,7 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
 
     EXPECT_FLOAT_EQ(full_ip_base, ip_base);
     EXPECT_FLOAT_EQ(full_est, boosted_est);
-    EXPECT_FLOAT_NEARLY_EQUAL(
+    EXPECT_NEAR(
         full_low,
         full_est - (ref_f_error_bin * kGError / static_cast<float>(1 << kExtraBits)),
         1e-4F
@@ -634,7 +632,7 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
         ip_base
     );
 
-    EXPECT_FLOAT_NEARLY_EQUAL(full_est, ref_est, 1e-2F);
+    EXPECT_NEAR(full_est, ref_est, 1e-2F);
     // The cheap filter's lower bound must not exclude the refined estimate,
     // otherwise the base layer would prune candidates the refine layer would
     // have kept.

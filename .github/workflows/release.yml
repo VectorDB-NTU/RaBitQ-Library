@@ -139,7 +139,8 @@ jobs:
         run: test "$BUILD_RESULT" = success
 
   windows-wheel-build:
-    name: Windows x86-64 wheel builds
+    # Windows wheels take longest, so each ABI builds on its own runner.
+    name: Windows x86-64 wheel build (${{ matrix.abi }})
     needs: [prepare, changes]
     if: >-
       !cancelled() && needs.prepare.result == 'success' &&
@@ -147,6 +148,10 @@ jobs:
       (needs.changes.result != 'success' || needs.changes.outputs.wheels == 'true')
     runs-on: windows-2025-vs2026
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: ${{ fromJSON(github.event_name == 'pull_request' && '["cp311", "cp314"]' || '["cp311", "cp312", "cp313", "cp314"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -157,13 +162,13 @@ jobs:
       - name: Build and test wheels
         uses: pypa/cibuildwheel@v4.2.0
         env:
-          CIBW_BUILD: ${{ github.event_name == 'pull_request' && 'cp311-win_amd64 cp314-win_amd64' || 'cp311-win_amd64 cp312-win_amd64 cp313-win_amd64 cp314-win_amd64' }}
+          CIBW_BUILD: ${{ matrix.abi }}-win_amd64
         with:
           output-dir: wheelhouse
       - name: Store wheel artifact
         uses: actions/upload-artifact@v7
         with:
-          name: windows-wheels
+          name: windows-wheels-${{ matrix.abi }}
           path: wheelhouse/*.whl
           if-no-files-found: error
 
@@ -265,7 +270,7 @@ jobs:
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: '*-wheels'
+          pattern: '*-wheels*'
           path: wheelhouse
           merge-multiple: true
 
@@ -293,7 +298,7 @@ jobs:
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: '*-wheels'
+          pattern: '*-wheels*'
           path: wheelhouse
           merge-multiple: true
 

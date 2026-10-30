@@ -12,6 +12,7 @@
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/utils/path.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -22,7 +23,8 @@ void write_value(std::ofstream& output, const T& value) {
 }
 
 TEST(VectorIoTest, LoadsCompleteConsistentRecords) {
-    const std::string path = ::testing::TempDir() + "rabitq_valid.fvecs";
+    const rabitq_test::TempFile path_file("rabitq_valid.fvecs");
+    const std::string& path = path_file.path();
     {
         std::ofstream output(path, std::ios::binary);
         const uint32_t cols = 2;
@@ -39,7 +41,6 @@ TEST(VectorIoTest, LoadsCompleteConsistentRecords) {
     ASSERT_EQ(matrix.cols(), 2);
     EXPECT_FLOAT_EQ(matrix(0, 0), 1.0F);
     EXPECT_FLOAT_EQ(matrix(1, 1), 4.0F);
-    std::remove(path.c_str());
 }
 
 TEST(BinaryMatrixIoTest, LoadsUtf8PathsAndChecksTheirSize) {
@@ -91,7 +92,8 @@ TEST(BinaryMatrixIoTest, LoadsNonUtf8NativePaths) {
 #endif
 
 TEST(VectorIoTest, RejectsInconsistentAndTruncatedRecordsWithoutReplacingOutput) {
-    const std::string path = ::testing::TempDir() + "rabitq_invalid.fvecs";
+    const rabitq_test::TempFile path_file("rabitq_invalid.fvecs");
+    const std::string& path = path_file.path();
     RowMajorMatrix<float> matrix(1, 1);
     matrix(0, 0) = 7.0F;
 
@@ -119,11 +121,11 @@ TEST(VectorIoTest, RejectsInconsistentAndTruncatedRecordsWithoutReplacingOutput)
     EXPECT_THROW(load_vecs<float>(path.c_str(), matrix), std::runtime_error);
     ASSERT_EQ(matrix.rows(), 1);
     EXPECT_FLOAT_EQ(matrix(0, 0), 7.0F);
-    std::remove(path.c_str());
 }
 
 TEST(BinaryMatrixIoTest, ValidatesPayloadBeforeReplacingOutput) {
-    const std::string path = ::testing::TempDir() + "rabitq_matrix.bin";
+    const rabitq_test::TempFile path_file("rabitq_matrix.bin");
+    const std::string& path = path_file.path();
     RowMajorMatrix<float> matrix(1, 1);
     matrix(0, 0) = 7.0F;
 
@@ -153,7 +155,6 @@ TEST(BinaryMatrixIoTest, ValidatesPayloadBeforeReplacingOutput) {
     ASSERT_EQ(matrix.rows(), 2);
     ASSERT_EQ(matrix.cols(), 2);
     EXPECT_FLOAT_EQ(matrix(1, 1), 4.0F);
-    std::remove(path.c_str());
 }
 
 }  // namespace

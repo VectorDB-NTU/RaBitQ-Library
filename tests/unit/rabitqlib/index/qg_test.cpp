@@ -42,6 +42,7 @@
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib::symqg {
 struct QGConstructionTestAccess {
@@ -1275,7 +1276,8 @@ TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
                 EXPECT_LT(ids[j], kCount);
                 EXPECT_TRUE(std::isfinite(distances[j]));
             }
-            const std::string path = ::testing::TempDir() + "rabitq_qg_seeded.index";
+            const rabitq_test::TempFile path_file("rabitq_qg_seeded.index");
+            const std::string& path = path_file.path();
             graph.save(path.c_str());
             QuantizedGraph<float> loaded;
             loaded.load(path.c_str());
@@ -1284,7 +1286,6 @@ TEST(QGConstructionTest, RefinesPartialSeedOnceAfterReleasingInputs) {
             EXPECT_EQ(ids, loaded_ids);
             EXPECT_EQ(distances, loaded_distances);
             EXPECT_EQ(graph.entry_point(), loaded.entry_point());
-            std::remove(path.c_str());
         }
     }
 }
@@ -1387,7 +1388,8 @@ TEST(QuantizedGraphPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget
     QGBuilder builder(source, kDegree, data.data(), 1);
     builder.build(2);
 
-    const std::string path = ::testing::TempDir() + "rabitq_qg_malformed.index";
+    const rabitq_test::TempFile path_file("rabitq_qg_malformed.index");
+    const std::string& path = path_file.path();
     QuantizedGraph<float> target(65, kDim, kDegree, METRIC_IP);
 
     source.save(path.c_str());
@@ -1438,8 +1440,6 @@ TEST(QuantizedGraphPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget
     EXPECT_THROW(target.load(path.c_str()), std::runtime_error);
     EXPECT_EQ(target.num_vertices(), 65U);
     EXPECT_EQ(target.metric_type(), METRIC_IP);
-
-    std::remove(path.c_str());
 }
 
 TEST(QuantizedGraphPersistenceTest, PreservesNewAndLegacyPaddedDomains) {
@@ -1448,7 +1448,8 @@ TEST(QuantizedGraphPersistenceTest, PreservesNewAndLegacyPaddedDomains) {
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = std::sin(static_cast<float>(i) * 0.13F);
     }
-    const std::string path = ::testing::TempDir() + "rabitq_qg_padding.index";
+    const rabitq_test::TempFile path_file("rabitq_qg_padding.index");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (auto rotator : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
             for (size_t bits : {0U, 4U, 8U}) {
@@ -1492,7 +1493,6 @@ TEST(QuantizedGraphPersistenceTest, PreservesNewAndLegacyPaddedDomains) {
             }
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(QuantizedGraphLifecycleTest, DestroysConcreteRotatorThroughBasePointer) {
@@ -1501,8 +1501,8 @@ TEST(QuantizedGraphLifecycleTest, DestroysConcreteRotatorThroughBasePointer) {
 }
 
 TEST(QuantizedGraphLifecycleTest, RejectsSearchAndSaveBeforeBuild) {
-    const std::string path = ::testing::TempDir() + "rabitq_qg_unbuilt.index";
-    std::remove(path.c_str());
+    const rabitq_test::TempFile path_file("rabitq_qg_unbuilt.index");
+    const std::string& path = path_file.path();
     std::array<float, 64> query{};
     std::array<PID, 1> ids{};
     std::array<float, 1> distances{};
@@ -1520,7 +1520,6 @@ TEST(QuantizedGraphLifecycleTest, RejectsSearchAndSaveBeforeBuild) {
         configured.search(query.data(), 1, ids.data(), distances.data()), std::logic_error
     );
     EXPECT_FALSE(std::filesystem::exists(path));
-    std::remove(path.c_str());
 }
 
 TEST(QuantizedGraphLifecycleTest, BuilderDoesNotPublishPartialGraph) {
@@ -1534,8 +1533,8 @@ TEST(QuantizedGraphLifecycleTest, BuilderDoesNotPublishPartialGraph) {
 
     for (const auto init : {QGInitialization::Random, QGInitialization::PiPNN}) {
         SCOPED_TRACE(static_cast<int>(init));
-        const std::string path = ::testing::TempDir() + "rabitq_qg_partial.index";
-        std::remove(path.c_str());
+        const rabitq_test::TempFile path_file("rabitq_qg_partial.index");
+        const std::string& path = path_file.path();
         QuantizedGraph<float> graph(kNumPoints, kDim, kDegree);
         QGBuilder builder(graph, kDegree, data.data(), 1, init);
         graph.set_ef(1);
@@ -1547,7 +1546,6 @@ TEST(QuantizedGraphLifecycleTest, BuilderDoesNotPublishPartialGraph) {
         EXPECT_NO_THROW(graph.search(query.data(), 1, &result, &distance));
         EXPECT_NO_THROW(graph.save(path.c_str()));
         EXPECT_TRUE(std::filesystem::exists(path));
-        std::remove(path.c_str());
     }
 }
 
@@ -1640,8 +1638,10 @@ TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
             EXPECT_TRUE(std::isfinite(distances[i]));
         }
 
-        const std::string path =
-            ::testing::TempDir() + "rabitq_qg_quant_" + std::to_string(bits) + ".index";
+        const rabitq_test::TempFile path_file(
+            "rabitq_qg_quant_" + std::to_string(bits) + ".index"
+        );
+        const std::string& path = path_file.path();
         graph.save(path.c_str());
         QuantizedGraph<float> loaded;
         loaded.set_ef(kNumPoints);
@@ -1656,7 +1656,6 @@ TEST(QGQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
         );
         EXPECT_EQ(loaded_ids, ids);
         EXPECT_EQ(loaded_distances, distances);
-        std::remove(path.c_str());
     }
 }
 

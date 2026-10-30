@@ -26,6 +26,7 @@
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib::hnsw {
 
@@ -334,8 +335,8 @@ TEST(HnswAddTest, SurvivesSaveAndLoad) {
     constexpr size_t kTotal = kBuilt + kAdded;
     AddFixture fixture(kTotal, 11);
 
-    const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "hnsw_add_roundtrip.index";
+    const rabitq_test::TempFile path_file("hnsw_add_roundtrip.index");
+    const std::filesystem::path path(path_file.path());
 
     {
         HierarchicalNSW index(kTotal, AddFixture::kDim, 4, 8, 50);
@@ -368,7 +369,6 @@ TEST(HnswAddTest, SurvivesSaveAndLoad) {
     for (size_t i = 0; i < kAdded; ++i) {
         EXPECT_EQ(results[i][0].second, kBuilt + i);
     }
-    std::filesystem::remove(path);
 }
 
 TEST(HnswAddTest, RejectsBadInputWithoutDisturbingTheIndex) {
@@ -631,8 +631,8 @@ TEST(HnswResizeTest, SurvivesSaveAndLoad) {
     constexpr size_t kTotal = 96;
     AddFixture fixture(kTotal, 41);
 
-    const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "hnsw_resize_roundtrip.index";
+    const rabitq_test::TempFile path_file("hnsw_resize_roundtrip.index");
+    const std::filesystem::path path(path_file.path());
     {
         HierarchicalNSW index(kBuilt, AddFixture::kDim, 4, 8, 50);
         index.construct(
@@ -661,7 +661,6 @@ TEST(HnswResizeTest, SurvivesSaveAndLoad) {
     for (size_t i = 0; i < kTotal; ++i) {
         EXPECT_EQ(results[i][0].second, i);
     }
-    std::filesystem::remove(path);
 }
 
 // Labels must not depend on the order threads happen to finish in, and every
@@ -975,11 +974,10 @@ Results without_removed(const Results& before, const std::vector<bool>& removed)
 std::unique_ptr<HierarchicalNSW> copy_of(
     const HierarchicalNSW& index, const std::string& name
 ) {
-    const std::string path = ::testing::TempDir() + name;
-    index.save(path.c_str());
+    const rabitq_test::TempFile file(name);
+    index.save(file.path().c_str());
     auto copy = std::make_unique<HierarchicalNSW>();
-    copy->load(path.c_str());
-    std::remove(path.c_str());
+    copy->load(file.path().c_str());
     return copy;
 }
 
@@ -992,7 +990,8 @@ std::vector<char> saved_bytes(const HierarchicalNSW& index, const std::string& p
 TEST(HnswConstructionTest, SeedReproducesRotationCodesAndSerialSearch) {
     constexpr size_t kCount = 65;
     AddFixture fixture(kCount, 47);
-    const std::string path = ::testing::TempDir() + "rabitq_hnsw_seed.index";
+    const rabitq_test::TempFile path_file("rabitq_hnsw_seed.index");
+    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         std::vector<char> expected_bytes;
         Results expected_results;
@@ -1019,7 +1018,6 @@ TEST(HnswConstructionTest, SeedReproducesRotationCodesAndSerialSearch) {
             }
         }
     }
-    std::remove(path.c_str());
 }
 
 TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
@@ -1153,7 +1151,8 @@ TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
     constexpr size_t kBuilt = 96;
     constexpr size_t kAdded = 32;
     constexpr size_t kTotal = kBuilt + kAdded;
-    const std::string path = ::testing::TempDir() + "rabitq_hnsw_remove_roundtrip.index";
+    const rabitq_test::TempFile path_file("rabitq_hnsw_remove_roundtrip.index");
+    const std::string& path = path_file.path();
     for (const auto& config : remove_cases()) {
         SCOPED_TRACE(
             ::testing::Message()
@@ -1198,7 +1197,6 @@ TEST(HnswRemoveTest, SurvivesSaveLoadResizeAndLaterAdds) {
             without_removed(search_everything(*plain, fixture, kTotal), removed)
         );
     }
-    std::remove(path.c_str());
 }
 
 TEST(HnswRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
@@ -1218,7 +1216,8 @@ TEST(HnswRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
 
     AddFixture fixture(kCount, 79);
     auto index = build_for_remove(fixture, kCount, kCount, {METRIC_L2, 4});
-    const std::string path = ::testing::TempDir() + "rabitq_hnsw_remove_rejects.index";
+    const rabitq_test::TempFile path_file("rabitq_hnsw_remove_rejects.index");
+    const std::string& path = path_file.path();
     const auto expected = saved_bytes(*index, path);
 
     const std::vector<PID> unknown{3, kCount};
@@ -1234,7 +1233,6 @@ TEST(HnswRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
 
     // Label 3 was valid in the rejected call, so it is still there to remove.
     EXPECT_EQ(index->remove(&one, 1), 1U);
-    std::remove(path.c_str());
 }
 
 TEST(HnswRemoveTest, RemovingEveryPointReturnsNoResults) {
@@ -1272,7 +1270,8 @@ TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
     const PID one = 5;
     ASSERT_EQ(index->remove(&one, 1), 1U);
 
-    const std::string path = ::testing::TempDir() + "rabitq_hnsw_remove_bad_cluster.index";
+    const rabitq_test::TempFile path_file("rabitq_hnsw_remove_bad_cluster.index");
+    const std::string& path = path_file.path();
     index->save(path.c_str());
     HierarchicalNSW loaded;
     ASSERT_NO_THROW(loaded.load(path.c_str()));
@@ -1286,7 +1285,6 @@ TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
     } catch (const std::runtime_error& error) {
         EXPECT_STREQ(error.what(), "HNSW: invalid or truncated index file");
     }
-    std::remove(path.c_str());
 }
 
 }  // namespace

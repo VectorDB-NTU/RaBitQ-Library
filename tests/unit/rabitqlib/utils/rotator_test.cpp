@@ -9,16 +9,15 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/core/detail/simd/rotator_dispatch.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/memory.hpp"
-#include "test_data.hpp"
 
 using namespace rabitqlib;
-using namespace rabitq_test;
 
 class RotatorTest : public ::testing::Test {
    protected:
@@ -82,7 +81,10 @@ TEST(FhtRotatorTest, PadsToThirtyTwoAndAcceptsLegacyPadding) {
             choose_rotator<float>(dim, RotatorType::FhtKacRotator, legacy_padded, 43)
         );
         loaded->load(state.data());
-        auto input = TestDataGenerator::GenerateRandomVector(dim, -1.0f, 1.0f, 42);
+        std::mt19937 generator(42);
+        std::uniform_real_distribution<float> uniform(-1.0F, 1.0F);
+        std::vector<float> input(dim);
+        std::generate(input.begin(), input.end(), [&] { return uniform(generator); });
         std::vector<float> expected(legacy_padded), actual(legacy_padded);
         legacy->rotate(input.data(), expected.data());
         loaded->rotate(input.data(), actual.data());

@@ -164,10 +164,16 @@ def test_auto_initializer_thresholds(clusters, expected):
         assert IvfIndex(64, 1, clusters, 1, initializer=mode).initializer == mode
 
 
+# Historical routing depends only on the cluster count, and both storage widths'
+# legacy headers are covered below the threshold, so the costly 20000-centroid
+# HNSW case is built for one width.
 @pytest.fixture(
     scope="module",
     params=[
-        (bits, clusters) for bits in (1, 32) for clusters in (3, 5000, 19999, 20000)
+        (bits, clusters)
+        for bits in (1, 32)
+        for clusters in (3, 5000, 19999, 20000)
+        if (bits, clusters) != (1, 20000)
     ],
     ids=lambda case: f"{case[0]}bit-{case[1]}clusters",
 )

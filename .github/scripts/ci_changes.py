@@ -8,6 +8,7 @@ from pathlib import Path
 
 GROUPS = (
     "cpp",
+    "cpp_core",
     "cpp_format",
     "cpp_tidy",
     "python_quality",
@@ -19,6 +20,34 @@ GROUPS = (
 )
 
 CPP_SUFFIXES = (".c", ".cc", ".cpp", ".h", ".hpp")
+
+# Core and FastScan consumer builds exclude ANN indexes, clustering and their tests.
+# Anything not listed here keeps those consumer checks selected.
+INDEX_ONLY_PREFIXES = (
+    "include/rabitqlib/clustering/",
+    "include/rabitqlib/index/",
+    "include/rabitqlib/third/hnswlib/",
+    "src/index/",
+    "tests/consumer/",
+    "tests/integration/",
+    "tests/unit/rabitqlib/clustering/",
+    "tests/unit/rabitqlib/index/",
+)
+CORE_SAMPLE_PREFIXES = ("sample/cpp/core/", "sample/cpp/fastscan/")
+INDEX_ONLY_TESTS = frozenset(
+    (
+        "tests/failures/construction_failure_test.cpp",
+        "tests/failures/hnsw_add_allocation_test.cpp",
+    )
+)
+
+
+def selects_core(path):
+    """Whether a C++ change can affect the core and FastScan consumer builds."""
+    if path.startswith(INDEX_ONLY_PREFIXES) or path in INDEX_ONLY_TESTS:
+        return False
+    return not path.startswith("sample/cpp/") or path.startswith(CORE_SAMPLE_PREFIXES)
+
 
 BENCHMARK_PYTHON_PATHS = frozenset(
     f"benchmarks/{name}.py"
@@ -107,11 +136,13 @@ def classify(paths):
             selected.update(("python_quality", "python_build", "wheels"))
         elif path.startswith("tests/fixtures/core_api_v1/"):
             # Frozen compatibility fixture; excluded from clang-format by design.
-            selected.add("cpp")
+            selected.update(("cpp", "cpp_core"))
         elif path == "pyproject.toml":
             selected.update(("python_quality", "python_build", "wheels", "benchmarks"))
         elif path == "CMakeLists.txt" or path.startswith("cmake/"):
-            selected.update(("cpp", "cpp_tidy", "python_build", "wheels", "benchmarks"))
+            selected.update(
+                ("cpp", "cpp_core", "cpp_tidy", "python_build", "wheels", "benchmarks")
+            )
         elif path.startswith(("include/", "src/")):
             selected.update(
                 (
@@ -123,6 +154,8 @@ def classify(paths):
                     "benchmarks",
                 )
             )
+            if selects_core(path):
+                selected.add("cpp_core")
         elif path.startswith("python_bindings/"):
             selected.update(("python_build", "wheels", "benchmarks"))
             if path.endswith((".py", ".pyi")):
@@ -146,6 +179,8 @@ def classify(paths):
             or path == "tests/CMakeLists.txt"
         ):
             selected.add("cpp")
+            if selects_core(path):
+                selected.add("cpp_core")
             if path.endswith(CPP_SUFFIXES):
                 selected.add("cpp_format")
         elif path == "tests/python/test_cpp_clustering_examples.py":
@@ -175,6 +210,7 @@ def classify(paths):
             selected.update(
                 (
                     "cpp",
+                    "cpp_core",
                     "cpp_format",
                     "cpp_tidy",
                     "shell",

@@ -9,6 +9,8 @@ on:
         value: ${{ jobs.detect.outputs.docs }}
       cpp:
         value: ${{ jobs.detect.outputs.cpp }}
+      cpp_core:
+        value: ${{ jobs.detect.outputs.cpp_core }}
       cpp_format:
         value: ${{ jobs.detect.outputs.cpp_format }}
       cpp_tidy:
@@ -33,6 +35,7 @@ jobs:
       benchmarks: ${{ steps.paths.outputs.benchmarks }}
       docs: ${{ steps.paths.outputs.docs }}
       cpp: ${{ steps.paths.outputs.cpp }}
+      cpp_core: ${{ steps.paths.outputs.cpp_core }}
       cpp_format: ${{ steps.paths.outputs.cpp_format }}
       cpp_tidy: ${{ steps.paths.outputs.cpp_tidy }}
       python_quality: ${{ steps.paths.outputs.python_quality }}
@@ -40,12 +43,12 @@ jobs:
       shell: ${{ steps.paths.outputs.shell }}
       wheels: ${{ steps.paths.outputs.wheels }}
     steps:
+      # Path selection needs commit history and trees, not file contents.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
+          filter: blob:none
+      # The hosted Ubuntu Python provides tomllib; no interpreter setup is needed.
       - name: Select affected checks
         id: paths
-        run: python .github/scripts/ci_changes.py
+        run: python3 .github/scripts/ci_changes.py
