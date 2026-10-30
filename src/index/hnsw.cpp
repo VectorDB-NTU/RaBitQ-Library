@@ -587,6 +587,96 @@ void HierarchicalNSW::construct(
     construction_data_ = nullptr;
 }
 
+template <class Distance>
+PID HierarchicalNSW::greedy_descend(
+    PID current_id, int from_level, int to_level, Distance distance
+) {
+    float current_distance = distance(current_id);
+    for (int level = from_level; level > to_level; level--) {
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
+            const PID* data = get_linklist(current_id, level);
+            const size_t size = get_list_count(data);
+            const PID* datal = data + 1;
+            for (size_t i = 0; i < size; i++) {
+                PID cand = datal[i];
+                assert(cand < num_stored_points_);
+                float d = distance(cand);
+                if (d < current_distance) {
+                    current_distance = d;
+                    current_id = cand;
+                    changed = true;
+                }
+            }
+        }
+    }
+    return current_id;
+}
+
+template <class Distance, class Prefetch>
+maxheap<std::pair<float, PID>> HierarchicalNSW::search_layer(
+    PID entry_point_id, int layer, Distance distance, Prefetch prefetch
+) {
+    auto visited = visited_list_pool_->get_free_vislist();
+
+    maxheap<std::pair<float, PID>> top_candidates;
+    minheap<std::pair<float, PID>> candidate_set;
+
+    float lower_bound = distance(entry_point_id);
+    top_candidates.emplace(lower_bound, entry_point_id);
+    candidate_set.emplace(lower_bound, entry_point_id);
+    visited->set(entry_point_id);
+
+    while (!candidate_set.empty()) {
+        std::pair<float, PID> curr_el_pair = candidate_set.top();
+        if (curr_el_pair.first > lower_bound && top_candidates.size() == ef_construction_) {
+            break;
+        }
+        candidate_set.pop();
+
+        PID current_id = curr_el_pair.second;
+        std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
+
+        const PID* data =
+            (layer == 0) ? get_linklist0(current_id) : get_linklist(current_id, layer);
+        const size_t size = get_list_count(data);
+        const PID* datal = data + 1;
+
+        prefetch(*datal);
+        prefetch(*(datal + 1));
+
+        for (size_t j = 0; j < size; j++) {
+            PID candidate_id = datal[j];
+            assert(candidate_id < num_stored_points_);
+            if (visited->get(candidate_id)) {
+                continue;
+            }
+            visited->set(candidate_id);
+
+            if (j < size - 1) {
+                prefetch(*(datal + j + 1));
+            }
+
+            float candidate_distance = distance(candidate_id);
+            if (top_candidates.size() < ef_construction_ ||
+                lower_bound > candidate_distance) {
+                candidate_set.emplace(candidate_distance, candidate_id);
+                top_candidates.emplace(candidate_distance, candidate_id);
+                if (top_candidates.size() > ef_construction_) {
+                    top_candidates.pop();
+                }
+                if (!top_candidates.empty()) {
+                    lower_bound = top_candidates.top().first;
+                }
+            }
+        }
+    }
+    visited_list_pool_->release_vis_list(std::move(visited));
+    return top_candidates;
+}
+
 void HierarchicalNSW::add_point(
     PID label, PID cluster_id, const quant::RabitqConfig& config
 ) {
@@ -656,34 +746,25 @@ void HierarchicalNSW::add_point(
     }
 
     if (static_cast<signed>(current_id) != -1) {
+        const auto distance = [this, new_node_id](PID id) {
+            return get_data_dist(id, new_node_id);
+        };
+        const auto prefetch = [this](PID id) {
+            rabitqlib::memory::mem_prefetch_l1(
+                reinterpret_cast<const char*>(
+                    construction_data_ + (get_external_label(id) * dim_)
+                ),
+                padded_dim_ / 16
+            );
+        };
         if (node_level < previous_max_level) {
-            float current_distance = get_data_dist(current_id, new_node_id);
-            for (int level = previous_max_level; level > node_level; level--) {
-                bool changed = true;
-                while (changed) {
-                    changed = false;
-                    std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-                    const PID* data = get_linklist(current_id, level);
-                    const size_t size = get_list_count(data);
-
-                    const PID* datal = data + 1;
-                    for (size_t i = 0; i < size; i++) {
-                        PID cand = datal[i];
-                        assert(cand < num_stored_points_);
-                        float d = get_data_dist(cand, new_node_id);
-                        if (d < current_distance) {
-                            current_distance = d;
-                            current_id = cand;
-                            changed = true;
-                        }
-                    }
-                }
-            }
+            current_id =
+                greedy_descend(current_id, previous_max_level, node_level, distance);
         }
 
         for (int level = std::min(node_level, previous_max_level); level >= 0; level--) {
             maxheap<std::pair<float, PID>> top_candidates =
-                search_base_layer(current_id, new_node_id, level);
+                search_layer(current_id, level, distance, prefetch);
             current_id = mutually_connect_new_element(new_node_id, top_candidates, level);
         }
     }
@@ -693,83 +774,6 @@ void HierarchicalNSW::add_point(
         entry_point_id_ = new_node_id;
         max_level_ = node_level;
     }
-}
-
-maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer(
-    PID entry_point_id, PID new_node_id, int layer
-) {
-    auto visited = visited_list_pool_->get_free_vislist();
-
-    maxheap<std::pair<float, PID>> top_candidates;
-    minheap<std::pair<float, PID>> candidate_set;
-
-    float lower_bound = get_data_dist(entry_point_id, new_node_id);
-    top_candidates.emplace(lower_bound, entry_point_id);
-    candidate_set.emplace(lower_bound, entry_point_id);
-    visited->set(entry_point_id);
-
-    while (!candidate_set.empty()) {
-        std::pair<float, PID> curr_el_pair = candidate_set.top();
-        if (curr_el_pair.first > lower_bound && top_candidates.size() == ef_construction_) {
-            break;
-        }
-        candidate_set.pop();
-
-        PID current_id = curr_el_pair.second;
-
-        std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-
-        const PID* data =
-            (layer == 0) ? get_linklist0(current_id) : get_linklist(current_id, layer);
-        const size_t size = get_list_count(data);
-        const PID* datal = data + 1;
-
-        rabitqlib::memory::mem_prefetch_l1(
-            reinterpret_cast<const char*>(
-                construction_data_ + (get_external_label(*datal) * dim_)
-            ),
-            padded_dim_ / 16
-        );
-
-        rabitqlib::memory::mem_prefetch_l1(
-            reinterpret_cast<const char*>(
-                construction_data_ + (get_external_label(*(datal + 1)) * dim_)
-            ),
-            padded_dim_ / 16
-        );
-
-        for (size_t j = 0; j < size; j++) {
-            PID candidate_id = *(datal + j);
-            if (visited->get(candidate_id)) {
-                continue;
-            }
-            visited->set(candidate_id);
-
-            if (j < size - 1) {
-                rabitqlib::memory::mem_prefetch_l1(
-                    reinterpret_cast<const char*>(
-                        construction_data_ + (get_external_label(*(datal + j + 1)) * dim_)
-                    ),
-                    padded_dim_ / 16
-                );
-            }
-
-            float candidate_distance = get_data_dist(candidate_id, new_node_id);
-            if (top_candidates.size() < ef_construction_ ||
-                lower_bound > candidate_distance) {
-                candidate_set.emplace(candidate_distance, candidate_id);
-                top_candidates.emplace(candidate_distance, candidate_id);
-                if (top_candidates.size() > ef_construction_) {
-                    top_candidates.pop();
-                }
-                if (!top_candidates.empty()) {
-                    lower_bound = top_candidates.top().first;
-                }
-            }
-        }
-    }
-    visited_list_pool_->release_vis_list(std::move(visited));
-    return top_candidates;
 }
 
 namespace detail {
@@ -1004,16 +1008,7 @@ void HierarchicalNSW::reconstruct_rotated(PID id, float* out) const {
     combined.resize(padded_dim_);
 
     const ConstBinDataMap<float> bin(get_bindata_by_internalid(id), padded_dim_);
-    const uint8_t* sign_code = bin.bin_code();
-    for (size_t word = 0; word * 64 < padded_dim_; ++word) {
-        uint64_t bits = 0;
-        const size_t base = word * 64;
-        const size_t span = std::min<size_t>(64, padded_dim_ - base);
-        std::memcpy(&bits, sign_code + (word * sizeof(uint64_t)), span / 8);
-        for (size_t j = 0; j < span; ++j) {
-            combined[base + j] = static_cast<uint16_t>((bits >> (span - 1 - j)) & 1ULL);
-        }
-    }
+    quant::rabitq_impl::unpack_sign_bits(bin.bin_code(), padded_dim_, combined.data());
 
     const auto* centroid = reinterpret_cast<const float*>(centroids_memory_.get()) +
                            (get_clusterid_by_internalid(id) * padded_dim_);
@@ -1090,60 +1085,6 @@ float HierarchicalNSW::get_quant_dist(
         .distance;
 }
 
-maxheap<std::pair<float, PID>> HierarchicalNSW::search_base_layer_quant(
-    PID entry_point_id, PID new_node_id, int layer, detail::QuantQuery& query
-) {
-    auto visited = visited_list_pool_->get_free_vislist();
-
-    maxheap<std::pair<float, PID>> top_candidates;
-    minheap<std::pair<float, PID>> candidate_set;
-
-    float lower_bound = get_quant_dist(entry_point_id, new_node_id, query);
-    top_candidates.emplace(lower_bound, entry_point_id);
-    candidate_set.emplace(lower_bound, entry_point_id);
-    visited->set(entry_point_id);
-
-    while (!candidate_set.empty()) {
-        std::pair<float, PID> curr_el_pair = candidate_set.top();
-        if (curr_el_pair.first > lower_bound && top_candidates.size() == ef_construction_) {
-            break;
-        }
-        candidate_set.pop();
-
-        PID current_id = curr_el_pair.second;
-        std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-
-        const PID* data =
-            (layer == 0) ? get_linklist0(current_id) : get_linklist(current_id, layer);
-        const size_t size = get_list_count(data);
-        const PID* datal = data + 1;
-
-        for (size_t j = 0; j < size; j++) {
-            PID candidate_id = datal[j];
-            assert(candidate_id < num_stored_points_);
-            if (visited->get(candidate_id)) {
-                continue;
-            }
-            visited->set(candidate_id);
-
-            float candidate_distance = get_quant_dist(candidate_id, new_node_id, query);
-            if (top_candidates.size() < ef_construction_ ||
-                lower_bound > candidate_distance) {
-                candidate_set.emplace(candidate_distance, candidate_id);
-                top_candidates.emplace(candidate_distance, candidate_id);
-                if (top_candidates.size() > ef_construction_) {
-                    top_candidates.pop();
-                }
-                if (!top_candidates.empty()) {
-                    lower_bound = top_candidates.top().first;
-                }
-            }
-        }
-    }
-    visited_list_pool_->release_vis_list(std::move(visited));
-    return top_candidates;
-}
-
 PID HierarchicalNSW::mutually_connect_quant(
     PID new_node_id,
     maxheap<std::pair<float, PID>>& top_candidates,
@@ -1184,34 +1125,18 @@ void HierarchicalNSW::add_point_quant(
 
     try {
         if (static_cast<signed>(current_id) != -1) {
+            const auto distance = [this, new_node_id, &query](PID id) {
+                return get_quant_dist(id, new_node_id, query);
+            };
             if (node_level < previous_max_level) {
-                float current_distance = get_quant_dist(current_id, new_node_id, query);
-                for (int level = previous_max_level; level > node_level; level--) {
-                    bool changed = true;
-                    while (changed) {
-                        changed = false;
-                        std::unique_lock<std::mutex> lock(link_list_locks_[current_id]);
-                        const PID* data = get_linklist(current_id, level);
-                        const size_t size = get_list_count(data);
-                        const PID* datal = data + 1;
-                        for (size_t i = 0; i < size; i++) {
-                            PID cand = datal[i];
-                            assert(cand < num_stored_points_);
-                            float d = get_quant_dist(cand, new_node_id, query);
-                            if (d < current_distance) {
-                                current_distance = d;
-                                current_id = cand;
-                                changed = true;
-                            }
-                        }
-                    }
-                }
+                current_id =
+                    greedy_descend(current_id, previous_max_level, node_level, distance);
             }
 
             for (int level = std::min(node_level, previous_max_level); level >= 0;
                  level--) {
                 maxheap<std::pair<float, PID>> top_candidates =
-                    search_base_layer_quant(current_id, new_node_id, level, query);
+                    search_layer(current_id, level, distance, [](PID) {});
                 current_id =
                     mutually_connect_quant(new_node_id, top_candidates, level, query);
             }

@@ -20,14 +20,7 @@ inline PID exact_nn(
     T (*dist_func)(const T*, const T*, size_t)
 ) {
 #if RABITQ_USE_OPENMP
-    const auto num_workers = static_cast<int>(std::max<size_t>(
-        1,
-        std::min(
-            {resolve_num_threads(num_threads),
-             std::max<size_t>(num_points, 1),
-             static_cast<size_t>(std::numeric_limits<int>::max())}
-        )
-    ));
+    const int num_workers = detail::openmp_team_size(num_threads, num_points);
 #else
     (void)num_threads;
     constexpr int num_workers = 1;

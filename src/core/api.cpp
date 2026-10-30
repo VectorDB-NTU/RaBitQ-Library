@@ -16,7 +16,6 @@
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/pack_excode.hpp"
-#include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::quant::v1 {
@@ -191,21 +190,14 @@ void read_codes(const Parameters& p, CodeView input, ScratchStorage& s) {
         }
         return;
     }
+    rabitq_impl::unpack_sign_bits(bytes, p.dim, s.codes);
     const size_t ex_bits = p.total_bits - 1;
     if (ex_bits > 0) {
         rabitq_impl::ex_bits::unpacking_rabitqplus_code(
             static_cast<const uint8_t*>(input.extra.data), s.extra, p.dim, ex_bits
         );
-    }
-    // Sign words retain the existing full-64 / final-32 coordinate convention.
-    for (size_t start = 0; start < p.dim; start += 64) {
-        const size_t width = std::min(size_t{64}, p.dim - start);
-        const uint64_t word = bitops::load_word(bytes + start / 8, width / 8);
-        for (size_t i = 0; i < width; ++i) {
-            const auto sign = static_cast<uint16_t>((word >> (width - 1 - i)) & 1U);
-            s.codes[start + i] = static_cast<uint16_t>(
-                (sign << ex_bits) | (ex_bits == 0 ? 0 : s.extra[start + i])
-            );
+        for (size_t i = 0; i < p.dim; ++i) {
+            s.codes[i] = static_cast<uint16_t>((s.codes[i] << ex_bits) | s.extra[i]);
         }
     }
 }

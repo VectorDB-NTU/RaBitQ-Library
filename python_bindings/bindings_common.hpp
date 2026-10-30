@@ -4,6 +4,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pytypes.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -14,7 +15,6 @@
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/packed.hpp"
 
@@ -139,19 +139,9 @@ inline std::string metric_to_string(rabitqlib::MetricType metric) {
     return metric == rabitqlib::METRIC_IP ? "ip" : "l2";
 }
 
-inline rabitqlib::RotatorType rotator_from_string(const std::string& method) {
-    if (method == "matrix") {
-        return rabitqlib::RotatorType::MatrixRotator;
-    }
-    if (method == "fht_kac" || method == "fht") {
-        return rabitqlib::RotatorType::FhtKacRotator;
-    }
-    throw std::invalid_argument("Unsupported rotator method. Use 'fht_kac' or 'matrix'.");
-}
-
 template <typename T>
-inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_2d_array(
-    py::handle value, const char* name
+inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_array_rank(
+    py::handle value, const char* name, py::ssize_t rank
 ) {
     auto array = py::array_t<T, py::array::c_style | py::array::forcecast>::ensure(value);
     if (!array) {
@@ -161,11 +151,20 @@ inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_2d_array
             array_input_type(value)
         );
     }
-    if (array.ndim() != 2) {
+    if (array.ndim() != rank) {
         throw std::invalid_argument(
-            std::string(name) + " must be a 2D NumPy array; got shape " + array_shape(array)
+            std::string(name) + " must be a " + std::to_string(rank) +
+            "D NumPy array; got shape " + array_shape(array)
         );
     }
+    return array;
+}
+
+template <typename T>
+inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_2d_array(
+    py::handle value, const char* name
+) {
+    auto array = ensure_array_rank<T>(value, name, 2);
     // C-contiguous NumPy views may start at an unaligned byte offset. Native
     // scalar accesses require alignof(T), independently of SIMD load alignment.
     if (reinterpret_cast<std::uintptr_t>(array.data()) % alignof(T) != 0) {
@@ -186,20 +185,28 @@ template <typename T>
 inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_1d_array(
     py::handle value, const char* name
 ) {
-    auto array = py::array_t<T, py::array::c_style | py::array::forcecast>::ensure(value);
-    if (!array) {
-        throw std::invalid_argument(
-            std::string(name) + " must be convertible to a NumPy array of dtype " +
-            py::str(py::dtype::of<T>()).cast<std::string>() + "; got " +
-            array_input_type(value)
-        );
-    }
-    if (array.ndim() != 1) {
-        throw std::invalid_argument(
-            std::string(name) + " must be a 1D NumPy array; got shape " + array_shape(array)
-        );
-    }
-    return array;
+    return ensure_array_rank<T>(value, name, 1);
+}
+
+struct SearchResults {
+    py::array_t<PID> ids;
+    py::array_t<float> distances;
+};
+
+// (num_queries, k) outputs. Slots without a neighbor keep kPidMax and +inf.
+inline SearchResults unfilled_search_results(size_t num_queries, size_t k) {
+    const auto shape = std::vector<py::ssize_t>{
+        static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
+    SearchResults results{py::array_t<PID>(shape), py::array_t<float>(shape)};
+    std::fill(
+        results.ids.mutable_data(), results.ids.mutable_data() + results.ids.size(), kPidMax
+    );
+    std::fill(
+        results.distances.mutable_data(),
+        results.distances.mutable_data() + results.distances.size(),
+        std::numeric_limits<float>::infinity()
+    );
+    return results;
 }
 
 // Like ensure_1d_array<int64_t>, but refuses input whose dtype is not an integer. forcecast

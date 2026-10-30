@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <queue>
 #include <random>
 #include <thread>
@@ -92,6 +93,20 @@ inline size_t resolve_num_threads(size_t requested) {
     const size_t available = total_threads();
     return requested == 0 ? available : std::min(requested, available);
 }
+
+namespace detail {
+// OpenMP team size for work_items items: at least one and representable as int.
+inline int openmp_team_size(size_t requested, size_t work_items) {
+    return static_cast<int>(std::max<size_t>(
+        1,
+        std::min(
+            {resolve_num_threads(requested),
+             work_items,
+             static_cast<size_t>(std::numeric_limits<int>::max())}
+        )
+    ));
+}
+}  // namespace detail
 
 template <typename T, typename TP>
 float distance_ratio(

@@ -6,7 +6,6 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>  // IWYU pragma: keep (vector conversion for iteration_stats)
 
-#include <cstring>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -19,13 +18,10 @@ namespace py = pybind11;
 
 namespace rabitqlib::python_bindings {
 
+// Without a base object, pybind11 copies the data into a new array.
 template <typename T>
 py::array_t<T> vector_to_array(const std::vector<T>& values) {
-    py::array_t<T> result(static_cast<py::ssize_t>(values.size()));
-    if (!values.empty()) {
-        std::memcpy(result.mutable_data(), values.data(), values.size() * sizeof(T));
-    }
-    return result;
+    return py::array_t<T>(static_cast<py::ssize_t>(values.size()), values.data());
 }
 
 template <typename Clustering>
@@ -35,13 +31,7 @@ py::array_t<float> centroids_to_array(const Clustering& clustering, const char* 
     }
     const auto shape = std::vector<py::ssize_t>{
         static_cast<py::ssize_t>(clustering.k), static_cast<py::ssize_t>(clustering.d)};
-    py::array_t<float> result(shape);
-    std::memcpy(
-        result.mutable_data(),
-        clustering.centroids.data(),
-        clustering.centroids.size() * sizeof(float)
-    );
-    return result;
+    return py::array_t<float>(shape, clustering.centroids.data());
 }
 
 template <typename Clustering>
@@ -126,12 +116,14 @@ void bind_clustering(py::module_& m, const char* native_name, const char* public
         .def_property_readonly(
             "obj",
             [](const Clustering& clustering) {
-                std::vector<double> values;
-                values.reserve(clustering.iteration_stats.size());
+                py::array_t<double> values(
+                    static_cast<py::ssize_t>(clustering.iteration_stats.size())
+                );
+                double* out = values.mutable_data();
                 for (const auto& stats : clustering.iteration_stats) {
-                    values.push_back(stats.obj);
+                    *out++ = stats.obj;
                 }
-                return vector_to_array(values);
+                return values;
             }
         )
         .def_readonly("iteration_stats", &Clustering::iteration_stats);

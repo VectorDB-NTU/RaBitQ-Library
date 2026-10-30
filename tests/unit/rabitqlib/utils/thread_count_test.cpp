@@ -226,3 +226,53 @@ TEST(ThreadCount, NestedParallelForPreservesBindingAndWorkerIds) {
     GTEST_SKIP() << "OpenMP binding requires OpenMP 4.0";
 #endif
 }
+
+TEST(ThreadCount, OmpForDynamicVisitsEachItemOnceAndPropagatesErrors) {
+    constexpr size_t kCount = 257;
+    for (size_t workers : {1U, 4U}) {
+        SCOPED_TRACE(workers);
+        std::vector<std::atomic<size_t>> visits(kCount);
+        for (auto& visited : visits) {
+            visited.store(0);
+        }
+        rabitqlib::index_detail::omp_for_dynamic(
+            kCount, workers, [&](size_t i, size_t worker) {
+                EXPECT_LT(worker, workers);
+                visits[i].fetch_add(1);
+            }
+        );
+        for (const auto& visited : visits) {
+            EXPECT_EQ(visited.load(), 1U);
+        }
+
+        std::atomic<size_t> calls{0};
+        EXPECT_THROW(
+            rabitqlib::index_detail::omp_for_dynamic(
+                kCount,
+                workers,
+                [&](size_t i, size_t) {
+                    calls.fetch_add(1);
+                    if (i == 3) {
+                        throw std::runtime_error("failed");
+                    }
+                }
+            ),
+            std::runtime_error
+        );
+        // Items after a failure are skipped; the serial order stops at the first one.
+        if (workers == 1) {
+            EXPECT_EQ(calls.load(), 4U);
+        }
+    }
+}
+
+TEST(ThreadCount, OpenMpTeamSizeIsPositiveAndBounded) {
+    const size_t available = rabitqlib::total_threads();
+    EXPECT_EQ(rabitqlib::detail::openmp_team_size(0, 0), 1);
+    EXPECT_EQ(rabitqlib::detail::openmp_team_size(1, 100), 1);
+    EXPECT_EQ(rabitqlib::detail::openmp_team_size(0, 1), 1);
+    EXPECT_EQ(
+        rabitqlib::detail::openmp_team_size(0, std::numeric_limits<size_t>::max()),
+        static_cast<int>(std::min<size_t>(available, std::numeric_limits<int>::max()))
+    );
+}
