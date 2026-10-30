@@ -498,11 +498,7 @@ void QuantizedGraph<float>::search_batch_with_ef(
         return;
     }
 
-    const auto num_workers = static_cast<int>(std::min(
-        {resolve_num_threads(num_threads),
-         num_queries,
-         static_cast<size_t>(std::numeric_limits<int>::max())}
-    ));
+    const int num_workers = rabitqlib::detail::openmp_team_size(num_threads, num_queries);
     index_detail::ParallelException failure;
 #pragma omp parallel num_threads(num_workers) if (num_workers > 1)
     {

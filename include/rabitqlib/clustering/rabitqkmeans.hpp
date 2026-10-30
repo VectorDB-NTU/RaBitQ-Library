@@ -6,7 +6,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <limits>
 #include <stdexcept>
 #include <vector>
@@ -19,6 +18,7 @@
 #include "rabitqlib/fastscan/estimator.hpp"
 #include "rabitqlib/fastscan/pack_codes.hpp"
 #include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 
@@ -126,12 +126,12 @@ class RaBitQAssigner {
         std::vector<std::vector<float>> rotated_blocks(
             num_workers_, std::vector<float>(fastscan::kBatchSize * padded_dim_)
         );
-        std::vector<std::exception_ptr> errors(num_workers_);
+        index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(static)
         for (std::ptrdiff_t batch = 0; batch < static_cast<std::ptrdiff_t>(num_batches_);
              ++batch) {
             const auto thread = static_cast<size_t>(omp_get_thread_num());
-            if (errors[thread]) {
+            if (failure.failed()) {
                 continue;
             }
             try {
@@ -153,13 +153,9 @@ class RaBitQAssigner {
                         block * QGBatchDataMap<float>::data_bytes(padded_dim_),
                     metric_type_
                 );
-            } catch (...) { errors[thread] = std::current_exception(); }
+            } catch (...) { failure.capture(); }
         }
-        for (const auto& error : errors) {
-            if (error) {
-                std::rethrow_exception(error);
-            }
-        }
+        failure.rethrow();
     }
 
     void assign(const float* centroids, PID* labels, float* distances, bool = false) {
@@ -175,12 +171,11 @@ class RaBitQAssigner {
             query.set_g_add(distance_func(centroid, center_.data(), dim_));
         }
 
-        std::vector<std::exception_ptr> errors(num_workers_);
+        index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(static)
         for (std::ptrdiff_t batch = 0; batch < static_cast<std::ptrdiff_t>(num_batches_);
              ++batch) {
-            const auto thread = static_cast<size_t>(omp_get_thread_num());
-            if (errors[thread]) {
+            if (failure.failed()) {
                 continue;
             }
             try {
@@ -218,13 +213,9 @@ class RaBitQAssigner {
                         data_ + id * dim_, centroids + best_labels[point] * dim_, dim_
                     );
                 }
-            } catch (...) { errors[thread] = std::current_exception(); }
+            } catch (...) { failure.capture(); }
         }
-        for (const auto& error : errors) {
-            if (error) {
-                std::rethrow_exception(error);
-            }
-        }
+        failure.rethrow();
     }
 };
 

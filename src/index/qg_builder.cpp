@@ -20,6 +20,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/exact_nn.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
+#include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/detail/visited_set.hpp"
 #include "rabitqlib/index/symqg/detail/pipnn.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
@@ -463,17 +464,10 @@ void QGBuilder::heuristic_prune(
  */
 void QGBuilder::search_new_neighbors() {
     {
-        index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_workers_) schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
-            }
-            try {
-                const size_t i = static_cast<size_t>(index);
+        index_detail::omp_for_dynamic(
+            num_points_, num_workers_, [&](size_t i, size_t thread) {
                 PID point_id = i;
-                auto& worker = workers_[static_cast<size_t>(omp_get_thread_num())];
+                auto& worker = workers_[thread];
                 CandidateList& candidates = worker.candidates;
                 candidates.clear();
                 VisitedSet& visited = worker.visited;
@@ -513,9 +507,8 @@ void QGBuilder::search_new_neighbors() {
                 // prune and update qg
                 new_neighbors_[point_id].reserve(max_degree_);
                 heuristic_prune(candidates, new_neighbors_[point_id], /*recorded=*/nullptr);
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+            }
+        );
     }
 }
 
@@ -528,15 +521,9 @@ void QGBuilder::add_reverse_edges(bool final_pass) {
     // Keep new_neighbors_ read-only while reverse candidates are collected. Mutating a
     // destination row here races with another worker reading that row as its source.
     {
-        index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_workers_) schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
-            }
-            try {
-                const PID data_id = static_cast<PID>(index);
+        index_detail::omp_for_dynamic(
+            num_points_, num_workers_, [&](size_t i, size_t /*thread*/) {
+                const PID data_id = static_cast<PID>(i);
                 for (const auto& nei : new_neighbors_[data_id]) {
                     const PID destination = nei.id;
                     const CandidateList& destination_neighbors =
@@ -560,21 +547,14 @@ void QGBuilder::add_reverse_edges(bool final_pass) {
                         reverse_buffer_[destination].emplace_back(data_id, nei.distance);
                     }
                 }
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+            }
+        );
     }
 
     {
-        index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_workers_) schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
-            }
-            try {
-                const PID data_id = static_cast<PID>(index);
+        index_detail::omp_for_dynamic(
+            num_points_, num_workers_, [&](size_t i, size_t thread) {
+                const PID data_id = static_cast<PID>(i);
                 CandidateList& candidate_pool = reverse_buffer_[data_id];
                 if (qg_.is_quantized() && !candidate_pool.empty()) {
                     // RaBitQ estimates are directional: score destination -> source afresh.
@@ -591,7 +571,7 @@ void QGBuilder::add_reverse_edges(bool final_pass) {
                     new_neighbors_[data_id].end()
                 );
                 std::sort(candidate_pool.begin(), candidate_pool.end());
-                auto& worker = workers_[static_cast<size_t>(omp_get_thread_num())];
+                auto& worker = workers_[thread];
                 worker.pruned.clear();
                 if (final_pass) {
                     worker.pruned.reserve(kMaxPrunedSize);
@@ -606,9 +586,8 @@ void QGBuilder::add_reverse_edges(bool final_pass) {
                 if (final_pass) {
                     complete_degree(data_id, worker);
                 }
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+            }
+        );
     }
 }
 
@@ -616,15 +595,8 @@ void QGBuilder::random_init() {
     const PID min_id = 0;
     const PID max_id = num_points_ - 1;
     {
-        index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_workers_) schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
-            }
-            try {
-                const size_t i = static_cast<size_t>(index);
+        index_detail::omp_for_dynamic(
+            num_points_, num_workers_, [&](size_t i, size_t thread) {
                 new_neighbors_[i].clear();
                 std::mt19937 rng(seed_ ^ static_cast<uint32_t>(i));
                 std::uniform_int_distribution<PID> distribution(min_id, max_id);
@@ -644,14 +616,9 @@ void QGBuilder::random_init() {
                     new_neighbors_[i].emplace_back(cur_neigh, query.distance_to(cur_neigh));
                 }
 
-                write_row(
-                    static_cast<PID>(i),
-                    new_neighbors_[i],
-                    workers_[static_cast<size_t>(omp_get_thread_num())]
-                );
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+                write_row(static_cast<PID>(i), new_neighbors_[i], workers_[thread]);
+            }
+        );
     }
 }
 
@@ -728,23 +695,11 @@ void QGBuilder::run_pass(bool final_pass) {
 
     // update qg
     {
-        index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_workers_) schedule(dynamic)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
+        index_detail::omp_for_dynamic(
+            num_points_, num_workers_, [&](size_t i, size_t thread) {
+                write_row(static_cast<PID>(i), new_neighbors_[i], workers_[thread]);
             }
-            try {
-                const size_t i = static_cast<size_t>(index);
-                write_row(
-                    static_cast<PID>(i),
-                    new_neighbors_[i],
-                    workers_[static_cast<size_t>(omp_get_thread_num())]
-                );
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+        );
     }
 }
 void QGBuilder::BuildQuery::reset(PID id) {

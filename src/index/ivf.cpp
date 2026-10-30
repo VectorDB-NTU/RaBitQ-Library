@@ -234,15 +234,8 @@ void IVF::construct(
     }
     /* Quantize each cluster */
     {
-        index_detail::ParallelException failure;
-#pragma omp parallel for schedule(dynamic) num_threads(num_threads)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_clusters_);
-             ++index) {
-            if (failure.failed()) {
-                continue;
-            }
-            try {
-                const size_t i = static_cast<size_t>(index);
+        index_detail::omp_for_dynamic(
+            num_clusters_, num_threads, [&](size_t i, size_t thread) {
                 const float* cur_centroid = centroids + (i * dim_);
                 float* cur_rotated_c = &rotated_centroids[i * padded_dim_];
                 Cluster& cp = clusters_[i];
@@ -252,12 +245,11 @@ void IVF::construct(
                     data,
                     cur_centroid,
                     cur_rotated_c,
-                    rotated_blocks[static_cast<size_t>(omp_get_thread_num())].data(),
+                    rotated_blocks[thread].data(),
                     config
                 );
-            } catch (...) { failure.capture(); }
-        }
-        failure.rethrow();
+            }
+        );
     }
 
     this->initializer_->add_vectors(rotated_centroids.data(), num_threads);
@@ -1078,16 +1070,8 @@ void IVF::search_batch(
         }
         return;
     }
-    index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(num_workers) schedule(dynamic)
-    for (std::ptrdiff_t query_index = 0;
-         query_index < static_cast<std::ptrdiff_t>(num_queries);
-         ++query_index) {
-        if (failure.failed()) {
-            continue;
-        }
-        const size_t i = static_cast<size_t>(query_index);
-        try {
+    index_detail::omp_for_dynamic(
+        num_queries, num_workers, [&](size_t i, size_t /*thread*/) {
             search(
                 queries + i * dim_,
                 k,
@@ -1096,9 +1080,8 @@ void IVF::search_batch(
                 distances == nullptr ? nullptr : distances + i * k,
                 hacc
             );
-        } catch (...) { failure.capture(); }
-    }
-    failure.rethrow();
+        }
+    );
 }
 
 inline void IVF::validate_search(

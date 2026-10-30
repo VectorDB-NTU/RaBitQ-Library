@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/utils/openmp.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
@@ -37,21 +38,17 @@ inline void parallel_for(
             // its existing scheduling. Binding requires OpenMP placement because
             // native threads inherit only the caller's place. Keep unbound nested
             // calls on the existing native-thread path.
-            std::vector<std::exception_ptr> errors(num_threads);
+            ParallelException failure;
 #pragma omp parallel for num_threads(num_threads) schedule(dynamic)
             for (size_t id = start; id < end; ++id) {
-                const size_t worker = static_cast<size_t>(omp_get_thread_num());
-                if (!errors[worker]) {
-                    try {
-                        fn(id, worker);
-                    } catch (...) { errors[worker] = std::current_exception(); }
+                if (failure.failed()) {
+                    continue;
                 }
+                try {
+                    fn(id, static_cast<size_t>(omp_get_thread_num()));
+                } catch (...) { failure.capture(); }
             }
-            for (const auto& error : errors) {
-                if (error) {
-                    std::rethrow_exception(error);
-                }
-            }
+            failure.rethrow();
             return;
         }
 #endif
@@ -112,5 +109,25 @@ inline void parallel_for(
         }
     }
 }
+
+#if RABITQ_USE_OPENMP
+// Runs fn(i, worker) for i in [0, count) on an OpenMP team with dynamic scheduling.
+// After an iteration throws, the remaining ones are skipped; the first exception is
+// rethrown once the team has joined.
+template <class Function>
+inline void omp_for_dynamic(size_t count, size_t num_workers, Function fn) {
+    ParallelException failure;
+#pragma omp parallel for num_threads(num_workers) schedule(dynamic)
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(count); ++index) {
+        if (failure.failed()) {
+            continue;
+        }
+        try {
+            fn(static_cast<size_t>(index), static_cast<size_t>(omp_get_thread_num()));
+        } catch (...) { failure.capture(); }
+    }
+    failure.rethrow();
+}
+#endif
 
 }  // namespace rabitqlib::index_detail

@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -17,6 +16,7 @@
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/fastscan/pack_codes.hpp"
 #include "rabitqlib/fastscan/query.hpp"
+#include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/detail/visited_set.hpp"
 #include "rabitqlib/index/symqg/detail/search_scratch.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
@@ -256,7 +256,7 @@ class QGAssigner {
                     static_cast<uint32_t>(point);
             }
         }
-        std::vector<std::exception_ptr> errors(num_workers_);
+        index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(dynamic, 64)
         for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n);
              ++loop_index) {
@@ -264,7 +264,7 @@ class QGAssigner {
                                  ? static_cast<size_t>(loop_index)
                                  : query_order[static_cast<size_t>(loop_index)];
             const int thread_id = omp_get_thread_num();
-            if (errors[static_cast<size_t>(thread_id)]) {
+            if (failure.failed()) {
                 continue;
             }
             try {
@@ -300,16 +300,10 @@ class QGAssigner {
                     distances[i] =
                         distance_func(x + i * dim_, centroids + labels[i] * dim_, dim_);
                 }
-            } catch (...) {
-                errors[static_cast<size_t>(thread_id)] = std::current_exception();
-            }
+            } catch (...) { failure.capture(); }
         }
 
-        for (const auto& error : errors) {
-            if (error) {
-                std::rethrow_exception(error);
-            }
-        }
+        failure.rethrow();
 
         previous_labels_.assign(labels, labels + n);
         query_sums.complete();

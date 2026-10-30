@@ -21,6 +21,7 @@
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
+#include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -412,20 +413,11 @@ std::vector<Bucket> cluster(
             // nested, forcing the runtime to create workers again on every reset.
             process_bucket(0);
         } else {
-            {
-                index_detail::ParallelException failure;
-#pragma omp parallel for num_threads(std::min(num_workers, active.size())) schedule(dynamic)
-                for (std::ptrdiff_t i = 0; i < static_cast<std::ptrdiff_t>(active.size());
-                     ++i) {
-                    if (failure.failed()) {
-                        continue;
-                    }
-                    try {
-                        process_bucket(static_cast<size_t>(i));
-                    } catch (...) { failure.capture(); }
-                }
-                failure.rethrow();
-            }
+            index_detail::omp_for_dynamic(
+                active.size(),
+                std::min(num_workers, active.size()),
+                [&](size_t i, size_t /*thread*/) { process_bucket(i); }
+            );
         }
         std::vector<BucketJob> new_active;
         for (size_t i = 0; i < active.size(); ++i) {

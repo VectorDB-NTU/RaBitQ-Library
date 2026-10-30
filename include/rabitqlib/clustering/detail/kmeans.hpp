@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -22,6 +21,7 @@
 
 #include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
 #include "rabitqlib/core/rotator.hpp"
+#include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -86,7 +86,7 @@ inline void exact_assign(
     std::vector<std::vector<float>> products(
         num_workers, std::vector<float>(point_block * std::min(k, kCentroidBlock))
     );
-    std::vector<std::exception_ptr> errors(num_workers);
+    index_detail::ParallelException failure;
 
     const auto exact_distance = [d, spherical](const float* vector, const float* centroid) {
         double distance = 0.0;
@@ -136,7 +136,7 @@ inline void exact_assign(
 #pragma omp for schedule(static)
         for (std::ptrdiff_t block = 0; block < static_cast<std::ptrdiff_t>(blocks);
              ++block) {
-            if (errors[thread]) {
+            if (failure.failed()) {
                 continue;
             }
             try {
@@ -201,14 +201,10 @@ inline void exact_assign(
                 for (size_t row = 0; row < rows; ++row) {
                     distances[first_point + row] = static_cast<float>(best_distances[row]);
                 }
-            } catch (...) { errors[thread] = std::current_exception(); }
+            } catch (...) { failure.capture(); }
         }
     }
-    for (const auto& error : errors) {
-        if (error) {
-            std::rethrow_exception(error);
-        }
-    }
+    failure.rethrow();
 }
 
 template <typename Parameters, typename Assignment>

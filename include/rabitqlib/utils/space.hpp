@@ -17,10 +17,6 @@
 #include "rabitqlib/utils/tools.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"
 
-#if RABITQ_USE_OPENMP
-#include <limits>
-#endif
-
 namespace rabitqlib {
 
 inline uint64_t load_unaligned_u64(const void* data) {
@@ -191,14 +187,7 @@ inline std::vector<T> compute_centroid(
     const T* data, size_t num_points, size_t dim, size_t num_threads
 ) {
 #if RABITQ_USE_OPENMP
-    const auto thread_count = static_cast<int>(std::max<size_t>(
-        1,
-        std::min(
-            {resolve_num_threads(num_threads),
-             std::max<size_t>(num_points, 1),
-             static_cast<size_t>(std::numeric_limits<int>::max())}
-        )
-    ));
+    const int thread_count = detail::openmp_team_size(num_threads, num_points);
 #else
     (void)num_threads;
     constexpr int thread_count = 1;
