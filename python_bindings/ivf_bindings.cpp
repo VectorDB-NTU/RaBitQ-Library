@@ -6,10 +6,8 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>  // IWYU pragma: keep; registers std::optional casters
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -63,8 +61,8 @@ class IvfIndex {
         size_t max_elements,
         size_t num_clusters,
         size_t nbits,
-        const std::string& metric = "l2",
-        const std::string& initializer = "auto"
+        const std::string& metric,
+        const std::string& initializer
     ) {
         const auto metric_type = metric_from_string(metric);
         index_ = std::make_unique<rabitqlib::ivf::IVF>(
@@ -82,8 +80,8 @@ class IvfIndex {
         py::handle data,
         py::handle centroids,
         py::handle cluster_ids,
-        size_t num_threads = 1,
-        bool fast_quantization = false
+        size_t num_threads,
+        bool fast_quantization
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
@@ -118,29 +116,21 @@ class IvfIndex {
         const auto* data_ptr = data_array.data();
         const auto* centroids_ptr = centroids_array.data();
         const auto* cluster_ids_ptr = cluster_ids_vec.data();
-        try {
-            py::gil_scoped_release release;
-            index_->construct(
-                data_ptr, centroids_ptr, cluster_ids_ptr, fast_quantization, num_threads
-            );
-        } catch (...) {
-            // Early failures preserve the old index; allocation can invalidate it.
-            // Stored count remains nonzero even when every point was removed.
-            built_ = index_->num_stored_points() != 0;
-            throw;
-        }
-        built_ = true;
+        py::gil_scoped_release release;
+        index_->construct(
+            data_ptr, centroids_ptr, cluster_ids_ptr, fast_quantization, num_threads
+        );
     }
 
     py::array_t<rabitqlib::PID> add(
         py::handle data,
         const py::object& cluster_ids,
-        size_t num_threads = 1,
-        bool fast_quantization = false
+        size_t num_threads,
+        bool fast_quantization
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
-        if (!built_) {
+        if (!built()) {
             throw std::runtime_error("IvfIndex must be built or loaded before add");
         }
         ensure_dimension(
@@ -177,7 +167,7 @@ class IvfIndex {
 
     void reserve(int64_t cluster_id, int64_t num_points) {
         const auto operation = access_.write();
-        if (!built_) {
+        if (!built()) {
             throw std::runtime_error("IvfIndex must be built or loaded before reserve");
         }
         if (cluster_id < 0 || static_cast<uint64_t>(cluster_id) >= index_->num_clusters()) {
@@ -195,7 +185,7 @@ class IvfIndex {
     size_t remove(py::handle ids) {
         const auto operation = access_.write();
         auto ids_array = ensure_1d_integer_array(ids, "ids");
-        if (!built_) {
+        if (!built()) {
             throw std::runtime_error("IvfIndex must be built or loaded before remove");
         }
         auto to_remove = checked_removal_ids(ids_array, index_->num_stored_points());
@@ -207,12 +197,12 @@ class IvfIndex {
         py::handle queries,
         size_t k,
         size_t nprobe,
-        std::optional<bool> high_accuracy = std::nullopt,
-        size_t num_threads = 1
+        std::optional<bool> high_accuracy,
+        size_t num_threads
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
-        if (!built_) {
+        if (!built()) {
             throw std::runtime_error("IvfIndex must be built or loaded before search");
         }
         ensure_dimension(
@@ -226,18 +216,9 @@ class IvfIndex {
         }
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
-        const auto shape = std::vector<py::ssize_t>{
-            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
-        auto result_ids = py::array_t<rabitqlib::PID>(shape);
-        auto distances = py::array_t<float>(shape);
-        auto* ids_data = result_ids.mutable_data();
-        auto* distances_data = distances.mutable_data();
-        std::fill(ids_data, ids_data + result_ids.size(), rabitqlib::kPidMax);
-        std::fill(
-            distances_data,
-            distances_data + distances.size(),
-            std::numeric_limits<float>::infinity()
-        );
+        auto output = unfilled_search_results(num_queries, k);
+        auto* ids_data = output.ids.mutable_data();
+        auto* distances_data = output.distances.mutable_data();
 
         const auto* queries_data = query_array.data();
         {
@@ -254,13 +235,13 @@ class IvfIndex {
             );
         }
 
-        return py::make_tuple(result_ids, distances);
+        return py::make_tuple(output.ids, output.distances);
     }
 
     void save(py::handle path) const {
         const auto filename = path_string(path);
         const auto operation = access_.read();
-        if (!built_) {
+        if (!built()) {
             throw std::runtime_error("IvfIndex must be built or loaded before save");
         }
         py::gil_scoped_release release;
@@ -275,7 +256,6 @@ class IvfIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
         }
-        wrapper.built_ = true;
         return wrapper;
     }
 
@@ -289,7 +269,7 @@ class IvfIndex {
                ", max_elements=" + std::to_string(index_->max_elements()) +
                ", num_clusters=" + std::to_string(index_->num_clusters()) +
                ", initializer='" + initializer_to_string(index_->initializer_type()) +
-               "', is_built=" + (built_ ? "True" : "False") + ")";
+               "', is_built=" + (built() ? "True" : "False") + ")";
     }
 
     [[nodiscard]] size_t dim() const {
@@ -318,7 +298,7 @@ class IvfIndex {
     }
     [[nodiscard]] bool is_built() const {
         const auto operation = access_.read();
-        return built_;
+        return built();
     }
     [[nodiscard]] std::string initializer() const {
         const auto operation = access_.read();
@@ -332,7 +312,10 @@ class IvfIndex {
    private:
     IvfIndex() = default;
 
-    bool built_ = false;
+    // Construction or loading succeeded. A failed construct keeps the old index, or
+    // leaves it empty if allocation had begun. Removed points remain stored.
+    [[nodiscard]] bool built() const { return index_->num_stored_points() != 0; }
+
     mutable IndexAccess access_;
     std::unique_ptr<rabitqlib::ivf::IVF> index_;
 };

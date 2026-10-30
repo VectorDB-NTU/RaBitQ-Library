@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -30,8 +29,8 @@ class HnswIndex {
         size_t M,
         size_t ef_construction,
         size_t nbits,
-        const std::string& metric = "l2",
-        size_t random_seed = 100
+        const std::string& metric,
+        size_t random_seed
     )
         : index_(
               std::make_unique<rabitqlib::hnsw::HierarchicalNSW>(
@@ -49,8 +48,8 @@ class HnswIndex {
         py::handle data,
         py::handle centroids,
         py::handle cluster_ids,
-        size_t num_threads = 1,
-        bool fast_quantization = false
+        size_t num_threads,
+        bool fast_quantization
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
@@ -104,8 +103,8 @@ class HnswIndex {
     py::array_t<rabitqlib::PID> add(
         py::handle data,
         const py::object& cluster_ids,
-        size_t num_threads = 1,
-        bool fast_quantization = false
+        size_t num_threads,
+        bool fast_quantization
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
@@ -168,7 +167,7 @@ class HnswIndex {
         return built_ ? index_->num_stored_points() : 0;
     }
 
-    py::tuple search(py::handle queries, size_t k, size_t ef = 0, size_t num_threads = 1) {
+    py::tuple search(py::handle queries, size_t k, size_t ef, size_t num_threads) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
         if (!built_) {
@@ -186,22 +185,9 @@ class HnswIndex {
             throw std::invalid_argument("k must be between 1 and max_elements");
         }
 
-        const auto shape = std::vector<py::ssize_t>{
-            static_cast<py::ssize_t>(query_array.shape(0)), static_cast<py::ssize_t>(k)};
-        auto result_ids = py::array_t<rabitqlib::PID>(shape);
-        auto distances = py::array_t<float>(shape);
-        std::fill(
-            result_ids.mutable_data(),
-            result_ids.mutable_data() + result_ids.size(),
-            rabitqlib::kPidMax
-        );
-        std::fill(
-            distances.mutable_data(),
-            distances.mutable_data() + distances.size(),
-            std::numeric_limits<float>::infinity()
-        );
-        auto result_ids_view = result_ids.mutable_unchecked<2>();
-        auto distances_view = distances.mutable_unchecked<2>();
+        auto output = unfilled_search_results(static_cast<size_t>(query_array.shape(0)), k);
+        auto result_ids_view = output.ids.mutable_unchecked<2>();
+        auto distances_view = output.distances.mutable_unchecked<2>();
 
         const auto* queries_data = query_array.data();
         const auto num_queries = static_cast<size_t>(query_array.shape(0));
@@ -222,7 +208,7 @@ class HnswIndex {
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].first;
             }
         }
-        return py::make_tuple(result_ids, distances);
+        return py::make_tuple(output.ids, output.distances);
     }
 
     void save(py::handle path) const {
