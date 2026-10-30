@@ -69,7 +69,7 @@ void fht_rotate_impl(
     }
 #undef RABITQ_FHT_CASE
 
-    std::memcpy(rotated_data, data, sizeof(float) * dim);
+    std::memmove(rotated_data, data, sizeof(float) * dim);
     std::fill(rotated_data + dim, rotated_data + padded_dim, 0.0F);
 
     if (trunc_dim == padded_dim) {
