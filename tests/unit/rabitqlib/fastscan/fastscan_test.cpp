@@ -297,7 +297,7 @@ TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) 
                 SCOPED_TRACE("AVX2");
                 check_backend(
                     simd::accumulate_avx2,
-                    simd::transfer_lut_hacc_avx2,
+                    simd::transfer_lut_hacc_generic,
                     simd::accumulate_hacc_avx2
                 );
             }
@@ -401,7 +401,7 @@ TEST(FastScanHighAccuracyTest, AccumulatesLargeDimensionsWithoutLaneOverflow) {
 #if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2()) {
                 SCOPED_TRACE("AVX2");
-                check_backend(simd::transfer_lut_hacc_avx2, simd::accumulate_hacc_avx2);
+                check_backend(simd::transfer_lut_hacc_generic, simd::accumulate_hacc_avx2);
             }
 #endif
 #if defined(__x86_64__) || defined(_M_X64)
@@ -437,7 +437,7 @@ TEST(FastScanHighAccuracyTest, RejectsAccumulationsExceedingInt32Range) {
 #if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
         SCOPED_TRACE("AVX2");
-        check_backend(simd::transfer_lut_hacc_avx2, simd::accumulate_hacc_avx2);
+        check_backend(simd::transfer_lut_hacc_generic, simd::accumulate_hacc_avx2);
     }
 #endif
 #if defined(__x86_64__) || defined(_M_X64)

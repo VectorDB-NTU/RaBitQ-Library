@@ -195,33 +195,6 @@ void accumulate_avx2(
     }
 }
 
-void transfer_lut_hacc_avx2(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
-    size_t num_codebook = dim >> 2;
-
-    for (size_t i = 0; i < num_codebook; i++) {
-        constexpr size_t kRegBits = 256;
-        constexpr size_t kLaneBits = 128;
-        constexpr size_t kByteBits = 8;
-
-        constexpr size_t kLutPerIter = kRegBits / kLaneBits;
-        constexpr size_t kCodePerIter = 2 * kRegBits / kByteBits;
-        constexpr size_t kCodePerLine = kLaneBits / kByteBits;
-
-        uint8_t* fill_lo =
-            hc_lut + (i / kLutPerIter * kCodePerIter) + ((i % kLutPerIter) * kCodePerLine);
-        uint8_t* fill_hi = fill_lo + (kRegBits / kByteBits);
-
-        for (size_t j = 0; j < 16; ++j) {
-            int tmp = lut[j];
-            uint8_t lo = static_cast<uint8_t>(tmp);
-            uint8_t hi = static_cast<uint8_t>(tmp >> 8);
-            fill_lo[j] = lo;
-            fill_hi[j] = hi;
-        }
-        lut += 16;
-    }
-}
-
 namespace {
 
 void accumulate_hacc_chunk_avx2(
