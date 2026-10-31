@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "rabitqlib/core/data_layout.hpp"
+#include "rabitqlib/core/detail/fast_scale_table.hpp"
 #include "rabitqlib/core/detail/rabitq_impl.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/estimator.hpp"
@@ -751,6 +752,57 @@ TEST(RabitqPreconditionTest, SplitSingleQueryRequiresPaddedDimensionMultipleOf32
             (SplitSingleQuery<float>(query.data(), padded_dim, 3, RabitqConfig{}))
         );
     }
+}
+
+TEST(FastScaleTableTest, FasterConfigReadsTheFrozenTable) {
+    // Pinned table entries; these hold on every platform because they are data.
+    EXPECT_EQ(faster_config(768, 4).t_const, 0x1.4c76161b7a4b6p+6);
+    EXPECT_EQ(faster_config(64, 9).t_const, 0x1.8a0b920d378c3p+9);
+    EXPECT_EQ(
+        faster_config(768, 4).t_const,
+        rabitq_impl::ex_bits::frozen_const_scaling_factor(768, 3).value()
+    );
+    // One bit needs no scale and keeps the default configuration.
+    EXPECT_EQ(faster_config(768, 1).t_const, RabitqConfig().t_const);
+}
+
+TEST(FastScaleTableTest, FrozenValuesMatchTheComputation) {
+    for (size_t padded_dim : {32U, 64U, 96U, 800U}) {
+        for (size_t ex_bits = 1; ex_bits <= rabitq_impl::ex_bits::kFastScaleMaxExBits;
+             ++ex_bits) {
+            SCOPED_TRACE(::testing::Message() << padded_dim << ", " << ex_bits);
+            const double frozen =
+                rabitq_impl::ex_bits::frozen_const_scaling_factor(padded_dim, ex_bits)
+                    .value();
+            const double computed =
+                rabitq_impl::ex_bits::const_scaling_factor(padded_dim, ex_bits);
+#if defined(__GLIBCXX__) && defined(__x86_64__) && !defined(__AVX__) && !defined(__FMA__)
+            // The configuration the table was generated in reproduces it exactly, which
+            // shows the table was generated faithfully. If this fails after a deliberate
+            // change to const_scaling_factor, relax it to the tolerance below; never
+            // regenerate the table, which is frozen data.
+            EXPECT_EQ(frozen, computed);
+#else
+            // Other standard libraries draw different samples (several percent apart)
+            // and FMA or AVX builds differ in the last bits, so this only checks the
+            // value is plausible. The table removes those differences from faster_config.
+            EXPECT_NEAR(frozen, computed, 1e-1 * frozen);
+#endif
+        }
+    }
+}
+
+TEST(FastScaleTableTest, DimensionsOutsideTheTableFallBackToTheComputation) {
+    using rabitq_impl::ex_bits::frozen_const_scaling_factor;
+    EXPECT_FALSE(frozen_const_scaling_factor(0, 3).has_value());
+    EXPECT_FALSE(frozen_const_scaling_factor(50, 3).has_value());
+    EXPECT_FALSE(frozen_const_scaling_factor(65536 + 32, 3).has_value());
+    EXPECT_FALSE(frozen_const_scaling_factor(64, 0).has_value());
+    EXPECT_FALSE(frozen_const_scaling_factor(64, 9).has_value());
+    EXPECT_GT(frozen_const_scaling_factor(65536, 8).value(), 0);
+    EXPECT_EQ(
+        faster_config(50, 4).t_const, rabitq_impl::ex_bits::const_scaling_factor(50, 3)
+    );
 }
 
 }  // namespace
