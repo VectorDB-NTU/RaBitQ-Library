@@ -37,7 +37,8 @@ constexpr Backend kAvx2Backend{
     simd::pack_lut_avx2,
     simd::pack_lut_range_avx2,
     rabitqlib::simd::scalar_quantize_nonnegative_uint8_avx2,
-    simd::transfer_lut_hacc_avx2,
+    // AVX2 consumes the Pair32 layout the generic producer writes.
+    simd::transfer_lut_hacc_generic,
     simd::accumulate_avx2,
     simd::accumulate_hacc_avx2,
     rabitqlib::simd::qg_batch_estdist_avx2,

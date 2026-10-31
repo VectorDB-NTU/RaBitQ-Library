@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 
 #include "packed_tail_avx2.hpp"
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
@@ -43,13 +44,14 @@ float l2norm_sqr_avx2(const float* a, size_t dim) {
 }
 
 namespace {
-// NonNegative requires (value - lo) / delta >= 0, as for FastScan LUT entries at
-// least their minimum; truncation plus a half test then rounds half away from zero.
-// Signed inputs keep round_away_from_zero. Do not replace either with adding 0.5f.
-template <bool NonNegative>
-void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, float delta) {
+// Code is uint8_t or uint16_t. NonNegative requires (value - lo) / delta >= 0, as for
+// FastScan LUT entries at least their minimum; truncation plus a half test then
+// rounds half away from zero. Signed inputs keep round_away_from_zero. Do not replace
+// either with adding 0.5f.
+template <typename Code, bool NonNegative = false>
+void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
-        std::fill_n(result, dim, uint8_t{0});
+        std::fill_n(result, dim, Code{0});
         return;
     }
     size_t mul8 = dim - (dim & 0b111);
@@ -57,7 +59,6 @@ void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, fl
     float one_over_delta = 1.0F / delta;
     __m256 lo256 = _mm256_set1_ps(lo);
     __m256 od256 = _mm256_set1_ps(one_over_delta);
-    __m128i zero = _mm_setzero_si128();
 
     for (; i < mul8; i += 8) {
         __m256 cur = _mm256_loadu_ps(&vec0[i]);
@@ -78,11 +79,15 @@ void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, fl
         __m128i lo32 = _mm256_castsi256_si128(i32);
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
         __m128i i16 = _mm_packus_epi32(lo32, hi32);
-        __m128i i8 = _mm_packus_epi16(i16, zero);
-        _mm_storel_epi64(reinterpret_cast<__m128i*>(&result[i]), i8);
+        if constexpr (std::is_same_v<Code, uint8_t>) {
+            __m128i i8 = _mm_packus_epi16(i16, _mm_setzero_si128());
+            _mm_storel_epi64(reinterpret_cast<__m128i*>(&result[i]), i8);
+        } else {
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(result + i), i16);
+        }
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] = static_cast<Code>(std::round((vec0[i] - lo) * one_over_delta));
     }
 }
 }  // namespace
@@ -90,39 +95,19 @@ void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, fl
 void scalar_quantize_uint8_avx2(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-    quantize_uint8<false>(result, vec0, dim, lo, delta);
+    quantize(result, vec0, dim, lo, delta);
 }
 
 void scalar_quantize_nonnegative_uint8_avx2(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-    quantize_uint8<true>(result, vec0, dim, lo, delta);
+    quantize<uint8_t, true>(result, vec0, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_avx2(
     uint16_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-    if (delta == 0.0F) {
-        std::fill_n(result, dim, uint16_t{0});
-        return;
-    }
-    size_t mul8 = dim - (dim & 0b111);
-    size_t i = 0;
-    float one_over_delta = 1.0F / delta;
-    __m256 lo256 = _mm256_set1_ps(lo);
-    __m256 ow256 = _mm256_set1_ps(one_over_delta);
-    for (; i < mul8; i += 8) {
-        __m256 cur = _mm256_loadu_ps(&vec0[i]);
-        cur = _mm256_mul_ps(_mm256_sub_ps(cur, lo256), ow256);
-        __m256i i32 = _mm256_cvttps_epi32(round_away_from_zero(cur));
-        __m128i lo32 = _mm256_castsi256_si128(i32);
-        __m128i hi32 = _mm256_extracti128_si256(i32, 1);
-        __m128i i16 = _mm_packus_epi32(lo32, hi32);
-        _mm_storeu_si128(reinterpret_cast<__m128i*>(result + i), i16);
-    }
-    for (; i < dim; ++i) {
-        result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
-    }
+    quantize(result, vec0, dim, lo, delta);
 }
 
 void new_transpose_bin_avx2(

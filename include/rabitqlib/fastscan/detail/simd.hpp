@@ -58,7 +58,6 @@ void accumulate_avx2(
     size_t dim
 );
 void transfer_lut_hacc_generic(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
-void transfer_lut_hacc_avx2(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 void accumulate_hacc_generic(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lut,

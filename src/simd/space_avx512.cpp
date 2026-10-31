@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "space_float_kernels.hpp"
@@ -43,13 +44,14 @@ float l2norm_sqr_avx512(const float* a, size_t dim) {
 }
 
 namespace {
-// NonNegative requires (value - lo) / delta >= 0, as for FastScan LUT entries at
-// least their minimum; truncation plus a half test then rounds half away from zero.
-// Signed inputs keep round_away_from_zero. Do not replace either with adding 0.5f.
-template <bool NonNegative>
-void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, float delta) {
+// Code is uint8_t or uint16_t. NonNegative requires (value - lo) / delta >= 0, as for
+// FastScan LUT entries at least their minimum; truncation plus a half test then
+// rounds half away from zero. Signed inputs keep round_away_from_zero. Do not replace
+// either with adding 0.5f.
+template <typename Code, bool NonNegative = false>
+void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
-        std::fill_n(result, dim, uint8_t{0});
+        std::fill_n(result, dim, Code{0});
         return;
     }
     size_t mul16 = dim - (dim & 0b1111);
@@ -72,11 +74,18 @@ void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, fl
         } else {
             i32 = _mm512_cvttps_epi32(round_away_from_zero(cur));
         }
-        __m128i i8 = _mm512_cvtusepi32_epi8(i32);
-        _mm_storeu_si128(reinterpret_cast<__m128i*>(&result[i]), i8);
+        if constexpr (std::is_same_v<Code, uint8_t>) {
+            _mm_storeu_si128(
+                reinterpret_cast<__m128i*>(&result[i]), _mm512_cvtusepi32_epi8(i32)
+            );
+        } else {
+            _mm256_storeu_si256(
+                reinterpret_cast<__m256i*>(&result[i]), _mm512_cvtusepi32_epi16(i32)
+            );
+        }
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] = static_cast<Code>(std::round((vec0[i] - lo) * one_over_delta));
     }
 }
 }  // namespace
@@ -84,37 +93,19 @@ void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, fl
 void scalar_quantize_uint8_avx512(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-    quantize_uint8<false>(result, vec0, dim, lo, delta);
+    quantize(result, vec0, dim, lo, delta);
 }
 
 void scalar_quantize_nonnegative_uint8_avx512(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-    quantize_uint8<true>(result, vec0, dim, lo, delta);
+    quantize<uint8_t, true>(result, vec0, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_avx512(
     uint16_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-    if (delta == 0.0F) {
-        std::fill_n(result, dim, uint16_t{0});
-        return;
-    }
-    size_t mul16 = dim - (dim & 0b1111);
-    size_t i = 0;
-    float one_over_delta = 1.0F / delta;
-    __m512 lo512 = _mm512_set1_ps(lo);
-    __m512 ow512 = _mm512_set1_ps(one_over_delta);
-    for (; i < mul16; i += 16) {
-        __m512 cur = _mm512_loadu_ps(&vec0[i]);
-        cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), ow512);
-        __m256i i16 =
-            _mm512_cvtusepi32_epi16(_mm512_cvttps_epi32(round_away_from_zero(cur)));
-        _mm256_storeu_si256(reinterpret_cast<__m256i*>(&result[i]), i16);
-    }
-    for (; i < dim; ++i) {
-        result[i] = static_cast<uint16_t>(std::round((vec0[i] - lo) * one_over_delta));
-    }
+    quantize(result, vec0, dim, lo, delta);
 }
 
 void new_transpose_bin_avx512(

@@ -90,51 +90,36 @@ void pairwise_distances_lower(
 }
 
 float euclidean_sqr(const float* a, const float* b, size_t dim) {
-#if defined(__aarch64__)
-    static const auto kEuclideanSqrFn =
-        resolve_optional_kernel(euclidean_sqr_neon, euclidean_sqr_generic, cpu::has_neon());
-#else
-    static const auto kEuclideanSqrFn =
-        RABITQ_RESOLVE(euclidean_sqr_avx512, euclidean_sqr_avx2, euclidean_sqr_generic);
-#endif
+    static const auto kEuclideanSqrFn = RABITQ_RESOLVE_NEON(
+        euclidean_sqr_neon, euclidean_sqr_avx512, euclidean_sqr_avx2, euclidean_sqr_generic
+    );
 
     return kEuclideanSqrFn(a, b, dim);
 }
 
 float dot_product(const float* a, const float* b, size_t dim) {
-#if defined(__aarch64__)
-    static const auto kDotProductFn =
-        resolve_optional_kernel(dot_product_neon, dot_product_generic, cpu::has_neon());
-#else
-    static const auto kDotProductFn =
-        RABITQ_RESOLVE(dot_product_avx512, dot_product_avx2, dot_product_generic);
-#endif
+    static const auto kDotProductFn = RABITQ_RESOLVE_NEON(
+        dot_product_neon, dot_product_avx512, dot_product_avx2, dot_product_generic
+    );
 
     return kDotProductFn(a, b, dim);
 }
 
 float dot_product_dis(const float* a, const float* b, size_t dim) {
-#if defined(__aarch64__)
-    static const auto kDotProductDisFn = resolve_optional_kernel(
-        dot_product_dis_neon, dot_product_dis_generic, cpu::has_neon()
+    static const auto kDotProductDisFn = RABITQ_RESOLVE_NEON(
+        dot_product_dis_neon,
+        dot_product_dis_avx512,
+        dot_product_dis_avx2,
+        dot_product_dis_generic
     );
-#else
-    static const auto kDotProductDisFn = RABITQ_RESOLVE(
-        dot_product_dis_avx512, dot_product_dis_avx2, dot_product_dis_generic
-    );
-#endif
 
     return kDotProductDisFn(a, b, dim);
 }
 
 float l2norm_sqr(const float* a, size_t dim) {
-#if defined(__aarch64__)
-    static const auto kL2normSqrFn =
-        resolve_optional_kernel(l2norm_sqr_neon, l2norm_sqr_generic, cpu::has_neon());
-#else
-    static const auto kL2normSqrFn =
-        RABITQ_RESOLVE(l2norm_sqr_avx512, l2norm_sqr_avx2, l2norm_sqr_generic);
-#endif
+    static const auto kL2normSqrFn = RABITQ_RESOLVE_NEON(
+        l2norm_sqr_neon, l2norm_sqr_avx512, l2norm_sqr_avx2, l2norm_sqr_generic
+    );
     return kL2normSqrFn(a, dim);
 }
 
@@ -186,13 +171,9 @@ void fht_rotate(
     float scale_factor,
     const uint8_t* flip
 ) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kFhtRotateFn =
-        resolve_optional_kernel(fht_rotate_neon, fht_rotate_generic, cpu::has_neon());
-#else
-    static const auto kFhtRotateFn =
-        RABITQ_RESOLVE(fht_rotate_avx512, fht_rotate_avx2, fht_rotate_generic);
-#endif
+    static const auto kFhtRotateFn = RABITQ_RESOLVE_NEON(
+        fht_rotate_neon, fht_rotate_avx512, fht_rotate_avx2, fht_rotate_generic
+    );
 
     kFhtRotateFn(data, rotated_data, dim, padded_dim, trunc_dim, scale_factor, flip);
 }
@@ -256,42 +237,29 @@ static ExcodeIpTable resolve_excode_ip_table() {
 }
 
 void flip_sign(const uint8_t* flip, float* data, size_t dim) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kFlipSignFn =
-        resolve_optional_kernel(flip_sign_neon, flip_sign_generic, cpu::has_neon());
-#else
-    static const auto kFlipSignFn =
-        RABITQ_RESOLVE(flip_sign_avx512, flip_sign_avx2, flip_sign_generic);
-#endif
+    static const auto kFlipSignFn = RABITQ_RESOLVE_NEON(
+        flip_sign_neon, flip_sign_avx512, flip_sign_avx2, flip_sign_generic
+    );
 
     kFlipSignFn(flip, data, dim);
 }
 
 void kacs_walk(float* data, size_t len) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kKacsWalkFn =
-        resolve_optional_kernel(kacs_walk_neon, kacs_walk_generic, cpu::has_neon());
-#else
-    static const auto kKacsWalkFn =
-        RABITQ_RESOLVE(kacs_walk_avx512, kacs_walk_avx2, kacs_walk_generic);
-#endif
+    static const auto kKacsWalkFn = RABITQ_RESOLVE_NEON(
+        kacs_walk_neon, kacs_walk_avx512, kacs_walk_avx2, kacs_walk_generic
+    );
     kKacsWalkFn(data, len);
 }
 
 void scalar_quantize_uint8(
     uint8_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kScalarQuantizeUint8Fn = resolve_optional_kernel(
-        scalar_quantize_uint8_neon, scalar_quantize_uint8_generic, cpu::has_neon()
-    );
-#else
-    static const auto kScalarQuantizeUint8Fn = RABITQ_RESOLVE(
+    static const auto kScalarQuantizeUint8Fn = RABITQ_RESOLVE_NEON(
+        scalar_quantize_uint8_neon,
         scalar_quantize_uint8_avx512,
         scalar_quantize_uint8_avx2,
         scalar_quantize_uint8_generic
     );
-#endif
 
     kScalarQuantizeUint8Fn(result, vec0, dim, lo, delta);
 }
@@ -299,17 +267,12 @@ void scalar_quantize_uint8(
 void scalar_quantize_uint16(
     uint16_t* result, const float* vec0, size_t dim, float lo, float delta
 ) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kScalarQuantizeUint16Fn = resolve_optional_kernel(
-        scalar_quantize_uint16_neon, scalar_quantize_uint16_generic, cpu::has_neon()
-    );
-#else
-    static const auto kScalarQuantizeUint16Fn = RABITQ_RESOLVE(
+    static const auto kScalarQuantizeUint16Fn = RABITQ_RESOLVE_NEON(
+        scalar_quantize_uint16_neon,
         scalar_quantize_uint16_avx512,
         scalar_quantize_uint16_avx2,
         scalar_quantize_uint16_generic
     );
-#endif
 
     kScalarQuantizeUint16Fn(result, vec0, dim, lo, delta);
 }
@@ -424,17 +387,12 @@ float excode_ipimpl::ip64_fxu7_avx(
 }
 
 void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kNewTransposeBinFn = simd::resolve_optional_kernel(
-        simd::new_transpose_bin_neon, simd::new_transpose_bin_generic, cpu::has_neon()
-    );
-#else
-    static const auto kNewTransposeBinFn = RABITQ_RESOLVE(
+    static const auto kNewTransposeBinFn = RABITQ_RESOLVE_NEON(
+        simd::new_transpose_bin_neon,
         simd::new_transpose_bin_avx512,
         simd::new_transpose_bin_avx2,
         simd::new_transpose_bin_generic
     );
-#endif
 
     kNewTransposeBinFn(q, tq, padded_dim, b_query);
 }
@@ -442,37 +400,23 @@ void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_
 void new_transpose_bin_512(
     const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
 ) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const auto kNewTransposeBin512Fn = simd::resolve_optional_kernel(
+    static const auto kNewTransposeBin512Fn = RABITQ_RESOLVE_NEON(
         simd::new_transpose_bin_512_neon,
-        simd::new_transpose_bin_512_generic,
-        cpu::has_neon()
-    );
-#else
-    static const auto kNewTransposeBin512Fn = RABITQ_RESOLVE(
         simd::new_transpose_bin_512_avx512,
         simd::new_transpose_bin_512_avx2,
         simd::new_transpose_bin_512_generic
     );
-#endif
 
     kNewTransposeBin512Fn(q, tq, padded_dim, b_query);
 }
 
 float mask_ip_x0_q(const float* query, const uint8_t* data, size_t padded_dim) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const MaskIpX0QFn kMaskIpX0QFn = simd::resolve_optional_kernel(
+    static const MaskIpX0QFn kMaskIpX0QFn = RABITQ_RESOLVE_NEON(
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_neon),
-        static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_generic),
-        cpu::has_neon()
-    );
-#else
-    static const MaskIpX0QFn kMaskIpX0QFn = RABITQ_RESOLVE(
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx512),
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx2),
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_generic)
     );
-#endif
 
     return kMaskIpX0QFn(query, data, padded_dim);
 }
@@ -496,20 +440,13 @@ float warmup_ip_x0_q_512(
     size_t padded_dim,
     size_t b_query
 ) {
-#if defined(__aarch64__) || defined(_M_ARM64)
-    static const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = simd::resolve_optional_kernel(
+    static const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = RABITQ_RESOLVE_NEON(
         static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_neon),
-        static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_generic),
-        cpu::has_neon()
-    );
-#else
-    static const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = RABITQ_RESOLVE(
         static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512),
         static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2),
         static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_generic),
         cpu::has_avx512_popcnt()
     );
-#endif
 
     return kWarmupIpX0Q512Fn(data, query, delta, vl, padded_dim, b_query);
 }

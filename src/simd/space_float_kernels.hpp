@@ -4,6 +4,8 @@
 
 #include <cstddef>
 
+#include "packed_tail_avx2.hpp"
+
 namespace rabitqlib::simd {
 namespace {
 #ifdef __AVX512F__
@@ -23,11 +25,7 @@ inline Vec load(const float* p) { return _mm256_loadu_ps(p); }
 inline Vec add(Vec a, Vec b) { return _mm256_add_ps(a, b); }
 inline Vec sub(Vec a, Vec b) { return _mm256_sub_ps(a, b); }
 inline Vec fma(Vec a, Vec b, Vec c) { return _mm256_fmadd_ps(a, b, c); }
-inline float reduce(Vec a) {
-    __m128 h = _mm_add_ps(_mm256_castps256_ps128(a), _mm256_extractf128_ps(a, 1));
-    h = _mm_add_ps(h, _mm_movehl_ps(h, h));
-    return _mm_cvtss_f32(_mm_add_ss(h, _mm_movehdup_ps(h)));
-}
+inline float reduce(Vec a) { return detail::reduce_add_avx2(a); }
 #endif
 inline Vec tail_load(const float* p, size_t remaining) {
 #ifdef __AVX512F__
