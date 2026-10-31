@@ -6,6 +6,7 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>  // IWYU pragma: keep (vector conversion for iteration_stats)
 
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 #include "bindings_common.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
+#include "rabitqlib/index/types.hpp"
 
 namespace py = pybind11;
 
@@ -47,6 +49,28 @@ double train(Clustering& clustering, py::handle x) {
     return clustering.iteration_stats.back().obj;
 }
 
+template <typename Clustering>
+py::tuple assign(const Clustering& clustering, py::handle x) {
+    auto x_array = ensure_2d_array<float>(x, "x");
+    ensure_dimension(x_array, clustering.d, "x dimension does not match d");
+
+    const auto num_points = x_array.shape(0);
+    py::array_t<PID> assignments(num_points);
+    py::array_t<float> distances(num_points);
+    PID* assignments_data = assignments.mutable_data();
+    float* distances_data = distances.mutable_data();
+    {
+        py::gil_scoped_release release;
+        clustering.assign(
+            static_cast<size_t>(num_points),
+            x_array.data(),
+            assignments_data,
+            distances_data
+        );
+    }
+    return py::make_tuple(assignments, distances);
+}
+
 template <typename Parameters>
 void bind_training_parameters(py::class_<Parameters>& binding) {
     binding.def(py::init<>(), "Create parameters with their documented defaults.")
@@ -72,6 +96,11 @@ void bind_training_parameters(py::class_<Parameters>& binding) {
             R"doc(Warn below this many training vectors per centroid. Default is 39.)doc"
         )
         .def_readwrite(
+            "max_points_per_centroid",
+            &Parameters::max_points_per_centroid,
+            R"doc(When positive, train on a random sample of k * max_points_per_centroid vectors if there are more, then assign all vectors. Default is 0, which trains on all vectors; Faiss uses 256.)doc"
+        )
+        .def_readwrite(
             "early_stop_threshold",
             &Parameters::early_stop_threshold,
             R"doc(Stop when the absolute relative objective change is at most this threshold. Default is 0.0.)doc"
@@ -93,6 +122,7 @@ void bind_clustering(py::module_& m, const char* native_name, const char* public
     py::class_<Clustering>(m, native_name)
         .def(py::init<size_t, size_t, const Parameters&>())
         .def("train", &train<Clustering>, py::arg("x"))
+        .def("assign", &assign<Clustering>, py::arg("x"))
         .def_readonly("d", &Clustering::d)
         .def_readonly("k", &Clustering::k)
         .def_readonly("final_obj", &Clustering::final_obj)

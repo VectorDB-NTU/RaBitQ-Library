@@ -40,12 +40,16 @@ struct RaBitQKMeansParameters {
     double early_stop_threshold = 0.0;
     FinalAssignmentMode final_assignment = FinalAssignmentMode::Approximate;
     uint32_t num_threads = 0;
+    // When positive, train on a random sample of k * max_points_per_centroid
+    // vectors if there are more, then assign all vectors; 0 trains on all vectors.
+    size_t max_points_per_centroid = 0;
 };
 
 namespace detail {
 
 // Encode immutable training points once; each moving centroid supplies one LUT.
 // RaBitQKMeans validates inputs and keeps the borrowed x buffer alive through training.
+// Points are encoded around their mean, or around a given d-element center.
 class RaBitQAssignment {
     size_t dim_;
     size_t num_clusters_;
@@ -79,7 +83,8 @@ class RaBitQAssignment {
         const float* x,
         size_t n,
         uint32_t num_workers,
-        const RaBitQKMeansParameters& cp
+        const RaBitQKMeansParameters& cp,
+        const float* center = nullptr
     )
         : dim_(d)
         , num_clusters_(k)
@@ -95,7 +100,9 @@ class RaBitQAssignment {
         , centroid_queries_(k)
         , rotated_query_(padded_dim_)
         , lookup_table_(padded_dim_ * 4) {
-        {
+        if (center != nullptr) {
+            std::copy_n(center, dim_, center_.data());
+        } else {
             std::vector<std::vector<double>> partial_sums(
                 num_workers_, std::vector<double>(dim_, 0.0)
             );
@@ -156,6 +163,35 @@ class RaBitQAssignment {
             } catch (...) { failure.capture(); }
         }
         failure.rethrow();
+    }
+
+    // Kept by the model after training: later assignments encode points around
+    // the training center, independently of the other points in a call.
+    struct ModelState {
+        std::vector<float> center;
+    };
+
+    void store_model_state(ModelState& state) const { state.center = center_; }
+
+    [[nodiscard]] static bool has_model_state(const ModelState& state, size_t d) {
+        return state.center.size() == d;
+    }
+
+    // Requires validated inputs and centroids.
+    static void assign_with_state(
+        size_t d,
+        size_t k,
+        const float* centroids,
+        const float* x,
+        size_t n,
+        uint32_t num_workers,
+        const RaBitQKMeansParameters& cp,
+        const ModelState& state,
+        PID* assignments,
+        float* distances
+    ) {
+        RaBitQAssignment assigner(d, k, x, n, num_workers, cp, state.center.data());
+        assigner.assign(centroids, assignments, distances);
     }
 
     void assign(const float* centroids, PID* assignments, float* distances, bool = false) {

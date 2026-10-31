@@ -30,6 +30,9 @@ centroids = kmeans.centroids      # shape (k, d)
 assignments = kmeans.assignments  # shape (n,)
 distances = kmeans.distances      # shape (n,)
 final_obj = kmeans.final_obj
+
+# Assign other vectors, shape (m, d), to the trained centroids.
+query_assignments, query_distances = kmeans.assign(queries)  # shapes (m,), (m,)
 ```
 
 `x` has shape `(n, d)` and is converted to a C-contiguous float32 array.
@@ -55,6 +58,11 @@ const auto& centroids = kmeans.centroids;
 const auto& assignments = kmeans.assignments;
 const auto& distances = kmeans.distances;
 const double final_obj = kmeans.final_obj;
+
+// Caller-owned outputs with num_queries elements each.
+std::vector<rabitqlib::PID> query_assignments(num_queries);
+std::vector<float> query_distances(num_queries);
+kmeans.assign(num_queries, queries, query_assignments.data(), query_distances.data());
 ```
 
 Complete examples: [RaBitQKMeans](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/rabitqkmeans.cpp)
@@ -83,6 +91,7 @@ Set Python keyword arguments or fields of the corresponding C++ parameter type:
 | `spherical` | `false` | Normalize centroids and assign by inner product; input must already be normalized. |
 | `seed` | `42` | Seed for centroid selection and rotation. |
 | `min_points_per_centroid` | `39` | Warn below this training-points-per-centroid ratio when verbose. |
+| `max_points_per_centroid` | `0` | When positive, train on a random sample above `k * max_points_per_centroid` vectors; `0` trains on all vectors. See [sampling](#training-set-sampling). |
 | `verbose` | `false` | Print training progress and warnings. |
 | `final_assignment` | `Approximate` | Use the selected method for final labels, or `Exact` for nearest-centroid labels. |
 
@@ -101,6 +110,35 @@ empty clusters in the final assignment. Thread scheduling can affect graph
 construction and floating-point reductions, so a fixed seed does not guarantee
 identical multithreaded results.
 
+### Training-set sampling
+
+Sampling is disabled by default. When `max_points_per_centroid` is positive
+and `n > k * max_points_per_centroid`, training draws
+`k * max_points_per_centroid` distinct vectors uniformly at random, as Faiss
+does; Faiss enables this by default with 256. Centroid initialization and all
+Lloyd iterations use only this sample. The final centroids then assign all `n`
+vectors with the selected `final_assignment` mode, as [`assign`](#assign-new-vectors)
+does, so `assignments` and `distances` keep shape `(n,)` and can be passed
+directly to index builders.
+
+`seed` selects the sample through a random stream separate from centroid
+initialization. Training that does not sample, because the parameter is `0` or
+`n` is at most `k * max_points_per_centroid`, returns the same results as
+before this parameter existed. The selected vectors depend on the
+C++ standard library's random distributions, so the same seed can choose a
+different sample on another platform.
+
+`obj` and `iteration_stats` (and the value returned by Python `train()`) are
+computed on the sampled vectors, while `distances` and `final_obj` cover all `n`
+vectors. Their values are not directly comparable. Validation still checks
+every input vector, including those outside the sample.
+
+Sampling reduces iteration work but raises peak memory. Training copies the
+sample into a contiguous buffer of `k * max_points_per_centroid * d` float32
+values, 4 GiB for `k = 4096`, `max_points_per_centroid = 256` and `d = 960`,
+and briefly holds `n` 8-byte row indices to select it, in addition to the
+caller's input. The final assignment still processes all `n` vectors.
+
 ## Method details
 
 ### RaBitQKMeans
@@ -109,9 +147,11 @@ The flat assignment design is inspired by
 [SuperKMeans](https://github.com/cwida/SuperKMeans). Training points are rotated
 and encoded once around a fixed dataset mean. Each centroid becomes a query
 that scans all packed point batches, and each point receives the centroid with
-the best estimated distance.
+the best estimated distance. The model keeps this mean of the training points
+(of the sample, when training samples), and [`assign`](#assign-new-vectors)
+encodes new vectors around it.
 
-Each iteration compares all `n * k` point-centroid pairs. The batch size of 32
+Each iteration compares every training point with every centroid. The batch size of 32
 is not a cluster-count limit. This method uses one-bit point codes throughout;
 it has no graph parameters or `quantization_bits` setting.
 
@@ -129,7 +169,8 @@ assignments as search hints. Its additional parameters are:
 
 The seed also controls fallback neighbors; PiPNN uses fixed internal seeds.
 `QGAssigner` in `qgkmeans.hpp` supports repeated vector-to-centroid assignment
-without the clustering loop.
+without the clustering loop. To assign vectors with trained QGKMeans centroids,
+use [`assign`](#assign-new-vectors).
 
 ## Results and final assignment
 
@@ -145,9 +186,10 @@ their sum (WCSS); spherical mode sums `1 - inner_product`. `obj` and
 `FinalAssignmentMode.Approximate` (default) uses the selected class's assignment
 algorithm. The legacy name `FinalAssignmentMode.SymphonyQG` remains an alias for
 `Approximate`. Labels need not identify the exact nearest centroids, but reported
-distances and WCSS remain exact for those labels. Quantized QGKMeans final
-assignment retains a previous label when it is closer. Approximate training
-objectives need not decrease monotonically.
+distances and WCSS remain exact for those labels. Without sampling, quantized
+QGKMeans final assignment retains a point's last-iteration label when it is
+closer. After sampling, most points have no such label, so every point uses the
+same graph search. Approximate training objectives need not decrease monotonically.
 
 To require exact nearest-centroid **final** assignments with either class:
 
@@ -167,6 +209,30 @@ Exact final assignment screens all centroids with blocked GEMM and refines
 possible winners in float64; ties select the smallest centroid index. Returned
 distances remain float32. Work is proportional to `n * k * d`; large coordinate
 offsets or near ties can require more refinement.
+
+## Assign new vectors
+
+After a successful fit, `assign(x)` returns `(assignments, distances)` for an
+`(m, d)` array: uint32 centroid IDs and float32 distances to those centroids,
+each of shape `(m,)`. It uses `final_assignment` and the other parameters of the
+last successful fit and checks coordinates as training does; `m` may be `0`.
+Before the first successful fit, it raises `RuntimeError`. The C++ method
+`assign(n, x, assignments, distances)` writes to caller-owned buffers. It throws
+`std::runtime_error` until `train()` succeeds, including when `centroids` were
+written directly, and `std::invalid_argument` for invalid `x` or `centroids`.
+
+`assign` uses no labels or search hints from training, so each vector's
+result is independent of the other vectors in the call. Approximate
+RaBitQKMeans encodes vectors around the stored training mean. Approximate
+QGKMeans builds a graph over the centroids on first use and reuses it;
+C++ callers that change `centroids` or graph parameters cause one rebuild on
+the next call. Each call still validates the `k * d` centroid coordinates.
+
+For the training vectors, `assign` reproduces `assignments` and `distances`
+with `FinalAssignmentMode.Exact`, for RaBitQKMeans, and whenever training
+sampled the input, because the sampled final pass is the same assignment.
+Unsampled approximate QGKMeans training also uses previous labels as graph
+search hints, so its final labels can differ.
 
 ## Compare with Faiss
 

@@ -62,6 +62,10 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
         assert_type(model.distances, npt.NDArray[np.float32] | None)
         assert_type(model.obj, npt.NDArray[np.float64] | None)
         assert_type(model.final_obj, float | None)
+        assert_type(
+            model.assign(x),
+            tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]],
+        )
         if model.iteration_stats is not None:
             assert_type(model.iteration_stats[0], QGKMeansIterationStats)
     qg.cp.final_assignment = FinalAssignmentMode.Approximate
@@ -83,7 +87,9 @@ def check_parameter_reads(
     # the assigned NumPy scalar, although the native setter normalizes it.
     assert_type(parameters.niter, int)
     assert_type(parameters.verbose, bool)
+    assert_type(parameters.max_points_per_centroid, int)
     assert type(parameters.niter) is int
+    assert type(parameters.max_points_per_centroid) is int
     assert type(parameters.verbose) is bool
 
 
@@ -133,11 +139,14 @@ def check_numpy_scalars() -> None:
         model.cp.niter = np.int64(1)
         model.cp.seed = np.uint32(42)
         model.cp.min_points_per_centroid = np.int64(1)
+        model.cp.max_points_per_centroid = np.int64(1)
         model.cp.num_threads = np.int64(1)
         model.cp.verbose = np.bool_(False)
         model.cp.spherical = np.bool_(False)
         check_parameter_reads(model.cp)
         assert_type(model.train(x), float)
+        assignments, distances = model.assign(x[:3])
+        assert assignments.shape == distances.shape == (3,)
     qg.cp.graph_degree = np.int64(32)
     qg.cp.ef_build = np.int64(40)
     qg.cp.ef_search = np.int64(16)

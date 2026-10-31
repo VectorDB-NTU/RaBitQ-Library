@@ -53,8 +53,9 @@ class _KMeans:
         Returns
         -------
         objective : float
-            Last pre-update objective. This can differ from final_obj, which uses
-            returned assignments and final centroids.
+            Last pre-update objective, over the sample when training sampled the
+            input. This can differ from final_obj, which uses all vectors, returned
+            assignments and final centroids.
 
         Notes
         -----
@@ -65,6 +66,43 @@ class _KMeans:
         objective = implementation.train(x)
         self._impl = implementation
         return objective
+
+    def assign(self, x):
+        """Assign vectors to the trained centroids.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (m, d)
+            Vectors in the original, unpadded coordinates, with finite
+            coordinates in the range accepted by train; m may be 0. Converted to
+            contiguous float32; a copy may be made.
+
+        Returns
+        -------
+        assignments : ndarray of uint32, shape (m,)
+            Centroid IDs.
+        distances : ndarray of float32, shape (m,)
+            Distances to the assigned centroids, as in the distances property.
+
+        Raises
+        ------
+        RuntimeError
+            If no train call has succeeded.
+
+        Notes
+        -----
+        Uses final_assignment and the other parameters of the last successful
+        train call, but no labels or search hints from it, so each vector's
+        result is independent of the other vectors in x. RaBitQKMeans encodes
+        vectors around the training center. Approximate QGKMeans builds a
+        centroid graph on first use and reuses it in later calls. For the
+        training vectors, the result reproduces assignments and distances with
+        Exact final assignment, with RaBitQKMeans, or when training sampled the
+        input; unsampled approximate QGKMeans training uses search hints.
+        """
+        if self._impl is None:
+            raise RuntimeError(f"{type(self).__name__} has not been trained")
+        return self._impl.assign(x)
 
     @property
     def centroids(self):
@@ -78,22 +116,22 @@ class _KMeans:
 
     @property
     def distances(self):
-        """Final assignment distances, float32 array of shape (n,), or None before training."""
+        """Final assignment distances for all n vectors, float32 array of shape (n,), or None before training."""
         return None if self._impl is None else self._impl.distances
 
     @property
     def obj(self):
-        """Pre-update objectives, float64 array of shape (iterations,), or None before training."""
+        """Pre-update objectives over the vectors used for iterations, float64 array of shape (iterations,), or None before training."""
         return None if self._impl is None else self._impl.obj
 
     @property
     def final_obj(self):
-        """Objective for final assignments and centroids, or None before training."""
+        """Objective for the final assignments of all n vectors, or None before training."""
         return None if self._impl is None else self._impl.final_obj
 
     @property
     def iteration_stats(self):
-        """Per-iteration statistics, or None before training."""
+        """Per-iteration statistics over the vectors used for iterations, or None before training."""
         return None if self._impl is None else self._impl.iteration_stats
 
 
@@ -119,6 +157,10 @@ class QGKMeans(_KMeans):
         Random seed. Default is 42.
     min_points_per_centroid : int, optional
         Warn below this many training vectors per centroid. Default is 39.
+    max_points_per_centroid : int, optional
+        When positive, train on a random sample of k * max_points_per_centroid
+        vectors if there are more, then assign all vectors. Default is 0, which
+        trains on all vectors; Faiss uses 256.
     early_stop_threshold : float, optional
         Stop when the absolute relative objective change is at most this
         threshold. Default is 0.0.
@@ -146,6 +188,12 @@ class QGKMeans(_KMeans):
     Training results are None until the first successful train call. Set cp
     fields before training to customize subsequent runs. A failed train
     preserves previous results.
+
+    When max_points_per_centroid is positive and n exceeds
+    k * max_points_per_centroid, initialization and iterations use a random
+    sample chosen by seed. obj and iteration_stats then describe the sample,
+    while assignments, distances and final_obj cover all n vectors, so the two
+    kinds of objective are not directly comparable.
     """
 
     _parameters_type = QGKMeansParameters
@@ -173,6 +221,10 @@ class RaBitQKMeans(_KMeans):
         Random seed. Default is 42.
     min_points_per_centroid : int, optional
         Warn below this many training vectors per centroid. Default is 39.
+    max_points_per_centroid : int, optional
+        When positive, train on a random sample of k * max_points_per_centroid
+        vectors if there are more, then assign all vectors. Default is 0, which
+        trains on all vectors; Faiss uses 256.
     early_stop_threshold : float, optional
         Stop when the absolute relative objective change is at most this
         threshold. Default is 0.0.
@@ -188,6 +240,12 @@ class RaBitQKMeans(_KMeans):
     Training results are None until the first successful train call. Set cp
     fields before training to customize subsequent runs. A failed train
     preserves previous results.
+
+    When max_points_per_centroid is positive and n exceeds
+    k * max_points_per_centroid, initialization and iterations use a random
+    sample chosen by seed. obj and iteration_stats then describe the sample,
+    while assignments, distances and final_obj cover all n vectors, so the two
+    kinds of objective are not directly comparable.
 
     Examples
     --------
