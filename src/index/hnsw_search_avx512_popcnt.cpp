@@ -33,7 +33,7 @@ std::vector<std::pair<float, PID>> search_knn_sorted_avx512_popcnt(
     HierarchicalNSW& index, const float* rotated_query, size_t k, size_t ef_search
 ) {
     return index.search_knn_sorted_direct<HnswAvx512PopcntKernel>(
-        rotated_query, k, ef_search == 0 ? index.default_ef_search_ : ef_search
+        rotated_query, k, ef_search
     );
 }
 

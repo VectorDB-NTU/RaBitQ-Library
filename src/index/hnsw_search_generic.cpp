@@ -35,9 +35,7 @@ struct HnswGenericKernel {
 std::vector<std::pair<float, PID>> search_knn_sorted_generic(
     HierarchicalNSW& index, const float* rotated_query, size_t k, size_t ef_search
 ) {
-    return index.search_knn_sorted_direct<HnswGenericKernel>(
-        rotated_query, k, ef_search == 0 ? index.default_ef_search_ : ef_search
-    );
+    return index.search_knn_sorted_direct<HnswGenericKernel>(rotated_query, k, ef_search);
 }
 
 }  // namespace rabitqlib::hnsw::detail
