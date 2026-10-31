@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
@@ -5,9 +6,11 @@
 #include "../simd/dispatch_resolver.hpp"
 #include "fastscan_backend.hpp"
 #include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
+#include "rabitqlib/fastscan/detail/lut_prepare.hpp"
 #include "rabitqlib/fastscan/detail/simd.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/utils/space.hpp"
 #if defined(__aarch64__) || defined(_M_ARM64)
 #include "rabitqlib/utils/cpu_features.hpp"
 #endif
@@ -18,6 +21,8 @@ constexpr Backend kGenericBackend{
     "generic",
     HaccLutLayout::Pair32,
     simd::pack_lut_generic,
+    simd::pack_lut_range_generic,
+    rabitqlib::simd::scalar_quantize_uint8_generic,
     simd::transfer_lut_hacc_generic,
     simd::accumulate_unsupported,
     simd::accumulate_hacc_generic,
@@ -30,6 +35,8 @@ constexpr Backend kAvx2Backend{
     "avx2",
     HaccLutLayout::Pair32,
     simd::pack_lut_avx2,
+    simd::pack_lut_range_avx2,
+    rabitqlib::simd::scalar_quantize_nonnegative_uint8_avx2,
     simd::transfer_lut_hacc_avx2,
     simd::accumulate_avx2,
     simd::accumulate_hacc_avx2,
@@ -40,6 +47,8 @@ constexpr Backend kAvx512Backend{
     "avx512",
     HaccLutLayout::Quad64,
     simd::pack_lut_avx512,
+    simd::pack_lut_range_avx512,
+    rabitqlib::simd::scalar_quantize_nonnegative_uint8_avx512,
     simd::transfer_lut_hacc_avx512,
     simd::accumulate_avx512,
     simd::accumulate_hacc_avx512,
@@ -52,6 +61,8 @@ constexpr Backend kNeonBackend{
     "neon",
     HaccLutLayout::Pair32,
     simd::pack_lut_neon,
+    simd::pack_lut_range_neon,
+    rabitqlib::simd::scalar_quantize_uint8_neon,
     simd::transfer_lut_hacc_generic,
     simd::accumulate_neon,
     simd::accumulate_hacc_neon,
@@ -71,6 +82,26 @@ RABITQ_COLD_INIT const Backend& selected_backend() {
         RABITQ_RESOLVE(&kAvx512Backend, &kAvx2Backend, &kGenericBackend);
 #endif
     return *backend;
+}
+
+bool pack_lut_with_range(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    static const auto kPackLutRangeFn = selected_backend().pack_lut_range;
+    kPackLutRangeFn(dim, query, lut, minimum, maximum);
+    // Raw kernels signal any NaN via minimum; infinities remain in the extrema.
+    const bool finite = std::isfinite(minimum) && std::isfinite(maximum);
+    if (!finite || minimum == 0.0F || maximum == 0.0F) {
+        data_range(lut, dim * 4, minimum, maximum);
+    }
+    return finite;
+}
+
+void quantize_lut_uint8(
+    uint8_t* result, const float* values, size_t count, float lo, float delta
+) {
+    static const auto kQuantizeLutFn = selected_backend().quantize_lut;
+    kQuantizeLutFn(result, values, count, lo, delta);
 }
 }  // namespace rabitqlib::fastscan::detail
 

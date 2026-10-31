@@ -24,6 +24,20 @@ void pack_lut_generic(size_t dim, const float* query, float* lut);
 void pack_lut_avx2(size_t dim, const float* query, float* lut);
 void pack_lut_avx512(size_t dim, const float* query, float* lut);
 
+// Raw fused kernels; the wrapper preserves exceptional/zero-bound reduction behavior.
+void pack_lut_range_generic(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+);
+void pack_lut_range_avx2(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+);
+void pack_lut_range_avx512(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+);
+void pack_lut_range_neon(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+);
+
 // Scalar reference for backend correctness tests; never selected by runtime dispatch.
 void accumulate_generic(
     const uint8_t* __restrict__ codes,

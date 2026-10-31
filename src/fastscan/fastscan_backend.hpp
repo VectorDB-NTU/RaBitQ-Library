@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "rabitqlib/fastscan/detail/estimator_dispatch.hpp"
 #include "rabitqlib/fastscan/detail/simd.hpp"
 
@@ -16,6 +17,8 @@ struct Backend {
     const char* name;
     HaccLutLayout hacc_layout;
     decltype(&simd::pack_lut_generic) pack_lut;
+    decltype(&simd::pack_lut_range_generic) pack_lut_range;
+    decltype(&rabitqlib::simd::scalar_quantize_uint8_generic) quantize_lut;
     decltype(&simd::transfer_lut_hacc_generic) transfer_hacc;
     decltype(&simd::accumulate_generic) accumulate;
     decltype(&simd::accumulate_hacc_generic) accumulate_hacc;

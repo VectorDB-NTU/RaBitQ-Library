@@ -11,7 +11,19 @@
 
 namespace rabitqlib::fastscan::simd {
 
-void pack_lut_avx512(size_t dim, const float* query, float* lut) {
+namespace {
+// Evaluated at compile time: unoptimized builds would otherwise export these library
+// functions compiled with this file's ISA flags for callers on other CPUs.
+constexpr float kInfinity = std::numeric_limits<float>::infinity();
+constexpr float kQuietNaN = std::numeric_limits<float>::quiet_NaN();
+
+template <bool ComputeRange>
+void pack_lut_impl(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    auto min_values = _mm512_set1_ps(kInfinity), max_values = _mm512_set1_ps(-kInfinity);
+    unsigned nan_mask = 0;
+
     // Keep the initial +0 addition observable for signed-zero inputs.
     volatile float zero = 0;
     for (size_t group = 0; group < dim / 4; ++group) {
@@ -22,10 +34,33 @@ void pack_lut_avx512(size_t dim, const float* query, float* lut) {
         values = _mm512_mask_add_ps(values, 0xF0F0, values, _mm512_set1_ps(query[1]));
         values = _mm512_mask_add_ps(values, 0xCCCC, values, _mm512_set1_ps(query[2]));
         values = _mm512_mask_add_ps(values, 0xAAAA, values, _mm512_set1_ps(query[3]));
+        if constexpr (ComputeRange) {
+            min_values = _mm512_min_ps(min_values, values);
+            max_values = _mm512_max_ps(max_values, values);
+            nan_mask |= _mm512_cmp_ps_mask(values, values, _CMP_UNORD_Q);
+        }
         _mm512_storeu_ps(lut, values);
         query += 4;
         lut += 16;
     }
+    if constexpr (ComputeRange) {
+        minimum = nan_mask ? kQuietNaN : _mm512_reduce_min_ps(min_values);
+        maximum = _mm512_reduce_max_ps(max_values);
+    }
+}
+}  // namespace
+
+void pack_lut_avx512(size_t dim, const float* query, float* lut) {
+    float unused_minimum = 0, unused_maximum = 0;
+    pack_lut_impl<false>(dim, query, lut, unused_minimum, unused_maximum);
+}
+
+// Preserve the existing ordered subset additions; reduce their values in registers.
+// A NaN minimum signals that the wrapper must use the original reduction.
+void pack_lut_range_avx512(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    pack_lut_impl<true>(dim, query, lut, minimum, maximum);
 }
 
 namespace {

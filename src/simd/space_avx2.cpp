@@ -42,9 +42,12 @@ float l2norm_sqr_avx2(const float* a, size_t dim) {
     return raw_float<FloatOperation::SquaredNorm>(a, a, dim);
 }
 
-void scalar_quantize_uint8_avx2(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
-) {
+namespace {
+// NonNegative requires (value - lo) / delta >= 0, as for FastScan LUT entries at
+// least their minimum; truncation plus a half test then rounds half away from zero.
+// Signed inputs keep round_away_from_zero. Do not replace either with adding 0.5f.
+template <bool NonNegative>
+void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
         std::fill_n(result, dim, uint8_t{0});
         return;
@@ -59,7 +62,19 @@ void scalar_quantize_uint8_avx2(
     for (; i < mul8; i += 8) {
         __m256 cur = _mm256_loadu_ps(&vec0[i]);
         cur = _mm256_mul_ps(_mm256_sub_ps(cur, lo256), od256);
-        __m256i i32 = _mm256_cvttps_epi32(round_away_from_zero(cur));
+        __m256i i32;
+        if constexpr (NonNegative) {
+            const __m256 truncated =
+                _mm256_round_ps(cur, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC);
+            const __m256 increment = _mm256_cmp_ps(
+                _mm256_sub_ps(cur, truncated), _mm256_set1_ps(0.5F), _CMP_GE_OQ
+            );
+            i32 = _mm256_sub_epi32(
+                _mm256_cvttps_epi32(truncated), _mm256_castps_si256(increment)
+            );
+        } else {
+            i32 = _mm256_cvttps_epi32(round_away_from_zero(cur));
+        }
         __m128i lo32 = _mm256_castsi256_si128(i32);
         __m128i hi32 = _mm256_extracti128_si256(i32, 1);
         __m128i i16 = _mm_packus_epi32(lo32, hi32);
@@ -69,6 +84,19 @@ void scalar_quantize_uint8_avx2(
     for (; i < dim; ++i) {
         result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
+}
+}  // namespace
+
+void scalar_quantize_uint8_avx2(
+    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+) {
+    quantize_uint8<false>(result, vec0, dim, lo, delta);
+}
+
+void scalar_quantize_nonnegative_uint8_avx2(
+    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+) {
+    quantize_uint8<true>(result, vec0, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_avx2(

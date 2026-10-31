@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "rabitqlib/fastscan/detail/lut_prepare.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -95,10 +96,17 @@ class Lut {
         uint16_t* lut_u16_scratch,
         bool use_hacc
     ) {
-        fastscan::pack_lut(padded_dim, rotated_query, lut_scratch);
         T vl_lut;
         T vr_lut;
-        data_range(lut_scratch, table_length_, vl_lut, vr_lut);
+        bool finite_lut = false;
+        if constexpr (std::is_same_v<T, float>) {
+            finite_lut = fastscan::detail::pack_lut_with_range(
+                padded_dim, rotated_query, lut_scratch, vl_lut, vr_lut
+            );
+        } else {
+            fastscan::pack_lut(padded_dim, rotated_query, lut_scratch);
+            data_range(lut_scratch, table_length_, vl_lut, vr_lut);
+        }
 
         if (use_hacc) {
             delta_ = (vr_lut - vl_lut) / ((1 << kNumBitsHacc) - 1);
@@ -106,7 +114,17 @@ class Lut {
             fastscan::transfer_lut_hacc(lut_u16_scratch, padded_dim, lut_.data());
         } else {
             delta_ = (vr_lut - vl_lut) / ((1 << kNumBits) - 1);
-            quantize_entries(lut_.data(), lut_scratch, vl_lut);
+            // finite_lut is only set for float, the only type the uint8 kernels take.
+            if constexpr (std::is_same_v<T, float>) {
+                if (finite_lut) {
+                    fastscan::detail::quantize_lut_uint8(
+                        lut_.data(), lut_scratch, table_length_, vl_lut, delta_
+                    );
+                }
+            }
+            if (!finite_lut) {
+                quantize_entries(lut_.data(), lut_scratch, vl_lut);
+            }
         }
 
         const size_t num_tables = table_length_ / 16;

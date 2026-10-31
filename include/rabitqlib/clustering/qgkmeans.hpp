@@ -74,7 +74,8 @@ class QuerySumCache {
 
    public:
     QuerySumCache(size_t padded_dim, const QGKMeansParameters& parameters) {
-        if (padded_dim >= 1024 &&
+        constexpr size_t kMinCachedDim = 512;
+        if (padded_dim >= kMinCachedDim &&
             (parameters.niter > 1 ||
              parameters.final_assignment != FinalAssignmentMode::Exact)) {
             state_ = State::Pending;
