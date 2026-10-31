@@ -474,15 +474,16 @@ def test_grouped_training_preserves_centroid_means_with_dimension_tail(bits, thr
 
 @pytest.mark.parametrize("bits", [0, 4, 8])
 @pytest.mark.parametrize("spherical", [False, True])
-def test_refit_recomputes_sums_for_mutated_storage_seed_and_count(bits, spherical):
+@pytest.mark.parametrize("dim", [511, 960, 1024])
+def test_refit_recomputes_sums_for_mutated_storage_seed_and_count(bits, spherical, dim):
     rng = np.random.default_rng(823)
-    storage = np.zeros((257, 1024), dtype=np.float32)
+    storage = np.zeros((257, dim), dtype=np.float32)
     storage[:, :8] = rng.standard_normal((257, 8)).astype(np.float32)
     original_pointer = storage.ctypes.data
 
     def make_model(seed):
         return QGKMeans(
-            1024,
+            dim,
             65,
             niter=3,
             num_threads=1,

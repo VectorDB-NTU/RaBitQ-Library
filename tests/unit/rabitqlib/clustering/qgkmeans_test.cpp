@@ -36,7 +36,10 @@ TEST(QGKMeansQuerySumTest, CachePolicyAndSuccessfulFillControlValidity) {
         bool enabled;
     };
     for (const auto configuration :
-         {Case{960, 25, FinalAssignmentMode::Approximate, false},
+         {Case{480, 25, FinalAssignmentMode::Approximate, false},
+          Case{512, 1, FinalAssignmentMode::Exact, false},
+          Case{512, 2, FinalAssignmentMode::Exact, true},
+          Case{960, 25, FinalAssignmentMode::Approximate, true},
           Case{1024, 1, FinalAssignmentMode::Exact, false},
           Case{1024, 1, FinalAssignmentMode::Approximate, true},
           Case{1024, 2, FinalAssignmentMode::Exact, true}}) {
@@ -77,7 +80,7 @@ TEST(QGKMeansQuerySumTest, CachePolicyAndSuccessfulFillControlValidity) {
 
 TEST(QGAssignerTest, CallerOwnedQuerySumsMatchUncachedAcrossRebuilds) {
     constexpr size_t kClusters = 33, kPoints = 64;
-    for (size_t dim : {64U, 1024U}) {
+    for (size_t dim : {64U, 511U, 512U, 960U, 1024U}) {
         std::vector<float> data(kPoints * dim), centroids(kClusters * dim);
         for (size_t i = 0; i < data.size(); ++i) {
             data[i] = std::sin(static_cast<float>(i) * 0.13F);
