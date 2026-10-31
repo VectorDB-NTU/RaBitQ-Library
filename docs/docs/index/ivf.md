@@ -146,7 +146,12 @@ auto routing = ivf.initializer_type();
   using twice the standard RaBitQ error margin, and recomputes exact distances
   for the retained candidates. Returned distances are exact for those centroids, but
   routing is approximate: pruning can miss a true nearest centroid.
-- `hnsw` searches a graph of float32 centroids approximately.
+- `hnsw` searches a graph of float32 centroids approximately. It suits workloads
+  whose `nprobe` is much smaller than the cluster count. Graph construction can
+  leave a few centroids unreachable, so points stored in those clusters are not
+  returned at any `nprobe`, and an `nprobe` close to the cluster count raises an
+  error instead of probing every cluster. Use `flat` or `flat_rabitq` when a
+  query should probe most clusters.
 
 All choices support L2 and inner product. Flat RaBitQ uses the IVF-RaBitQ rotation and
 padded domain, retains float32 centroids for refinement, and stores its mean and
