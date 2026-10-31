@@ -954,6 +954,9 @@ std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_with(
     if (ef_search == 0) {
         ef_search = kDefaultEfSearch;
     }
+    // No candidate pool can hold more distinct points than are stored, so a huge
+    // ef_search must not turn into a huge allocation.
+    ef_search = std::min(ef_search, num_stored_points_.load());
 
     SplitSingleQuery<float> query_wrapper(
         rotated_query, padded_dim_, ex_bits_, query_config_, metric_type_
@@ -989,7 +992,9 @@ std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_with(
 
     auto visited = visited_set_pool_->acquire();
     // Keep the ef_search best estimates in a bounded sorted buffer.
-    buffer::SearchBuffer<float> search_pool(std::max(ef_search, k));
+    buffer::SearchBuffer<float> search_pool(
+        std::min(std::max(ef_search, k), num_stored_points_.load())
+    );
     std::vector<AnnCandidate<float>> nearest(k);
     const size_t num_results = search_layers(
         *this,
@@ -1068,7 +1073,7 @@ void HierarchicalNSW::reconstruct_rotated(PID internal_id, float* rotated) const
     quant::rabitq_impl::unpack_sign_bits(bin.bin_code(), padded_dim_, combined.data());
 
     const auto* centroid = reinterpret_cast<const float*>(centroids_memory_.get()) +
-                           (cluster_id_of(internal_id) * padded_dim_);
+                           (stored_cluster_id(internal_id) * padded_dim_);
 
     if (ex_bits_ == 0) {
         quant::reconstruct_full_vec<float, uint16_t>(
@@ -1118,7 +1123,7 @@ float HierarchicalNSW::quantized_distance(
     }
 
     const auto* centroid = reinterpret_cast<const float*>(centroids_memory_.get()) +
-                           (cluster_id_of(target) * padded_dim_);
+                           (stored_cluster_id(target) * padded_dim_);
     const float dist_sqr = euclidean_sqr(cached.rotated.data(), centroid, padded_dim_);
     const float g_error = std::sqrt(dist_sqr);
     const float g_add = (metric_type_ == METRIC_IP)

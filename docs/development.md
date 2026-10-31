@@ -533,6 +533,10 @@ Use the [path conversion helper](#filesystem-paths) for file access. Preserve
 Frozen release-produced indexes and reference searches live in `tests/fixtures/persistence/`;
 keep their provenance and hashes, and do not regenerate them with the current writer.
 
+Index files are trusted input (see the usage guide): validate structure and sizes so
+that corrupt or mismatched files are reported before allocation, without treating a
+crafted file as a supported input.
+
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
 serialized fields for new formats, validate sizes before allocation, check every read, and retain a
 compatibility test fixture or an explicit rejection path. Review each affected format;

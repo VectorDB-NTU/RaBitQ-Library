@@ -56,9 +56,9 @@ inline void HierarchicalNSW::estimate_bin_direct(
     DistanceEstimate& estimate
 ) const {
     if (metric_type_ == METRIC_IP) {
-        const float query_centroid_ip = q_to_centroids[cluster_id_of(candidate_id)];
+        const float query_centroid_ip = q_to_centroids[stored_cluster_id(candidate_id)];
         const float residual_norm =
-            q_to_centroids[cluster_id_of(candidate_id) + num_clusters_];
+            q_to_centroids[stored_cluster_id(candidate_id) + num_clusters_];
         estimate = estimate_split_single_direct<Kernel>(
             bin_data(candidate_id),
             query_wrapper,
@@ -68,7 +68,7 @@ inline void HierarchicalNSW::estimate_bin_direct(
         );
     } else {
         // L2 distance
-        const float residual_norm = q_to_centroids[cluster_id_of(candidate_id)];
+        const float residual_norm = q_to_centroids[stored_cluster_id(candidate_id)];
         estimate = estimate_split_single_direct<Kernel>(
             bin_data(candidate_id),
             query_wrapper,
@@ -87,9 +87,9 @@ inline void HierarchicalNSW::estimate_full_direct(
     DistanceEstimate& estimate
 ) const {
     if (metric_type_ == METRIC_IP) {
-        const float query_centroid_ip = q_to_centroids[cluster_id_of(candidate_id)];
+        const float query_centroid_ip = q_to_centroids[stored_cluster_id(candidate_id)];
         const float residual_norm =
-            q_to_centroids[cluster_id_of(candidate_id) + num_clusters_];
+            q_to_centroids[stored_cluster_id(candidate_id) + num_clusters_];
         estimate = estimate_split_single_full_direct<Kernel>(
             bin_data(candidate_id),
             ex_data(candidate_id),
@@ -102,7 +102,7 @@ inline void HierarchicalNSW::estimate_full_direct(
         );
     } else {
         // L2 distance
-        const float residual_norm = q_to_centroids[cluster_id_of(candidate_id)];
+        const float residual_norm = q_to_centroids[stored_cluster_id(candidate_id)];
         estimate = estimate_split_single_full_direct<Kernel>(
             bin_data(candidate_id),
             ex_data(candidate_id),

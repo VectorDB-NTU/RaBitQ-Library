@@ -62,7 +62,7 @@ see [C++ integration](../cpp_integration.md).
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit; Python defaults to 8. Raw-vector storage is not supported. |
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. |
 | `metric`, `random_seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. |
-| `k`, `ef` | Positive result count and search window. Python requires `k <= max_elements`; omitted/zero `ef` uses `max(k, 10)`, and positive `ef` is raised to at least `k`. |
+| `k`, `ef` | Positive result count and search window. Python requires `k <= max_elements`; omitted/zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
 `random_seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
