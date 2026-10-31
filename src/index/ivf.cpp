@@ -640,15 +640,12 @@ void IVF::reserve(PID cluster_id, size_t num_points) {
         std::copy_n(old_cluster.ex_data(), ex_data_bytes(num), grown.ex_data());
     }
     std::copy_n(old_cluster.ids(), num, grown.ids());
-    std::vector<size_t> cluster_sizes(num_clusters_);
-    for (size_t i = 0; i < num_clusters_; ++i) {
-        cluster_sizes[i] = clusters_[i].num();
-    }
 
-    /* Commit. Rebuilding the cluster list reuses its capacity, so it cannot throw. */
+    /* Commit. Only this cluster's storage moved, so only its view changes. */
     cs = std::move(grown);
-    clusters_.clear();
-    init_clusters(cluster_sizes);
+    clusters_[cluster_id].reset(
+        num, cs.batch_data(), rerank_vector_bytes() > 0 ? cs.ex_data() : nullptr, cs.ids()
+    );
 }
 
 size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
