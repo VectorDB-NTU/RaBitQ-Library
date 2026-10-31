@@ -57,6 +57,8 @@ jobs:
           -Dpybind11_DIR="$pybind11_DIR"
       - name: Run clang-tidy
         run: ./scripts/check-tidy.sh build-tidy
+      - name: Check ISA-specific symbols with Clang
+        run: ./scripts/check-isa-symbols.sh build-tidy
 
   shellcheck:
     needs: changes
@@ -348,6 +350,8 @@ jobs:
           cmake --build build-install
       - name: Test portable Release build
         run: ctest --test-dir build-install --output-on-failure --no-tests=error
+      - name: Check ISA-specific symbols with GCC
+        run: ./scripts/check-isa-symbols.sh build-install
       - name: Download pinned Intel SDE
         run: |
           curl --fail --location --retry 3 --max-time 120 \
