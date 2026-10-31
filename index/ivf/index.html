@@ -2085,7 +2085,12 @@ accepts total quantized bit widths from 1 through 9, or <code>total_bits=32</cod
   using twice the standard RaBitQ error margin, and recomputes exact distances
   for the retained candidates. Returned distances are exact for those centroids, but
   routing is approximate: pruning can miss a true nearest centroid.</li>
-<li><code>hnsw</code> searches a graph of float32 centroids approximately.</li>
+<li><code>hnsw</code> searches a graph of float32 centroids approximately. It suits workloads
+  whose <code>nprobe</code> is much smaller than the cluster count. Graph construction can
+  leave a few centroids unreachable, so points stored in those clusters are not
+  returned at any <code>nprobe</code>, and an <code>nprobe</code> close to the cluster count raises an
+  error instead of probing every cluster. Use <code>flat</code> or <code>flat_rabitq</code> when a
+  query should probe most clusters.</li>
 </ul>
 <p>All choices support L2 and inner product. Flat RaBitQ uses the IVF-RaBitQ rotation and
 padded domain, retains float32 centroids for refinement, and stores its mean and
