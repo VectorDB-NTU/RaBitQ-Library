@@ -15,7 +15,7 @@
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::hnsw::HierarchicalNSW;
 using data_type = rabitqlib::RowMajorArray<float>;
-using gt_type = rabitqlib::RowMajorArray<uint32_t>;
+using cluster_ids_type = rabitqlib::RowMajorArray<uint32_t>;
 
 int run(int argc, char* argv[]) {
     if (argc < 8) {
@@ -36,7 +36,7 @@ int run(int argc, char* argv[]) {
 
     char* data_file = argv[1];
     char* centroid_file = argv[2];
-    char* cid_file = argv[3];
+    char* cluster_ids_file = argv[3];
     size_t m = atoi(argv[4]);
     size_t ef = atoi(argv[5]);
     size_t total_bits = atoi(argv[6]);
@@ -66,11 +66,11 @@ int run(int argc, char* argv[]) {
 
     data_type data;
     data_type centroids;
-    gt_type cluster_id;
+    cluster_ids_type cluster_ids;
 
     rabitqlib::load_vecs<float, data_type>(data_file, data);
     rabitqlib::load_vecs<float, data_type>(centroid_file, centroids);
-    rabitqlib::load_vecs<uint32_t, gt_type>(cid_file, cluster_id);
+    rabitqlib::load_vecs<uint32_t, cluster_ids_type>(cluster_ids_file, cluster_ids);
 
     size_t num_points = data.rows();
     size_t dim = data.cols();
@@ -88,7 +88,7 @@ int run(int argc, char* argv[]) {
         centroids.data(),
         num_points,
         data.data(),
-        cluster_id.data(),
+        cluster_ids.data(),
         0,
         faster_quant
     );

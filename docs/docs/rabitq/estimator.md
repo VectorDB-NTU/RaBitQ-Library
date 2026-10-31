@@ -17,7 +17,7 @@ factors. For API usage, see [Stable core API](core_api.md) or the advanced
 | $\mathbf{\bar o}$ | Unit-length quantized residual direction, expressed in the original padded domain. |
 | $\mathbf{q}_r'$ | The query in the quantized coordinate system: $\mathbf{q}_r'=P^{-1}\mathbf{q}_r$. |
 | $S_q$ | $S_q=\sum_{i=1}^{D} \mathbf{q}'_{r}[i].$ |
-| $\Delta_x$ | Residual-norm scale defined below; distinct from the estimator factor `F_rescale`. |
+| $\Delta_x$ | Residual-norm scale defined below; distinct from the estimator factor `f_rescale`. |
 | $\mathbf{x}_u$ | Unsigned integer codes.|
 
 ## Quantization
@@ -91,16 +91,17 @@ $$
 \end{align}
 $$
 
-Store the following factors (`F_` for data and `G_` for the query).
+Store the following factors. Data factors use the `f_` accessors of the code layouts;
+query factors use the `g_` accessors of the prepared query objects.
 
 | Name (Type) of Variable | Description |
 | ----------------- | ----------- |
-| `F_add (float)`| $\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}$ |
-| `F_rescale (float)`| $-2\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}$|
-| `F_error (float)`| $\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}$|
-| `G_add (float)`| $\|\mathbf{q}_r-\mathbf{c}\|^2$ |
-| `G_kBxSumq (float)`| $c_BS_q$|
-| `G_error (float)`| $\| \mathbf{q}_r-\mathbf{c}\|$|
+| `f_add (float)`| $\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}$ |
+| `f_rescale (float)`| $-2\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}$|
+| `f_error (float)`| $\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}$|
+| `g_add (float)`| $\|\mathbf{q}_r-\mathbf{c}\|^2$ |
+| `g_kbxsumq (float)`| $c_BS_q$|
+| `g_error (float)`| $\| \mathbf{q}_r-\mathbf{c}\|$|
 
 ### Estimator of inner product
 
@@ -126,17 +127,18 @@ $$
 \end{align}
 $$
 
-Store the following factors (`F_` for data and `G_` for the query).
+Store the following factors. Data factors use the `f_` accessors of the code layouts;
+query factors use the `g_` accessors of the prepared query objects.
 
 | Name (Type) of Variable | Description |
 | ----------------- | ----------- |
-| `F_add (float)`| $1-\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right>+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}$ |
-| `F_rescale (float)`| $-\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}$|
-| `F_error (float)`| $\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}$|
-| `G_add (float)`| $-\left< \mathbf{q}_r,\mathbf{c}\right>$ |
-| `G_kBxSumq (float)`| $c_BS_q$|
-| `G_k1xSumq (float)`| $c_1S_q$|
-| `G_error (float)`| $\| \mathbf{q}_r-\mathbf{c}\|$|
+| `f_add (float)`| $1-\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right>+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}$ |
+| `f_rescale (float)`| $-\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}$|
+| `f_error (float)`| $\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}$|
+| `g_add (float)`| $-\left< \mathbf{q}_r,\mathbf{c}\right>$ |
+| `g_kbxsumq (float)`| $c_BS_q$|
+| `g_k1xsumq (float)`| $c_1S_q$|
+| `g_error (float)`| $\| \mathbf{q}_r-\mathbf{c}\|$|
 
 ## Implementation
 
@@ -150,25 +152,25 @@ when $B=1$.
 ```cpp
 
 // Compute the estimated distance
-// Note that G_add is dependent on the centroid.
-float estimated_distance = F_add + G_add + F_rescale * (ip + G_kBxSumq);
+// Note that g_add is dependent on the centroid.
+float estimated_distance = f_add + g_add + f_rescale * (ip + g_kbxsumq);
 
-// Compute the error bound 
-// Note that G_error is dependent on the centroid.
-float error_bound = F_error * G_error;
+// Compute the error bound
+// Note that g_error is dependent on the centroid.
+float error_bound = f_error * g_error;
 
 // Compute the lower and upper bounds of the estimated distance
-float lb_dist = estimated_distance - error_bound;
-float ub_dist = estimated_distance + error_bound;
+float lower_bound = estimated_distance - error_bound;
+float upper_bound = estimated_distance + error_bound;
 ```
 
 ### Incremental distance estimation
 
 Split codes separate the sign bit from the remaining $B-1$ extra bits.
 Score the sign code first, then refine selected candidates with the extra bits.
-Each part has its own factors. The binary layout stores `F_add`,
-`F_rescale`, and `F_error`; the extended layout stores `F_add_ex` and
-`F_rescale_ex`. For $B>1$, the logical codes satisfy
+Each part has its own factors. The binary layout stores `f_add`,
+`f_rescale`, and `f_error`; the extended layout stores `f_add_ex` and
+`f_rescale_ex`. For $B>1$, the logical codes satisfy
 $\mathbf{x}_u=2^{B-1}\mathbf{x}_{\mathrm{bin}}+\mathbf{x}_{\mathrm{ex}}$,
 which gives the refined distance formula below.
 
@@ -176,8 +178,8 @@ The split-code implementation uses the binary error factor divided by
 $2^{B-1}$ as its refined pruning margin. This is an approximation, not an
 identity for the full-code error factor in the tables above: that factor depends
 on the full-code direction's own $\langle\mathbf{\bar o},\mathbf{o}\rangle$.
-The split layout does not store a separate `F_error_ex`.
-The query factors are `G_add`, `G_error`, `G_kBxSumq` and `G_k1xSumq`.
+The split layout does not store a separate `f_error_ex`.
+The query factors are `g_add`, `g_error`, `g_kbxsumq` and `g_k1xsumq`.
 Here `ip_bin` and `ip_ex` are the inner products of the sign and extra-bit
 codes, respectively, with the rotated query.
 These equations use exact code/query inner products. Binary filtering may instead
@@ -187,17 +189,17 @@ that additional error.
 
 ```cpp
 // 1-bit dist
-float estimated_distance = F_add + G_add + F_rescale * (ip_bin + G_k1xSumq);
-float bound = F_error * G_error;
-float ub_dist = estimated_distance + bound;
-float lb_dist = estimated_distance - bound;
+float estimated_distance = f_add + g_add + f_rescale * (ip_bin + g_k1xsumq);
+float error_bound = f_error * g_error;
+float upper_bound = estimated_distance + error_bound;
+float lower_bound = estimated_distance - error_bound;
 
 // boost to full-bit dist
 float ex_scale = static_cast<float>(1 << (bits - 1));
-float ex_est_dist =
-    F_add_ex + G_add +
-    F_rescale_ex * (ex_scale * ip_bin + ip_ex + G_kBxSumq);
-float ex_bound = F_error * G_error / ex_scale;
-float ex_ub_dist = ex_est_dist + ex_bound;
-float ex_lb_dist = ex_est_dist - ex_bound;
+float estimated_distance_ex =
+    f_add_ex + g_add +
+    f_rescale_ex * (ex_scale * ip_bin + ip_ex + g_kbxsumq);
+float error_bound_ex = f_error * g_error / ex_scale;
+float upper_bound_ex = estimated_distance_ex + error_bound_ex;
+float lower_bound_ex = estimated_distance_ex - error_bound_ex;
 ```

@@ -436,7 +436,7 @@ TEST(XyQuantizationTest, StorageCostsBasePlusExtraBitsOnly) {
 
 // End-to-end backward-compat check: at base_bits=1, quantize_xy_single +
 // xy_single_base_dist + split_distance_boosting must agree with today's production
-// formula ((1<<ex_bits)*ip_x0_qr + ip_func_(ex_code) + kbxsumq), using a
+// formula ((1<<ex_bits)*ip_x0_qr + ip_func_(ex_code) + g_kbxsumq), using a
 // plain reference dot product in place of the popcount kernel for ip_x0_qr.
 // xy_single_full_dist must land on the same estimate and, like
 // split_single_fulldist_direct, bound it with f_error_base / 2^ex_bits.

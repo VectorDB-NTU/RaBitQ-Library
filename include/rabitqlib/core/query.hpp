@@ -104,12 +104,12 @@ class SplitSingleQuery {
 
     [[nodiscard]] T vl() const { return vl_; }
 
-    [[nodiscard]] T k1xsumq() const { return G_k1xSumq_; }
+    [[nodiscard]] T g_k1xsumq() const { return G_k1xSumq_; }
 
-    // Equals k1xsumq() when base_bits == 1.
-    [[nodiscard]] T kbase_sumq() const { return G_kbaseSumq_; }
+    // Equals g_k1xsumq() when base_bits == 1.
+    [[nodiscard]] T g_kbase_sumq() const { return G_kbaseSumq_; }
 
-    [[nodiscard]] T kbxsumq() const { return G_kbxSumq_; }
+    [[nodiscard]] T g_kbxsumq() const { return G_kbxSumq_; }
 
     [[nodiscard]] T g_add() const { return G_add_; }
 

@@ -47,12 +47,12 @@ inline void split_batch_estdist_impl(
     const float delta = query_wrapper.delta();
     const float sum_vl_lut = query_wrapper.sum_vl_lut();
     const float g_add = query_wrapper.g_add();
-    const float k1xsumq = query_wrapper.k1xsumq();
+    const float g_k1xsumq = query_wrapper.g_k1xsumq();
     const float g_error = query_wrapper.g_error();
     for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
         const float ip = delta * static_cast<float>(accumulated_values[lane]) + sum_vl_lut;
         const float estimated =
-            f_add_values[lane] + g_add + f_rescale_values[lane] * (ip + k1xsumq);
+            f_add_values[lane] + g_add + f_rescale_values[lane] * (ip + g_k1xsumq);
         ip_x0_qr[lane] = ip;
         estimated_distances[lane] = estimated;
         lower_bounds[lane] = estimated - f_error_values[lane] * g_error;
