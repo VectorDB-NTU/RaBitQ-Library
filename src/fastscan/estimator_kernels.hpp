@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/fastscan/data_layout.hpp"
 #include "rabitqlib/fastscan/pack_codes.hpp"
 #include "rabitqlib/fastscan/query.hpp"
@@ -12,7 +11,10 @@
 namespace rabitqlib::simd {
 namespace {
 // Compile the complete batch estimator at each ISA so accumulation conversion and
-// factor correction use the same vector width as the scanning kernels.
+// factor correction use the same vector width as the scanning kernels. The
+// correction is written as plain loops so each backend vectorizes it with its own
+// flags: an Eigen expression here would instantiate identically named weak helper
+// functions in every ISA translation unit, and the linker keeps one copy for all.
 template <auto Accumulate, auto AccumulateHacc>
 inline void split_batch_estdist_impl(
     const char* batch_data,
@@ -25,9 +27,6 @@ inline void split_batch_estdist_impl(
 ) {
     ConstBatchDataMap<float> cur_batch(batch_data, padded_dim);
     std::array<int32_t, fastscan::kBatchSize> accumulated_values{};
-    RowMajorArrayMap<int32_t> accumulated_arr(
-        accumulated_values.data(), 1, fastscan::kBatchSize
-    );
     if (use_hacc) {
         AccumulateHacc(
             cur_batch.bin_code(), query_wrapper.lut(), accumulated_values.data(), padded_dim
@@ -44,27 +43,20 @@ inline void split_batch_estdist_impl(
     cur_batch.f_add().copy_to(f_add_values.data(), f_add_values.size());
     cur_batch.f_rescale().copy_to(f_rescale_values.data(), f_rescale_values.size());
     cur_batch.f_error().copy_to(f_error_values.data(), f_error_values.size());
-    ConstRowMajorArrayMap<float> f_add_arr(f_add_values.data(), 1, fastscan::kBatchSize);
-    ConstRowMajorArrayMap<float> f_rescale_arr(
-        f_rescale_values.data(), 1, fastscan::kBatchSize
-    );
-    ConstRowMajorArrayMap<float> f_error_arr(
-        f_error_values.data(), 1, fastscan::kBatchSize
-    );
 
-    RowMajorArrayMap<float> estimated_distances_arr(
-        estimated_distances, 1, fastscan::kBatchSize
-    );
-    RowMajorArrayMap<float> ip_x0_qr_arr(ip_x0_qr, 1, fastscan::kBatchSize);
-    RowMajorArrayMap<float> lower_bounds_arr(lower_bounds, 1, fastscan::kBatchSize);
-
-    ip_x0_qr_arr = query_wrapper.delta() * (accumulated_arr.template cast<float>()) +
-                   query_wrapper.sum_vl_lut();
-
-    estimated_distances_arr = f_add_arr + query_wrapper.g_add() +
-                              f_rescale_arr * (ip_x0_qr_arr + query_wrapper.k1xsumq());
-
-    lower_bounds_arr = estimated_distances_arr - f_error_arr * query_wrapper.g_error();
+    const float delta = query_wrapper.delta();
+    const float sum_vl_lut = query_wrapper.sum_vl_lut();
+    const float g_add = query_wrapper.g_add();
+    const float k1xsumq = query_wrapper.k1xsumq();
+    const float g_error = query_wrapper.g_error();
+    for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
+        const float ip = delta * static_cast<float>(accumulated_values[lane]) + sum_vl_lut;
+        const float estimated =
+            f_add_values[lane] + g_add + f_rescale_values[lane] * (ip + k1xsumq);
+        ip_x0_qr[lane] = ip;
+        estimated_distances[lane] = estimated;
+        lower_bounds[lane] = estimated - f_error_values[lane] * g_error;
+    }
 }
 
 }  // namespace

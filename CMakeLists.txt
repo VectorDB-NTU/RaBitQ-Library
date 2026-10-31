@@ -63,11 +63,13 @@ endif()
 if(RABITQ_ENABLE_SANITIZERS)
     # Keep sanitizer instrumentation consistent across public inline code and
     # compiled components, including their runtime linkage.
+    # float-cast-overflow and float-divide-by-zero are not part of "undefined";
+    # quantization converts floats to integers, so enable them explicitly.
     target_compile_options(rabitq_compile_options INTERFACE
-        "$<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-fsanitize=address,undefined;-fno-omit-frame-pointer>"
+        "$<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-fsanitize=address,undefined,float-cast-overflow,float-divide-by-zero;-fno-omit-frame-pointer>"
     )
     target_link_options(rabitq_compile_options INTERFACE
-        $<$<CXX_COMPILER_ID:Clang,GNU>:-fsanitize=address,undefined>
+        $<$<CXX_COMPILER_ID:Clang,GNU>:-fsanitize=address,undefined,float-cast-overflow,float-divide-by-zero>
     )
 endif()
 
@@ -281,6 +283,7 @@ install(DIRECTORY include/rabitqlib/core DESTINATION "${rabitq_include_dir}")
 install(FILES
     include/rabitqlib/utils/bitops.hpp
     include/rabitqlib/utils/cpu_features.hpp
+    include/rabitqlib/utils/input_checks.hpp
     include/rabitqlib/utils/memory.hpp
     include/rabitqlib/utils/openmp.hpp
     include/rabitqlib/utils/packed.hpp

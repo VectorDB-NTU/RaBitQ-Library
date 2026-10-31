@@ -35,6 +35,7 @@
 #include "rabitqlib/index/detail/visited_pool.hpp"
 #include "rabitqlib/index/hnsw/hnsw_quant.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -518,6 +519,8 @@ void HierarchicalNSW::construct(
             throw std::invalid_argument("HNSW cluster ID is out of range");
         }
     }
+    check_coordinates(data, num_points * dim_, dim_, "HNSW construction data");
+    check_coordinates(centroids, num_clusters * dim_, dim_, "HNSW construction centroids");
 
     try {
         num_clusters_ = num_clusters;
@@ -913,6 +916,12 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     if (k == 0) {
         throw std::invalid_argument("HNSW k must be greater than zero");
     }
+    if (num_queries != 0) {
+        if (queries == nullptr) {
+            throw std::invalid_argument("HNSW search queries must not be null");
+        }
+        check_coordinates(queries, num_queries * dim_, dim_, "HNSW search queries");
+    }
     std::vector<std::vector<std::pair<float, PID>>> results(num_queries);
     index_detail::parallel_for(
         0,
@@ -1290,6 +1299,7 @@ std::vector<PID> HierarchicalNSW::add(
     if (num_points > buffer::kSearchBufferMaxPointCount - num_stored_points_) {
         throw std::invalid_argument("HNSW add point count exceeds the supported ID range");
     }
+    check_coordinates(data, num_points * dim_, dim_, "HNSW add data");
     std::vector<PID> labels(num_points);
     // Either the caller names the cluster of every point, or each one goes to its
     // nearest centroid, ordered the way a query is routed.

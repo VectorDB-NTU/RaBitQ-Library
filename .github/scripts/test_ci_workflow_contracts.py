@@ -89,6 +89,7 @@ class WorkflowContractsTest(unittest.TestCase):
             ]
 
         artifacts = set()
+        verdicts = set()
         for prefix, tag, check_name in (
             ("linux", "manylinux_x86_64", "Linux x86-64 wheels"),
             (
@@ -131,21 +132,64 @@ class WorkflowContractsTest(unittest.TestCase):
                     self.assertNotIn("continue-on-error", entry)
                 gate = job(workflow, f"{prefix}-wheels")
                 self.assertEqual(gate["name"], check_name)
-                self.assertEqual(needs(gate), [f"{prefix}-wheel-build"])
+                # The gate always runs so that a build skipped because the
+                # eligibility check failed cannot satisfy the required check.
+                self.assertEqual(
+                    needs(gate), ["prepare", "changes", f"{prefix}-wheel-build"]
+                )
+                self.assertEqual(gate["if"], "${{ always() }}")
                 (verdict_step,) = steps(gate)
                 self.assertEqual(
-                    verdict_step["env"]["BUILD_RESULT"],
-                    f"${{{{ needs.{prefix}-wheel-build.result }}}}",
+                    verdict_step["env"],
+                    {
+                        "PREPARE_RESULT": "${{ needs.prepare.result }}",
+                        "BUILD_SELECTED": "${{ needs.prepare.outputs.build }}",
+                        "CHANGES_RESULT": "${{ needs.changes.result }}",
+                        "WHEELS_SELECTED": "${{ needs.changes.outputs.wheels }}",
+                        "BUILD_RESULT": f"${{{{ needs.{prefix}-wheel-build.result }}}}",
+                    },
                 )
-                for result in ("success", "failure", "cancelled", "skipped", ""):
-                    with self.subTest(result=result):
-                        verdict = subprocess.run(
-                            ["bash", "-e", "-c", verdict_step["run"]],
-                            env=dict(os.environ, BUILD_RESULT=result),
-                            capture_output=True,
-                            check=False,
-                        )
-                        self.assertEqual(verdict.returncode == 0, result == "success")
+                verdicts.add(verdict_step["run"])
+        # One shared verdict script, exercised over every input combination.
+        (command,) = verdicts
+        results = ("success", "failure", "cancelled", "skipped", "")
+        for prepare in results:
+            for selected in ("true", "false", ""):
+                for changes in results:
+                    for wheels in ("true", "false", ""):
+                        for build in results:
+                            if build == "success":
+                                expected = True
+                            elif build != "skipped":
+                                expected = False
+                            elif prepare == "skipped":
+                                expected = True  # excluded by the workflow_run filter
+                            else:
+                                expected = prepare == "success" and (
+                                    selected == "false"
+                                    or (changes == "success" and wheels == "false")
+                                )
+                            with self.subTest(
+                                prepare=prepare,
+                                selected=selected,
+                                changes=changes,
+                                wheels=wheels,
+                                build=build,
+                            ):
+                                verdict = subprocess.run(
+                                    ["bash", "-e", "-c", command],
+                                    env=dict(
+                                        os.environ,
+                                        PREPARE_RESULT=prepare,
+                                        BUILD_SELECTED=selected,
+                                        CHANGES_RESULT=changes,
+                                        WHEELS_SELECTED=wheels,
+                                        BUILD_RESULT=build,
+                                    ),
+                                    capture_output=True,
+                                    check=False,
+                                )
+                                self.assertEqual(verdict.returncode == 0, expected)
 
     def test_installed_typing_checks_are_required(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text())

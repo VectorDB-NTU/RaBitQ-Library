@@ -1289,17 +1289,24 @@ TEST(QGKMeansTest, RejectsInvalidNativeParametersBeforeAllocation) {
 
 namespace rabitqlib::qgkmeans {
 TEST(QGAssignerTest, PropagatesSearchFailureFromWorkers) {
+    // Out-of-range queries are rejected by the per-query search entry that each
+    // worker calls, so the failure originates inside the parallel region.
     const std::vector<float> centroids(33 * 64, 0.0F);
     const std::vector<float> data(128 * 64, 1e19F);
     std::vector<PID> assignments(128, kPidMax);
     std::vector<float> distances(128, -1.0F);
     QGAssigner assigner(64, 33, 32, 33, 33, 1, 2);
-    EXPECT_THROW(
+    try {
         assigner.assign(
             centroids.data(), data.data(), 128, assignments.data(), distances.data()
-        ),
-        std::runtime_error
-    );
+        );
+        ADD_FAILURE() << "expected the worker failure to propagate";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(
+            error.what(),
+            "QuantizedGraph search query exceeds the safe float32 coordinate range"
+        );
+    }
     EXPECT_EQ(assignments.front(), kPidMax);
     EXPECT_EQ(distances.front(), -1.0F);
 }

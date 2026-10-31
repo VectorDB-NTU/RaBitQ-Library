@@ -165,11 +165,14 @@ Clang:
 
 It recompiles the library sources from `compile_commands.json` with that build's flags
 (extra arguments such as `-O1` are appended) and fails when copies of a weak function
-differ between ISA flag sets. Only the Release (`-O3`) configuration is clean and checked.
-Lower optimization levels emit helpers the compiler otherwise inlines: Debug (`-O0`)
-emits many standard-library and Eigen functions per source, and GCC at `-O1`/`-O2`
-still shares two Eigen assignment loops between the FastScan estimator sources. The
-script only sees `src/`, needs GNU binutils, and does not cover MSVC or ARM-only builds.
+differ between ISA flag sets. CI checks the Release (`-O3`) configuration; with GCC 14
+the check also passes at `-O1` and `-O2 -g`, which is what the sanitizer and
+RelWithDebInfo configurations compile. Debug (`-O0`) still emits standard-library
+helpers (`std::min`, `std::round`, `std::fill`) per source and is not clean. The FastScan
+estimator correction is written as plain loops rather than Eigen expressions so that no
+ISA source instantiates a shared Eigen helper; keep it that way, since a static library
+only hides such sharing while its generic objects precede the ISA objects. The script
+only sees `src/`, needs GNU binutils, and does not cover MSVC or ARM-only builds.
 
 ### Static analysis
 
@@ -330,6 +333,16 @@ mode; it does not mean the full pre-merge check passed.
 Keep validation at the public operation boundary and reuse only invariants established
 for that operation. Buffer contents and per-record factors may change between calls:
 validate them again even when reusing a query or workspace.
+
+**Index inputs**
+
+Every index entry point that accepts float data, centroids or queries calls
+`check_coordinates` from `utils/input_checks.hpp` after its shape checks and before
+mutating state: non-finite values and magnitudes above the clustering bound raise
+`std::invalid_argument`. The core `quantize_*` encoders and `Lut` rely on that (the
+LUT additionally rejects non-finite rotated queries) because quantization converts
+floats to integers, which is undefined for NaN. Keep the check at the boundary rather
+than inside per-vector kernels.
 
 **Python conversion**
 

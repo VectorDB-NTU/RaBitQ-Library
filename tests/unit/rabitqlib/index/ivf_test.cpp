@@ -27,6 +27,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "temp_file.hpp"
 
 namespace rabitqlib::ivf {
@@ -1442,6 +1443,109 @@ TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
     for (size_t r = 0; r < kCount; ++r) {
         EXPECT_EQ(hits.ids[r], kPidMax);
     }
+}
+
+TEST(IvfInputTest, RejectsNonFiniteAndOversizedCoordinatesBeforeMutation) {
+    constexpr size_t kCount = 40;
+    const auto points = random_rows(kCount, 901);
+    const auto centroids = random_rows(kDynNumClusters, 902);
+    std::vector<PID> assigned(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        assigned[i] = static_cast<PID>(i % kDynNumClusters);
+    }
+    const float bound = max_coordinate_magnitude(kDynDim);
+    const std::array<float, 4> rejected{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+        2.0F * bound,
+    };
+    const auto message_for = [](float value, const char* what) {
+        return std::string(what) + (std::isfinite(value)
+                                        ? " exceeds the safe float32 coordinate range"
+                                        : " must contain only finite values");
+    };
+    const auto expect_message = [](const auto& call, const std::string& message) {
+        try {
+            call();
+            ADD_FAILURE() << "expected: " << message;
+        } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+    };
+
+    IVF index(kCount, kDynDim, kDynNumClusters, 4);
+    for (float value : rejected) {
+        auto bad_points = points;
+        bad_points[kDynDim + 3] = value;
+        expect_message(
+            [&] {
+                index.construct(
+                    bad_points.data(), centroids.data(), assigned.data(), false, 1
+                );
+            },
+            message_for(value, "IVF construction data")
+        );
+        auto bad_centroids = centroids;
+        bad_centroids.back() = value;
+        expect_message(
+            [&] {
+                index.construct(
+                    points.data(), bad_centroids.data(), assigned.data(), false, 1
+                );
+            },
+            message_for(value, "IVF construction centroids")
+        );
+        EXPECT_EQ(index.num_points(), 0U);
+    }
+    ASSERT_NO_THROW(
+        index.construct(points.data(), centroids.data(), assigned.data(), false, 1)
+    );
+    ASSERT_EQ(index.num_points(), kCount);
+
+    const auto extra = random_rows(2, 903);
+    const auto queries = random_rows(2, 904);
+    std::vector<PID> result_ids(2 * 3);
+    std::vector<float> distances(2 * 3);
+    for (float value : rejected) {
+        auto bad_extra = extra;
+        bad_extra[kDynDim] = value;
+        expect_message(
+            [&] { index.add(bad_extra.data(), 2, nullptr, false, 1); },
+            message_for(value, "IVF add data")
+        );
+        EXPECT_EQ(index.num_points(), kCount);
+        auto bad_query = queries;
+        bad_query[0] = value;
+        expect_message(
+            [&] {
+                index.search(bad_query.data(), 3, 1, result_ids.data(), distances.data());
+            },
+            message_for(value, "IVF search query")
+        );
+        auto bad_batch = queries;
+        bad_batch[kDynDim + 1] = value;
+        expect_message(
+            [&] {
+                index.search_batch(
+                    bad_batch.data(), 2, 3, 1, result_ids.data(), distances.data()
+                );
+            },
+            message_for(value, "IVF search queries")
+        );
+    }
+    // The bound itself is accepted everywhere.
+    auto edge = extra;
+    edge[0] = bound;
+    edge[kDynDim] = -bound;
+    ASSERT_NO_THROW(index.add(edge.data(), 2, nullptr, false, 1));
+    EXPECT_EQ(index.num_points(), kCount + 2);
+    auto edge_query = queries;
+    edge_query[0] = bound;
+    ASSERT_NO_THROW(
+        index.search(edge_query.data(), 3, 1, result_ids.data(), distances.data())
+    );
+    ASSERT_NO_THROW(
+        index.search_batch(edge_query.data(), 2, 3, 1, result_ids.data(), distances.data())
+    );
 }
 
 }  // namespace

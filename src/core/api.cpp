@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory_resource>
 #include <numeric>
@@ -17,6 +16,7 @@
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/pack_excode.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::quant::v1 {
@@ -94,18 +94,7 @@ void check_input(const float* input, size_t dim) {
     check_buffer<alignof(float)>(
         {input, checked_multiply(dim, sizeof(float))}, checked_multiply(dim, sizeof(float))
     );
-    static_assert(
-        sizeof(float) == sizeof(uint32_t) && std::numeric_limits<float>::is_iec559
-    );
-    // An integer reduction lets portable builds check several float32 values
-    // per instruction without relaxing floating-point compiler options.
-    uint32_t nonfinite = 0;
-    for (size_t i = 0; i < dim; ++i) {
-        uint32_t bits;
-        std::memcpy(&bits, input + i, sizeof(bits));
-        nonfinite |= static_cast<uint32_t>((bits & 0x7f800000U) == 0x7f800000U);
-    }
-    if (nonfinite != 0) {
+    if (!all_finite(input, dim)) {
         throw std::invalid_argument("Input vectors must contain only finite values");
     }
 }

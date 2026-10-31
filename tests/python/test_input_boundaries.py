@@ -277,3 +277,62 @@ def test_array_conversion_reports_target_dtype(built_index, value, description):
         == "queries must be convertible to a NumPy array of dtype float32; got "
         + description
     )
+
+
+@pytest.mark.parametrize(
+    "value,message",
+    [
+        (np.nan, "must contain only finite values"),
+        (np.inf, "must contain only finite values"),
+        (-np.inf, "must contain only finite values"),
+        (1e30, "exceeds the safe float32 coordinate range"),
+    ],
+)
+def test_nonfinite_or_oversized_coordinates_are_rejected(built_index, value, message):
+    index, queries = built_index
+    before = index.num_points
+    bad_queries = np.array(queries, copy=True)
+    bad_queries[1, 3] = value
+    with pytest.raises(ValueError, match=message):
+        index.search(bad_queries, 3, 32)
+    extra = np.random.default_rng(7).normal(size=(2, 64)).astype(np.float32)
+    extra[0, 0] = value
+    if isinstance(index, IvfIndex):
+        with pytest.raises(ValueError, match=message):
+            index.add(extra)
+    elif isinstance(index, HnswIndex):
+        # The shared fixture is at capacity, which is checked before coordinates.
+        data = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
+        spare = HnswIndex(64, 82, nbits=4)
+        spare.build(
+            data, data.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32)
+        )
+        with pytest.raises(ValueError, match=message):
+            spare.add(extra)
+        assert spare.num_points == 80
+    assert index.num_points == before
+    ids, distances = index.search(queries, 3, 32)
+    assert ids.shape == (2, 3) and np.all(np.isfinite(distances))
+
+
+@pytest.mark.parametrize("index_kind", ["ivf", "hnsw", "symqg"])
+@pytest.mark.parametrize("value", [np.nan, np.inf, 1e30])
+def test_build_rejects_bad_coordinates_without_building(index_kind, value):
+    data = np.random.default_rng(3).normal(size=(80, 64)).astype(np.float32)
+    bad_data = data.copy()
+    bad_data[5, 3] = value
+    if index_kind == "symqg":
+        index = SymqgIndex(64, 32)
+        with pytest.raises(ValueError):
+            index.build(bad_data, 40)
+    else:
+        centroid = data.mean(axis=0, keepdims=True)
+        ids = np.zeros(80, dtype=np.uint32)
+        index = IvfIndex(64, 80, 1, 4) if index_kind == "ivf" else HnswIndex(64, 80)
+        with pytest.raises(ValueError):
+            index.build(bad_data, centroid, ids)
+        bad_centroid = centroid.copy()
+        bad_centroid[0, 0] = value
+        with pytest.raises(ValueError):
+            index.build(data, bad_centroid, ids)
+    assert not index.is_built

@@ -85,16 +85,43 @@ jobs:
           if-no-files-found: error
 
   linux-wheels:
-    # Preserve the required check name and include every selected ABI.
+    # Preserve the required check name and include every selected ABI. The gate
+    # always runs: a skipped build passes only when nothing selected it, never
+    # because the eligibility check failed.
     name: Linux x86-64 wheels
-    needs: linux-wheel-build
-    if: ${{ always() && !cancelled() && needs.linux-wheel-build.result != 'skipped' }}
+    needs: [prepare, changes, linux-wheel-build]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all selected wheels
         env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_SELECTED: ${{ needs.prepare.outputs.build }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WHEELS_SELECTED: ${{ needs.changes.outputs.wheels }}
           BUILD_RESULT: ${{ needs.linux-wheel-build.result }}
-        run: test "$BUILD_RESULT" = success
+        run: |
+          if [ "$BUILD_RESULT" = success ]; then
+            exit 0
+          fi
+          if [ "$BUILD_RESULT" != skipped ]; then
+            exit 1
+          fi
+          # A skipped build passes when the eligibility check excluded this run,
+          # ran and selected no build, or a pull request changed nothing
+          # wheel-related. A failed eligibility check keeps the gate red.
+          if [ "$PREPARE_RESULT" = skipped ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$BUILD_SELECTED" = false ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$CHANGES_RESULT" = success ] &&
+             [ "$WHEELS_SELECTED" = false ]; then
+            exit 0
+          fi
+          exit 1
 
   linux-arm64-wheel-build:
     name: Linux ARM64 wheel builds
@@ -129,14 +156,39 @@ jobs:
 
   linux-arm64-wheels:
     name: Linux ARM64 wheels (CPython 3.11–3.14)
-    needs: linux-arm64-wheel-build
-    if: ${{ always() && !cancelled() && needs.linux-arm64-wheel-build.result != 'skipped' }}
+    needs: [prepare, changes, linux-arm64-wheel-build]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all selected wheels
         env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_SELECTED: ${{ needs.prepare.outputs.build }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WHEELS_SELECTED: ${{ needs.changes.outputs.wheels }}
           BUILD_RESULT: ${{ needs.linux-arm64-wheel-build.result }}
-        run: test "$BUILD_RESULT" = success
+        run: |
+          if [ "$BUILD_RESULT" = success ]; then
+            exit 0
+          fi
+          if [ "$BUILD_RESULT" != skipped ]; then
+            exit 1
+          fi
+          # A skipped build passes when the eligibility check excluded this run,
+          # ran and selected no build, or a pull request changed nothing
+          # wheel-related. A failed eligibility check keeps the gate red.
+          if [ "$PREPARE_RESULT" = skipped ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$BUILD_SELECTED" = false ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$CHANGES_RESULT" = success ] &&
+             [ "$WHEELS_SELECTED" = false ]; then
+            exit 0
+          fi
+          exit 1
 
   windows-wheel-build:
     # Windows wheels take longest, so each ABI builds on its own runner.
@@ -174,14 +226,39 @@ jobs:
 
   windows-wheels:
     name: Windows x86-64 wheels
-    needs: windows-wheel-build
-    if: ${{ always() && !cancelled() && needs.windows-wheel-build.result != 'skipped' }}
+    needs: [prepare, changes, windows-wheel-build]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all selected wheels
         env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_SELECTED: ${{ needs.prepare.outputs.build }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WHEELS_SELECTED: ${{ needs.changes.outputs.wheels }}
           BUILD_RESULT: ${{ needs.windows-wheel-build.result }}
-        run: test "$BUILD_RESULT" = success
+        run: |
+          if [ "$BUILD_RESULT" = success ]; then
+            exit 0
+          fi
+          if [ "$BUILD_RESULT" != skipped ]; then
+            exit 1
+          fi
+          # A skipped build passes when the eligibility check excluded this run,
+          # ran and selected no build, or a pull request changed nothing
+          # wheel-related. A failed eligibility check keeps the gate red.
+          if [ "$PREPARE_RESULT" = skipped ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$BUILD_SELECTED" = false ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$CHANGES_RESULT" = success ] &&
+             [ "$WHEELS_SELECTED" = false ]; then
+            exit 0
+          fi
+          exit 1
 
   macos-wheel-build:
     name: macOS arm64 wheel builds
@@ -218,14 +295,39 @@ jobs:
   macos-wheels:
     # Preserve the protected check name; PRs test the oldest and newest ABI.
     name: macOS arm64 wheels (CPython 3.11–3.14)
-    needs: macos-wheel-build
-    if: ${{ always() && !cancelled() && needs.macos-wheel-build.result != 'skipped' }}
+    needs: [prepare, changes, macos-wheel-build]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require all selected wheels
         env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_SELECTED: ${{ needs.prepare.outputs.build }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WHEELS_SELECTED: ${{ needs.changes.outputs.wheels }}
           BUILD_RESULT: ${{ needs.macos-wheel-build.result }}
-        run: test "$BUILD_RESULT" = success
+        run: |
+          if [ "$BUILD_RESULT" = success ]; then
+            exit 0
+          fi
+          if [ "$BUILD_RESULT" != skipped ]; then
+            exit 1
+          fi
+          # A skipped build passes when the eligibility check excluded this run,
+          # ran and selected no build, or a pull request changed nothing
+          # wheel-related. A failed eligibility check keeps the gate red.
+          if [ "$PREPARE_RESULT" = skipped ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$BUILD_SELECTED" = false ]; then
+            exit 0
+          fi
+          if [ "$PREPARE_RESULT" = success ] && [ "$CHANGES_RESULT" = success ] &&
+             [ "$WHEELS_SELECTED" = false ]; then
+            exit 0
+          fi
+          exit 1
 
   release-tag:
     name: Create version tag

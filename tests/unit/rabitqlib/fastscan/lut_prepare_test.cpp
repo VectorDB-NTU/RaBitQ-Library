@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
@@ -262,5 +263,36 @@ TEST(FastScanLutPreparationTest, FloatLutPreservesStandardAndHaccCodes) {
 TEST(FastScanLutPreparationTest, DoubleLutRetainsOriginalPreparation) {
     check_prepared_lut<double>();
 }
+
+TEST(FastScanLutPreparationTest, RejectsNonFiniteQueriesForFloatAndDouble) {
+    constexpr size_t kPaddedDim = 64;
+    const std::vector<float> query(kPaddedDim, 0.5F);
+    const std::vector<double> double_query(kPaddedDim, 0.5);
+    const float poison[] = {
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+    };
+    for (float value : poison) {
+        auto bad = query;
+        bad[7] = value;
+        EXPECT_THROW((Lut<float>(bad.data(), kPaddedDim)), std::invalid_argument);
+        EXPECT_THROW((Lut<float>(bad.data(), kPaddedDim, true)), std::invalid_argument);
+        auto bad_double = double_query;
+        bad_double[7] = static_cast<double>(value);
+        EXPECT_THROW((Lut<double>(bad_double.data(), kPaddedDim)), std::invalid_argument);
+        EXPECT_THROW(
+            (Lut<double>(bad_double.data(), kPaddedDim, true)), std::invalid_argument
+        );
+    }
+    // A rejected reset keeps the previously prepared table.
+    Lut<float> lut(query.data(), kPaddedDim);
+    std::vector<float> scratch(kPaddedDim * 4);
+    auto bad = query;
+    bad[0] = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_THROW(lut.reset(bad.data(), kPaddedDim, scratch.data()), std::invalid_argument);
+    EXPECT_EQ(lut.padded_dim(), kPaddedDim);
+}
+
 }  // namespace
 }  // namespace rabitqlib::fastscan
