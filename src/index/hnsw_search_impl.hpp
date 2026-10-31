@@ -256,7 +256,8 @@ inline void HierarchicalNSW::search_base_layer_direct(
         const PID* links = level0_links(current_node_id);
         const size_t num_neighbors = link_count(links);
 
-        for (size_t p = 0; p < kPrefetchLookahead; ++p) {
+        // Slots beyond the link count hold stale IDs; never form addresses from them.
+        for (size_t p = 0; p < std::min(kPrefetchLookahead, num_neighbors); ++p) {
             memory::mem_prefetch_l1(bin_data(*(links + 1 + p)), prefetch_size);
         }
         // Iterate over neighbors. (List starts at index 1.)
@@ -299,9 +300,13 @@ inline void HierarchicalNSW::search_base_layer_direct(
                 search_pool.insert(candidate_id, candidate_estimate.distance);
             }
 
-            memory::mem_prefetch_l2(
-                reinterpret_cast<const char*>(level0_links(search_pool.next_id())), 2
-            );
+            // A full pool parks the displaced entry, possibly with its checked bit
+            // set, in the spare slot that next_id() would read.
+            if (search_pool.has_next()) {
+                memory::mem_prefetch_l2(
+                    reinterpret_cast<const char*>(level0_links(search_pool.next_id())), 2
+                );
+            }
         }
     }
 }

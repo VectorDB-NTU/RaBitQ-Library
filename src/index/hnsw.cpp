@@ -620,8 +620,10 @@ maxheap<std::pair<float, PID>> HierarchicalNSW::search_layer(
         const size_t num_neighbors = link_count(links);
         const PID* neighbors = links + 1;
 
-        prefetch(*neighbors);
-        prefetch(*(neighbors + 1));
+        // Slots beyond the link count hold stale or unwritten IDs.
+        for (size_t j = 0; j < std::min<size_t>(2, num_neighbors); ++j) {
+            prefetch(neighbors[j]);
+        }
 
         for (size_t j = 0; j < num_neighbors; ++j) {
             PID candidate_id = neighbors[j];
