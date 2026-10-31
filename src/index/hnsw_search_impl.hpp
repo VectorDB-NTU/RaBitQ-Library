@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -11,17 +10,47 @@
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/query.hpp"
 #include "rabitqlib/index/detail/buffer.hpp"
-#include "rabitqlib/index/detail/visited_pool.hpp"
+#include "rabitqlib/index/detail/hnsw_dispatch.hpp"
+#include "rabitqlib/index/detail/visited_set.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/memory.hpp"
-#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::hnsw {
 
+namespace detail {
+// Grants the dispatch and per-ISA translation units access to the search members.
+struct HnswSearchAccess {
+    static std::vector<std::pair<float, PID>> search(
+        const HierarchicalNSW& index,
+        SearchLayersFn search_layers,
+        const float* rotated_query,
+        size_t k,
+        size_t ef_search
+    ) {
+        return index.search_knn_sorted_with(search_layers, rotated_query, k, ef_search);
+    }
+
+    template <class Kernel>
+    static size_t search_layers(
+        const HierarchicalNSW& index,
+        const SplitSingleQuery<float>& query_wrapper,
+        const float* q_to_centroids,
+        VisitedSet& visited,
+        buffer::SearchBuffer<float>& search_pool,
+        size_t k,
+        AnnCandidate<float>* nearest
+    ) {
+        return index.search_layers_direct<Kernel>(
+            query_wrapper, q_to_centroids, visited, search_pool, k, nearest
+        );
+    }
+};
+}  // namespace detail
+
 template <class Kernel>
 inline void HierarchicalNSW::estimate_bin_direct(
-    const std::vector<float>& q_to_centroids,
+    const float* q_to_centroids,
     const SplitSingleQuery<float>& query_wrapper,
     PID candidate_id,
     DistanceEstimate& estimate
@@ -52,7 +81,7 @@ inline void HierarchicalNSW::estimate_bin_direct(
 
 template <class Kernel>
 inline void HierarchicalNSW::estimate_full_direct(
-    const std::vector<float>& q_to_centroids,
+    const float* q_to_centroids,
     const SplitSingleQuery<float>& query_wrapper,
     PID candidate_id,
     DistanceEstimate& estimate
@@ -88,49 +117,14 @@ inline void HierarchicalNSW::estimate_full_direct(
 }
 
 template <class Kernel>
-inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_direct(
-    const float* rotated_query, size_t k, size_t ef_search
+inline size_t HierarchicalNSW::search_layers_direct(
+    const SplitSingleQuery<float>& query_wrapper,
+    const float* q_to_centroids,
+    VisitedSet& visited,
+    buffer::SearchBuffer<float>& search_pool,
+    size_t k,
+    AnnCandidate<float>* nearest
 ) const {
-    std::vector<std::pair<float, PID>> result;
-    if (num_stored_points_ == 0) {
-        return result;
-    }
-    if (ef_search == 0) {
-        ef_search = kDefaultEfSearch;
-    }
-
-    SplitSingleQuery<float> query_wrapper(
-        rotated_query, padded_dim_, ex_bits_, query_config_, metric_type_
-    );
-
-    // Preprocess - get the distance from query to all centroids
-    std::vector<float> q_to_centroids(num_clusters_);
-
-    if (metric_type_ == METRIC_L2) {
-        for (size_t i = 0; i < num_clusters_; ++i) {
-            q_to_centroids[i] = std::sqrt(raw_dist_func_(
-                rotated_query,
-                reinterpret_cast<const float*>(centroids_memory_.get()) + (i * padded_dim_),
-                padded_dim_
-            ));
-        }
-    } else if (metric_type_ == METRIC_IP) {
-        q_to_centroids.resize(2 * num_clusters_);
-        // First half stores dot(query, centroid); second half stores ||query - centroid||.
-        for (size_t i = 0; i < num_clusters_; ++i) {
-            q_to_centroids[i] = dot_product(
-                rotated_query,
-                reinterpret_cast<const float*>(centroids_memory_.get()) + (i * padded_dim_),
-                padded_dim_
-            );
-            q_to_centroids[i + num_clusters_] = std::sqrt(euclidean_sqr(
-                rotated_query,
-                reinterpret_cast<const float*>(centroids_memory_.get()) + (i * padded_dim_),
-                padded_dim_
-            ));
-        }
-    }
-
     PID current_id = entry_point_id_;
     DistanceEstimate current_estimate;
 
@@ -164,46 +158,72 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
         }
     }
 
+    // Bounded priority queue implemented as a sorted vector. A local class has no
+    // linkage, so the vector code it instantiates is never shared between ISA builds.
+    class BoundedKNN {
+       public:
+        struct Entry {
+            PID id;
+            float distance;
+        };
+
+        explicit BoundedKNN(size_t capacity) : capacity_(capacity) {}
+
+        // Insert a candidate in sorted order (ascending by distance), after equal ones.
+        void insert(PID id, float distance) {
+            auto it = std::upper_bound(
+                queue_.begin(),
+                queue_.end(),
+                distance,
+                [](float value, const Entry& entry) { return value < entry.distance; }
+            );
+            queue_.insert(it, Entry{id, distance});
+            // If we exceed capacity, drop the worst candidate (largest distance).
+            if (queue_.size() > capacity_) {
+                queue_.pop_back();
+            }
+        }
+
+        // Returns the worst (largest distance) candidate.
+        [[nodiscard]] const Entry& worst() const { return queue_.back(); }
+
+        [[nodiscard]] size_t size() const { return queue_.size(); }
+
+        [[nodiscard]] const std::vector<Entry>& candidates() const { return queue_; }
+
+       private:
+        size_t capacity_;
+        // Sorted in ascending order by distance so that the worst is at the back.
+        std::vector<Entry> queue_;
+    };
+
     BoundedKNN nearest_candidates(k);
     search_base_layer_direct<Kernel>(
         current_id,
-        std::max(ef_search, k),
         k,
         query_wrapper,
         q_to_centroids,
+        visited,
+        search_pool,
         nearest_candidates
     );
-    result.reserve(nearest_candidates.size());
+    size_t count = 0;
     for (const auto& candidate : nearest_candidates.candidates()) {
-        result.emplace_back(candidate.distance, external_label(candidate.id));
+        nearest[count++] = AnnCandidate<float>(candidate.id, candidate.distance);
     }
-    // Candidate selection uses distance only. Preserve that selection, then match
-    // the former heap's (distance, external label) ordering within each tie group.
-    for (auto first = result.begin(); first != result.end();) {
-        auto last = first + 1;
-        while (last != result.end() && last->first == first->first) {
-            ++last;
-        }
-        std::sort(first, last);
-        first = last;
-    }
-    return result;
+    return count;
 }
 
-template <class Kernel>
+template <class Kernel, class Results>
 inline void HierarchicalNSW::search_base_layer_direct(
     PID entry_point_id,
-    size_t ef_search,
     size_t k,
     const SplitSingleQuery<float>& query_wrapper,
-    const std::vector<float>& q_to_centroids,
-    BoundedKNN& nearest_candidates
+    const float* q_to_centroids,
+    VisitedSet& visited,
+    buffer::SearchBuffer<float>& search_pool,
+    Results& nearest_candidates
 ) const {
-    auto visited = visited_set_pool_->acquire();
-
-    // Keep the ef_search best estimates in a bounded sorted buffer.
-    buffer::SearchBuffer<float> search_pool(ef_search);
-
     float dist_k = 1e10F;
 
     DistanceEstimate start_estimate;
@@ -220,12 +240,12 @@ inline void HierarchicalNSW::search_base_layer_direct(
 
     // Insert initial candidate. A removed point is still explored, never returned.
     if (!is_removed(entry_point_id)) {
-        nearest_candidates.insert(AnnCandidate<float>(entry_point_id, estimated_distance));
+        nearest_candidates.insert(entry_point_id, estimated_distance);
         dist_k = estimated_distance;
     }
     search_pool.insert(entry_point_id, estimated_distance);
 
-    visited->set(entry_point_id);
+    visited.set(entry_point_id);
 
     const size_t prefetch_size = (((padded_dim_ / 8) + 63) / 64) + 1;
     constexpr size_t kPrefetchLookahead = 4;  // Number of neighbors to prefetch in advance.
@@ -249,10 +269,10 @@ inline void HierarchicalNSW::search_base_layer_direct(
                 );
             }
 
-            if (visited->get(candidate_id)) {
+            if (visited.get(candidate_id)) {
                 continue;
             }
-            visited->set(candidate_id);
+            visited.set(candidate_id);
 
             DistanceEstimate candidate_estimate;
             estimate_bin_direct<Kernel>(
@@ -271,9 +291,7 @@ inline void HierarchicalNSW::search_base_layer_direct(
                         q_to_centroids, query_wrapper, candidate_id, candidate_estimate
                     );
                 }
-                nearest_candidates.insert(
-                    AnnCandidate<float>(candidate_id, candidate_estimate.distance)
-                );
+                nearest_candidates.insert(candidate_id, candidate_estimate.distance);
                 dist_k = nearest_candidates.worst().distance;
             }
 
@@ -286,8 +304,6 @@ inline void HierarchicalNSW::search_base_layer_direct(
             );
         }
     }
-
-    visited_set_pool_->release(std::move(visited));
 }
 
 }  // namespace rabitqlib::hnsw

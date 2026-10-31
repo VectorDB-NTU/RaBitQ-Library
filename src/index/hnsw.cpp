@@ -930,6 +930,84 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
     return results;
 }
 
+std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_with(
+    detail::SearchLayersFn search_layers,
+    const float* rotated_query,
+    size_t k,
+    size_t ef_search
+) const {
+    std::vector<std::pair<float, PID>> result;
+    if (num_stored_points_ == 0) {
+        return result;
+    }
+    if (ef_search == 0) {
+        ef_search = kDefaultEfSearch;
+    }
+
+    SplitSingleQuery<float> query_wrapper(
+        rotated_query, padded_dim_, ex_bits_, query_config_, metric_type_
+    );
+
+    // Preprocess - get the distance from query to all centroids
+    std::vector<float> q_to_centroids(num_clusters_);
+
+    if (metric_type_ == METRIC_L2) {
+        for (size_t i = 0; i < num_clusters_; ++i) {
+            q_to_centroids[i] = std::sqrt(raw_dist_func_(
+                rotated_query,
+                reinterpret_cast<const float*>(centroids_memory_.get()) + (i * padded_dim_),
+                padded_dim_
+            ));
+        }
+    } else if (metric_type_ == METRIC_IP) {
+        q_to_centroids.resize(2 * num_clusters_);
+        // First half stores dot(query, centroid); second half stores ||query - centroid||.
+        for (size_t i = 0; i < num_clusters_; ++i) {
+            q_to_centroids[i] = dot_product(
+                rotated_query,
+                reinterpret_cast<const float*>(centroids_memory_.get()) + (i * padded_dim_),
+                padded_dim_
+            );
+            q_to_centroids[i + num_clusters_] = std::sqrt(euclidean_sqr(
+                rotated_query,
+                reinterpret_cast<const float*>(centroids_memory_.get()) + (i * padded_dim_),
+                padded_dim_
+            ));
+        }
+    }
+
+    auto visited = visited_set_pool_->acquire();
+    // Keep the ef_search best estimates in a bounded sorted buffer.
+    buffer::SearchBuffer<float> search_pool(std::max(ef_search, k));
+    std::vector<AnnCandidate<float>> nearest(k);
+    const size_t num_results = search_layers(
+        *this,
+        query_wrapper,
+        q_to_centroids.data(),
+        *visited,
+        search_pool,
+        k,
+        nearest.data()
+    );
+    visited_set_pool_->release(std::move(visited));
+
+    result.reserve(num_results);
+    for (size_t i = 0; i < num_results; ++i) {
+        result.emplace_back(nearest[i].distance, external_label(nearest[i].id));
+    }
+    // Candidate selection uses distance only. Preserve that selection, then match
+    // the former heap's (distance, external label) ordering within each tie group.
+    for (auto first = result.begin(); first != result.end();) {
+        auto last = first + 1;
+        while (last != result.end() && last->first == first->first) {
+            ++last;
+        }
+        std::sort(first, last);
+        first = last;
+    }
+    return result;
+}
+
 size_t HierarchicalNSW::remove(const PID* labels, size_t num_points) {
     if (data_level0_memory_ == nullptr || centroids_memory_ == nullptr ||
         rotator_ == nullptr || num_clusters_ == 0) {

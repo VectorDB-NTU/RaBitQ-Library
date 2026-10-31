@@ -1,7 +1,5 @@
 #include <cstddef>
 #include <cstdint>
-#include <utility>
-#include <vector>
 
 #include "hnsw_search_impl.hpp"  // IWYU pragma: keep (backend template definitions)
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
@@ -11,6 +9,9 @@
 
 namespace rabitqlib::hnsw::detail {
 
+namespace {
+// Internal linkage keeps every template instantiated with this kernel local to
+// this ISA's translation unit.
 struct HnswGenericKernel {
     static inline float warmup_ip_x0_q_512(
         const uint64_t* data,
@@ -31,11 +32,20 @@ struct HnswGenericKernel {
         return simd::mask_ip_x0_q_generic(query, data, padded_dim);
     }
 };
+}  // namespace
 
-std::vector<std::pair<float, PID>> search_knn_sorted_generic(
-    HierarchicalNSW& index, const float* rotated_query, size_t k, size_t ef_search
+size_t search_layers_generic(
+    const HierarchicalNSW& index,
+    const SplitSingleQuery<float>& query_wrapper,
+    const float* q_to_centroids,
+    VisitedSet& visited,
+    buffer::SearchBuffer<float>& search_pool,
+    size_t k,
+    AnnCandidate<float>* nearest
 ) {
-    return index.search_knn_sorted_direct<HnswGenericKernel>(rotated_query, k, ef_search);
+    return HnswSearchAccess::search_layers<HnswGenericKernel>(
+        index, query_wrapper, q_to_centroids, visited, search_pool, k, nearest
+    );
 }
 
 }  // namespace rabitqlib::hnsw::detail
