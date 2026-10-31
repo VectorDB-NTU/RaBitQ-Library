@@ -49,14 +49,6 @@ inline void contribute_ip_signed(
     sum_hi = _mm256_fmadd_ps(cf, q, sum_hi);
 };
 
-// Reduce in a tree rather than serially adding eight scalar lanes.
-inline float mm256_reduce_add_ps(__m256 v) {
-    __m128 h = _mm_add_ps(_mm256_castps256_ps128(v), _mm256_extractf128_ps(v, 1));
-    h = _mm_add_ps(h, _mm_movehl_ps(h, h));
-    h = _mm_add_ss(h, _mm_movehdup_ps(h));
-    return _mm_cvtss_f32(h);
-}
-
 // ip16_fxu1 consumes groups of 16 float query values and packed 1-bit codes.
 // This translation unit uses AVX2/FMA; callers should use runtime dispatch.
 // Packed extra-bit layouts are owned by core/pack_excode.hpp.
@@ -81,7 +73,7 @@ float ip16_fxu1_avx2(
         query += 8;
         ++compact_code;
     }
-    result = mm256_reduce_add_ps(sum);
+    result = detail::reduce_add_avx2(sum);
 
     return result;
 }
@@ -112,7 +104,7 @@ float ip64_fxu2_avx2(
     simd::detail::accumulate_excode_tail_avx2<2>(
         query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
     );
-    result = mm256_reduce_add_ps(
+    result = detail::reduce_add_avx2(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
 
@@ -162,7 +154,7 @@ float ip64_fxu3_avx2(
     simd::detail::accumulate_excode_tail_avx2<3>(
         query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
     );
-    result = mm256_reduce_add_ps(
+    result = detail::reduce_add_avx2(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
 
@@ -188,7 +180,7 @@ float ip16_fxu4_avx2(
 
         compact_code += 8;
     }
-    result = mm256_reduce_add_ps(_mm256_add_ps(sum0, sum1));
+    result = detail::reduce_add_avx2(_mm256_add_ps(sum0, sum1));
 
     return result;
 }
@@ -239,7 +231,7 @@ float ip64_fxu5_avx2(
     simd::detail::accumulate_excode_tail_avx2<5>(
         query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
     );
-    result = mm256_reduce_add_ps(
+    result = detail::reduce_add_avx2(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
 
@@ -281,7 +273,7 @@ float ip64_fxu6_avx2(
     simd::detail::accumulate_excode_tail_avx2<6>(
         query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
     );
-    result = mm256_reduce_add_ps(
+    result = detail::reduce_add_avx2(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
 
@@ -341,7 +333,7 @@ float ip64_fxu7_avx2(
     simd::detail::accumulate_excode_tail_avx2<7>(
         query + dim - dim % 64, compact_code, dim % 64, sum0, sum1
     );
-    result = mm256_reduce_add_ps(
+    result = detail::reduce_add_avx2(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
 
@@ -358,7 +350,7 @@ float ip16_fxu8_avx2(
         contribute_ip(c8, &query[i], sum0, sum1);
         code += 16;
     }
-    return mm256_reduce_add_ps(_mm256_add_ps(sum0, sum1));
+    return detail::reduce_add_avx2(_mm256_add_ps(sum0, sum1));
 }
 
 }  // namespace rabitqlib::simd::excode_ipimpl

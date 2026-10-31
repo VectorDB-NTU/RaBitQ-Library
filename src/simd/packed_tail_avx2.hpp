@@ -83,6 +83,13 @@ inline void accumulate_excode_tail_avx2(
     }
 }
 
+// Sum the eight lanes as a tree rather than serially.
+static inline float reduce_add_avx2(__m256 v) {
+    __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(v), _mm256_extractf128_ps(v, 1));
+    lanes = _mm_add_ps(lanes, _mm_movehl_ps(lanes, lanes));
+    return _mm_cvtss_f32(_mm_add_ss(lanes, _mm_movehdup_ps(lanes)));
+}
+
 static inline float mask_ip_avx2(
     const float* query, const uint8_t* data, size_t padded_dim
 ) {
@@ -139,9 +146,8 @@ static inline float mask_ip_avx2(
         sum2 = accumulate(sum2, it_query + 16, bits, shifts2);
         sum3 = accumulate(sum3, it_query + 24, bits, shifts3);
     }
-    const __m256 sum = _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3));
-    __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(sum), _mm256_extractf128_ps(sum, 1));
-    lanes = _mm_add_ps(lanes, _mm_movehl_ps(lanes, lanes));
-    return _mm_cvtss_f32(_mm_add_ss(lanes, _mm_movehdup_ps(lanes)));
+    return reduce_add_avx2(
+        _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
+    );
 }
 }  // namespace rabitqlib::simd::detail
