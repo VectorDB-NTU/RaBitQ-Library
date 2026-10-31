@@ -84,6 +84,7 @@ endfunction()
 
 set(RABITQ_CORE_SOURCES
     src/core/api.cpp
+    src/core/fast_scale_table.cpp
     src/utils/cpu_features.cpp
     src/utils/thread_count.cpp
     src/simd/dispatch.cpp
