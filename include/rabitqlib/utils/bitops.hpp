@@ -10,8 +10,11 @@
 
 namespace rabitqlib::bitops {
 
+// ISA-specific translation units include these helpers; internal linkage keeps each
+// backend's compiled body from being merged with another backend's.
+
 // Load 1..8 bytes of a compact word, zero-extending a final partial word.
-inline uint64_t load_word(const void* data, size_t bytes) {
+static inline uint64_t load_word(const void* data, size_t bytes) {
     if (bytes == 8) {
         uint64_t word;
         std::memcpy(&word, data, sizeof(word));
@@ -27,7 +30,7 @@ inline uint64_t load_word(const void* data, size_t bytes) {
     return word;
 }
 
-inline unsigned popcount32(uint32_t value) {
+static inline unsigned popcount32(uint32_t value) {
 #if defined(_MSC_VER)
     value -= (value >> 1) & 0x55555555U;
     value = (value & 0x33333333U) + ((value >> 2) & 0x33333333U);
@@ -53,7 +56,7 @@ static inline unsigned popcount64(uint64_t value) {
 }
 
 // Callers pass nonzero masks.
-inline unsigned countr_zero32(uint32_t value) {
+static inline unsigned countr_zero32(uint32_t value) {
 #if defined(_MSC_VER)
     unsigned long index = 0;
     _BitScanForward(&index, value);

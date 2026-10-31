@@ -9,6 +9,8 @@
 #include <cstring>
 
 namespace rabitqlib::simd::detail {
+// Internal linkage: backends compiled with different ISA flags keep their own bodies.
+namespace {
 
 template <size_t Bits>
 inline void pack_excode_tail_intrinsics(const uint8_t* raw, uint8_t* compact, size_t dim) {
@@ -353,4 +355,5 @@ inline void packing_7bit_excode_intrinsics(
     pack_excode_tail_intrinsics<7>(o_raw, o_compact, dim % 64);
 }
 
+}  // namespace
 }  // namespace rabitqlib::simd::detail
