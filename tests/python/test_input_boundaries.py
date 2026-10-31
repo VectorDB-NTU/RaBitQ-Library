@@ -66,6 +66,24 @@ def test_path_roundtrip(built_index, tmp_path, kind):
     np.testing.assert_allclose(actual[1], expected[1], rtol=1e-6, atol=1e-6)
 
 
+def test_save_replaces_existing_files_without_leftovers(built_index, tmp_path):
+    index, queries = built_index
+    filename = tmp_path / "replaced.index"
+    filename.write_bytes(b"stale")
+    expected_files = {filename.name}
+    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
+        Path(str(filename) + ".hnsw").write_bytes(b"stale")
+        expected_files.add(filename.name + ".hnsw")
+    for _ in range(2):
+        index.save(filename)
+        assert {path.name for path in tmp_path.iterdir()} == expected_files
+    restored = type(index).load(filename)
+    expected = index.search(queries, 3, 32)
+    actual = restored.search(queries, 3, 32)
+    np.testing.assert_array_equal(actual[0], expected[0])
+    np.testing.assert_allclose(actual[1], expected[1], rtol=1e-6, atol=1e-6)
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX native path bytes")
 def test_path_preserves_undecodable_bytes(built_index, tmp_path):
     index, queries = built_index

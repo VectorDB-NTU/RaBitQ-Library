@@ -168,6 +168,9 @@ class IVF {
 
     inline void validate_search(const float*, size_t, size_t, const PID*) const;
 
+    // Write the index file, and any initializer sidecar, at exactly this path.
+    void write_file(const char* filename) const;
+
    public:
     explicit IVF() noexcept;
     // dim is the original input dimension; total_bits is 1-9 for quantized

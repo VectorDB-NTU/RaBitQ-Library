@@ -16,10 +16,12 @@
 #include <queue>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "file_replacement.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/estimator.hpp"
@@ -153,13 +155,24 @@ void HierarchicalNSW::save(const char* filename) const {
     if (level0_record_bytes_ == 0) {
         throw std::logic_error("HNSW index must be initialized before save");
     }
+    if (filename == nullptr || filename[0] == '\0') {
+        throw std::invalid_argument("HNSW: index filename must not be empty");
+    }
+    index_detail::save_replacing(filename, {}, [this](const std::string& path) {
+        write_file(path.c_str());
+    });
+}
+
+void HierarchicalNSW::write_file(const char* filename) const {
     std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("HNSW: cannot open index file for writing");
     }
 
+    // Serialize one count value rather than the bytes of the atomic object.
+    const size_t num_stored_points = num_stored_points_.load();
     output.write(reinterpret_cast<const char*>(&max_elements_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&num_stored_points_), sizeof(size_t));
+    output.write(reinterpret_cast<const char*>(&num_stored_points), sizeof(size_t));
 
     output.write(reinterpret_cast<const char*>(&dim_), sizeof(size_t));
     output.write(reinterpret_cast<const char*>(&padded_dim_), sizeof(size_t));
@@ -192,10 +205,10 @@ void HierarchicalNSW::save(const char* filename) const {
 
     output.write(
         reinterpret_cast<const char*>(data_level0_memory_.get()),
-        static_cast<std::streamsize>(num_stored_points_ * level0_record_bytes_)
+        static_cast<std::streamsize>(num_stored_points * level0_record_bytes_)
     );
 
-    for (size_t i = 0; i < num_stored_points_; i++) {
+    for (size_t i = 0; i < num_stored_points; i++) {
         unsigned int link_list_size =
             element_levels_[i] > 0 ? upper_layer_links_bytes_ * element_levels_[i] : 0;
         output.write(reinterpret_cast<const char*>(&link_list_size), sizeof(unsigned int));

@@ -27,8 +27,8 @@ namespace rabitqlib {
 template <typename T>
 class Rotator {
    protected:
-    size_t dim_;
-    size_t padded_dim_;
+    size_t dim_ = 0;
+    size_t padded_dim_ = 0;
 
    public:
     explicit Rotator() = default;

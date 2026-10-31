@@ -127,6 +127,9 @@ class QuantizedGraph<float> {
 
     void initialize(bool randomize_rotation = true);
 
+    // Write the graph file at exactly this path.
+    void write_file(const char* filename) const;
+
     void copy_vectors(const float*, size_t);
 
     void set_quantization_centroid(const float* centroid);

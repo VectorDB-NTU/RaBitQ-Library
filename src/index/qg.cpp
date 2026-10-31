@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "file_replacement.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -261,6 +262,12 @@ void QuantizedGraph<float>::save(const char* filename) const {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("QuantizedGraph save filename must not be empty");
     }
+    index_detail::save_replacing(filename, {}, [this](const std::string& path) {
+        write_file(path.c_str());
+    });
+}
+
+void QuantizedGraph<float>::write_file(const char* filename) const {
     std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("Cannot open quantized graph file for writing");

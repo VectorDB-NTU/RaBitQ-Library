@@ -513,7 +513,9 @@ void QGBuilder::search_new_neighbors() {
 }
 
 void QGBuilder::add_reverse_edges(bool final_pass) {
-    std::vector<std::mutex> locks(num_points_);
+    // Striped locks bound this pass's memory independently of the point count.
+    constexpr size_t kLockStripes = 4096;
+    std::vector<std::mutex> locks(std::min(num_points_, kLockStripes));
     for (auto& row : reverse_buffer_) {
         row.clear();
     }
@@ -539,7 +541,7 @@ void QGBuilder::add_reverse_edges(bool final_pass) {
                         continue;
                     }
 
-                    std::lock_guard lock(locks[destination]);
+                    std::lock_guard lock(locks[destination % locks.size()]);
                     const size_t missing_slots =
                         max_degree_ - std::min(max_degree_, destination_neighbors.size());
                     if (reverse_buffer_[destination].size() <

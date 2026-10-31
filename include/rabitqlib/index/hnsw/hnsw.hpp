@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -89,7 +90,7 @@ class HierarchicalNSW {
         size_t num_points,
         const float* data,
         PID* cluster_ids,
-        size_t num_threads = 0,
+        size_t num_threads = std::numeric_limits<size_t>::max(),
         bool fast_quantization = false
     );
 
@@ -110,7 +111,9 @@ class HierarchicalNSW {
      * route each one to its nearest centroid
      * @param fast_quantization Use fixed-scale extra-bit quantization for speed at a
      * possible loss of accuracy; has no effect on one-bit storage
-     * @param num_threads Threads used to route and insert
+     * @param num_threads Threads used to route and insert. Labels never depend on it,
+     * but links do with more than one thread, so the default of one keeps the graph
+     * deterministic.
      * @return The label given to each new point
      */
     std::vector<PID> add(
@@ -361,6 +364,9 @@ class HierarchicalNSW {
     }
 
     int get_random_level(double reverse_size);
+
+    // Write the index file at exactly this path.
+    void write_file(const char* filename) const;
 
     PID* get_linklist(PID internal_id, int level) {
         return reinterpret_cast<PID*>(
