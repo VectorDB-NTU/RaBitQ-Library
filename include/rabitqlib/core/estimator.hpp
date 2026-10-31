@@ -42,7 +42,7 @@ inline float split_distance_boosting(
                     (cur_ex.f_rescale_ex() *
                      (static_cast<float>(1 << ex_bits) * ip_x0_qr +
                       ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim) +
-                      query_wrapper.kbxsumq()));
+                      query_wrapper.g_kbxsumq()));
 
     return ex_dist;
 }
@@ -77,7 +77,7 @@ inline void split_single_fulldist_direct(
         (cur_ex.f_rescale_ex() *
          (static_cast<float>(1 << ex_bits) * ip_x0_qr +
           ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim) +
-          query_wrapper.kbxsumq()));
+          query_wrapper.g_kbxsumq()));
 
     lower_bound = estimated_distance -
                   (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
@@ -106,7 +106,7 @@ inline void split_single_fulldist(
         (cur_ex.f_rescale_ex() *
          (static_cast<float>(1 << ex_bits) * ip_x0_qr +
           ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim) +
-          query_wrapper.kbxsumq()));
+          query_wrapper.g_kbxsumq()));
 
     lower_bound = estimated_distance -
                   (cur_bin.f_error() * g_error / static_cast<float>(1 << ex_bits));
@@ -134,7 +134,7 @@ inline void split_single_estdist(
     );
 
     estimated_distance = cur_bin.f_add() + g_add +
-                         (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.k1xsumq()));
+                         (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.g_k1xsumq()));
 
     lower_bound = estimated_distance - (cur_bin.f_error() * g_error);
 }
@@ -163,7 +163,7 @@ inline void split_single_estdist_direct(
     );
 
     estimated_distance = cur_bin.f_add() + g_add +
-                         (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.k1xsumq()));
+                         (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.g_k1xsumq()));
 
     lower_bound = estimated_distance - (cur_bin.f_error() * g_error);
 }
@@ -185,7 +185,7 @@ inline void xy_single_base_dist(
     ip_base = base_ip_func(query_wrapper.rotated_query(), cur_base.base_code(), padded_dim);
 
     estimated_distance = cur_base.f_add() + g_add +
-                         (cur_base.f_rescale() * (ip_base + query_wrapper.kbase_sumq()));
+                         (cur_base.f_rescale() * (ip_base + query_wrapper.g_kbase_sumq()));
 
     lower_bound = estimated_distance - (cur_base.f_error() * g_error);
 }
@@ -211,7 +211,7 @@ inline void xy_single_full_dist(
     if (ex_bits == 0) {
         estimated_distance =
             cur_base.f_add() + g_add +
-            (cur_base.f_rescale() * (ip_base + query_wrapper.kbase_sumq()));
+            (cur_base.f_rescale() * (ip_base + query_wrapper.g_kbase_sumq()));
         lower_bound = estimated_distance - (cur_base.f_error() * g_error);
         return;
     }
@@ -222,7 +222,7 @@ inline void xy_single_full_dist(
                ex_ip_func(query_wrapper.rotated_query(), cur_ex.ex_code(), padded_dim);
 
     estimated_distance = cur_ex.f_add_ex() + g_add +
-                         (cur_ex.f_rescale_ex() * (ip + query_wrapper.kbxsumq()));
+                         (cur_ex.f_rescale_ex() * (ip + query_wrapper.g_kbxsumq()));
 
     lower_bound = estimated_distance -
                   (cur_base.f_error() * g_error / static_cast<float>(1 << ex_bits));

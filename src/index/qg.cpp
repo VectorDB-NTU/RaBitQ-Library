@@ -54,14 +54,16 @@ QuantizedQuery::QuantizedQuery(
     MetricType metric_type
 )
     : rotated_query_(rotated_query) {
-    k1xsumq_ = std::accumulate(rotated_query, rotated_query + padded_dim, 0.0F) / -2;
+    g_k1xsumq_ = std::accumulate(rotated_query, rotated_query + padded_dim, 0.0F) / -2;
     g_add_ = metric_type == METRIC_IP ? -dot_product(rotated_query, centroid, padded_dim)
                                       : euclidean_sqr(rotated_query, centroid, padded_dim);
 }
 QuantizedQuery::QuantizedQuery(const float* rotated_query, const QuantizedQuery& prepared)
-    : rotated_query_(rotated_query), k1xsumq_(prepared.k1xsumq_), g_add_(prepared.g_add_) {}
+    : rotated_query_(rotated_query)
+    , g_k1xsumq_(prepared.g_k1xsumq_)
+    , g_add_(prepared.g_add_) {}
 const float* QuantizedQuery::rotated_query() const { return rotated_query_; }
-float QuantizedQuery::k1xsumq() const { return k1xsumq_; }
+float QuantizedQuery::g_k1xsumq() const { return g_k1xsumq_; }
 float QuantizedQuery::g_add() const { return g_add_; }
 
 size_t QuantizedGraph<float>::checked_add(size_t lhs, size_t rhs) {
@@ -695,7 +697,7 @@ float QuantizedGraph<float>::quantized_distance(
         data.f_add_ex(),
         data.f_rescale_ex(),
         query.g_add(),
-        query.k1xsumq()
+        query.g_k1xsumq()
     );
 }
 
@@ -780,7 +782,7 @@ void QuantizedGraph<float>::search_with_scratch(
     buffer::SearchBuffer<float>& result_pool,
     VisitedSet& visited,
     PID hint,
-    const float* k1xsumq
+    const float* g_k1xsumq
 ) {
     detail::search_with_workspace(
         *this,
@@ -796,7 +798,7 @@ void QuantizedGraph<float>::search_with_scratch(
          result_pool,
          visited},
         hint,
-        k1xsumq
+        g_k1xsumq
     );
 }
 
@@ -808,11 +810,13 @@ void detail::search_with_workspace(
     float* distances,
     detail::SearchScratchView scratch,
     PID hint,
-    const float* k1xsumq
+    const float* g_k1xsumq
 ) {
     graph.validate_search(query, k, result_ids, distances, graph.default_ef_search_);
     check_coordinates(query, graph.dim_, graph.dim_, "QuantizedGraph search query");
-    graph.search_with_scratch_impl(query, k, result_ids, distances, scratch, hint, k1xsumq);
+    graph.search_with_scratch_impl(
+        query, k, result_ids, distances, scratch, hint, g_k1xsumq
+    );
 }
 
 void QuantizedGraph<float>::search_with_scratch_impl(
@@ -822,7 +826,7 @@ void QuantizedGraph<float>::search_with_scratch_impl(
     float* __restrict__ distances,
     detail::SearchScratchView scratch,
     PID hint,
-    const float* k1xsumq
+    const float* g_k1xsumq
 ) {
     if (scratch.rotated_query == nullptr || scratch.estimated_distances == nullptr ||
         scratch.lookup_table == nullptr) {
@@ -844,7 +848,7 @@ void QuantizedGraph<float>::search_with_scratch_impl(
     }
     const auto* quantized = quantized_query ? &*quantized_query : nullptr;
     scratch.batch_query.reset(
-        scratch.rotated_query, padded_dim_, scratch.lookup_table, metric_type_, k1xsumq
+        scratch.rotated_query, padded_dim_, scratch.lookup_table, metric_type_, g_k1xsumq
     );
     scratch.search_pool.clear();
     scratch.result_pool.clear();

@@ -290,7 +290,7 @@ class QGAssigner {
                     hint,
                     query_sums.cached(i)
                 );
-                query_sums.store(i, scratch.batch_query.k1xsumq());
+                query_sums.store(i, scratch.batch_query.g_k1xsumq());
                 if (graph_->is_quantized()) {
                     // Keep objectives and returned distances relative to the original
                     // centroids; graph search scores are quantized estimates.

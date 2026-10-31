@@ -15,7 +15,7 @@
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::ivf::IVF;
 using data_type = rabitqlib::RowMajorArray<float>;
-using gt_type = rabitqlib::RowMajorArray<uint32_t>;
+using cluster_ids_type = rabitqlib::RowMajorArray<uint32_t>;
 
 int run(int argc, char** argv) {
     if (argc < 6) {
@@ -55,17 +55,17 @@ int run(int argc, char** argv) {
 
     char* data_file = argv[1];
     char* centroids_file = argv[2];
-    char* cids_file = argv[3];
+    char* cluster_ids_file = argv[3];
     size_t total_bits = atoi(argv[4]);
     char* index_file = argv[5];
 
     data_type data;
     data_type centroids;
-    gt_type cids;
+    cluster_ids_type cluster_ids;
 
     rabitqlib::load_vecs<float, data_type>(data_file, data);
     rabitqlib::load_vecs<float, data_type>(centroids_file, centroids);
-    rabitqlib::load_vecs<PID, gt_type>(cids_file, cids);
+    rabitqlib::load_vecs<PID, cluster_ids_type>(cluster_ids_file, cluster_ids);
 
     size_t num_points = data.rows();
     size_t dim = data.cols();
@@ -77,7 +77,7 @@ int run(int argc, char** argv) {
 
     rabitqlib::StopW stopw;
     index_type ivf(num_points, dim, k, total_bits, metric_type);
-    ivf.construct(data.data(), centroids.data(), cids.data(), faster_quant);
+    ivf.construct(data.data(), centroids.data(), cluster_ids.data(), faster_quant);
     float miniutes = stopw.get_elapsed_mili() / 1000 / 60;
     std::cout << "ivf constructed \n";
     ivf.save(index_file);

@@ -29,7 +29,7 @@ namespace rabitqlib::symqg {
 class QuantizedQuery {
    private:
     const float* rotated_query_;
-    float k1xsumq_;
+    float g_k1xsumq_;
     float g_add_;
 
    public:
@@ -41,7 +41,7 @@ class QuantizedQuery {
     );
     QuantizedQuery(const float* rotated_query, const QuantizedQuery& prepared);
     [[nodiscard]] const float* rotated_query() const;
-    [[nodiscard]] float k1xsumq() const;
+    [[nodiscard]] float g_k1xsumq() const;
     [[nodiscard]] float g_add() const;
 };
 
@@ -62,7 +62,7 @@ void search_with_workspace(
     float* distances,
     SearchScratchView scratch,
     PID hint = kPidMax,
-    const float* k1xsumq = nullptr
+    const float* g_k1xsumq = nullptr
 );
 }  // namespace detail
 
@@ -77,7 +77,7 @@ class QuantizedGraph<float> {
         float* distances,
         detail::SearchScratchView scratch,
         PID hint,
-        const float* k1xsumq
+        const float* g_k1xsumq
     );
     friend struct QGConstructionTestAccess;
 
@@ -181,7 +181,7 @@ class QuantizedGraph<float> {
         float* distances,
         detail::SearchScratchView scratch,
         PID hint,
-        const float* k1xsumq
+        const float* g_k1xsumq
     );
 
     float point_distance(
@@ -340,7 +340,7 @@ class QuantizedGraph<float> {
      * std::invalid_argument. Concurrent searches require separate scratch
      * buffers, including visited sets.
      *
-     * An optional k1xsumq must come from BatchQuery::k1xsumq() for the same
+     * An optional g_k1xsumq must come from BatchQuery::g_k1xsumq() for the same
      * query and this graph's rotation. A null pointer recomputes the sum.
      */
     void search_with_scratch(
@@ -356,7 +356,7 @@ class QuantizedGraph<float> {
         buffer::SearchBuffer<float>& result_pool,
         VisitedSet& visited,
         PID hint = kPidMax,
-        const float* k1xsumq = nullptr
+        const float* g_k1xsumq = nullptr
     );
 
     [[nodiscard]] size_t padded_dim() const { return padded_dim_; }

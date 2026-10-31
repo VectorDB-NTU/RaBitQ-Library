@@ -33,10 +33,10 @@ static inline void qg_batch_estdist_impl(
     const T delta = query_wrapper.delta();
     const T sum_vl_lut = query_wrapper.sum_vl_lut();
     const T g_add = query_wrapper.g_add();
-    const T k1xsumq = query_wrapper.k1xsumq();
+    const T g_k1xsumq = query_wrapper.g_k1xsumq();
     for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
         const T ip =
-            delta * static_cast<T>(accumulated_values[lane]) + sum_vl_lut + k1xsumq;
+            delta * static_cast<T>(accumulated_values[lane]) + sum_vl_lut + g_k1xsumq;
         estimated_distances[lane] =
             f_add_values[lane] + g_add + f_rescale_values[lane] * ip;
     }

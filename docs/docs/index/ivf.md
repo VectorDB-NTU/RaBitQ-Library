@@ -78,7 +78,7 @@ For example, split SIFT into 4,096 clusters using squared L2 distance:
 ```
 
 After files are prepared, load them into memory. The snippet below uses
-`const char*` paths `data_file`, `centroids_file`, and `cids_file`. Include the
+`const char*` paths `data_file`, `centroids_file`, and `cluster_ids_file`. Include the
 Eigen aliases and I/O helpers explicitly; `ivf.hpp` does not import them.
 
 ```c++
@@ -89,15 +89,15 @@ Eigen aliases and I/O helpers explicitly; `ivf.hpp` does not import them.
 
 using PID = rabitqlib::PID;
 using data_type = rabitqlib::RowMajorArray<float>;
-using gt_type = rabitqlib::RowMajorArray<PID>;
+using cluster_ids_type = rabitqlib::RowMajorArray<PID>;
 
 data_type data;
 data_type centroids;
-gt_type cids;
+cluster_ids_type cluster_ids;
 
 rabitqlib::load_vecs<float, data_type>(data_file, data);
 rabitqlib::load_vecs<float, data_type>(centroids_file, centroids);
-rabitqlib::load_vecs<PID, gt_type>(cids_file, cids);
+rabitqlib::load_vecs<PID, cluster_ids_type>(cluster_ids_file, cluster_ids);
 ```
 
 See the [complete indexing example](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
@@ -125,7 +125,7 @@ The optional final C++ constructor argument selects `InitializerType::Auto`,
 `initializer="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:
 
 ```python
-index = IvfIndex(dim, num_points, num_clusters, nbits=4,
+index = IvfIndex(dim, max_elements, num_clusters, nbits=4,
                  initializer="flat_rabitq")
 print(index.initializer)  # resolved routing type
 ```
@@ -196,7 +196,7 @@ void IVF::construct(
 For example:
 
 ```c++
-ivf.construct(data.data(), centroids.data(), cids.data(), true);
+ivf.construct(data.data(), centroids.data(), cluster_ids.data(), true);
 ```
 
 ## Querying

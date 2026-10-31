@@ -389,13 +389,13 @@ QueryState prepare_query(
     state.total_bits_ = parameters.total_bits;
     state.metric_ = parameters.metric;
     state.extra_ip_ = select_excode_ipfunc(parameters.total_bits - 1);
-    state.k1xsumq_ = std::accumulate(query, query + parameters.dim, 0.0F) * -0.5F;
+    state.g_k1xsumq_ = std::accumulate(query, query + parameters.dim, 0.0F) * -0.5F;
     state.g_add_ =
         parameters.metric == METRIC_L2
             ? (centroid == nullptr ? l2norm_sqr(query, parameters.dim)
                                    : euclidean_sqr(query, centroid, parameters.dim))
             : (centroid == nullptr ? 0.0F : -dot_product(query, centroid, parameters.dim));
-    if (!std::isfinite(state.g_add_) || !std::isfinite(state.k1xsumq_)) {
+    if (!std::isfinite(state.g_add_) || !std::isfinite(state.g_k1xsumq_)) {
         throw std::overflow_error("Query factors are not representable in float32");
     }
     return state;
@@ -446,7 +446,7 @@ float QueryState::compute_checked(
         factors.add,
         factors.rescale,
         query_wrapper.g_add_,
-        query_wrapper.k1xsumq_
+        query_wrapper.g_k1xsumq_
     );
     if (!std::isfinite(distance)) {
         throw std::overflow_error("Estimated distance is not representable in float32");
