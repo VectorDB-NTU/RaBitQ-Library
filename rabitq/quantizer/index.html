@@ -372,6 +372,8 @@
       
         
       
+        
+      
     
     
     
@@ -432,6 +434,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -2122,11 +2152,15 @@ factors. The application stores the codes and factors separately or together.</p
 <a id="__codelineno-1-61" name="__codelineno-1-61" href="#__codelineno-1-61"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
 <a id="__codelineno-1-62" name="__codelineno-1-62" href="#__codelineno-1-62"></a><span class="p">}</span>
 </code></pre></div>
-<p>The advanced encoders validate their preconditions and throw
-<code>std::invalid_argument</code> otherwise: <code>dim</code> must be at least 2 (the error factor
-divides by <code>dim - 1</code>), the code element type must hold <code>bits</code> (nine bits need
-<code>uint16_t</code>), inputs must be finite, and <code>SplitSingleQuery</code> needs a padded
-dimension that is a positive multiple of 32.</p>
+<p>The advanced encoders check a few preconditions and throw
+<code>std::invalid_argument</code> when they fail: encoders that produce error factors
+require <code>dim</code> of at least 2 (the error factor divides by <code>dim - 1</code>),
+<code>quantize_full_single</code> requires a code element type that holds <code>bits</code> (nine
+bits need <code>uint16_t</code>), and <code>SplitSingleQuery</code> needs a padded dimension that is
+a positive multiple of 32. <code>quantize_scalar</code> does not check the code element
+type, so a type that is too narrow silently produces wrong codes. None of the
+per-vector encoders checks that inputs are finite; validate each batch before
+encoding, as the stable API and the indexes do.</p>
 <h4 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h4>
 <p>Score a query using the encoded vector and its factors.
 Insert the following before <code>return 0</code> in the indexing example above.</p>

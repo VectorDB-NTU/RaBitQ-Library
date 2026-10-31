@@ -372,6 +372,8 @@
       
         
       
+        
+      
     
     
     
@@ -432,6 +434,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -2021,7 +2051,7 @@ it is not a representative random-rotation quality benchmark.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>sample/cpp/stable_core<span class="w"> </span>-B<span class="w"> </span>build-stable-example<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"&lt;core-install-prefix&gt;"</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-stable-example
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build-stable-example<span class="w"> </span>--output-on-failure
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build-stable-example<span class="w"> </span>--output-on-failure
 </code></pre></div>
 <p>The frozen v1 consumer (<code>tests/fixtures/core_api_v1/consumer.cpp</code>) is compiled
 against source-tree and installed packages in CI. The internal workspace resource

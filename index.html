@@ -513,6 +513,8 @@
       
         
       
+        
+      
     
     
     
@@ -573,6 +575,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -1732,8 +1762,10 @@
 <p class="eyebrow">RaBitQ Library · C++17 &amp; Python</p>
 <h1 id="compact-vector-search-with-rabitq">Vector search with<br>compact RaBitQ codes.<a class="headerlink" href="#compact-vector-search-with-rabitq" title="Permanent link">&para;</a></h1>
 <p class="hero-description">Compress vectors and search for nearest neighbors.
-Use ready-made indexes in Python or C++, or integrate quantization and distance
-estimation into your own C++ search engine.</p>
+RaBitQ estimates distances from 1–9-bit codes with a theoretical error bound,
+and its multi-bit extension is asymptotically optimal. Use ready-made indexes in
+Python or <span class="nowrap">C++</span>, or integrate quantization and distance
+estimation into your own <span class="nowrap">C++</span> search engine.</p>
 <div class="hero-actions" id="start-here">
 <p><a class="md-button md-button--primary" href="quick_start/">Python quick start</a>
 <a class="md-button" href="cpp_integration/">C++ integration</a></p>
@@ -1752,18 +1784,21 @@ Start with IVF-RaBitQ for the complete introductory example, then compare on you
 <p>Search selected clusters of compressed vectors. Tune the bit width and number
 of clusters probed to balance storage, recall, and query time.</p>
 <p><strong>Updates:</strong> append and remove vectors.</p>
+<p><strong>GIST1M, 5-bit:</strong> 1,038 QPS at 92.8% Recall@10; 0.60 GiB index.</p>
 </div>
 <div class="feature-card">
 <h3 id="hnsw-rabitq"><a href="index/hnsw/">HNSW-RaBitQ</a><a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h3>
 <p>Traverse a graph over compressed vectors. Graph links add storage; tune the
 search window and graph degree alongside the code precision.</p>
 <p><strong>Updates:</strong> append and remove vectors.</p>
+<p><strong>GIST1M, 5-bit:</strong> 1,866 QPS at 92.7% Recall@10; 0.72 GiB index.</p>
 </div>
 <div class="feature-card">
 <h3 id="symphonyqg"><a href="index/qg/">SymphonyQG</a><a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h3>
 <p>Build a graph directly from vectors, without a separate clustering step.
 Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
 <p><strong>Updates:</strong> rebuild to change the dataset.</p>
+<p><strong>GIST1M, 4-bit:</strong> 3,086 QPS at 90.4% Recall@10; 4.39 GiB index.</p>
 </div>
 </div>
 <p>For input shapes, distance conventions, memory estimates, and threading, see
@@ -1777,9 +1812,11 @@ Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
   centroids and assignments for IVF-RaBitQ or HNSW-RaBitQ.</li>
 </ul>
 <h2 id="compare-measured-performance">Compare measured performance<a class="headerlink" href="#compare-measured-performance" title="Permanent link">&para;</a></h2>
-<p>See the <a href="benchmarks/bench/">benchmarks</a> for datasets, settings, measured
-results, and limitations. Evaluate recall and query time on your own dataset
-when choosing an index.</p>
+<p>The GIST1M numbers above are the fastest measured setting with Recall@10 ≥ 90%,
+using one search thread and one query per call with RaBitQ-Library 0.7.1; index
+size is serialized storage. See the <a href="benchmarks/bench/#key-results">benchmark results</a>
+for datasets, baselines, settings, and limitations. Evaluate recall and query time
+on your own dataset when choosing an index.</p>
 <h2 id="built-with-rabitq-library">Built with RaBitQ-Library<a class="headerlink" href="#built-with-rabitq-library" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="integrations/txtai/">txtai</a> uses the Python IVF-RaBitQ and HNSW-RaBitQ indexes as an

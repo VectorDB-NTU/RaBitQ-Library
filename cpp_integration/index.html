@@ -557,6 +557,8 @@
       
         
       
+        
+      
     
     
     
@@ -617,6 +619,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -2001,7 +2031,7 @@ No ANN index is constructed.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>sample/cpp/core<span class="w"> </span>-B<span class="w"> </span>build-core-example<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local/rabitqlib-core"</span>
 <a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-core-example
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build-core-example<span class="w"> </span>--output-on-failure
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build-core-example<span class="w"> </span>--output-on-failure
 </code></pre></div>
 <p>With project samples enabled, the same program is built as <code>core_example</code> under
 <code>build-core/sample/cpp/</code> (under <code>Release/</code> there for multi-configuration generators).</p>
@@ -2027,7 +2057,7 @@ MODULE, not a C++ link library, and is not exported as a C++ <code>find_package<
 <h2 id="run-the-c-tests-on-linux">Run the C++ tests on Linux<a class="headerlink" href="#run-the-c-tests-on-linux" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DRABITQ_BUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>ctest<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
 </code></pre></div>
 <p>GoogleTest is downloaded during test configuration.</p>
 

@@ -372,6 +372,8 @@
       
         
       
+        
+      
     
     
     
@@ -432,6 +434,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -1415,17 +1445,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#index-configurations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Index configurations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#reading-the-results" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1489,6 +1508,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#index-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Index configurations
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1602,17 +1632,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#index-configurations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Index configurations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#reading-the-results" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1680,6 +1699,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#index-configurations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Index configurations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#download-measurements" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1721,76 +1751,15 @@ Each baseline retains its latest measurement and was not rerun.
 See the <a href="../bench/#package-installation">source revisions, environments and comparison limits</a>.</p>
 <p>Settings and results for eight configurations. See the <a href="../bench/">overview</a> for
 hardware, datasets, and measurement definitions.</p>
-<h2 id="index-configurations">Index configurations<a class="headerlink" href="#index-configurations" title="Permanent link">&para;</a></h2>
-<p>Every IVF index uses <strong>4,096 clusters</strong>. <code>d</code> is the dataset dimension and
-<code>m=d/2</code> for PQ: 480 on GIST1M and 768 on DBpedia. PQ subquantizers
-use four bits. RaBitQ clustering uses up to 10 iterations, seed 42, exact final
-assignment, and spherical training for DBpedia's inner-product metric. Faiss uses its
-factory training defaults. Training is included in construction time.</p>
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th>Construction specification</th>
-<th>Search parameters</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>IVF-RaBitQ raw</td>
-<td><code>IvfIndex(nbits=32)</code>; one-bit filter with original float32 vectors</td>
-<td><code>nprobe</code></td>
-</tr>
-<tr>
-<td>IVF-RaBitQ 1+4</td>
-<td><code>IvfIndex(nbits=5)</code></td>
-<td><code>nprobe</code></td>
-</tr>
-<tr>
-<td>IVF-RaBitQ 1+8</td>
-<td><code>IvfIndex(nbits=9)</code></td>
-<td><code>nprobe</code></td>
-</tr>
-<tr>
-<td>Faiss IVF RaBitQfs raw + RFlat</td>
-<td><code>HRd,IVF4096,RaBitQfs1,RFlat</code></td>
-<td><code>nprobe</code>, <code>k_factor</code></td>
-</tr>
-<tr>
-<td>Faiss IVF RaBitQfs 1+4</td>
-<td><code>HRd,IVF4096,RaBitQfs5</code></td>
-<td><code>nprobe</code></td>
-</tr>
-<tr>
-<td>Faiss IVF RaBitQfs 1+8</td>
-<td><code>HRd,IVF4096,RaBitQfs9</code></td>
-<td><code>nprobe</code></td>
-</tr>
-<tr>
-<td>Faiss IVF PQfs + RFlat</td>
-<td><code>IVF4096,PQ{m}x4fs,RFlat</code></td>
-<td><code>nprobe</code>, <code>k_factor</code></td>
-</tr>
-<tr>
-<td>Faiss OPQ-IVF PQfs + RFlat</td>
-<td><code>OPQ{m},IVF4096,PQ{m}x4fs,RFlat</code></td>
-<td><code>nprobe</code>, <code>k_factor</code></td>
-</tr>
-</tbody>
-</table>
-<p><code>1+4</code> and <code>1+8</code> denote one sign bit plus four or eight extra bits.
-<code>nbits=32</code> retains raw float32 vectors in RaBitQ-Library; <code>RFlat</code> retains them
-for Faiss reranking. Index size and QPS include retained vectors and reranking.</p>
-<p>The search grid is <code>nprobe=1,2,4,8,16,32,64,128,256,512</code>, crossed with
-<code>k_factor=1,2,5,10,20</code> for the <code>RFlat</code> methods. Quantized IVF-RaBitQ uses its
-default HACC search mode for total bit widths 5 and 9.</p>
 <h2 id="reading-the-results">Reading the results<a class="headerlink" href="#reading-the-results" title="Permanent link">&para;</a></h2>
-<p>Curves use one search thread and one query per call over all 1,000 queries.
+<p>Each figure groups methods with similar storage per dimension into panels;
+method names are defined under <a href="#index-configurations">index configurations</a>.
+Curves use one search thread and one query per call over all 1,000 queries.
 Indexes are built with 48 threads and reused for the query sweeps.
 See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <a href="../bench/#reading-the-indexing-tables">indexing metrics</a>.</p>
 <h2 id="gist1m">GIST1M<a class="headerlink" href="#gist1m" title="Permanent link">&para;</a></h2>
-<p><img alt="GIST1M ivf QPS–recall trade-off" src="../figures/ivf-gist1m-qps-recall.svg" /></p>
+<p><img alt="GIST1M ivf QPS–recall trade-off" class="chart" src="../figures/ivf-gist1m-qps-recall.svg" /></p>
 <h3 id="indexing-time-and-size">Indexing time and size<a class="headerlink" href="#indexing-time-and-size" title="Permanent link">&para;</a></h3>
 <!-- indexing:gist1m:start -->
 <table>
@@ -1874,7 +1843,7 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <!-- indexing:gist1m:end -->
 
 <h2 id="dbpedia">DBpedia<a class="headerlink" href="#dbpedia" title="Permanent link">&para;</a></h2>
-<p><img alt="DBpedia ivf QPS–recall trade-off" src="../figures/ivf-dbpedia-qps-recall.svg" /></p>
+<p><img alt="DBpedia ivf QPS–recall trade-off" class="chart" src="../figures/ivf-dbpedia-qps-recall.svg" /></p>
 <h3 id="indexing-time-and-size_1">Indexing time and size<a class="headerlink" href="#indexing-time-and-size_1" title="Permanent link">&para;</a></h3>
 <!-- indexing:dbpedia:start -->
 <table>
@@ -1957,6 +1926,70 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 </table>
 <!-- indexing:dbpedia:end -->
 
+<h2 id="index-configurations">Index configurations<a class="headerlink" href="#index-configurations" title="Permanent link">&para;</a></h2>
+<p>Every IVF index uses <strong>4,096 clusters</strong>. <code>d</code> is the dataset dimension and
+<code>m=d/2</code> for PQ: 480 on GIST1M and 768 on DBpedia. PQ subquantizers
+use four bits. RaBitQ clustering uses up to 10 iterations, seed 42, exact final
+assignment, and spherical training for DBpedia's inner-product metric. Faiss uses its
+factory training defaults. Training is reported separately and included in total
+construction time.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Construction specification</th>
+<th>Search parameters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IVF-RaBitQ raw</td>
+<td><code>IvfIndex(nbits=32)</code>; one-bit filter with original float32 vectors</td>
+<td><code>nprobe</code></td>
+</tr>
+<tr>
+<td>IVF-RaBitQ 1+4</td>
+<td><code>IvfIndex(nbits=5)</code></td>
+<td><code>nprobe</code></td>
+</tr>
+<tr>
+<td>IVF-RaBitQ 1+8</td>
+<td><code>IvfIndex(nbits=9)</code></td>
+<td><code>nprobe</code></td>
+</tr>
+<tr>
+<td>Faiss IVF RaBitQfs raw + RFlat</td>
+<td><code>HRd,IVF4096,RaBitQfs1,RFlat</code></td>
+<td><code>nprobe</code>, <code>k_factor</code></td>
+</tr>
+<tr>
+<td>Faiss IVF RaBitQfs 1+4</td>
+<td><code>HRd,IVF4096,RaBitQfs5</code></td>
+<td><code>nprobe</code></td>
+</tr>
+<tr>
+<td>Faiss IVF RaBitQfs 1+8</td>
+<td><code>HRd,IVF4096,RaBitQfs9</code></td>
+<td><code>nprobe</code></td>
+</tr>
+<tr>
+<td>Faiss IVF PQfs + RFlat</td>
+<td><code>IVF4096,PQ{m}x4fs,RFlat</code></td>
+<td><code>nprobe</code>, <code>k_factor</code></td>
+</tr>
+<tr>
+<td>Faiss OPQ-IVF PQfs + RFlat</td>
+<td><code>OPQ{m},IVF4096,PQ{m}x4fs,RFlat</code></td>
+<td><code>nprobe</code>, <code>k_factor</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>1+4</code> and <code>1+8</code> denote one sign bit plus four or eight extra bits.
+<code>nbits=32</code> retains raw float32 vectors in RaBitQ-Library; <code>RFlat</code> retains them
+for Faiss reranking. Index size and QPS include retained vectors and reranking.</p>
+<p>The search grid is <code>nprobe=1,2,4,8,16,32,64,128,256,512</code>, crossed with
+<code>k_factor=1,2,5,10,20</code> for the <code>RFlat</code> methods. Quantized IVF-RaBitQ uses its
+default HACC search mode for total bit widths 5 and 9.</p>
 <h2 id="download-measurements">Download measurements<a class="headerlink" href="#download-measurements" title="Permanent link">&para;</a></h2>
 <p><a href="../figures/qps-recall-points.csv">QPS–recall CSV</a> · <a href="../figures/indexing.csv">Indexing CSV</a></p>
 

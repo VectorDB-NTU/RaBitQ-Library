@@ -370,6 +370,8 @@
       
         
       
+        
+      
     
     
     
@@ -430,6 +432,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -1469,28 +1499,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Settings
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#metrics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Metrics
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#results" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1526,6 +1534,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1583,28 +1613,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Settings
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#metrics" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Metrics
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#results" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1640,6 +1648,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1685,6 +1715,84 @@ Each baseline retains its latest measurement and was not rerun.
 See the <a href="../bench/#package-installation">source revisions, environments and comparison limits</a>.</p>
 <p>Compare <strong>QGKMeans</strong>, <strong>Faiss K-means</strong>, and <strong>SuperKMeans</strong> using their Python APIs.
 Metrics are total time, WCSS, and recall@10 with 1% of clusters probed.</p>
+<h2 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h2>
+<h3 id="gist1m">GIST1M<a class="headerlink" href="#gist1m" title="Permanent link">&para;</a></h3>
+<!-- kmeans:gist1m:start -->
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th style="text-align: right;">Total time (s)</th>
+<th style="text-align: right;">WCSS</th>
+<th style="text-align: right;">Recall@10 (40 probes)</th>
+<th style="text-align: right;">Iterations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>QGKMeans</td>
+<td style="text-align: right;">14.88</td>
+<td style="text-align: right;">1034709</td>
+<td style="text-align: right;">0.815900</td>
+<td style="text-align: right;">25</td>
+</tr>
+<tr>
+<td>Faiss K-means</td>
+<td style="text-align: right;">84.17</td>
+<td style="text-align: right;">1034624.88</td>
+<td style="text-align: right;">0.815700</td>
+<td style="text-align: right;">25</td>
+</tr>
+<tr>
+<td>SuperKMeans</td>
+<td style="text-align: right;">28.14</td>
+<td style="text-align: right;">1034648.39</td>
+<td style="text-align: right;">0.820700</td>
+<td style="text-align: right;">25</td>
+</tr>
+</tbody>
+</table>
+<!-- kmeans:gist1m:end -->
+
+<h3 id="dbpedia">DBpedia<a class="headerlink" href="#dbpedia" title="Permanent link">&para;</a></h3>
+<!-- kmeans:dbpedia:start -->
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th style="text-align: right;">Total time (s)</th>
+<th style="text-align: right;">WCSS</th>
+<th style="text-align: right;">Recall@10 (40 probes)</th>
+<th style="text-align: right;">Iterations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>QGKMeans</td>
+<td style="text-align: right;">22.35</td>
+<td style="text-align: right;">620213.444</td>
+<td style="text-align: right;">0.894400</td>
+<td style="text-align: right;">25</td>
+</tr>
+<tr>
+<td>Faiss K-means</td>
+<td style="text-align: right;">171.03</td>
+<td style="text-align: right;">620737.534</td>
+<td style="text-align: right;">0.894700</td>
+<td style="text-align: right;">25</td>
+</tr>
+<tr>
+<td>SuperKMeans</td>
+<td style="text-align: right;">35.23</td>
+<td style="text-align: right;">620268.628</td>
+<td style="text-align: right;">0.896800</td>
+<td style="text-align: right;">24</td>
+</tr>
+</tbody>
+</table>
+<!-- kmeans:dbpedia:end -->
+
+<p><a href="../figures/kmeans.csv">Download measurements (CSV)</a></p>
 <h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1767,84 +1875,6 @@ and initializers; the same seed does not guarantee identical starting centroids.
 </ul>
 <p>Exact assignments are checked on 128 base vectors using float64 distances,
 outside timing.</p>
-<h2 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h2>
-<h3 id="gist1m">GIST1M<a class="headerlink" href="#gist1m" title="Permanent link">&para;</a></h3>
-<!-- kmeans:gist1m:start -->
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th style="text-align: right;">Total time (s)</th>
-<th style="text-align: right;">WCSS</th>
-<th style="text-align: right;">Recall@10 (40 probes)</th>
-<th style="text-align: right;">Iterations</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>QGKMeans</td>
-<td style="text-align: right;">14.88</td>
-<td style="text-align: right;">1034709</td>
-<td style="text-align: right;">0.815900</td>
-<td style="text-align: right;">25</td>
-</tr>
-<tr>
-<td>Faiss K-means</td>
-<td style="text-align: right;">84.17</td>
-<td style="text-align: right;">1034624.88</td>
-<td style="text-align: right;">0.815700</td>
-<td style="text-align: right;">25</td>
-</tr>
-<tr>
-<td>SuperKMeans</td>
-<td style="text-align: right;">28.14</td>
-<td style="text-align: right;">1034648.39</td>
-<td style="text-align: right;">0.820700</td>
-<td style="text-align: right;">25</td>
-</tr>
-</tbody>
-</table>
-<!-- kmeans:gist1m:end -->
-
-<h3 id="dbpedia">DBpedia<a class="headerlink" href="#dbpedia" title="Permanent link">&para;</a></h3>
-<!-- kmeans:dbpedia:start -->
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th style="text-align: right;">Total time (s)</th>
-<th style="text-align: right;">WCSS</th>
-<th style="text-align: right;">Recall@10 (40 probes)</th>
-<th style="text-align: right;">Iterations</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>QGKMeans</td>
-<td style="text-align: right;">22.35</td>
-<td style="text-align: right;">620213.444</td>
-<td style="text-align: right;">0.894400</td>
-<td style="text-align: right;">25</td>
-</tr>
-<tr>
-<td>Faiss K-means</td>
-<td style="text-align: right;">171.03</td>
-<td style="text-align: right;">620737.534</td>
-<td style="text-align: right;">0.894700</td>
-<td style="text-align: right;">25</td>
-</tr>
-<tr>
-<td>SuperKMeans</td>
-<td style="text-align: right;">35.23</td>
-<td style="text-align: right;">620268.628</td>
-<td style="text-align: right;">0.896800</td>
-<td style="text-align: right;">24</td>
-</tr>
-</tbody>
-</table>
-<!-- kmeans:dbpedia:end -->
-
-<p><a href="../figures/kmeans.csv">Download measurements (CSV)</a></p>
 <h2 id="reproduction">Reproduction<a class="headerlink" href="#reproduction" title="Permanent link">&para;</a></h2>
 <p>Follow the <a href="../bench/#package-installation">installation instructions</a>, then run:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>benchmarks/reproduce.py<span class="w"> </span>--benchmarks<span class="w"> </span>kmeans

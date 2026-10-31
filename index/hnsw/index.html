@@ -372,6 +372,8 @@
       
         
       
+        
+      
     
     
     
@@ -432,6 +434,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -2115,7 +2145,7 @@ see <a href="../../cpp_integration/">C++ integration</a>.</p>
 </tr>
 <tr>
 <td><code>M</code>, <code>ef_construction</code></td>
-<td>Graph connectivity and construction search budget; Python defaults are 16 and 200.</td>
+<td>Graph connectivity and construction search budget; Python defaults are 16 and 200. <code>M</code> must be at least 2 and is capped at 10,000; <code>ef_construction</code> is raised to at least <code>M</code>.</td>
 </tr>
 <tr>
 <td><code>metric</code>, <code>random_seed</code></td>
@@ -2229,9 +2259,9 @@ retrying, or rebuild to restore full reachability.</p>
 <h3 id="capacity">Capacity<a class="headerlink" href="#capacity" title="Permanent link">&para;</a></h3>
 <p>See the shared <a href="../usage/#index-counts">index count contract</a>. Removed
 records still occupy capacity.</p>
-<p><code>add</code> never grows the index: it throws once <code>num_stored_points()</code> reaches
-<code>max_elements()</code>, and <code>resize</code> is the only way to raise that. Reserving capacity
-avoids reallocating and copying the whole base-layer record storage during <code>add</code>.
+<p><code>add</code> never grows the index: it rejects a whole batch whose size exceeds
+<code>max_elements() - num_stored_points()</code>, and <code>resize</code> is the only way to raise
+that. Reserving capacity avoids reallocating and copying the whole base-layer record storage during <code>add</code>.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.</p>
 <p><code>resize</code> rebuilds the base-layer storage and copies it, so it needs memory for
@@ -2266,10 +2296,12 @@ exclusive access as other updates.</p>
 <h4 id="choosing-ef-after-removals">Choosing <code>ef</code> after removals<a class="headerlink" href="#choosing-ef-after-removals" title="Permanent link">&para;</a></h4>
 <p>Removed points still take slots in the <code>ef_search</code> candidate set, so a search with
 <code>ef_search</code> close to <code>k</code> finds fewer live points as removals accumulate. C++ search
-uses <code>max(ef_search, k)</code>. Python uses <code>max(k, 10)</code> when <code>ef</code> is omitted or zero;
-an explicit positive <code>ef</code> is also raised to at least <code>k</code>.
+uses <code>max(ef_search, k)</code>, clamped to <code>num_stored_points()</code>. Python uses <code>max(k, 10)</code>
+when <code>ef</code> is omitted or zero; an explicit positive <code>ef</code> is also raised to at least <code>k</code>,
+and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
-the effective window by the share of live points:</p>
+the effective window by the share of live points (search clamps the result to
+<code>num_stored_points()</code>):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>max(ef_search, k) * num_stored_points() / (num_stored_points() - removed points)
 </code></pre></div>
 <p>Callers that track how many points they removed can apply this directly.</p>
@@ -2280,6 +2312,13 @@ limit the number of clusters to 2^31, so no real cluster ID has that bit, and
 every reader of the cluster ID masks it off. The mark lives in the base layer, so
 it survives <code>save</code>, <code>load</code>, and <code>resize</code>, and a file without removals is
 unchanged.</p>
+<p>In C++, <code>cluster_id_of(internal_id)</code> returns a stored record's cluster with the
+mark masked off; removed points keep their cluster. It takes an internal ID from 0
+through <code>num_stored_points() - 1</code>, which matches the label only for points added
+in order. It throws <code>std::logic_error</code> on a default-constructed index that has
+not been loaded, and <code>std::invalid_argument</code> for an ID not below
+<code>num_stored_points()</code>, including any ID before <code>construct</code>. Python does not
+expose it.</p>
 <p>A file that has removals cannot be read by earlier releases. Releases 0.3.7
 through 0.5.1 check every cluster ID on <code>load</code> and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
@@ -2299,7 +2338,7 @@ files whose padded dimension is not a multiple of 64.</p>
 <p>Each indexed element is stored in the following layout:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>[number of edges]
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>[edges]
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>[cluster ID]       (its high bit marks a removed point, see Removing points)
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>[cluster ID]       (its high bit marks a removed point, see How removal is stored)
 <a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>[external label]
 <a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>[BinData (1-bit * padded_dim + factors)]
 <a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>[ExData (ex-bits * padded_dim + factors)]
@@ -2319,7 +2358,8 @@ input <code>dim</code>. Loading preserves the index's saved padded dimension.</p
 <p>In the base layer, we apply an adaptive re-ranking strategy:</p>
 <ul>
 <li><strong>search_pool</strong>: A distance-sorted exploration window with capacity
-  <code>max(ef_search, k)</code>, containing both expanded and unexpanded candidates.</li>
+  <code>min(max(ef_search, k), num_stored_points())</code>, containing both expanded and
+  unexpanded candidates.</li>
 <li><strong>nearest_candidates</strong>: Current best k candidates.</li>
 </ul>
 <p>Repeat while the exploration window has an unexpanded candidate:</p>

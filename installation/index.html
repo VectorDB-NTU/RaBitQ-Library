@@ -480,6 +480,8 @@
       
         
       
+        
+      
     
     
     
@@ -540,6 +542,34 @@
     
   
     0.7.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.7.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.7.1
   
 
     
@@ -1720,8 +1750,9 @@ build can use scalar kernels without the FastScan CPU baseline.
 </code></pre></div>
 <p>For changes from 0.6.0, see the <a href="../releases/0.7.0/">0.7.0 upgrade notes</a>.</p>
 <p>Wheels target the platforms above and require no compiler or CMake.
-Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
-need a separate OpenMP installation.
+Every wheel bundles its OpenMP runtime (GNU OpenMP on Linux, LLVM OpenMP on
+macOS, and the MSVC <code>vcomp140</code> runtime on Windows), so wheel users do not need a
+separate OpenMP installation.
 Release wheels disable native CPU tuning and select supported kernels at runtime.</p>
 <h3 id="python-editor-support">Python editor support<a class="headerlink" href="#python-editor-support" title="Permanent link">&para;</a></h3>
 <p>Version 0.7.2 includes type declarations (<code>__init__.pyi</code>) and a <code>py.typed</code> marker
