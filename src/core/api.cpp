@@ -186,17 +186,21 @@ uint16_t read_u16(const uint8_t* bytes) {
     return static_cast<uint16_t>(bytes[0] | (uint16_t{bytes[1]} << 8U));
 }
 
+// The i-th UnpackedU16 code, rejected if it does not fit the configured bit width.
+uint16_t checked_unpacked_code(const uint8_t* bytes, size_t i, uint16_t maximum) {
+    const uint16_t value = read_u16(bytes + 2 * i);
+    if (value > maximum) {
+        throw std::invalid_argument("Unpacked code exceeds the configured bit width");
+    }
+    return value;
+}
+
 void read_codes(const Parameters& p, CodeView input, ScratchStorage& s) {
     const auto* bytes = static_cast<const uint8_t*>(input.codes.data);
     if (input.layout == CodeLayout::UnpackedU16) {
         const auto maximum = static_cast<uint16_t>((1U << p.total_bits) - 1);
         for (size_t i = 0; i < p.dim; ++i) {
-            s.codes[i] = read_u16(bytes + 2 * i);
-            if (s.codes[i] > maximum) {
-                throw std::invalid_argument(
-                    "Unpacked code exceeds the configured bit width"
-                );
-            }
+            s.codes[i] = checked_unpacked_code(bytes, i, maximum);
         }
         return;
     }
@@ -390,13 +394,8 @@ float QueryState::compute_checked(
         const auto* bytes = static_cast<const uint8_t*>(code.codes.data);
         const auto maximum = static_cast<uint16_t>((1U << p.total_bits) - 1);
         for (size_t i = 0; i < p.dim; ++i) {
-            const uint16_t value = read_u16(bytes + 2 * i);
-            if (value > maximum) {
-                throw std::invalid_argument(
-                    "Unpacked code exceeds the configured bit width"
-                );
-            }
-            ip += query.query_[i] * static_cast<float>(value);
+            ip += query.query_[i] *
+                  static_cast<float>(checked_unpacked_code(bytes, i, maximum));
         }
     } else {
         const size_t ex_bits = p.total_bits - 1;
