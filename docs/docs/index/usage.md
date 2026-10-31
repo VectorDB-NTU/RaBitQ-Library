@@ -164,3 +164,9 @@ or unsupported versions. See the
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before
 downgrading the library.
+
+Index files are trusted input. Loaders validate structure and reject truncated,
+inconsistent, or unsupported files so that mistakes are reported, but they are
+not a security boundary: a crafted file can make `load` allocate its stored
+capacity or violate invariants that later `add` and `remove` calls rely on.
+Load only files written by this library.
