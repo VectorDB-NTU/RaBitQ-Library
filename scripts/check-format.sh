@@ -34,5 +34,5 @@ fi
 
 if ((${#files[@]} > 0)); then
     printf '%s\0' "${files[@]}" \
-        | xargs -0 --no-run-if-empty "$formatter" --dry-run --Werror
+        | xargs -0 -r "$formatter" --dry-run --Werror
 fi

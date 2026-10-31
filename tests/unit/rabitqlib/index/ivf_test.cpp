@@ -1548,6 +1548,45 @@ TEST(IvfInputTest, RejectsNonFiniteAndOversizedCoordinatesBeforeMutation) {
     );
 }
 
+TEST(IvfPersistenceTest, RejectsTrailingBytesAndReportsUnopenableDestination) {
+    constexpr size_t kCount = 33;
+    const auto points = random_rows(kCount, 911);
+    const auto centroids = random_rows(kDynNumClusters, 912);
+    std::vector<PID> assigned(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        assigned[i] = static_cast<PID>(i % kDynNumClusters);
+    }
+    IVF index(kCount, kDynDim, kDynNumClusters, 4);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const rabitq_test::TempFile path_file("rabitq_ivf_trailing.index");
+    const std::string& path = path_file.path();
+    index.save(path.c_str());
+
+    IVF loaded;
+    ASSERT_NO_THROW(loaded.load(path.c_str()));
+    {
+        std::ofstream append(path, std::ios::binary | std::ios::app);
+        const std::array<char, 64> extra{};
+        append.write(extra.data(), static_cast<std::streamsize>(extra.size()));
+    }
+    try {
+        loaded.load(path.c_str());
+        ADD_FAILURE() << "trailing bytes were accepted";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "IVF index file has unexpected trailing data");
+    }
+    // The failed load leaves the previously loaded index intact.
+    EXPECT_EQ(loaded.num_points(), kCount);
+
+    const std::string missing_directory = path + ".missing/index.bin";
+    try {
+        index.save(missing_directory.c_str());
+        ADD_FAILURE() << "saving into a missing directory succeeded";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "IVF cannot open index file for writing");
+    }
+}
+
 }  // namespace
 }  // namespace rabitqlib::ivf
 

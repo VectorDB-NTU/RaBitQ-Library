@@ -119,6 +119,9 @@ class FlatInitializer : public Initializer {
             reinterpret_cast<const char*>(centroids_.data()),
             static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
         );
+        if (!output) {
+            throw std::runtime_error("IVF Flat initializer cannot be written");
+        }
     }
 
     void load(std::ifstream& input, const char* /*filename*/) override {
@@ -126,6 +129,9 @@ class FlatInitializer : public Initializer {
             reinterpret_cast<char*>(centroids_.data()),
             static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
         );
+        if (!input) {
+            throw std::runtime_error("IVF Flat initializer cannot be read");
+        }
     }
 };
 

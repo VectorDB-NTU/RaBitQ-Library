@@ -102,8 +102,12 @@ if(RABITQ_BUILD_INDEX)
     # Binding is initialized before main; test it in its own process.
     add_test(NAME OpenMPBinding COMMAND rabitq_tests
         --gtest_filter=ThreadCount.BoundParallelForUsesRuntimePlacementAndPropagatesErrors)
+    # GoogleTest exits 0 when a filter matches nothing; require the one expected test
+    # to be selected. It skips itself on runtimes without thread placement (MSVC).
     set_tests_properties(OpenMPBinding PROPERTIES
-        ENVIRONMENT "OMP_PROC_BIND=spread;OMP_PLACES=threads;OMP_NUM_THREADS=4")
+        ENVIRONMENT "OMP_PROC_BIND=spread;OMP_PLACES=threads;OMP_NUM_THREADS=4"
+        PASS_REGULAR_EXPRESSION "\\[  PASSED  \\] 1 test\\.;\\[  SKIPPED \\] 1 test"
+        FAIL_REGULAR_EXPRESSION "\\[  FAILED  \\]")
 
     # Substitute CPU predicates only in this executable to exercise real cached dispatch
     # on a CPU without SIMD. The static library's detector object is not linked here.

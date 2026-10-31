@@ -17,7 +17,14 @@ if [[ "$($formatter --version)" != *"version 23."* ]]; then
     exit 1
 fi
 
-mapfile -d '' absolute_files < <("$repo_root/scripts/clang-format-files.sh")
+# Process substitution would discard the file-list helper's exit status.
+file_list="$(mktemp)"
+trap 'rm -f -- "$file_list"' EXIT
+if ! "$repo_root/scripts/clang-format-files.sh" > "$file_list"; then
+    echo "error: could not list files for formatting" >&2
+    exit 1
+fi
+mapfile -d '' absolute_files < "$file_list"
 files=()
 for file in "${absolute_files[@]}"; do
     files+=("${file#"$repo_root/"}")

@@ -390,5 +390,35 @@ TEST(ParallelForTest, JoinsWorkersBeforeRethrowingFunctionException) {
     EXPECT_TRUE(result.get());
 }
 
+TEST(IvfInitializerTest, FlatInitializerReportsStreamFailures) {
+    constexpr size_t kDim = 8;
+    constexpr size_t kCount = 3;
+    std::vector<float> centroids(kCount * kDim, 1.5F);
+    FlatInitializer flat(kDim, kCount);
+    flat.add_vectors(centroids.data(), 1);
+    const rabitq_test::TempFile path_file("rabitq_flat_initializer.bin");
+    const std::string& path = path_file.path();
+    {
+        std::ofstream output(path, std::ios::binary);
+        ASSERT_NO_THROW(flat.save(output, path.c_str()));
+    }
+    {
+        // A stream that failed to open cannot be written.
+        std::ofstream unopened(path + ".missing/initializer.bin", std::ios::binary);
+        EXPECT_THROW(flat.save(unopened, path.c_str()), std::runtime_error);
+    }
+    {
+        std::ifstream input(path, std::ios::binary);
+        FlatInitializer restored(kDim, kCount);
+        ASSERT_NO_THROW(restored.load(input, path.c_str()));
+    }
+    std::filesystem::resize_file(
+        std::filesystem::u8path(path), sizeof(float) * kDim * kCount - 1
+    );
+    std::ifstream truncated(path, std::ios::binary);
+    FlatInitializer partial(kDim, kCount);
+    EXPECT_THROW(partial.load(truncated, path.c_str()), std::runtime_error);
+}
+
 }  // namespace
 }  // namespace rabitqlib::ivf

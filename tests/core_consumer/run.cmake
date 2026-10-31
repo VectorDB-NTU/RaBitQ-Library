@@ -99,7 +99,8 @@ foreach(component IN LISTS components)
             "-DRABITQ_SOURCE_DIR=${consumer_source}"
             "-DCMAKE_PREFIX_PATH=${work}/relocated")
         run("${CMAKE_COMMAND}" --build "${build}" --config Release --parallel 2)
-        run("${CMAKE_CTEST_COMMAND}" --test-dir "${build}" -C Release --output-on-failure)
+        run("${CMAKE_CTEST_COMMAND}" --test-dir "${build}" -C Release --output-on-failure
+            --no-tests=error)
     endforeach()
     foreach(build IN ITEMS producer ADD_SUBDIRECTORY FETCHCONTENT)
         if(EXISTS "${work}/${build}/compile_commands.json")
@@ -175,5 +176,5 @@ run("${CMAKE_COMMAND}" -S "${RABITQ_SOURCE_DIR}/benchmarks/core"
     "-DCMAKE_PREFIX_PATH=${WORK_DIR}/core/relocated")
 run("${CMAKE_COMMAND}" --build "${WORK_DIR}/benchmark" --config Release --parallel 2)
 run("${CMAKE_CTEST_COMMAND}" --test-dir "${WORK_DIR}/benchmark" -C Release
-    --output-on-failure)
+    --output-on-failure --no-tests=error)
 message(STATUS "External consumers and core benchmark passed for: ${components}")

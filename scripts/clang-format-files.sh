@@ -13,7 +13,15 @@ else
         ':(exclude)include/rabitqlib/third/**'
 fi | while IFS= read -r -d '' file; do
     if [[ "$file" == /* ]]; then
-        file="$(realpath --relative-to="$repo_root" "$file")"
+        # Resolve the directory portably (no GNU realpath) and keep only
+        # repository paths; anything outside is skipped below.
+        directory="$(cd "$(dirname "$file")" 2>/dev/null && pwd -P)" || continue
+        file="$directory/$(basename "$file")"
+        if [[ "$file" == "$repo_root"/* ]]; then
+            file="${file#"$repo_root"/}"
+        else
+            continue
+        fi
     else
         file="${file#./}"
     fi
