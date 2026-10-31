@@ -11,7 +11,26 @@
 
 namespace rabitqlib::fastscan::simd {
 
-void pack_lut_avx2(size_t dim, const float* query, float* lut) {
+namespace {
+// Evaluated at compile time: unoptimized builds would otherwise export these library
+// functions compiled with this file's ISA flags for callers on other CPUs.
+constexpr float kInfinity = std::numeric_limits<float>::infinity();
+constexpr float kQuietNaN = std::numeric_limits<float>::quiet_NaN();
+
+template <bool ComputeRange>
+void pack_lut_impl(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    auto min_values = _mm256_set1_ps(kInfinity), max_values = _mm256_set1_ps(-kInfinity);
+    unsigned nan_mask = 0;
+    const auto update_range = [&](__m256 values) {
+        min_values = _mm256_min_ps(min_values, values);
+        max_values = _mm256_max_ps(max_values, values);
+        nan_mask |= static_cast<unsigned>(
+            _mm256_movemask_ps(_mm256_cmp_ps(values, values, _CMP_UNORD_Q))
+        );
+    };
+
     // Keep the initial +0 addition observable for signed-zero inputs.
     volatile float zero = 0;
     for (size_t group = 0; group < dim / 4; ++group) {
@@ -27,11 +46,43 @@ void pack_lut_avx2(size_t dim, const float* query, float* lut) {
         hi = _mm256_blend_ps(hi, _mm256_add_ps(hi, q2), 0xCC);
         lo = _mm256_blend_ps(lo, _mm256_add_ps(lo, q3), 0xAA);
         hi = _mm256_blend_ps(hi, _mm256_add_ps(hi, q3), 0xAA);
+        if constexpr (ComputeRange) {
+            update_range(lo);
+            update_range(hi);
+        }
         _mm256_storeu_ps(lut, lo);
         _mm256_storeu_ps(lut + 8, hi);
         query += 4;
         lut += 16;
     }
+    if constexpr (ComputeRange) {
+        float min_lanes[8], max_lanes[8];
+        _mm256_storeu_ps(min_lanes, min_values);
+        _mm256_storeu_ps(max_lanes, max_values);
+        // Plain comparisons avoid std algorithms, for the reason given at kInfinity.
+        minimum = min_lanes[0];
+        maximum = max_lanes[0];
+        for (size_t lane = 1; lane < 8; ++lane) {
+            minimum = min_lanes[lane] < minimum ? min_lanes[lane] : minimum;
+            maximum = max_lanes[lane] > maximum ? max_lanes[lane] : maximum;
+        }
+        if (nan_mask)
+            minimum = kQuietNaN;
+    }
+}
+}  // namespace
+
+void pack_lut_avx2(size_t dim, const float* query, float* lut) {
+    float unused_minimum = 0, unused_maximum = 0;
+    pack_lut_impl<false>(dim, query, lut, unused_minimum, unused_maximum);
+}
+
+// Preserve the existing ordered subset additions; reduce their values in registers.
+// A NaN minimum signals that the wrapper must use the original reduction.
+void pack_lut_range_avx2(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    pack_lut_impl<true>(dim, query, lut, minimum, maximum);
 }
 
 namespace {

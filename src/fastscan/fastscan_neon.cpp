@@ -85,7 +85,15 @@ void accumulate_hacc_neon(
 }  // namespace rabitqlib::fastscan::simd
 
 namespace rabitqlib::fastscan::simd {
-void pack_lut_neon(size_t dim, const float* query, float* lut) {
+namespace {
+template <bool ComputeRange>
+void pack_lut_impl(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    auto min_values = vdupq_n_f32(std::numeric_limits<float>::infinity()),
+         max_values = vdupq_n_f32(-std::numeric_limits<float>::infinity());
+    auto nan_mask = vdupq_n_u32(0);
+
     // Each table enumerates q0..q3 using bits 3..0. Add in that order,
     // including the initial +0, to preserve cancellation and signed zeros.
     volatile float zero = 0;
@@ -101,10 +109,34 @@ void pack_lut_neon(size_t dim, const float* query, float* lut) {
             auto table = tables[i];
             table = vbslq_f32(select2, vaddq_f32(table, q2), table);
             table = vbslq_f32(select3, vaddq_f32(table, q3), table);
+            if constexpr (ComputeRange) {
+                min_values = vminq_f32(min_values, table);
+                max_values = vmaxq_f32(max_values, table);
+                nan_mask = vorrq_u32(nan_mask, vmvnq_u32(vceqq_f32(table, table)));
+            }
             vst1q_f32(lut + i * 4, table);
         }
         query += 4;
         lut += 16;
     }
+    if constexpr (ComputeRange) {
+        minimum = vmaxvq_u32(nan_mask) ? std::numeric_limits<float>::quiet_NaN()
+                                       : vminvq_f32(min_values);
+        maximum = vmaxvq_f32(max_values);
+    }
+}
+}  // namespace
+
+void pack_lut_neon(size_t dim, const float* query, float* lut) {
+    float unused_minimum = 0, unused_maximum = 0;
+    pack_lut_impl<false>(dim, query, lut, unused_minimum, unused_maximum);
+}
+
+// Preserve the existing ordered subset additions; reduce their values in registers.
+// A NaN minimum signals that the wrapper must use the original reduction.
+void pack_lut_range_neon(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    pack_lut_impl<true>(dim, query, lut, minimum, maximum);
 }
 }  // namespace rabitqlib::fastscan::simd

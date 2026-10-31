@@ -42,9 +42,12 @@ float l2norm_sqr_avx512(const float* a, size_t dim) {
     return raw_float<FloatOperation::SquaredNorm>(a, a, dim);
 }
 
-void scalar_quantize_uint8_avx512(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
-) {
+namespace {
+// NonNegative requires (value - lo) / delta >= 0, as for FastScan LUT entries at
+// least their minimum; truncation plus a half test then rounds half away from zero.
+// Signed inputs keep round_away_from_zero. Do not replace either with adding 0.5f.
+template <bool NonNegative>
+void quantize_uint8(uint8_t* result, const float* vec0, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
         std::fill_n(result, dim, uint8_t{0});
         return;
@@ -57,12 +60,37 @@ void scalar_quantize_uint8_avx512(
     for (; i < mul16; i += 16) {
         __m512 cur = _mm512_loadu_ps(&vec0[i]);
         cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), od512);
-        __m128i i8 = _mm512_cvtusepi32_epi8(_mm512_cvttps_epi32(round_away_from_zero(cur)));
+        __m512i i32;
+        if constexpr (NonNegative) {
+            const __m512 truncated =
+                _mm512_roundscale_ps(cur, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC);
+            const __mmask16 increment = _mm512_cmp_ps_mask(
+                _mm512_sub_ps(cur, truncated), _mm512_set1_ps(0.5F), _CMP_GE_OQ
+            );
+            const __m512i integer = _mm512_cvttps_epi32(truncated);
+            i32 = _mm512_mask_add_epi32(integer, increment, integer, _mm512_set1_epi32(1));
+        } else {
+            i32 = _mm512_cvttps_epi32(round_away_from_zero(cur));
+        }
+        __m128i i8 = _mm512_cvtusepi32_epi8(i32);
         _mm_storeu_si128(reinterpret_cast<__m128i*>(&result[i]), i8);
     }
     for (; i < dim; ++i) {
         result[i] = static_cast<uint8_t>(std::round((vec0[i] - lo) * one_over_delta));
     }
+}
+}  // namespace
+
+void scalar_quantize_uint8_avx512(
+    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+) {
+    quantize_uint8<false>(result, vec0, dim, lo, delta);
+}
+
+void scalar_quantize_nonnegative_uint8_avx512(
+    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+) {
+    quantize_uint8<true>(result, vec0, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_avx512(

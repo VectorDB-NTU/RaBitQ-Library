@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -8,7 +10,15 @@
 #include "rabitqlib/fastscan/pack_codes.hpp"
 
 namespace rabitqlib::fastscan::simd {
-void pack_lut_generic(size_t dim, const float* query, float* lut) {
+namespace {
+template <bool ComputeRange>
+void pack_lut_impl(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    float min_values = std::numeric_limits<float>::infinity(),
+          max_values = -std::numeric_limits<float>::infinity();
+    bool nan_mask = false;
+
     // Keep the initial +0 addition observable; MSVC otherwise turns +0 + -0 into -0.
     volatile float zero = 0;
     for (size_t group = 0; group < dim / 4; ++group) {
@@ -17,9 +27,34 @@ void pack_lut_generic(size_t dim, const float* query, float* lut) {
             const size_t lowbit = j & (size_t{0} - j);
             lut[j] = lut[j - lowbit] + query[kPos[j]];
         }
+        if constexpr (ComputeRange) {
+            for (size_t j = 0; j < 16; ++j) {
+                min_values = std::min(min_values, lut[j]);
+                max_values = std::max(max_values, lut[j]);
+                nan_mask |= std::isnan(lut[j]);
+            }
+        }
         query += 4;
         lut += 16;
     }
+    if constexpr (ComputeRange) {
+        minimum = nan_mask ? std::numeric_limits<float>::quiet_NaN() : min_values;
+        maximum = max_values;
+    }
+}
+}  // namespace
+
+void pack_lut_generic(size_t dim, const float* query, float* lut) {
+    float unused_minimum = 0, unused_maximum = 0;
+    pack_lut_impl<false>(dim, query, lut, unused_minimum, unused_maximum);
+}
+
+// Preserve the existing ordered subset additions; reduce their values in registers.
+// A NaN minimum signals that the wrapper must use the original reduction.
+void pack_lut_range_generic(
+    size_t dim, const float* query, float* lut, float& minimum, float& maximum
+) {
+    pack_lut_impl<true>(dim, query, lut, minimum, maximum);
 }
 }  // namespace rabitqlib::fastscan::simd
 
