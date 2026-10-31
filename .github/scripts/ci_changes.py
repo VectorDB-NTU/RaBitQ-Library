@@ -55,7 +55,6 @@ BENCHMARK_PYTHON_PATHS = frozenset(
         "build_indexes",
         "download_datasets",
         "install_baselines",
-        "plot_homepage",
         "plot_results",
         "query_index",
         "reproduce",

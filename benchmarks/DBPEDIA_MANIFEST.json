@@ -1,6 +1,6 @@
 {
   "dataset": "openai-1536-angular",
-  "source": "SuperKMeans benchmark data_openai.bin and data_openai_test.bin",
+  "source": "openai-1536-angular.hdf5 train/test splits (Google Drive file 1cwIY76n_HEbbZAANJVWiVkjBsIy3b9jB), converted to fvecs",
   "metric": "inner_product",
   "normalization": "unit-normalized source values preserved exactly",
   "dimension": 1536,
