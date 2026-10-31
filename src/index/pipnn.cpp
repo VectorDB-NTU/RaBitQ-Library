@@ -177,10 +177,17 @@ Workspace ScratchPool::worker(size_t id) {
         {}};
 }
 
-void gather(const float* data, size_t dim, const Bucket& ids, Workspace& work) {
-    for (size_t i = 0; i < ids.size(); ++i) {
-        std::copy_n(data + ids[i] * dim, dim, work.points + i * dim);
+namespace {
+// Copy the rows named by ids[0..count) to consecutive rows of output.
+void copy_rows(const float* data, size_t dim, const PID* ids, size_t count, float* output) {
+    for (size_t i = 0; i < count; ++i) {
+        std::copy_n(data + ids[i] * dim, dim, output + i * dim);
     }
+}
+}  // namespace
+
+void gather(const float* data, size_t dim, const Bucket& ids, Workspace& work) {
+    copy_rows(data, dim, ids.data(), ids.size(), work.points);
 }
 
 void pairwise(Workspace& work, size_t size, size_t dim, MetricType metric_type) {
@@ -248,9 +255,7 @@ std::vector<Bucket> partition(
     leaders.reserve(leader_count);
     std::sample(ids.begin(), ids.end(), std::back_inserter(leaders), leader_count, random);
     RowMajorMatrix<float> leader_data(leader_count, dim);
-    for (size_t i = 0; i < leader_count; ++i) {
-        std::copy_n(data + leaders[i] * dim, dim, leader_data.data() + i * dim);
-    }
+    copy_rows(data, dim, leaders.data(), leader_count, leader_data.data());
     Vector<float> leader_norms(leader_count);
     simd::row_norms(leader_data.data(), leader_norms.data(), leader_count, dim);
     std::vector<PID> assignments(ids.size() * fanout);
@@ -268,9 +273,7 @@ std::vector<Bucket> partition(
             static_cast<Eigen::Index>(leader_count)
         );
         VectorMap<float> norms(work.norms, static_cast<Eigen::Index>(count));
-        for (size_t i = 0; i < count; ++i) {
-            std::copy_n(data + ids[begin + i] * dim, dim, points.data() + i * dim);
-        }
+        copy_rows(data, dim, ids.data() + begin, count, points.data());
         simd::matrix_product_transposed(
             points.data(), leader_data.data(), distances.data(), count, dim, leader_count
         );
@@ -362,6 +365,13 @@ std::vector<Bucket> cluster(
                 return a.size() < b.size();
             });
             Bucket small;
+            // Merged small children become one deduplicated leaf.
+            const auto finish_small = [&] {
+                std::sort(small.begin(), small.end());
+                small.erase(std::unique(small.begin(), small.end()), small.end());
+                finished[i].push_back(std::move(small));
+                small = Bucket();
+            };
             for (size_t j = 0; j < children.size(); ++j) {
                 auto& child = children[j];
                 if (child.empty()) {
@@ -372,10 +382,7 @@ std::vector<Bucket> cluster(
                     if (small.size() < kLeafSize / 10) {
                         continue;
                     }
-                    std::sort(small.begin(), small.end());
-                    small.erase(std::unique(small.begin(), small.end()), small.end());
-                    finished[i].push_back(std::move(small));
-                    small = Bucket();
+                    finish_small();
                 } else if (child.size() <= kLeafSize) {
                     finished[i].push_back(std::move(child));
                 } else if (
@@ -402,9 +409,7 @@ std::vector<Bucket> cluster(
                 }
             }
             if (!small.empty()) {
-                std::sort(small.begin(), small.end());
-                small.erase(std::unique(small.begin(), small.end()), small.end());
-                finished[i].push_back(std::move(small));
+                finish_small();
             }
             Bucket().swap(job.ids);
         };

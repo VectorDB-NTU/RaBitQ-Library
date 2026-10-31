@@ -227,33 +227,22 @@ void QGBuilder::write_row(PID id, BuildWorker& worker) {
         auto& rotated_data = worker.rotated_neighbors;
         rotated_data.resize((num_neighbors + 1) * padded_dim);
         float* rotated_centroid = rotated_data.data() + num_neighbors * padded_dim;
-        for (size_t i = 0; i < num_neighbors; ++i) {
+        // Cached rows, rotated raw vectors or reconstructed codes, as configured.
+        const auto rotated_row = [&](PID source, float* row) {
             if (cache != nullptr) {
                 std::copy_n(
-                    cache->rotated_vectors.data() + new_neighbors[i] * padded_dim,
-                    padded_dim,
-                    rotated_data.data() + i * padded_dim
+                    cache->rotated_vectors.data() + source * padded_dim, padded_dim, row
                 );
             } else if (qg_.quantization_bits_ == 0) {
-                const float* neighbor_vec = qg_.get_vector(new_neighbors[i]);
-                qg_.rotator_->rotate(neighbor_vec, &rotated_data[i * padded_dim]);
+                qg_.rotator_->rotate(qg_.get_vector(source), row);
             } else {
-                qg_.reconstruct_quantized_vector(
-                    new_neighbors[i], &rotated_data[i * padded_dim]
-                );
+                qg_.reconstruct_quantized_vector(source, row);
             }
+        };
+        for (size_t i = 0; i < num_neighbors; ++i) {
+            rotated_row(new_neighbors[i], rotated_data.data() + i * padded_dim);
         }
-        if (cache != nullptr) {
-            std::copy_n(
-                cache->rotated_vectors.data() + id * padded_dim,
-                padded_dim,
-                rotated_centroid
-            );
-        } else if (qg_.quantization_bits_ == 0) {
-            qg_.rotator_->rotate(qg_.get_vector(id), rotated_centroid);
-        } else {
-            qg_.reconstruct_quantized_vector(id, rotated_centroid);
-        }
+        rotated_row(id, rotated_centroid);
         qg_.encode_neighbors(id, new_neighbors, rotated_data.data(), rotated_centroid);
     }
     degrees_[id] = worker.neighbor_ids.size();

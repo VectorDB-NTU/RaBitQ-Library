@@ -133,9 +133,6 @@ QuantizedGraph<float>::QuantizedGraph(
     , max_degree_(max_degree)
     , dim_(dim)
     , padded_dim_(dim)
-    , raw_dist_func_(
-          (metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
-      )
     , metric_type_(metric_type)
     , rotator_type_(rotator_type)
     , quantization_bits_(quantization_bits)
@@ -372,8 +369,6 @@ void QuantizedGraph<float>::load(const char* filename) {
         loaded.quantization_bits_ = 0;
     }
 
-    loaded.raw_dist_func_ =
-        (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
     loaded.validate_configuration();
     if (stored_padded_dim < loaded.dim_ || stored_padded_dim % 32 != 0) {
         throw std::runtime_error("Invalid padded dimension in quantized graph file");
@@ -675,6 +670,8 @@ void QuantizedGraph<float>::initialize(bool randomize_rotation) {
     assert(record_bytes_ % sizeof(float) == 0);
     data_ = RowStorage(data_bytes / sizeof(float));
 
+    raw_dist_func_ =
+        metric_type_ == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
     if (quantization_bits_ != 0) {
         quantized_ip_func_ = select_excode_ipfunc(quantization_bits_);
     }
