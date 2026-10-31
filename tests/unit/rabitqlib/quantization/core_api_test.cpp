@@ -42,6 +42,56 @@ api::CodeView view(api::CodeOutput output) {
         {output.extra.data, output.extra.bytes}};
 }
 
+TEST(CoreApi, RejectsNonFiniteValuesAtEveryInputPosition) {
+    for (size_t dim : {2U, 3U, 15U, 16U, 17U, 31U, 32U, 33U, 65U}) {
+        const api::Parameters parameters{dim, 1};
+        const auto sizes = api::requirements(parameters, api::CodeLayout::UnpackedU16);
+        Workspace workspace(sizes.workspace_bytes);
+        std::vector<uint8_t> codes(sizes.code_bytes, 0x5A);
+        const api::CodeOutput output{
+            api::CodeLayout::UnpackedU16, {codes.data(), codes.size()}, {}};
+        std::vector<float> values(dim, 0.0F), finite(dim, -0.0F);
+        for (size_t position = 0; position < dim; ++position) {
+            for (float bad :
+                 {std::numeric_limits<float>::quiet_NaN(),
+                  std::numeric_limits<float>::infinity(),
+                  -std::numeric_limits<float>::infinity()}) {
+                SCOPED_TRACE(::testing::Message() << dim << "/" << position << "/" << bad);
+                values[position] = bad;
+                const auto rejects = [](auto operation) {
+                    try {
+                        operation();
+                        FAIL() << "Non-finite input was accepted";
+                    } catch (const std::invalid_argument& error) {
+                        EXPECT_STREQ(
+                            error.what(), "Input vectors must contain only finite values"
+                        );
+                    }
+                };
+                rejects([&] { api::prepare_query(parameters, values.data(), nullptr); });
+                rejects([&] {
+                    api::prepare_query(parameters, finite.data(), values.data());
+                });
+                rejects([&] {
+                    api::encode(
+                        parameters, values.data(), nullptr, output, workspace.view()
+                    );
+                });
+                rejects([&] {
+                    api::encode(
+                        parameters, finite.data(), values.data(), output, workspace.view()
+                    );
+                });
+                values[position] = 0.0F;
+            }
+        }
+        EXPECT_TRUE(std::all_of(codes.begin(), codes.end(), [](uint8_t v) {
+            return v == 0x5A;
+        }));
+        EXPECT_NO_THROW(api::prepare_query(parameters, finite.data(), nullptr));
+    }
+}
+
 TEST(CoreApi, ExactWorkspaceSizeProtectsBoundaryBytes) {
     for (size_t dim : {2U, 3U, 31U, 33U, 65U, 96U}) {
         for (size_t bits : {1U, 4U, 9U}) {

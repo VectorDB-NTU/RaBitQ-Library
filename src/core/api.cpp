@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory_resource>
 #include <numeric>
@@ -89,10 +90,19 @@ void check_input(const float* input, size_t dim) {
     check_buffer<alignof(float)>(
         {input, multiply(dim, sizeof(float))}, multiply(dim, sizeof(float))
     );
+    static_assert(
+        sizeof(float) == sizeof(uint32_t) && std::numeric_limits<float>::is_iec559
+    );
+    // An integer reduction lets portable builds check several float32 values
+    // per instruction without relaxing floating-point compiler options.
+    uint32_t nonfinite = 0;
     for (size_t i = 0; i < dim; ++i) {
-        if (!std::isfinite(input[i])) {
-            throw std::invalid_argument("Input vectors must contain only finite values");
-        }
+        uint32_t bits;
+        std::memcpy(&bits, input + i, sizeof(bits));
+        nonfinite |= static_cast<uint32_t>((bits & 0x7f800000U) == 0x7f800000U);
+    }
+    if (nonfinite != 0) {
+        throw std::invalid_argument("Input vectors must contain only finite values");
     }
 }
 
