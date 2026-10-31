@@ -222,6 +222,7 @@ class ChangeSelectionTest(unittest.TestCase):
             "scripts/check-tidy.sh": {"shell", "cpp_tidy", "python_quality"},
             "scripts/check-format.sh": {"shell", "cpp_format", "python_quality"},
             "scripts/check-includes.sh": {"shell"},
+            "scripts/check-isa-symbols.sh": {"shell", "cpp", "cpp_tidy"},
             ".clang-format": {"cpp_format"},
             ".clang-tidy": {"cpp_tidy"},
             ".github/workflows/test.yaml": {

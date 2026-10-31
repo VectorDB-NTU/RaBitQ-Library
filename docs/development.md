@@ -152,6 +152,25 @@ shellcheck scripts/*.sh sample/run_cpp.sh sample/run_python.sh
 This matches CI's script set. Also pass any changed shell scripts outside
 `scripts/` to `shellcheck` explicitly.
 
+### ISA symbol check
+
+Sources compiled with ISA flags must not emit a weak function that a generic source also
+emits with different code: the linker keeps one copy for every caller, so generic code
+could execute AVX instructions. CI runs the check on portable Release builds with GCC and
+Clang:
+
+```bash
+./scripts/check-isa-symbols.sh build-tidy      # any CMake build directory
+```
+
+It recompiles the library sources from `compile_commands.json` with that build's flags
+(extra arguments such as `-O1` are appended) and fails when copies of a weak function
+differ between ISA flag sets. Only the Release (`-O3`) configuration is clean and checked.
+Lower optimization levels emit helpers the compiler otherwise inlines: Debug (`-O0`)
+emits many standard-library and Eigen functions per source, and GCC at `-O1`/`-O2`
+still shares two Eigen assignment loops between the FastScan estimator sources. The
+script only sees `src/`, needs GNU binutils, and does not cover MSVC or ARM-only builds.
+
 ### Static analysis
 
 clang-tidy performs semantic checks and is kept separate from clang-format.
@@ -753,8 +772,8 @@ index records.
 
 IVF/HNSW/SymphonyQG public index headers contain declarations and small accessors;
 they must not import encoding, scoring, rotator implementation, search scratch, Eigen
-or hnswlib. Operations compile in `src/index/{ivf,hnsw,qg}.cpp`; HNSW's per-ISA templates
-live in `src/index/hnsw_search_impl.hpp`. Preserve the advanced `hnsw_quant.hpp`
+or hnswlib. Operations compile in `src/index/{ivf,hnsw,qg}.cpp`; HNSW's per-ISA graph traversal
+templates live in `src/index/hnsw_search_impl.hpp`. Preserve the advanced `hnsw_quant.hpp`
 query-cache header. Installed-consumer tests poison implementation/vendor headers to
 check index header independence; `CoreModuleBoundary` also rejects batch declarations
 copied into core without an upward include.
@@ -922,8 +941,17 @@ a short-vector improvement does not justify applying it to wider vectors.
 
 Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
 headers use internal linkage so independently compiled backends retain their own bodies.
-This includes public headers reached from ISA-flagged sources, such as the per-ISA HNSW
-search files: keep their non-template helpers `static inline` rather than plain `inline`.
+This includes public headers reached from ISA-flagged sources: keep their non-template
+helpers `static inline` rather than plain `inline`. Template code instantiated in an
+ISA-flagged source must depend on a type local to that source, as the HNSW kernels do:
+`src/index/hnsw_search_*.cpp` keep their `Kernel` types in an anonymous namespace and
+only traverse the graph. Query preparation, centroid distances, acquiring the visited set
+and search buffer, and result formatting run in generic code
+(`HierarchicalNSW::search_knn_sorted_with`). The visited set's hash-table spill path is
+compiled once in `src/index/visited_set_hash.cpp`. Other calls inside a `Kernel` template
+that do not depend on `Kernel`, such as search-buffer operations, stay safe only while
+the compiler inlines them. `scripts/check-isa-symbols.sh` checks Release builds; see
+[ISA symbol check](#isa-symbol-check).
 The AVX FHT intrinsics in `src/simd/fht_kernels.hpp` use the private kernel namespace
 for the same reason. Rotation uses this implementation on GCC, Clang, and MSVC;
 no assembler is required. Keep the FFHT attribution and MIT license in the

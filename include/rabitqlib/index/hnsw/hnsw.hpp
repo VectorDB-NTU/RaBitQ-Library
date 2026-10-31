@@ -1,7 +1,6 @@
 // HNSW is developed from the [HNSW library](https://github.com/nmslib/hnswlib)
 #pragma once
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -36,7 +35,8 @@ struct DistanceEstimate;
 namespace rabitqlib::hnsw {
 namespace detail {
 struct QuantQuery;
-}
+struct HnswSearchAccess;
+}  // namespace detail
 
 template <typename T>
 using maxheap = std::priority_queue<T>;
@@ -169,52 +169,8 @@ class HierarchicalNSW {
     // Borrows construct() input only while its workers run; cleared on success or failure.
     const float* construction_data_{nullptr};
 
-    // Bounded priority queue implemented as a sorted vector.
-    class BoundedKNN {
-       public:
-        explicit BoundedKNN(size_t capacity) : capacity_(capacity) {}
-
-        // Insert a candidate in sorted order (ascending by distance).
-        void insert(const AnnCandidate<float>& candidate) {
-            auto it = std::upper_bound(queue_.begin(), queue_.end(), candidate);
-            queue_.insert(it, candidate);
-            // If we exceed capacity, drop the worst candidate (largest distance).
-            if (queue_.size() > capacity_) {
-                queue_.pop_back();
-            }
-        }
-
-        // Returns the worst (largest distance) candidate.
-        [[nodiscard]] const AnnCandidate<float>& worst() const { return queue_.back(); }
-
-        [[nodiscard]] size_t size() const { return queue_.size(); }
-
-        [[nodiscard]] const std::vector<AnnCandidate<float>>& candidates() const {
-            return queue_;
-        }
-
-       private:
-        size_t capacity_;
-        // Sorted in ascending order by distance so that the worst is at the back.
-        std::vector<AnnCandidate<float>> queue_;
-    };
-
     friend struct HnswTestAccess;
-    friend std::vector<std::pair<float, PID>> detail::search_knn_sorted_neon(
-        HierarchicalNSW&, const float*, size_t, size_t
-    );
-    friend std::vector<std::pair<float, PID>> detail::search_knn_sorted_generic(
-        HierarchicalNSW&, const float*, size_t, size_t
-    );
-    friend std::vector<std::pair<float, PID>> detail::search_knn_sorted_avx2(
-        HierarchicalNSW&, const float*, size_t, size_t
-    );
-    friend std::vector<std::pair<float, PID>> detail::search_knn_sorted_avx512_core(
-        HierarchicalNSW&, const float*, size_t, size_t
-    );
-    friend std::vector<std::pair<float, PID>> detail::search_knn_sorted_avx512_popcnt(
-        HierarchicalNSW&, const float*, size_t, size_t
-    );
+    friend struct detail::HnswSearchAccess;
 
     // `remove` sets the high bit of a point's stored cluster ID. construct and load
     // keep num_clusters_ at or below 2^31, so a real cluster ID never has it.
@@ -407,10 +363,18 @@ class HierarchicalNSW {
         *(reinterpret_cast<uint16_t*>(links)) = count;
     }
 
-    // ANN Search
+    // ANN Search. search_knn_sorted_with prepares the query in generic code and runs
+    // one ISA's search_layers_direct (instantiated in src/index/hnsw_search_*.cpp).
+    std::vector<std::pair<float, PID>> search_knn_sorted_with(
+        detail::SearchLayersFn search_layers,
+        const float* rotated_query,
+        size_t k,
+        size_t ef_search
+    ) const;
+
     template <class Kernel>
     void estimate_bin_direct(
-        const std::vector<float>& q_to_centroids,
+        const float* q_to_centroids,
         const SplitSingleQuery<float>& query_wrapper,
         PID candidate_id,
         DistanceEstimate& estimate
@@ -418,25 +382,31 @@ class HierarchicalNSW {
 
     template <class Kernel>
     void estimate_full_direct(
-        const std::vector<float>& q_to_centroids,
+        const float* q_to_centroids,
         const SplitSingleQuery<float>& query_wrapper,
         PID candidate_id,
         DistanceEstimate& estimate
     ) const;
 
     template <class Kernel>
-    std::vector<std::pair<float, PID>> search_knn_sorted_direct(
-        const float* rotated_query, size_t k, size_t ef_search
+    size_t search_layers_direct(
+        const SplitSingleQuery<float>& query_wrapper,
+        const float* q_to_centroids,
+        VisitedSet& visited,
+        buffer::SearchBuffer<float>& search_pool,
+        size_t k,
+        AnnCandidate<float>* nearest
     ) const;
 
-    template <class Kernel>
+    template <class Kernel, class Results>
     void search_base_layer_direct(
         PID entry_point_id,
-        size_t ef_search,
         size_t k,
         const SplitSingleQuery<float>& query_wrapper,
-        const std::vector<float>& q_to_centroids,
-        BoundedKNN& nearest_candidates
+        const float* q_to_centroids,
+        VisitedSet& visited,
+        buffer::SearchBuffer<float>& search_pool,
+        Results& nearest_candidates
     ) const;
 
     // Raw-vector distance used by construct; add scores links with quantized_distance.

@@ -38,7 +38,7 @@ Tool versions and installation instructions are maintained in [docs/development.
 | Python sources | `./scripts/check-python.sh` and affected Python tests via `python -m pytest` |
 | Bindings or Python-visible C++ behavior | C++ and Python checks above; rebuild/install the package in the existing environment before testing, then verify the imported package/extension paths and that the extension includes the current changes |
 | Python API signatures, type declarations or accepted-input contracts | Keep `python_bindings/__init__.pyi` and runtime docstrings synchronized; run the [editor/type checks](tests/README.md#python-editor-support), including the explicitly selected mypy and Pyright tests outside `tests/python` |
-| SIMD, metrics, packing, layouts, or index formats | Before building, audit every backend and consumer sharing the contract; build and run relevant reference/compatibility tests with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF` |
+| SIMD, metrics, packing, layouts, or index formats | Before building, audit every backend and consumer sharing the contract; build and run relevant reference/compatibility tests with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; run `./scripts/check-isa-symbols.sh` on that build when ISA-flagged sources or headers they include change |
 | Hot-path algorithm/allocation changes or performance claims | Correctness tests first, then a representative benchmark reporting dataset, CPU, compiler, ISA, threads, latency/throughput, and quality; a correctness fix may omit benchmarks with a documented justification, without making an unmeasured performance claim |
 | Examples | Build or run the affected example |
 | Shell scripts | ShellCheck on affected scripts; see contributor instructions |

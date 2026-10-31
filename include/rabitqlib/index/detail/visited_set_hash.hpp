@@ -40,6 +40,11 @@ class HashBasedVisitedSet {
 
     [[nodiscard]] auto hash1(const PID value) const { return value & mask_; }
 
+    // The spill-over lookups are compiled once in src/index/visited_set_hash.cpp, so
+    // ISA-specific search sources never instantiate the hash table themselves.
+    [[nodiscard]] bool spilled(PID internal_id) const;
+    void spill(PID internal_id);
+
     void initialize_table(const size_t table_size) {
         // Allocate before changing the mask so failure preserves the previous table.
         table_ = std::vector<PID, memory::AlignedAllocator<PID>>(table_size);
@@ -94,7 +99,7 @@ class HashBasedVisitedSet {
         if (val == internal_id) {
             return true;
         }
-        return (val != kPidMax && stl_hash_.find(internal_id) != stl_hash_.end());
+        return val != kPidMax && spilled(internal_id);
     }
 
     void set(PID internal_id) {
@@ -105,7 +110,7 @@ class HashBasedVisitedSet {
         if (val == kPidMax) {
             val = internal_id;
         } else {
-            stl_hash_.emplace(internal_id);
+            spill(internal_id);
         }
     }
 };

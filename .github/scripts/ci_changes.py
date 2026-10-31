@@ -234,6 +234,9 @@ def classify(paths):
                 selected.add("python_quality")
             elif path == "scripts/check-tidy.sh":
                 selected.add("cpp_tidy")
+            elif path == "scripts/check-isa-symbols.sh":
+                # Run by the static-analysis and installed-consumer jobs.
+                selected.update(("cpp", "cpp_tidy"))
             elif path != "scripts/check-includes.sh":
                 selected.add("cpp_format")
         else:
