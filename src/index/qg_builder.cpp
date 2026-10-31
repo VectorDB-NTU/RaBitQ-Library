@@ -205,7 +205,8 @@ bool QGBuilder::check_dup() const {
 }
 
 float QGBuilder::avg_degree() const {
-    size_t degrees = std::accumulate(degrees_.begin(), degrees_.end(), 0U);
+    // A size_t initial value keeps the sum from wrapping at 2^32 on large graphs.
+    size_t degrees = std::accumulate(degrees_.begin(), degrees_.end(), size_t{0});
     return static_cast<float>(degrees) / static_cast<float>(num_points_);
 }
 void QGBuilder::run_passes(size_t num_iter) {
