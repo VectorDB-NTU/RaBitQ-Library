@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 
@@ -25,13 +26,12 @@ inline uint32x4_t quantize4(const float* data, float32x4_t lo, float32x4_t recip
     // Callers provide finite values whose rounded codes fit the output type.
     return vcvtaq_u32_f32(vmulq_f32(vsubq_f32(vld1q_f32(data), lo), reciprocal));
 }
-}  // namespace
 
-void scalar_quantize_uint8_neon(
-    uint8_t* result, const float* data, size_t dim, float lo, float delta
-) {
+// Code is uint8_t or uint16_t; only the final narrowing and store differ.
+template <typename Code>
+void quantize(Code* result, const float* data, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
-        std::fill_n(result, dim, uint8_t{0});
+        std::fill_n(result, dim, Code{0});
         return;
     }
     const float reciprocal = 1.0F / delta;
@@ -42,35 +42,28 @@ void scalar_quantize_uint8_neon(
             vmovn_u32(quantize4(data + i, low, scale)),
             vmovn_u32(quantize4(data + i + 4, low, scale))
         );
-        vst1_u8(result + i, vmovn_u16(codes));
+        if constexpr (std::is_same_v<Code, uint8_t>) {
+            vst1_u8(result + i, vmovn_u16(codes));
+        } else {
+            vst1q_u16(result + i, codes);
+        }
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<uint8_t>(std::round((data[i] - lo) * reciprocal));
+        result[i] = static_cast<Code>(std::round((data[i] - lo) * reciprocal));
     }
+}
+}  // namespace
+
+void scalar_quantize_uint8_neon(
+    uint8_t* result, const float* data, size_t dim, float lo, float delta
+) {
+    quantize(result, data, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_neon(
     uint16_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    if (delta == 0.0F) {
-        std::fill_n(result, dim, uint16_t{0});
-        return;
-    }
-    const float reciprocal = 1.0F / delta;
-    const float32x4_t low = vdupq_n_f32(lo), scale = vdupq_n_f32(reciprocal);
-    size_t i = 0;
-    for (; i + 8 <= dim; i += 8) {
-        vst1q_u16(
-            result + i,
-            vcombine_u16(
-                vmovn_u32(quantize4(data + i, low, scale)),
-                vmovn_u32(quantize4(data + i + 4, low, scale))
-            )
-        );
-    }
-    for (; i < dim; ++i) {
-        result[i] = static_cast<uint16_t>(std::round((data[i] - lo) * reciprocal));
-    }
+    quantize(result, data, dim, lo, delta);
 }
 
 void new_transpose_bin_neon(
