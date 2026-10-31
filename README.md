@@ -1,6 +1,6 @@
 <div align="center">
 
-<p><img src="docs/docs/assets/logo.svg" alt="RaBitQ Library logo" width="800"></p>
+<p><img src="https://vectordb-ntu.github.io/RaBitQ-Library/assets/logo.svg" alt="RaBitQ Library logo" width="800"></p>
 
 <p>
   <a href="https://pypi.org/project/rabitqlib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/rabitqlib.svg?cacheSeconds=300"></a>
@@ -12,17 +12,17 @@
 </div>
 
 RaBitQ-Library is a research-backed library for vector quantization and
-approximate nearest-neighbor search. See the [research papers](docs/docs/papers.md).
+approximate nearest-neighbor search. See the [research papers](https://vectordb-ntu.github.io/RaBitQ-Library/papers/).
 
 ## News
 
 - **v0.7.2:** Python type hints, expanded API documentation, path-like inputs,
   clearer input errors, and concise index representations. Internal quantization
   refactoring and streamlined regression checks preserve existing APIs and index formats.
-  See the [release notes](docs/docs/releases/0.7.2.md).
+  See the [release notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.7.2/).
 - **v0.7.0:** Modular C++ components, stable core API v1, optional
   OpenMP for numerical components, and unified index counts. See the
-  [upgrade notes](docs/docs/releases/0.7.0.md).
+  [upgrade notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.7.0/).
 
 ## Vector indexes
 
@@ -33,14 +33,14 @@ QPS–recall tradeoffs.
 
 | Index | Search approach | Storage and updates |
 | --- | --- | --- |
-| [IVF-RaBitQ](docs/docs/index/ivf.md) | Partitioned search with batch scoring. | 1–9-bit codes or raw-vector reranking; add/remove. |
-| [HNSW-RaBitQ](docs/docs/index/hnsw.md) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and resize. |
-| [SymphonyQG](docs/docs/index/qg.md) | Graph search with batched distance estimation. | Raw or 4/8-bit storage; updates require rebuilding. |
+| [IVF-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/ivf/) | Partitioned search with batch scoring. | 1–9-bit codes or raw-vector reranking; add/remove. |
+| [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and resize. |
+| [SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/) | Graph search with batched distance estimation. | Raw or 4/8-bit storage; updates require rebuilding. |
 
-[Native clustering methods](docs/docs/clustering.md) prepare centroids and
+[Native clustering methods](https://vectordb-ntu.github.io/RaBitQ-Library/clustering/) prepare centroids and
 assignments for IVF-RaBitQ and HNSW-RaBitQ.
 
-See the [benchmarks](docs/docs/benchmarks/bench.md) for measured results,
+See the [benchmarks](https://vectordb-ntu.github.io/RaBitQ-Library/benchmarks/bench/) for measured results,
 settings, and limitations.
 
 ## Quick start
@@ -53,7 +53,7 @@ python -m pip install --upgrade "rabitqlib>=0.7.2"
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
 and macOS 14+ ARM64. x86-64 requires AVX2/FMA and optionally uses
-AVX-512; ARM64 uses NEON. See [platform requirements and source installation](docs/docs/installation.md#requirements).
+AVX-512; ARM64 uses NEON. See [platform requirements and source installation](https://vectordb-ntu.github.io/RaBitQ-Library/installation/#requirements).
 
 Build and search a small IVF-RaBitQ index with synthetic data; no dataset download is
 required. This example demonstrates the API, not performance.
@@ -78,17 +78,17 @@ print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 
 IDs identify input rows; distances here estimate squared L2 distance, with smaller
 values first. Quantization remains approximate even when all clusters are probed.
-The [complete quick start](docs/docs/quick_start.md) explains result handling,
+The [complete quick start](https://vectordb-ntu.github.io/RaBitQ-Library/quick_start/) explains result handling,
 measures recall while varying `nprobe`, and shows save/load.
 
-For other indexes, see the [HNSW-RaBitQ](docs/docs/index/hnsw.md#minimal-workflow) and
-[SymphonyQG](docs/docs/index/qg.md#minimal-workflow) examples.
+For other indexes, see the [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/#minimal-workflow) and
+[SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/#minimal-workflow) examples.
 
 ### C++
 
-Use the [C++ integration guide](docs/docs/cpp_integration.md) for source builds,
+Use the [C++ integration guide](https://vectordb-ntu.github.io/RaBitQ-Library/cpp_integration/) for source builds,
 component linking, and installation. Start with the
-[C++ index examples](docs/docs/cpp_integration.md#c-examples), or use the
+[C++ index examples](https://vectordb-ntu.github.io/RaBitQ-Library/cpp_integration/#c-examples), or use the
 quantization components below in your own engine.
 
 ## Quantization components
@@ -98,12 +98,12 @@ engine, independently of the included indexes.
 
 | Component | What it provides | Start here |
 | --- | --- | --- |
-| `rabitqlib::core` | Rotation, per-vector encoding, query preparation, and distance estimation. | [Core example](sample/cpp/core/) · [Stable v1 API](docs/docs/rabitq/core_api.md) |
-| `rabitqlib::fastscan` | Batch encoding and lookup-table scoring over 32-vector layouts, built on core. | [FastScan example](sample/cpp/fastscan/) |
+| `rabitqlib::core` | Rotation, per-vector encoding, query preparation, and distance estimation. | [Core example](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/cpp/core) · [Stable v1 API](https://vectordb-ntu.github.io/RaBitQ-Library/rabitq/core_api/) |
+| `rabitqlib::fastscan` | Batch encoding and lookup-table scoring over 32-vector layouts, built on core. | [FastScan example](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/sample/cpp/fastscan) |
 
-See [component integration](docs/docs/cpp_integration.md#core-only-c-integration)
-for build options and compatibility, the [quantizer guide](docs/docs/rabitq/quantizer.md)
-for encoding choices, and the [core benchmark](benchmarks/core/README.md) for
+See [component integration](https://vectordb-ntu.github.io/RaBitQ-Library/cpp_integration/#core-only-c-integration)
+for build options and compatibility, the [quantizer guide](https://vectordb-ntu.github.io/RaBitQ-Library/rabitq/quantizer/)
+for encoding choices, and the [core benchmark](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/benchmarks/core/README.md) for
 component throughput and estimation error.
 
 ## Adoption and resources
@@ -114,8 +114,8 @@ Two examples of direct library integration:
 
 | Project | Integration |
 | --- | --- |
-| [txtai](docs/docs/integrations/txtai.md) | Uses the Python IVF-RaBitQ and HNSW-RaBitQ indexes as an embedding-search backend. |
-| [zvec](docs/docs/integrations/zvec.md) | Uses core quantization in its own IVF-RaBitQ and HNSW-RaBitQ indexes, with FastScan batch scoring in IVF-RaBitQ. |
+| [txtai](https://vectordb-ntu.github.io/RaBitQ-Library/integrations/txtai/) | Uses the Python IVF-RaBitQ and HNSW-RaBitQ indexes as an embedding-search backend. |
+| [zvec](https://vectordb-ntu.github.io/RaBitQ-Library/integrations/zvec/) | Uses core quantization in its own IVF-RaBitQ and HNSW-RaBitQ indexes, with FastScan batch scoring in IVF-RaBitQ. |
 
 The linked walkthroughs describe integration boundaries and provide versioned
 source references.
@@ -191,15 +191,15 @@ listed above.
 
 ### Further reading
 
-- [Documentation](https://vectordb-ntu.github.io/RaBitQ-Library/) and [algorithm overview](docs/docs/rabitq/rabitq.md).
-- [Papers and citations](docs/docs/papers.md) for the research behind the library.
-- [Release notes](https://github.com/VectorDB-NTU/RaBitQ-Library/releases) and [0.7 migration guide](docs/docs/modular_migration.md).
+- [Documentation](https://vectordb-ntu.github.io/RaBitQ-Library/) and [algorithm overview](https://vectordb-ntu.github.io/RaBitQ-Library/rabitq/rabitq/).
+- [Papers and citations](https://vectordb-ntu.github.io/RaBitQ-Library/papers/) for the research behind the library.
+- [Release notes](https://github.com/VectorDB-NTU/RaBitQ-Library/releases) and [0.7 migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/modular_migration/).
 - [GPU implementation](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq) in cuVS.
 
 ## Contributing
 
-Start with the [contribution guide](.github/CONTRIBUTING.md#your-first-contribution)
-or [starter tasks](.github/CONTRIBUTING.md#starter-tasks). Report bugs and request
+Start with the [contribution guide](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/.github/CONTRIBUTING.md#your-first-contribution)
+or [starter tasks](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/.github/CONTRIBUTING.md#starter-tasks). Report bugs and request
 features through [GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose).
 
 ## Authors and acknowledgements
@@ -213,4 +213,4 @@ Jiabao Jin, Xiaoyao Zhong, and Jinjing Zhou for their valuable feedback.
 
 ## License
 
-RaBitQ Library is available under the [Apache License 2.0](LICENSE).
+RaBitQ Library is available under the [Apache License 2.0](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/LICENSE).

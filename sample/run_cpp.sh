@@ -13,7 +13,7 @@ mkdir -p ./data/gist
 if [ ! -f ./data/gist/gist.tar.gz ]; then
     wget -P ./data/gist ftp://ftp.irisa.fr/local/texmex/corpus/gist.tar.gz
 fi
-tar -xzvf ./data/gist/gist.tar.gz -C ./data/gist
+tar -xzvf ./data/gist/gist.tar.gz -C ./data
 
 # indexing and querying for symqg
 ./bin/symqg_indexing ./data/gist/gist_base.fvecs 32 400 ./data/gist/symqg_32.index

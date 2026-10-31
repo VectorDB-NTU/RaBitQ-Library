@@ -19,7 +19,9 @@ jobs:
 
   build:
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.docs == 'true') }}
+    # Main pushes always deploy: a newer push can cancel a docs-changing run, and
+    # its own diff would otherwise leave the site at the older commit.
+    if: ${{ !cancelled() && (github.event_name == 'push' || needs.changes.result != 'success' || needs.changes.outputs.docs == 'true') }}
     name: Build documentation
     runs-on: ubuntu-latest
     timeout-minutes: 10

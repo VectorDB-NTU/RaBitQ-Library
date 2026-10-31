@@ -67,7 +67,7 @@ class ChangeSelectionTest(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/bug_report.yml": set(),
             ".github/CODEOWNERS": set(),
             ".github/release.yml": {"python_quality"},
-            "benchmarks/plot_homepage.py": {"python_quality"},
+            "benchmarks/plot_results.py": {"python_quality"},
             "sample/run_cpp.sh": {"shell"},
             "sample/run_python.sh": {"shell"},
             "example.sh": {"shell"},  # Deleted paths still occur in a push diff.
@@ -87,7 +87,7 @@ class ChangeSelectionTest(unittest.TestCase):
                 self.assertEqual(classify([path]), expected)
 
     def test_support_paths_do_not_mask_source_or_unknown_changes(self):
-        support = [".github/ISSUE_TEMPLATE/config.yml", "benchmarks/plot_homepage.py"]
+        support = [".github/ISSUE_TEMPLATE/config.yml", "benchmarks/plot_results.py"]
         self.assertEqual(
             classify(support + ["src/core/api.cpp"]),
             {
@@ -364,7 +364,6 @@ class ChangeSelectionTest(unittest.TestCase):
         for companions, expected in (
             (["scripts/check-python.sh"], {"python_quality", "shell"}),
             (["sample/run_cpp.sh"], {"python_quality", "shell"}),
-            (["benchmarks/plot_homepage.py"], {"python_quality"}),
             (["benchmarks/build_indexes.py"], {"python_quality"}),
             ([".github/ISSUE_TEMPLATE/config.yml"], {"python_quality"}),
             (["src/core/api.cpp"], set(GROUPS)),

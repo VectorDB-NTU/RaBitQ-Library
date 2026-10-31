@@ -2,7 +2,7 @@
 
 C++ callers include `rabitqlib/index/ivf/ivf.hpp` and link `rabitqlib::index`.
 
-[IVF](https://dl.acm.org/doi/10.1109/TPAMI.2010.57) is a classical
+[IVF](https://doi.org/10.1109/TPAMI.2010.57) is a classical
 clustering-based ANN method. IVF-RaBitQ stores RaBitQ codes and
 vector IDs, optionally retaining raw vectors for reranking, and uses
 [FastScan](https://dl.acm.org/doi/abs/10.1145/3078971.3078992) to estimate a
@@ -51,7 +51,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count; Python requires `k <= max_elements`. |
+| `k`, `nprobe` | Positive result count and cluster probe count; C++ and Python both require `k` not to exceed `max_elements`, which `add` increases. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest

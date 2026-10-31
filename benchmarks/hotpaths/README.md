@@ -11,6 +11,7 @@ Enable `RABITQ_BUILD_BENCHMARKS=ON` in a Release build. Targets follow enabled c
 | `rabitq_core_hotpaths` | core only | One-bit compact encoding or raw L2 calls |
 | `rabitq_fastscan_hotpaths` | FastScan | Cached standard/HACC batch scoring |
 | `rabitq_load_hotpaths` | index | HNSW centroid-sidecar load and validation |
+| `rabitq_ivf_add_hotpaths` | index | One IVF `add` call on a freshly loaded index |
 | `rabitq_ids_benchmark` module + `ids.py` | Python bindings | Production cluster-ID conversion helper |
 
 No additional production dependencies are introduced. Core/FastScan benchmarks support
@@ -27,7 +28,7 @@ cmake -S . -B build-hotpaths -DCMAKE_BUILD_TYPE=Release \
   -DRABITQ_BUILD_BENCHMARKS=ON -DRABITQ_BUILD_SAMPLES=OFF \
   -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build-hotpaths --parallel
-ctest --test-dir build-hotpaths -R 'Hotpath' --output-on-failure
+ctest --no-tests=error --test-dir build-hotpaths -R 'Hotpath' --output-on-failure
 ```
 
 Set both `RABITQ_BUILD_INDEX=OFF` and `RABITQ_BUILD_FASTSCAN=OFF` for pure core.
@@ -50,6 +51,9 @@ Examples (from the repository root):
 ./build-hotpaths/benchmarks/hotpaths/rabitq_load_hotpaths prepare "$TMPDIR/centroids" 128 16384 1
 ./build-hotpaths/benchmarks/hotpaths/rabitq_load_hotpaths load "$TMPDIR/centroids" 128 16384 7
 
+# path dim clusters base_n add_n repetitions single|routed; path receives the base index
+./build-hotpaths/benchmarks/hotpaths/rabitq_ivf_add_hotpaths "$TMPDIR/ivf-add" 64 8 256 16 3 routed
+
 python benchmarks/hotpaths/ids.py --module-dir build-hotpaths/python_bindings
 ```
 
@@ -61,7 +65,8 @@ the deterministic input. Original production indexes are not benchmark fixtures.
 
 - IVF add verifies the expected point counts and samples new points' self-neighbors
   outside the timed call, in addition to comparing output hashes across repetitions.
-- Inputs use an LCG with seed 42 (query/centroid seed 91 where applicable), metric L2.
+- Inputs use an LCG with seed 42 (query/centroid seed 91 where applicable; IVF add uses
+  seed 91 for added points and seed 7 for centroids), metric L2.
   Dimensions for encoding/scoring are multiples of 32. Use 64, 128 and 960 dimensions;
   encoding rows 32/4096 and threads 1/4 retain the cases from the original investigation.
 - Core encoding times the existing serial template at one thread and OpenMP template

@@ -14,8 +14,8 @@ and rejection of truncated or unsupported formats.
   for the Visual Studio 2026 generator)
 - A C++17 compiler with OpenMP support (GCC, Clang, or Visual Studio 2026)
 - An x86-64 CPU with AVX2 and FMA (AVX-512 optional), or an ARM64 CPU on Linux or macOS
-- Git and network access during the first configuration so CMake can download
-  GoogleTest 1.14.0
+- Network access during the first configuration so CMake can download the
+  GoogleTest 1.14.0 source archive
 
 Linux CI additionally selects Clang 23 explicitly for portable builds, full C++
 tests, installed consumers, and core/FastScan integrations with OpenMP ON/OFF.
@@ -47,7 +47,7 @@ exercise the portable runtime-dispatch build.
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DRABITQ_BUILD_TESTS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build --config Release --parallel
-ctest --test-dir build -C Release --output-on-failure
+ctest --no-tests=error --test-dir build -C Release --output-on-failure
 ```
 
 #### Linux
@@ -55,7 +55,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```bash
 cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+ctest --no-tests=error --test-dir build --output-on-failure
 ```
 
 #### Linux ARM64
@@ -69,11 +69,12 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DRABITQ_BUILD_TESTS=ON -DRABITQ_BUILD_SAMPLES=OFF \
   -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build --parallel 2
-OMP_NUM_THREADS=2 ctest --test-dir build --output-on-failure
+OMP_NUM_THREADS=2 ctest --no-tests=error --test-dir build --output-on-failure
 ```
 
 Native Linux ARM64 CI runs the C++ suite and installed CMake consumer. Its wheel
-job builds and tests repaired CPython 3.11–3.14 wheels. Set
+job builds and tests repaired CPython 3.11–3.14 wheels (3.11 and 3.14 on pull
+requests). Set
 `RABITQ_TEST_WHEEL=1` after installing a repaired wheel locally to check the
 AArch64 extension and bundled OpenMP runtime. AVX backend tests skip on ARM.
 
@@ -89,7 +90,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
   -DOpenMP_ROOT="$(brew --prefix libomp)"
 cmake --build build --parallel
-OMP_NUM_THREADS=2 ctest --test-dir build --output-on-failure
+OMP_NUM_THREADS=2 ctest --no-tests=error --test-dir build --output-on-failure
 ```
 
 An environment providing `llvm-openmp` can use its prefix as `OpenMP_ROOT` instead.
@@ -98,7 +99,8 @@ NEON kernels; explicit AVX backend tests are guarded or skipped.
 
 For Python source builds, pass `-Ccmake.define.OpenMP_ROOT=<libomp-prefix>` as well
 as the native-optimization setting below. Release CI uses native `macos-15` runners,
-builds CPython 3.11–3.14 ARM64 wheels, bundles OpenMP with delocate, then installs and
+builds CPython 3.11–3.14 ARM64 wheels (3.11 and 3.14 on pull requests), bundles
+OpenMP with delocate, then installs and
 runs the core Python suite for each wheel (excluding the separately tested FAISS
 comparison and C++ clustering examples). The minimum wheel OS target is macOS 14.
 The wheel build compiles Homebrew's OpenMP source with that deployment target via
@@ -110,7 +112,7 @@ ARM64 extension and bundled OpenMP loader path.
 
 The combined executable is `build/tests/Release/rabitq_tests.exe` on Windows
 and `build/tests/rabitq_tests` on Linux/macOS. To run a subset, add `-R <pattern>` to
-the CTest command.
+the CTest command; keep `--no-tests=error` so a pattern that matches nothing fails.
 
 AVX-512 tests skip when the CPU or OS lacks the required features. Tests using
 `/dev/full` skip on Windows; native POSIX path tests compile only on their
@@ -184,7 +186,7 @@ Use an absolute path for `<install-prefix>`:
 cmake --install build --config Release --prefix "<install-prefix>"
 cmake -S tests/consumer -B build-consumer "-DCMAKE_PREFIX_PATH=<install-prefix>"
 cmake --build build-consumer --config Release
-ctest --test-dir build-consumer -C Release --output-on-failure
+ctest --no-tests=error --test-dir build-consumer -C Release --output-on-failure
 ```
 
 On Windows, add `-G "Visual Studio 18 2026" -A x64` to the consumer configure command.
@@ -202,7 +204,7 @@ Test source-tree consumption through `add_subdirectory` with the same consumer:
 ```text
 cmake -S tests/consumer -B build-source-consumer -DCMAKE_BUILD_TYPE=Release -DRABITQ_SOURCE_DIR="<absolute-repository-path>" -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=ON
 cmake --build build-source-consumer --config Release
-ctest --test-dir build-source-consumer -C Release --output-on-failure
+ctest --no-tests=error --test-dir build-source-consumer -C Release --output-on-failure
 ```
 
 CI checks both source-tree and installed native builds, portable installations,
@@ -233,8 +235,9 @@ have already run in the matching full build. CI uses this for OpenMP ON; OpenMP 
 keeps one combined reference run per compiler/platform. Pass
 `-DRABITQ_INTEGRATIONS=PACKAGE` to test only the relocated installed package when
 another job owns the `add_subdirectory` and FetchContent integrations; the default
-`ALL` runs all three. Consumer tests, header/symbol checks, invalid-configuration checks
-and the core benchmark always remain enabled.
+`ALL` runs all three. Consumer tests and header/symbol checks always remain enabled.
+Invalid-configuration checks and the core benchmark run when the selected components
+include core; `-DRABITQ_COMPONENT=fastscan` skips them.
 
 On macOS, also pass `-DOpenMP_ROOT=<OpenMP-prefix>`. On Windows, set
 `CMAKE_GENERATOR=Visual Studio 18 2026` and `CMAKE_GENERATOR_PLATFORM=x64` in the
@@ -285,11 +288,18 @@ See [the fixture policy](fixtures/core_api_v1/README.md).
 - `unit/`: C++ index, quantization, FastScan, and utility tests
 - `common/`: shared C++ test utilities; use `rabitq_test::TempFile` for files a test
   writes so they are removed even after a failed assertion
+- `allocation/`, `dispatch/`, `failures/`, `integration/`: separate C++ executables for
+  no-allocation, dispatch/static-initialization, allocation-failure and CLI-index checks
+- `fixtures/`: frozen core API and persistence compatibility fixtures
 - `python/`: Python binding tests and persistence fixtures
+- `test_mypy.py`, `test_pyright.py`: static type checks of the installed package
 - `consumer/`: installed CMake package test
+- `core_consumer/`: external core/FastScan consumer runner and the core static-initialization test
 
-CMake discovers `*_test.cpp` under `unit/`. Python and
-consumer tests run separately using the commands above.
+CMake discovers `*_test.cpp` under `unit/` and registers the allocation, dispatch and
+failure executables explicitly; `integration/cpp_example_index_check` is built with the
+samples for the Python clustering-example tests. Python and consumer tests run
+separately using the commands above.
 
 ## Coverage ownership and test size
 
@@ -341,9 +351,9 @@ python -m pytest tests/python/test_editor_support.py tests/test_mypy.py -q
 
 The suite checks installed declarations, signatures, documentation, examples, and
 runtime metadata on every wheel. Strict mypy valid/invalid-call checks live in
-`tests/test_mypy.py`, run for source installs and each CPython ABI on Linux x86-64
-wheels. Other wheel platforms do not repeat static analysis. CI requires mypy
-for these selected checks; missing mypy fails the test. Keep its pins in the
+`tests/test_mypy.py`, run for source installs on pushes and for each Linux x86-64
+wheel ABI that CI builds (3.11 and 3.14 on pull requests). Other wheel platforms
+do not repeat static analysis. CI requires mypy for these selected checks; missing mypy fails the test. Keep its pins in the
 `test` extra and Linux x86-64 wheel override synchronized.
 Benchmark protocol tests run in Python quality CI, separately from wheel tests.
 

@@ -3,8 +3,8 @@
 For embedding the quantizer in another system, use the independent
 [core C++ benchmark](core/README.md). It needs only core and reports per-repeat timings,
 distance-estimate error and quantized full-scan recall. The workflows below benchmark
-complete ANN/clustering systems. For dispatch, encoding, FastScan, sidecar loading and
-Python ID-conversion regression measurements, use the
+complete ANN/clustering systems. For dispatch, encoding, FastScan, sidecar loading, IVF add
+and Python ID-conversion regression measurements, use the
 [component hot-path benchmarks](hotpaths/README.md).
 
 See the [benchmark overview](../docs/docs/benchmarks/bench.md) for datasets,
