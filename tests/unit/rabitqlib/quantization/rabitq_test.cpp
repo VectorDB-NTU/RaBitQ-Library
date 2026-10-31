@@ -229,8 +229,9 @@ int level_from_thresholds(double magnitude, double t, int max_code) {
     int result = 0;
     if (magnitude > 0) {
         for (int level = 1; level <= max_code; ++level) {
-            if (static_cast<double>(level) / magnitude <= t)
+            if (static_cast<double>(level) / magnitude <= t) {
                 result = level;
+            }
         }
     }
     return result;
@@ -238,11 +239,13 @@ int level_from_thresholds(double magnitude, double t, int max_code) {
 
 template <typename T>
 double sorted_event_rescale_factor(const std::vector<T>& magnitudes, size_t bits) {
-    if (magnitudes.empty())
+    if (magnitudes.empty()) {
         return 0;
+    }
     const double max_o = *std::max_element(magnitudes.begin(), magnitudes.end());
-    if (max_o == 0)
+    if (max_o == 0) {
         return 0;
+    }
 
     const int max_code = (1 << bits) - 1;
     const double end = static_cast<double>(max_code + 10) / max_o;
@@ -260,8 +263,9 @@ double sorted_event_rescale_factor(const std::vector<T>& magnitudes, size_t bits
         if (magnitude > 0) {
             for (int next = level + 1; next <= max_code; ++next) {
                 const double threshold = static_cast<double>(next) / magnitude;
-                if (threshold < end)
+                if (threshold < end) {
                     events.emplace_back(threshold, i);
+                }
             }
         }
     }
@@ -294,11 +298,11 @@ void check_rescale_search_against_sorted_events() {
             double norm_sq = 0;
             for (size_t i = 0; i < dim; ++i) {
                 double value = 0;
-                if (pattern == 1)
+                if (pattern == 1) {
                     value = i == dim / 2 ? 1 : 0;
-                else if (pattern == 2)
+                } else if (pattern == 2) {
                     value = static_cast<double>(i % 4);
-                else if (pattern == 3) {
+                } else if (pattern == 3) {
                     state = state * 1664525U + 1013904223U;
                     value = i % 5 == 0 ? 0 : 1.0 + (state >> 16U);
                 }
@@ -307,8 +311,9 @@ void check_rescale_search_against_sorted_events() {
             }
             if (norm_sq > 0) {
                 const double norm = std::sqrt(norm_sq);
-                for (T& magnitude : magnitudes)
+                for (T& magnitude : magnitudes) {
                     magnitude = static_cast<T>(static_cast<double>(magnitude) / norm);
+                }
             }
             for (size_t bits = 0; bits <= 8; ++bits) {
                 SCOPED_TRACE(
@@ -330,8 +335,9 @@ void check_rescale_search_against_sorted_events() {
                     ipnorm += (level + 0.5) * magnitude;
                 }
                 T expected_factor = ipnorm == 0 ? T{1} : static_cast<T>(1.0 / ipnorm);
-                if (!std::isnormal(expected_factor))
+                if (!std::isnormal(expected_factor)) {
                     expected_factor = T{1};
+                }
                 std::vector<uint8_t> code(dim, 0xFF);
                 const T factor = rabitq_impl::ex_bits::quantize_ex(
                     magnitudes.data(), code.data(), dim, bits
@@ -677,8 +683,9 @@ TEST(RabitqCompactCodes, WordTailsUseCompactRowStrides) {
     for (size_t dim : {96U, 160U}) {
         constexpr size_t count = 3;
         std::vector<float> data(count * dim), centroid(dim, 0);
-        for (size_t i = 0; i < data.size(); ++i)
+        for (size_t i = 0; i < data.size(); ++i) {
             data[i] = static_cast<int>(i % 17) - 8;
+        }
         for (auto metric : {METRIC_L2, METRIC_IP}) {
             std::vector<uint8_t> expected(count * dim / 8 + 1, 0xA5), actual = expected;
             std::vector<float> add(count), rescale(count), error(count);

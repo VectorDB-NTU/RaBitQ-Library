@@ -97,8 +97,9 @@ TEST(LutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
             SCOPED_TRACE(dim);
             for (const auto& pattern : patterns) {
                 std::vector<float> query(dim + 1);
-                for (size_t i = 0; i < dim; ++i)
+                for (size_t i = 0; i < dim; ++i) {
                     query[i + 1] = pattern[i % 4];
+                }
                 const auto original = query;
                 std::vector<float> expected(dim * 4 + 2, 123), actual = expected;
                 backend.pack(dim, query.data() + 1, expected.data() + 1);
@@ -173,8 +174,9 @@ TEST(LutPreparationTest, Uint8PathPreservesHalfBoundariesFlagsAndZeroRange) {
             ASSERT_EQ(std::fesetround(rounding), 0);
             for (size_t count : {0U, 1U, 7U, 8U, 15U, 16U, 17U, 768U}) {
                 std::vector<float> values(count + 1);
-                for (size_t i = 0; i < count; ++i)
+                for (size_t i = 0; i < count; ++i) {
                     values[i + 1] = boundaries[i % boundaries.size()];
+                }
                 std::vector<uint8_t> expected(count + 2, 71), actual = expected;
                 std::feclearexcept(FE_ALL_EXCEPT);
                 backend.reference_quantize(
@@ -238,11 +240,13 @@ void check_prepared_lut() {
                     const T value =
                         delta == 0 ? T{0} : std::round((table[i] - lo) * reciprocal);
                     codes[i] = static_cast<uint16_t>(value);
-                    if (!hacc)
+                    if (!hacc) {
                         expected[i] = static_cast<uint8_t>(value);
+                    }
                 }
-                if (hacc)
+                if (hacc) {
                     transfer_lut_hacc(codes.data(), dim, expected.data());
+                }
                 Lut<T> actual(query.data(), dim, hacc);
                 expect_bits_equal(actual.delta(), delta);
                 expect_bits_equal(actual.sum_vl(), lo * static_cast<T>(dim / 4));

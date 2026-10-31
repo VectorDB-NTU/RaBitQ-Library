@@ -21,8 +21,9 @@ void accumulate_impl(
     constexpr size_t kChunkGroups = 256;
     for (size_t start = 0; start < dim / 4; start += kChunkGroups) {
         uint32x4_t sums[8];
-        for (auto& sum : sums)
+        for (auto& sum : sums) {
             sum = vdupq_n_u32(0);
+        }
         const size_t end = std::min(start + kChunkGroups, dim / 4);
         for (size_t group = start; group < end; ++group) {
             const uint8x16_t packed = vld1q_u8(codes + group * 16);
@@ -48,10 +49,12 @@ void accumulate_impl(
             }
         }
         uint32_t chunk[32];
-        for (size_t i = 0; i < 8; ++i)
+        for (size_t i = 0; i < 8; ++i) {
             vst1q_u32(chunk + i * 4, sums[i]);
-        for (size_t i = 0; i < 32; ++i)
+        }
+        for (size_t i = 0; i < 32; ++i) {
             totals[i] += chunk[i];
+        }
     }
     for (auto value : totals) {
         if (value > std::numeric_limits<int32_t>::max()) {

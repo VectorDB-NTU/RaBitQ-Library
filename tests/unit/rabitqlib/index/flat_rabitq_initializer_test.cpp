@@ -101,8 +101,9 @@ TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex
     std::vector<PID> labels(kCount);
     for (size_t i = 0; i < kCount; ++i) {
         labels[i] = static_cast<PID>(i);
-        for (size_t j = 0; j < kDim; ++j)
+        for (size_t j = 0; j < kDim; ++j) {
             data[i * kDim + j] = normal(generator);
+        }
     }
     const rabitq_test::TempFile path_file("ivf_initializer_reload.index");
     const std::string& path = path_file.path();
@@ -152,8 +153,9 @@ TEST(FlatRaBitQInitializerTest, TailBatchesMetricsAndExactReturnedDistances) {
             // Unit vectors make self-query the winner under both metrics.
             for (size_t i = 0; i < count; ++i) {
                 const float norm = std::sqrt(l2norm_sqr(centroids.data() + i * dim, dim));
-                for (size_t j = 0; j < dim; ++j)
+                for (size_t j = 0; j < dim; ++j) {
                     centroids[i * dim + j] /= norm;
+                }
             }
             for (auto metric : {METRIC_L2, METRIC_IP}) {
                 FlatRaBitQInitializer index(dim, count, metric);
@@ -163,8 +165,9 @@ TEST(FlatRaBitQInitializerTest, TailBatchesMetricsAndExactReturnedDistances) {
                     std::vector<AnnCandidate<float>> result;
                     index.centroids_distances(query, nprobe, result);
                     ASSERT_EQ(result.size(), std::min(nprobe, count));
-                    if (result.empty())
+                    if (result.empty()) {
                         continue;
+                    }
                     EXPECT_EQ(result[0].id, count - 1);
                     EXPECT_TRUE(std::is_sorted(result.begin(), result.end()));
                     std::vector<bool> seen(count);
@@ -195,11 +198,13 @@ TEST(FlatRaBitQInitializerTest, ZeroResidualsAndInnerProductMagnitude) {
         std::vector<AnnCandidate<float>> result;
         index.centroids_distances(query.data(), 7, result);
         ASSERT_EQ(result.size(), 7U);
-        for (const auto& item : result)
+        for (const auto& item : result) {
             EXPECT_FLOAT_EQ(item.distance, metric == METRIC_L2 ? 0 : 1);
+        }
     }
-    for (size_t i = 0; i < kCount; ++i)
+    for (size_t i = 0; i < kCount; ++i) {
         centroids[i * kDim] = 0.5F;
+    }
     centroids[17 * kDim] = 100.0F;
     query[0] = 1.0F;
     FlatRaBitQInitializer index(kDim, kCount, METRIC_IP);
@@ -244,8 +249,9 @@ TEST(FlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
                 loaded.centroids_distances(queries.data() + i * kDim, 7, actual[i]);
             });
         }
-        for (auto& thread : threads)
+        for (auto& thread : threads) {
             thread.join();
+        }
         for (size_t i = 0; i < 8; ++i) {
             ASSERT_EQ(actual[i].size(), expected[i].size());
             for (size_t j = 0; j < actual[i].size(); ++j) {

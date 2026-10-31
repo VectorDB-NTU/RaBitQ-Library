@@ -66,8 +66,9 @@ void pack_lut_impl(
             minimum = min_lanes[lane] < minimum ? min_lanes[lane] : minimum;
             maximum = max_lanes[lane] > maximum ? max_lanes[lane] : maximum;
         }
-        if (nan_mask)
+        if (nan_mask) {
             minimum = kQuietNaN;
+        }
     }
 }
 }  // namespace

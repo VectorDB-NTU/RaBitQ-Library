@@ -29,8 +29,9 @@ float product(const float* a, const float* b, size_t dim) {
         s3 = step(s3, i + 12);
     }
     float32x4_t sum = vaddq_f32(vaddq_f32(s0, s1), vaddq_f32(s2, s3));
-    for (; dim - i >= 4; i += 4)
+    for (; dim - i >= 4; i += 4) {
         sum = step(sum, i);
+    }
     float result = vaddvq_f32(sum);
     for (; i < dim; ++i) {
         if constexpr (SquaredDistance) {

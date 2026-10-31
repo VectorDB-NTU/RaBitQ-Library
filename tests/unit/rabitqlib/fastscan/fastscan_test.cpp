@@ -98,8 +98,9 @@ TEST(FastScanLutTest, EverySupportedBackendMatchesOrderedSubsetSumsExactly) {
 TEST(FastScanLutTest, ResetOwnsBytesAndReusesStorageWithoutRetainingScratch) {
     constexpr size_t kDim = 64;
     std::array<float, kDim> query{};
-    for (size_t i = 0; i < kDim; ++i)
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<float>(i % 17) - 8;
+    }
     for (bool hacc : {false, true}) {
         Lut<float> reused;
         std::vector<uint8_t> expected;

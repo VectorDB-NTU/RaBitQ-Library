@@ -913,12 +913,14 @@ TEST(QGEstimatorTest, MatchesExactDistancesForCollinearResiduals) {
             std::vector<decltype(&simd::qg_batch_estdist)> backends{
                 simd::qg_batch_estdist_generic, simd::qg_batch_estdist};
 #if defined(__x86_64__) || defined(_M_X64)
-            if (cpu::has_avx2())
+            if (cpu::has_avx2()) {
                 backends.push_back(simd::qg_batch_estdist_avx2);
+            }
 #endif
 #if defined(__x86_64__) || defined(_M_X64)
-            if (cpu::has_avx512_core())
+            if (cpu::has_avx512_core()) {
                 backends.push_back(simd::qg_batch_estdist_avx512);
+            }
 #endif
             for (auto backend : backends) {
                 backend(batch.data(), q_obj, dim, estimates.data());
@@ -2005,10 +2007,12 @@ TEST(QGSearchTest, ExplicitWindowsAreIndependentOfDefaultAndConcurrentCalls) {
     std::mt19937 random(314);
     std::normal_distribution<float> value;
     std::vector<float> data(kCount * kDim), queries(kQueries * kDim);
-    for (auto& x : data)
+    for (auto& x : data) {
         x = value(random);
-    for (auto& x : queries)
+    }
+    for (auto& x : queries) {
         x = value(random);
+    }
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {0U, 4U, 8U}) {
             SCOPED_TRACE(metric);
@@ -2048,8 +2052,9 @@ TEST(QGSearchTest, ExplicitWindowsAreIndependentOfDefaultAndConcurrentCalls) {
                         ef,
                         threads
                     );
-                    if (actual != expected || distances != expected_distances)
+                    if (actual != expected || distances != expected_distances) {
                         return false;
+                    }
                     graph.search_batch_with_ef(
                         queries.data(), 1, k, actual.data(), distances.data(), ef, threads
                     );
@@ -2058,8 +2063,9 @@ TEST(QGSearchTest, ExplicitWindowsAreIndependentOfDefaultAndConcurrentCalls) {
                             distances.begin(),
                             distances.begin() + k,
                             expected_distances.begin()
-                        ))
+                        )) {
                         return false;
+                    }
                 }
                 return true;
             };

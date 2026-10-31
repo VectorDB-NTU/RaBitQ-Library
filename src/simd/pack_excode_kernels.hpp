@@ -16,8 +16,9 @@ template <size_t Bits>
 inline void pack_excode_tail_intrinsics(const uint8_t* raw, uint8_t* compact, size_t dim) {
     static_assert(Bits == 2 || Bits == 3 || Bits == 5 || Bits == 6 || Bits == 7);
     assert(dim == 0 || dim == 32);
-    if (dim == 0)
+    if (dim == 0) {
         return;
+    }
     // A partial block is always 32 coordinates.
     const __m128i pair_weights =
         _mm_set1_epi16(static_cast<int16_t>(1U | (1U << (Bits + 8))));

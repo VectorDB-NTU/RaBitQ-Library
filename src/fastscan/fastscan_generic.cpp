@@ -82,8 +82,9 @@ void accumulate_generic_impl(
             for (size_t half = 0; half < 2; ++half) {
                 const size_t entry = (code >> (half * 4)) & 15;
                 int value = lut[offset + entry];
-                if constexpr (HighAccuracy)
+                if constexpr (HighAccuracy) {
                     value += int{lut[offset + 32 + entry]} * 256;
+                }
                 totals[kPerm0[lane] + half * 16] += value;
             }
         }
@@ -96,8 +97,9 @@ void accumulate_generic_impl(
             );
         }
     }
-    for (size_t lane = 0; lane < 32; ++lane)
+    for (size_t lane = 0; lane < 32; ++lane) {
         result[lane] = static_cast<int32_t>(totals[lane]);
+    }
 }
 }  // namespace
 void accumulate_generic(

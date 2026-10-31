@@ -1365,8 +1365,9 @@ void normalize_reference_centroids(std::vector<float>& rows, size_t dim) {
         for (size_t j = 0; j < dim; ++j) {
             norm += static_cast<double>(rows[offset + j]) * rows[offset + j];
         }
-        if (norm == 0)
+        if (norm == 0) {
             continue;
+        }
         const double scale = 1.0 / std::sqrt(norm);
         for (size_t j = 0; j < dim; ++j) {
             rows[offset + j] = static_cast<float>(rows[offset + j] * scale);
@@ -1421,8 +1422,9 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                         centroids.data() + cluster * kDimension
                     );
                 }
-                if (spherical)
+                if (spherical) {
                     normalize_reference_centroids(centroids, kDimension);
+                }
                 QGAssigner uncached(
                     kDimension,
                     clusters,
@@ -1467,8 +1469,9 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                                 static_cast<float>(sums[cluster * kDimension + j] * scale);
                         }
                     }
-                    if (spherical)
+                    if (spherical) {
                         normalize_reference_centroids(centroids, kDimension);
+                    }
                 }
                 // Compare state before the final assignment, whose safeguard is separate.
                 EXPECT_EQ(model.centroids, centroids);

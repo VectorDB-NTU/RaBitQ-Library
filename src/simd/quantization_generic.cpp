@@ -18,10 +18,12 @@ RescaleScratch& get_thread_local_rescale_scratch(size_t dim) {
     // Retain the largest buffers on each worker; smaller vectors overwrite only
     // their active prefix without shrinking or zero-initializing the storage.
     thread_local RescaleScratch scratch;
-    if (scratch.magnitudes.size() < dim)
+    if (scratch.magnitudes.size() < dim) {
         scratch.magnitudes.resize(dim);
-    if (scratch.reciprocals.size() < dim)
+    }
+    if (scratch.reciprocals.size() < dim) {
         scratch.reciprocals.resize(dim);
+    }
     return scratch;
 }
 

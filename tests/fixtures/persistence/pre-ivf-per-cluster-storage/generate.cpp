@@ -30,16 +30,20 @@ int main(int argc, char** argv) {
     };
     std::vector<float> data(kCount * kDim), queries(kQueries * kDim);
     std::vector<float> centroids(kClusters * kDim);
-    for (auto& value : data)
+    for (auto& value : data) {
         value = next();
-    for (auto& value : queries)
+    }
+    for (auto& value : queries) {
         value = next();
-    for (auto& value : centroids)
+    }
+    for (auto& value : centroids) {
         value = next();
+    }
     std::vector<PID> clusters(kCount, 3);
     clusters[0] = 1;
-    for (size_t i = 1; i < 33; ++i)
+    for (size_t i = 1; i < 33; ++i) {
         clusters[i] = 2;
+    }
     for (const std::string kind : {"ivf4", "ivf32"}) {
         const std::string name = kind + "_l2";
         const auto path = (directory / (name + ".index")).string();
@@ -57,10 +61,12 @@ int main(int argc, char** argv) {
         expected.exceptions(std::ios::failbit | std::ios::badbit);
         expected << std::setprecision(std::numeric_limits<float>::max_digits10);
         expected << kCount << ' ' << kDim << ' ' << kQueries << ' ' << kTopK << '\n';
-        for (size_t i = 0; i < queries.size(); ++i)
+        for (size_t i = 0; i < queries.size(); ++i) {
             expected << queries[i] << (i + 1 == queries.size() ? '\n' : ' ');
-        for (size_t i = 0; i < ids.size(); ++i)
+        }
+        for (size_t i = 0; i < ids.size(); ++i) {
             expected << ids[i] << ' ' << distances[i] << '\n';
+        }
         expected.close();
     }
     return 0;

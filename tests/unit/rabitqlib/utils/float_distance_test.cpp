@@ -115,8 +115,9 @@ TEST(FloatDistance, AccumulationRetainsFloatPrecision) {
     // their combined 2^-23 contribution and return the float above 1.
     std::array<float, 513> a{}, zero{};
     a[0] = 1.0F;
-    for (size_t i = 64; i < a.size(); i += 64)
+    for (size_t i = 64; i < a.size(); i += 64) {
         a[i] = std::ldexp(1.0F, -13);
+    }
     for (const auto& backend : backends()) {
         SCOPED_TRACE(backend.name);
         EXPECT_EQ(backend.l2(a.data(), zero.data(), a.size()), 1.0F);

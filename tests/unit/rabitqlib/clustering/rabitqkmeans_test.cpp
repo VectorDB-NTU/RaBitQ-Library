@@ -30,8 +30,9 @@ void normalize_reference_centroids(std::vector<float>& rows, size_t dim) {
         for (size_t j = 0; j < dim; ++j) {
             norm += static_cast<double>(rows[offset + j]) * rows[offset + j];
         }
-        if (norm == 0)
+        if (norm == 0) {
             continue;
+        }
         const double scale = 1.0 / std::sqrt(norm);
         for (size_t j = 0; j < dim; ++j) {
             rows[offset + j] = static_cast<float>(rows[offset + j] * scale);

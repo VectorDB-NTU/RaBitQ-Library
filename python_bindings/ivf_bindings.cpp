@@ -26,14 +26,18 @@ namespace rabitqlib::python_bindings {
 
 namespace {
 ivf::InitializerType initializer_from_string(const std::string& value) {
-    if (value == "auto")
+    if (value == "auto") {
         return ivf::InitializerType::Auto;
-    if (value == "flat")
+    }
+    if (value == "flat") {
         return ivf::InitializerType::Flat;
-    if (value == "flat_rabitq")
+    }
+    if (value == "flat_rabitq") {
         return ivf::InitializerType::FlatRaBitQ;
-    if (value == "hnsw")
+    }
+    if (value == "hnsw") {
         return ivf::InitializerType::HNSW;
+    }
     throw std::invalid_argument(
         "initializer must be 'auto', 'flat', 'flat_rabitq', or 'hnsw'"
     );

@@ -50,17 +50,19 @@ inline float raw_float(const float* a, const float* b, size_t n) {
         if constexpr (Op == FloatOperation::SquaredL2) {
             Vec d = sub(x, y);
             return fma(d, d, sum);
-        } else if constexpr (Op == FloatOperation::SquaredNorm)
+        } else if constexpr (Op == FloatOperation::SquaredNorm) {
             return fma(x, x, sum);
-        else
+        } else {
             return fma(x, y, sum);
+        }
     };
     auto step = [&](Vec sum, size_t at) {
         Vec x = load(a + at);
-        if constexpr (Op == FloatOperation::SquaredNorm)
+        if constexpr (Op == FloatOperation::SquaredNorm) {
             return accumulate(sum, x, x);
-        else
+        } else {
             return accumulate(sum, x, load(b + at));
+        }
     };
     for (; n - i >= kWidth * 4; i += kWidth * 4) {
         s0 = step(s0, i);
@@ -69,18 +71,21 @@ inline float raw_float(const float* a, const float* b, size_t n) {
         s3 = step(s3, i + kWidth * 3);
     }
     Vec sum = add(add(s0, s1), add(s2, s3));
-    for (; n - i >= kWidth; i += kWidth)
+    for (; n - i >= kWidth; i += kWidth) {
         sum = step(sum, i);
+    }
     if (i < n) {
         Vec x = tail_load(a + i, n - i);
-        if constexpr (Op == FloatOperation::SquaredNorm)
+        if constexpr (Op == FloatOperation::SquaredNorm) {
             sum = accumulate(sum, x, x);
-        else
+        } else {
             sum = accumulate(sum, x, tail_load(b + i, n - i));
+        }
     }
     float result = reduce(sum);
-    if constexpr (Op == FloatOperation::InnerProductDistance)
+    if constexpr (Op == FloatOperation::InnerProductDistance) {
         return 1.0F - result;
+    }
     return result;
 }
 }  // namespace

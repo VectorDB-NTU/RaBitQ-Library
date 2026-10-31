@@ -133,8 +133,9 @@ TEST(PortableKernels, QueryTransposeAndWarmupMatchIntegerReference) {
 TEST(PortableKernels, Uint16TransposePreservesAllBitPlanes) {
     constexpr size_t kDim = 192;
     std::array<uint16_t, kDim> query{};
-    for (size_t i = 0; i < kDim; ++i)
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<uint16_t>(i * 977);
+    }
     for (size_t bits = 1; bits <= 16; ++bits) {
         std::vector<uint64_t> actual(kDim / 64 * bits), scalar(actual.size());
         new_transpose_bin(query.data(), actual.data(), kDim, bits);
@@ -158,8 +159,9 @@ TEST(PortableKernels, ExtraBitTailsPreserveFullBlockBytesAndUseCompactBitStream)
         const size_t dim = 128 + tail;
         std::vector<uint8_t> raw(dim), packed(dim * bits / 8 + 2, 0xA5);
         std::vector<uint8_t> full(128 * bits / 8);
-        for (size_t i = 0; i < dim; ++i)
+        for (size_t i = 0; i < dim; ++i) {
             raw[i] = (i * 37 + 3) & ((1U << bits) - 1);
+        }
         quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
             raw.data(), full.data(), 128, bits
         );

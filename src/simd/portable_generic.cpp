@@ -274,8 +274,9 @@ float mask_ip_x0_q_generic(const float* query, const uint8_t* data, size_t dim) 
         const size_t width = std::min(size_t{64}, dim - block);
         const uint64_t word = bitops::load_word(data + block / 8, width / 8);
         for (size_t i = 0; i < width; ++i) {
-            if ((word >> (width - 1 - i)) & 1U)
+            if ((word >> (width - 1 - i)) & 1U) {
                 sum += query[block + i];
+            }
         }
     }
     return static_cast<float>(sum);
@@ -292,8 +293,9 @@ float warmup_ip_x0_q_512_generic(
     size_t dim,
     size_t bits
 ) {
-    if (bits > 8)
+    if (bits > 8) {
         throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
+    }
     uint64_t ip = 0, count = 0;
     for (size_t block = 0; block < dim; block += 512) {
         const size_t chunks = (std::min(size_t{512}, dim - block) + 63) / 64;
@@ -325,8 +327,9 @@ float warmup_ip_x0_q_512_generic(
 
 void flip_sign_generic(const uint8_t* flip, float* data, size_t dim) {
     for (size_t i = 0; i < dim; ++i) {
-        if ((flip[i / 8] >> (i % 8)) & 1U)
+        if ((flip[i / 8] >> (i % 8)) & 1U) {
             data[i] = -data[i];
+        }
     }
 }
 void kacs_walk_generic(float* data, size_t len) {
@@ -354,14 +357,17 @@ void fht_rotate_generic(
         flip_sign_generic(flip + pass * padded_dim / 8, rotated_data, padded_dim);
         const size_t start = pass % 2 == 0 ? 0 : padded_dim - trunc_dim;
         fht(rotated_data + start, trunc_dim);
-        for (size_t i = start; i < start + trunc_dim; ++i)
+        for (size_t i = start; i < start + trunc_dim; ++i) {
             rotated_data[i] *= scale_factor;
-        if (padded_dim != trunc_dim)
+        }
+        if (padded_dim != trunc_dim) {
             kacs_walk_generic(rotated_data, padded_dim);
+        }
     }
     if (padded_dim != trunc_dim) {
-        for (size_t i = 0; i < padded_dim; ++i)
+        for (size_t i = 0; i < padded_dim; ++i) {
             rotated_data[i] *= 0.25F;
+        }
     }
 }
 }  // namespace rabitqlib::simd

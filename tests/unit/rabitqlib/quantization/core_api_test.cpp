@@ -213,8 +213,9 @@ TEST(CoreApi, CodesFactorsAndBothLayoutsMatchExistingEncoder) {
                             ? rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim)
                             : -rabitqlib::dot_product(query.data(), centroid.data(), dim);
                     float sum = 0;
-                    for (float x : query)
+                    for (float x : query) {
                         sum += x;
+                    }
                     const float expected = rabitqlib::quant::full_est_dist(
                         reference.data(),
                         query.data(),
@@ -664,27 +665,32 @@ TEST(CoreApi, ConcurrentCallsUseOnlyTheirOwnWorkspace) {
                     api::prepare_query(c.parameters, c.query.data(), nullptr);
                 if (signs != c.signs || extra != c.extra || f.add != c.factors.add ||
                     f.rescale != c.factors.rescale || f.error != c.factors.error ||
-                    api::compute(query, view(out), f) != c.score)
+                    api::compute(query, view(out), f) != c.score) {
                     return false;
+                }
                 api::CodeOutput raw{
                     api::CodeLayout::UnpackedU16, {unpacked.data(), unpacked.size()}, {}};
                 api::convert_codes(c.parameters, view(out), raw, scratch.view());
-                if (unpacked != c.unpacked)
+                if (unpacked != c.unpacked) {
                     return false;
+                }
                 std::fill(signs.begin(), signs.end(), 0xA5);
                 std::fill(extra.begin(), extra.end(), 0xA5);
                 api::convert_codes(c.parameters, view(raw), out, scratch.view());
                 if (signs != c.signs || extra != c.extra ||
-                    api::compute(query, view(out), f) != c.score)
+                    api::compute(query, view(out), f) != c.score) {
                     return false;
+                }
             }
             return true;
         }));
     }
-    while (ready.load() != cases.size())
+    while (ready.load() != cases.size()) {
         std::this_thread::yield();
+    }
     start.set_value();
-    for (auto& worker : workers)
+    for (auto& worker : workers) {
         EXPECT_TRUE(worker.get());
+    }
 }
 }  // namespace

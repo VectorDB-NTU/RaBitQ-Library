@@ -58,10 +58,12 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
     ASSERT_EQ(k, 5U);
     std::vector<float> queries(nq * dim), distances(nq * k), reference_distances(nq * k);
     std::vector<PID> ids(nq * k), reference_ids(nq * k);
-    for (auto& value : queries)
+    for (auto& value : queries) {
         expected >> value;
-    for (size_t i = 0; i < ids.size(); ++i)
+    }
+    for (size_t i = 0; i < ids.size(); ++i) {
         expected >> reference_ids[i] >> reference_distances[i];
+    }
     ASSERT_TRUE(expected.good());
     const auto output = std::filesystem::temp_directory_path() /
                         ("rabitq_historical_" + GetParam().directory + "_" + name);

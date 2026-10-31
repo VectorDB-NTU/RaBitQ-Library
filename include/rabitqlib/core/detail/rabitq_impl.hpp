@@ -382,8 +382,9 @@ inline double event_sweep(
         // Never increment a saturated coordinate; skip zero coordinates.
         if (magnitude > 0 && cur < max_code) {
             const double next = static_cast<double>(cur + 1) / magnitude;
-            if (next < t_end)
+            if (next < t_end) {
                 next_t.emplace_back(next, i);
+            }
         }
     }
     std::make_heap(next_t.begin(), next_t.end(), std::greater<Event>{});
@@ -404,8 +405,9 @@ inline double event_sweep(
             numerator += magnitude;
 
             Event next{t_end, i};
-            if (cur_o_bar[i] < max_code)
+            if (cur_o_bar[i] < max_code) {
                 next.first = static_cast<double>(cur_o_bar[i] + 1) / magnitude;
+            }
             if (next.first >= t_end) {
                 // No further event for this coordinate: fill the root's hole
                 // with the last heap entry, then restore the heap below.
@@ -419,10 +421,12 @@ inline double event_sweep(
                 size_t parent = 0;
                 size_t child = 1;
                 while (child < next_t.size()) {
-                    if (child + 1 < next_t.size() && next_t[child + 1] < next_t[child])
+                    if (child + 1 < next_t.size() && next_t[child + 1] < next_t[child]) {
                         ++child;
-                    if (!(next_t[child] < next))
+                    }
+                    if (!(next_t[child] < next)) {
                         break;
+                    }
                     next_t[parent] = next_t[child];
                     parent = child;
                     child = 2 * parent + 1;
@@ -448,11 +452,13 @@ inline double best_rescale_factor_with_scratch(
     if (ex_bits >= kTightStart.size()) {
         throw std::invalid_argument("ex_bits exceeds the supported search table");
     }
-    if (dim == 0)
+    if (dim == 0) {
         return 0;
+    }
     const double max_o = static_cast<double>(*std::max_element(o_abs, o_abs + dim));
-    if (max_o == 0)
+    if (max_o == 0) {
         return 0;
+    }
 
     const int max_code = (1 << ex_bits) - 1;
     const double t_end = static_cast<double>(max_code + 10) / max_o;
@@ -478,8 +484,9 @@ inline double best_rescale_factor_with_scratch(
                       scratch->magnitudes,
                       scratch->reciprocals
                   );
-        if (t >= 0)
+        if (t >= 0) {
             return t;
+        }
     }
 
     // Scalar event sweep, also used if SIMD is unavailable or cannot certify a
@@ -520,8 +527,9 @@ inline T quantize_ex_with_scratch(
         code[i] = static_cast<TP>(value);
         ipnorm += (value + 0.5) * magnitude;
     }
-    if (ipnorm == 0)
+    if (ipnorm == 0) {
         return static_cast<T>(1);
+    }
     const T ipnorm_inv = static_cast<T>(1.0 / ipnorm);
     return std::isnormal(ipnorm_inv) ? ipnorm_inv : static_cast<T>(1);
 }

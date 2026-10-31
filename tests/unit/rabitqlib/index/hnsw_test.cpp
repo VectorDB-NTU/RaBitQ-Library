@@ -1337,25 +1337,31 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
     using Search = decltype(&hnsw::detail::search_knn_sorted_generic);
     std::vector<Search> backends{hnsw::detail::search_knn_sorted};
 #if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx2())
+    if (cpu::has_avx2()) {
         backends.push_back(hnsw::detail::search_knn_sorted_avx2);
-    if (cpu::has_avx512_core())
+    }
+    if (cpu::has_avx512_core()) {
         backends.push_back(hnsw::detail::search_knn_sorted_avx512_core);
-    if (cpu::has_avx512_popcnt())
+    }
+    if (cpu::has_avx512_popcnt()) {
         backends.push_back(hnsw::detail::search_knn_sorted_avx512_popcnt);
+    }
 #endif
 #if defined(__aarch64__) || defined(_M_ARM64)
-    if (cpu::has_neon())
+    if (cpu::has_neon()) {
         backends.push_back(hnsw::detail::search_knn_sorted_neon);
+    }
 #endif
     for (size_t dim : {64U, 96U, 128U, 160U, 256U, 544U, 576U}) {
         std::mt19937 random(642);
         std::uniform_real_distribution<float> value(-1, 1);
         std::vector<float> data(count * dim), centroid(dim, 0), query(dim);
-        for (auto& x : data)
+        for (auto& x : data) {
             x = value(random);
-        for (auto& x : query)
+        }
+        for (auto& x : query) {
             x = value(random);
+        }
         for (auto metric : {METRIC_L2, METRIC_IP}) {
             for (size_t bits = 1; bits <= 9; ++bits) {
                 SCOPED_TRACE(dim);
@@ -1402,10 +1408,12 @@ TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
     std::mt19937 random(314);
     std::normal_distribution<float> value;
     std::vector<float> data(kCount * kDim), queries(kQueries * kDim), centroid(kDim, 0);
-    for (auto& x : data)
+    for (auto& x : data) {
         x = value(random);
-    for (auto& x : queries)
+    }
+    for (auto& x : queries) {
         x = value(random);
+    }
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 4U, 9U}) {
             SCOPED_TRACE(metric);
@@ -1422,8 +1430,10 @@ TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
             const auto run = [&](size_t ef, size_t threads, const auto& expected) {
                 ready.wait();
                 for (size_t i = 0; i < 16; ++i) {
-                    if (index.search(queries.data(), kQueries, k, ef, threads) != expected)
+                    if (index.search(queries.data(), kQueries, k, ef, threads) !=
+                        expected) {
                         return false;
+                    }
                 }
                 return true;
             };
