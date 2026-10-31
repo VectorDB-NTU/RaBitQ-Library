@@ -701,6 +701,9 @@ void IVF::save(const char* filename) const {
 
 void IVF::write_file(const char* filename) const {
     std::ofstream output(io_impl::filesystem_path(filename), std::ios::binary);
+    if (!output.is_open()) {
+        throw std::runtime_error("IVF cannot open index file for writing");
+    }
     output.exceptions(std::ios::failbit | std::ios::badbit);
     const uint32_t flags = raw_reranking_ ? 1 : 0;
     const uint64_t stored_padded_dim = padded_dim_;
@@ -949,6 +952,9 @@ void IVF::load(const char* filename) {
                 loaded.num_removed_ += batch.f_add()[lane] == kRemovedFAdd;
             }
         }
+    }
+    if (remaining != 0) {
+        throw std::runtime_error("IVF index file has unexpected trailing data");
     }
     loaded.ready_ = true;
 
