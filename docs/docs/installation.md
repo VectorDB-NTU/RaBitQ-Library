@@ -46,8 +46,9 @@ python -m pip install "rabitqlib>=0.7.2"
 For changes from 0.6.0, see the [0.7.0 upgrade notes](releases/0.7.0.md).
 
 Wheels target the platforms above and require no compiler or CMake.
-Linux ARM64 and macOS ARM64 wheels bundle OpenMP, so wheel users do not
-need a separate OpenMP installation.
+Every wheel bundles its OpenMP runtime (GNU OpenMP on Linux, LLVM OpenMP on
+macOS, and the MSVC `vcomp140` runtime on Windows), so wheel users do not need a
+separate OpenMP installation.
 Release wheels disable native CPU tuning and select supported kernels at runtime.
 
 ### Python editor support

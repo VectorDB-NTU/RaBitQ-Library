@@ -12,7 +12,7 @@ cmake -S . -B build-core-bench -DCMAKE_BUILD_TYPE=Release \
   -DRABITQ_BUILD_SAMPLES=OFF -DRABITQ_USE_OPENMP=OFF \
   -DRABITQ_BUILD_BENCHMARKS=ON -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build-core-bench --parallel
-ctest --test-dir build-core-bench --output-on-failure
+ctest --no-tests=error --test-dir build-core-bench --output-on-failure
 ./build-core-bench/benchmarks/core/rabitq_core_benchmark > core-results.csv
 ```
 
@@ -22,7 +22,7 @@ For an installed package, configure this directory directly:
 cmake -S benchmarks/core -B build-core-bench-installed \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="<core-install-prefix>"
 cmake --build build-core-bench-installed --parallel
-ctest --test-dir build-core-bench-installed --output-on-failure
+ctest --no-tests=error --test-dir build-core-bench-installed --output-on-failure
 ./build-core-bench-installed/rabitq_core_benchmark 128 4 4096 64 7 > core-results.csv
 ```
 
@@ -107,8 +107,8 @@ valid code/factor prototypes are encoded, then replicated at distinct memory add
 This models access and call costs, not dataset-dependent ANN quality. Inputs are already
 in the numerical working domain; no rotation or top-k retrieval is timed or evaluated.
 The metric is L2 with a zero centroid. Prototype scores must match all three references
-exactly before timing. Raw timings and double-precision checksums are printed for every
-path and repetition; path order rotates and each timed pass has its own warmup.
+within a computed float32 rounding bound before timing. Raw timings and
+double-precision checksums are printed for every path and repetition; path order rotates and each timed pass has its own warmup.
 
 Compare baseline/candidate binaries with identical harness source, compiler flags and
 parameters. Alternate process order, retain all samples, and verify checksums alongside

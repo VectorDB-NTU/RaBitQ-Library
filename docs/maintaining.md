@@ -31,8 +31,9 @@ only the affected job groups:
 | `tests/python/conftest.py` | Python lint, C++ checks, and Python builds/wheels |
 | `sample/python/` | Python lint, source-install smoke tests, comparison tests, and wheels |
 | Python automation under `.github/scripts/` | Python lint (CI routing scripts trigger broader checks) |
-| CMake configuration | C++ tests and clang-tidy, plus Python builds/wheels |
-| `pyproject.toml` | Python lint, builds, and wheels; no C++ checks |
+| Root `CMakeLists.txt` or `cmake/` | C++ tests and clang-tidy, the C++ benchmark build, plus Python builds/wheels |
+| `tests/CMakeLists.txt` | C++ platform tests and the core/FastScan consumer matrix; no formatting, clang-tidy or Python builds |
+| `pyproject.toml` | Python lint, builds, wheels, and the C++ benchmark build; no other C++ checks |
 | Shell scripts | ShellCheck and any check driven by the changed script |
 
 See [CI coverage](../tests/README.md#ci-coverage) for full-suite versus smoke-test
@@ -49,8 +50,10 @@ Pushes compare the complete pushed range; pull requests compare against
 their base. Renames and deletions are included. Relevant jobs also run if
 change detection fails, so a detection error cannot silently waive a check.
 
-Every Linux and macOS job that compiles the library with native tuning disabled uses
-`ccache` through CMake's compiler launcher, set up by `.github/actions/setup-ccache`.
+Every Linux and macOS build job in the `Test` workflow that compiles the library with
+native tuning disabled uses `ccache` through CMake's compiler launcher, set up by
+`.github/actions/setup-ccache`. The C++ static analysis job and the wheel builds do not
+use it.
 Every run restores the newest cache saved from `main` for its per-configuration key,
 so unchanged translation units are not recompiled. Only pushes to `main` save, in the
 job's final `.github/actions/save-ccache` step, so pull requests cannot evict that
@@ -115,10 +118,12 @@ every SIMD backend executing.
 
 ## Documentation and concurrency gates
 
-The documentation workflow runs on every PR and main push. Its changed-file
+The documentation workflow runs on every PR and main push. On PRs, its changed-file
 output selects the strict MkDocs build for documentation changes; manual runs
-also build. `Documentation validation` always reports a result, accepting a
-skipped build only when change detection succeeded and did not select docs.
+also build. Every main push builds and deploys, so a run cancelled by a newer
+push cannot leave the site behind main. `Documentation validation` always
+reports a result, accepting a skipped build only when change detection succeeded
+and did not select docs.
 Selected build failures, cancellations, and unexpected skips fail this summary.
 Only successful push builds can deploy the documentation.
 
@@ -167,7 +172,9 @@ and record results and any unresolved failures or missing coverage in the releas
 or issue. These manual checks are not enforced by the automatic publishing workflow.
 
 Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt`,
-add a short README news entry, and merge into `main`. Once the `Test` and
+add a short README news entry and, for releases with user-facing notes, a
+`docs/docs/releases/X.Y.Z.md` page listed in the `docs/mkdocs.yml` navigation,
+and merge into `main`. Once the `Test` and
 `Python Wheel` workflows succeed for the same commit, `Release wheels` checks
 whether that version is newer than the existing release tags. It then builds
 and tests the release wheels, pushes `vX.Y.Z` at that tested commit, publishes
@@ -188,11 +195,14 @@ partial release, rerun the failed release jobs: existing tags must still point
 to the tested commit, and already uploaded PyPI files are skipped.
 
 From the repository root, using your activated project Python environment,
-validate automation changes locally with the command below. The workflow contract
+validate automation changes locally with the commands below. The workflow contract
 tests parse workflows with PyYAML, which the Python quality job installs alongside
-Ruff; install it in your environment if it is missing.
+Ruff; install it in your environment if it is missing. The label classifier tests
+also need Node.js on `PATH`.
 
 ```bash
+ruff format --check .github/scripts
+ruff check .github/scripts
 python -m unittest discover -s .github/scripts -p 'test_*.py'
 ```
 
@@ -213,7 +223,7 @@ PR title when a PR is opened, edited, reopened, or marked ready for review:
 | `deps:` | `release:dependencies` | Dependencies |
 | `chore:`, `refactor:`, `test:`, `style:` | `release:maintenance` | Maintenance |
 
-Use lowercase prefixes and a nonempty summary, for example
+Use lowercase prefixes, a space after the colon and a nonempty summary, for example
 `fix(ivf): update only affected clusters`. A scope and a `!` marker before the
 colon are optional. The marker does not change the category or authorize a
 breaking change; compatibility decisions still follow the project rules.

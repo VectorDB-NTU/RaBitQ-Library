@@ -171,11 +171,15 @@ int main() {
 }
 ```
 
-The advanced encoders validate their preconditions and throw
-`std::invalid_argument` otherwise: `dim` must be at least 2 (the error factor
-divides by `dim - 1`), the code element type must hold `bits` (nine bits need
-`uint16_t`), inputs must be finite, and `SplitSingleQuery` needs a padded
-dimension that is a positive multiple of 32.
+The advanced encoders check a few preconditions and throw
+`std::invalid_argument` when they fail: encoders that produce error factors
+require `dim` of at least 2 (the error factor divides by `dim - 1`),
+`quantize_full_single` requires a code element type that holds `bits` (nine
+bits need `uint16_t`), and `SplitSingleQuery` needs a padded dimension that is
+a positive multiple of 32. `quantize_scalar` does not check the code element
+type, so a type that is too narrow silently produces wrong codes. None of the
+per-vector encoders checks that inputs are finite; validate each batch before
+encoding, as the stable API and the indexes do.
 
 #### Querying
 

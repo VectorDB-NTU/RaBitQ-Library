@@ -63,7 +63,7 @@ Use `ctest --no-tests=error`, including filtered and installed-consumer runs.
 
 C++17 quantization/ANN library with Python bindings (`rabitqlib`). Components depend in one
 direction: `index` → `fastscan` → `core`; core and FastScan support OpenMP OFF, ANN/Python require ON.
-Stable float32 v1 API: `include/rabitqlib/core/api.hpp`. Implementations: `src/{core,simd,fastscan,index}/`.
+Stable float32 v1 API: `include/rabitqlib/core/api.hpp`. Implementations: `src/{core,simd,utils,fastscan,index}/`.
 Bindings: `python_bindings/`; tests: `tests/{unit,python}/`; site sources: `docs/docs/`.
 See the [full code map](docs/development.md#project-and-code-map) when locating unfamiliar code.
 

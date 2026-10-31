@@ -104,10 +104,10 @@ cmake -S . -B build -DRABITQ_BUILD_TESTS=ON \
     -DRABITQ_BUILD_SAMPLES=OFF -DCMAKE_BUILD_TYPE=Release \
     -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build --parallel 2
-ctest --test-dir build --output-on-failure
+ctest --no-tests=error --test-dir build --output-on-failure
 ```
 
-The first configuration needs Git and network access to download GoogleTest.
+The first configuration needs network access to download GoogleTest.
 Increase `--parallel 2` if your machine has enough memory for more compiler jobs.
 Native CPU tuning is disabled here to keep generic code portable. On Windows
 or Apple Silicon, use the matching commands in [the test guide](../tests/README.md#quick-start).
