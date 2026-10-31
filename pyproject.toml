@@ -5,11 +5,30 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "rabitqlib"
 version = "0.7.2"
-description = "RaBitQ Python bindings for indexes and clustering"
+description = "Official RaBitQ library for vector quantization and approximate nearest-neighbor search"
 readme = "README.md"
 requires-python = ">=3.11"
 maintainers = [{ name = "Yutong Gou" }]
+keywords = [
+    "rabitq",
+    "quantization",
+    "vector quantization",
+    "approximate nearest neighbor search",
+    "nearest neighbor search",
+    "ann",
+    "vector search",
+    "similarity search",
+    "embeddings",
+    "simd",
+]
 classifiers = [
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
@@ -17,6 +36,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries",
 ]
 dependencies = ["numpy"]
 
