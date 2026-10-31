@@ -194,7 +194,7 @@ Insert the following before `return 0` in the indexing example above.
 
     // See the Estimation guide for these query factors.
     float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
-    float k1xsumq = c_1 * std::accumulate(query.begin(), query.end(), 0.F);
+    float g_k1xsumq = c_1 * std::accumulate(query.begin(), query.end(), 0.F);
     float g_add = rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim);
 
     float estimated_distance = rabitqlib::quant::full_est_dist(
@@ -206,7 +206,7 @@ Insert the following before `return 0` in the indexing example above.
         f_add,
         f_rescale,
         g_add,
-        k1xsumq
+        g_k1xsumq
     );
     float gt_dist = rabitqlib::euclidean_sqr(query.data(), vector.data(), dim);
 
@@ -273,7 +273,7 @@ initialized `batch_data`, `centroid`, `dim`, and `batch_size`.
 
     rabitqlib::BatchQuery<float> query_wrapper(query.data(), dim);
 
-    // G_add is the squared L2 distance between the query and the centroid.
+    // g_add is the squared L2 distance between the query and the centroid.
     // This standalone example omits rotation, so both operands are raw vectors.
     // In an index that applies rotation, rotate both with the same transformation.
     query_wrapper.set_g_add(
@@ -400,8 +400,8 @@ Insert this before `return 0` in the indexing example, reusing its data and dime
     auto ip_func = rabitqlib::select_excode_ipfunc(bits - 1);
 
     // Compute more accurate distance based on full codes.
-    float est_dist_ex;
-    float low_dist_ex;
+    float estimated_distance_ex;
+    float lower_bound_ex;
     float ip_x0_qr_ex;
 
     rabitqlib::split_single_fulldist(
@@ -411,8 +411,8 @@ Insert this before `return 0` in the indexing example, reusing its data and dime
         query_wrapper,
         dim,
         bits - 1,
-        est_dist_ex,
-        low_dist_ex,
+        estimated_distance_ex,
+        lower_bound_ex,
         ip_x0_qr_ex,
         distance_sqr,
         distance_norm
@@ -512,7 +512,7 @@ Insert this before `return 0` in the indexing example, reusing its buffers and d
         query.data(), dim, bits - 1, rabitqlib::METRIC_L2, true
     );
 
-    // SplitBatchQuery expects the L2 norm and squares it internally for G_add.
+    // SplitBatchQuery expects the L2 norm and squares it internally for g_add.
     // This example omits rotation, so query and centroid are both raw vectors.
     float distance_norm =
         std::sqrt(rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim));

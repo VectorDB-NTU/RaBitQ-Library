@@ -20,7 +20,6 @@
 using PID = rabitqlib::PID;
 using index_type = rabitqlib::symqg::QuantizedGraph<float>;
 using data_type = rabitqlib::RowMajorArray<float>;
-using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
 int run(int argc, char** argv) {
     if (argc < 5) {
