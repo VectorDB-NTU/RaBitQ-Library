@@ -201,12 +201,14 @@ listed above.
 Start with the [contribution guide](.github/CONTRIBUTING.md#your-first-contribution)
 or [starter tasks](.github/CONTRIBUTING.md#starter-tasks). Report bugs and request
 features through [GitHub Issues](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/new/choose).
-See [maintenance and feedback](.github/CONTRIBUTING.md#feedback-and-further-reading) for maintainer information.
 
-## Acknowledgements
+## Authors and acknowledgements
 
-RaBitQ Library is developed by Yutong Gou, Jianyang Gao, Yuexuan Xu, Jifan Shi,
-and Zhonghao Yang. We thank Alexandr Guzhva, Li Liu, Chao Gao, Silu Huang,
+RaBitQ Library is led and maintained by [Yutong Gou](https://github.com/gouyt13),
+and developed with [Jianyang Gao](https://github.com/gaoj0017),
+[Yuexuan Xu](https://github.com/YuexuanXu7), [Jifan Shi](https://github.com/Stardust-SJF),
+[Zhonghao Yang](https://github.com/zhonghao-yang), [Tamim Ehsan](https://github.com/TamimEhsan),
+and Cheng Long. We thank Alexandr Guzhva, Li Liu, Chao Gao, Silu Huang,
 Jiabao Jin, Xiaoyao Zhong, and Jinjing Zhou for their valuable feedback.
 
 ## License

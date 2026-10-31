@@ -1,0 +1,89 @@
+cff-version: 1.2.0
+message: >-
+  If you use RaBitQ-Library, please cite it as below, together with the
+  papers for the methods you use.
+title: RaBitQ-Library
+type: software
+authors:
+  - given-names: Yutong
+    family-names: Gou
+  - given-names: Jianyang
+    family-names: Gao
+  - given-names: Yuexuan
+    family-names: Xu
+  - given-names: Jifan
+    family-names: Shi
+  - given-names: Zhonghao
+    family-names: Yang
+  - given-names: Tamim
+    family-names: Ehsan
+  - given-names: Cheng
+    family-names: Long
+abstract: >-
+  A research-backed library for vector quantization and approximate
+  nearest-neighbor search.
+repository-code: "https://github.com/VectorDB-NTU/RaBitQ-Library"
+url: "https://vectordb-ntu.github.io/RaBitQ-Library/"
+license: Apache-2.0
+keywords:
+  - vector quantization
+  - approximate nearest neighbor search
+  - vector search
+references:
+  - type: article
+    title: >-
+      RaBitQ: Quantizing High-Dimensional Vectors with a Theoretical Error
+      Bound for Approximate Nearest Neighbor Search
+    authors:
+      - given-names: Jianyang
+        family-names: Gao
+      - given-names: Cheng
+        family-names: Long
+    journal: Proceedings of the ACM on Management of Data
+    volume: 2
+    issue: 3
+    year: 2024
+    month: 5
+    doi: 10.1145/3654970
+  - type: article
+    title: >-
+      Practical and Asymptotically Optimal Quantization of High-Dimensional
+      Vectors in Euclidean Space for Approximate Nearest Neighbor Search
+    authors:
+      - given-names: Jianyang
+        family-names: Gao
+      - given-names: Yutong
+        family-names: Gou
+      - given-names: Yuexuan
+        family-names: Xu
+      - given-names: Yongyi
+        family-names: Yang
+      - given-names: Cheng
+        family-names: Long
+      - given-names: Raymond Chi-Wing
+        family-names: Wong
+    journal: Proceedings of the ACM on Management of Data
+    volume: 3
+    issue: 3
+    year: 2025
+    month: 6
+    doi: 10.1145/3725413
+  - type: article
+    title: >-
+      SymphonyQG: Towards Symphonious Integration of Quantization and Graph for
+      Approximate Nearest Neighbor Search
+    authors:
+      - given-names: Yutong
+        family-names: Gou
+      - given-names: Jianyang
+        family-names: Gao
+      - given-names: Yuexuan
+        family-names: Xu
+      - given-names: Cheng
+        family-names: Long
+    journal: Proceedings of the ACM on Management of Data
+    volume: 3
+    issue: 1
+    year: 2025
+    month: 2
+    doi: 10.1145/3709730

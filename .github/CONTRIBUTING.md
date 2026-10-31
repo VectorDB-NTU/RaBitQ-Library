@@ -186,8 +186,9 @@ another. Each task can be a separate PR.
 
 ## Feedback and further reading
 
-[Yutong Gou (@gouyt13)](https://github.com/gouyt13) handles issue triage and
-reviews. Review timing depends on availability; keep questions in the relevant
+[Yutong Gou (@gouyt13)](https://github.com/gouyt13) leads development and
+maintains the library, including issue triage, reviews and releases. Review
+timing depends on availability; keep questions in the relevant
 issue or PR so others can learn from the answers.
 
 - [Development reference](../docs/development.md): formatters, analysis,
