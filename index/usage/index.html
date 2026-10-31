@@ -1833,6 +1833,11 @@ or unsupported versions. See the
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before
 downgrading the library.</p>
+<p>Index files are trusted input. Loaders validate structure and reject truncated,
+inconsistent, or unsupported files so that mistakes are reported, but they are
+not a security boundary: a crafted file can make <code>load</code> allocate its stored
+capacity or violate invariants that later <code>add</code> and <code>remove</code> calls rely on.
+Load only files written by this library.</p>
 
 
 
