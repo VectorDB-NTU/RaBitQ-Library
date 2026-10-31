@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core>=0.10.0", "pybind11>=2.12", "numpy"]
+requires = ["scikit-build-core>=0.11.0", "pybind11>=2.12", "numpy"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -8,6 +8,8 @@ version = "0.7.2"
 description = "Official RaBitQ library for vector quantization and approximate nearest-neighbor search"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 maintainers = [{ name = "Yutong Gou" }]
 keywords = [
     "rabitq",
@@ -24,7 +26,6 @@ keywords = [
 classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
