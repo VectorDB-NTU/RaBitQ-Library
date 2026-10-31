@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "rabitqlib/fastscan/detail/simd.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
 
 namespace rabitqlib::fastscan::simd {
 
@@ -22,7 +23,7 @@ void pack_lut_impl(
     size_t dim, const float* query, float* lut, float& minimum, float& maximum
 ) {
     auto min_values = _mm512_set1_ps(kInfinity), max_values = _mm512_set1_ps(-kInfinity);
-    unsigned nan_mask = 0;
+    uint32_t nan_mask = 0;
 
     // Keep the initial +0 addition observable for signed-zero inputs.
     volatile float zero = 0;
@@ -68,12 +69,11 @@ namespace {
 // After removing packed high-byte terms, each byte-plane sum is at most
 // 255 * (1024 / 4) = 65280, below the 16-bit reduction limit.
 constexpr size_t kChunkDim = 1024;
-constexpr size_t kBatchSize = 32;
 
 void accumulate_chunk_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 ) {
     size_t code_length = dim << 2;
@@ -90,8 +90,7 @@ void accumulate_chunk_avx512(
     __m512i accu2 = _mm512_setzero_si512();
     __m512i accu3 = _mm512_setzero_si512();
 
-    // ! here, we assume the code_length is a multiple of 64, thus the dim must be a
-    // ! multiple of 16
+    // Requires code_length to be a multiple of 64, so dim must be a multiple of 16.
     for (size_t i = 0; i < code_length; i += 64) {
         c = _mm512_loadu_si512(&codes[i]);
         lut = _mm512_loadu_si512(&lookup_table[i]);
@@ -130,9 +129,11 @@ void accumulate_chunk_avx512(
     ret = _mm512_add_epi16(ret, _mm512_shuffle_i64x2(ret1, ret2, 0b10001000));
     ret = _mm512_add_epi16(ret, _mm512_shuffle_i64x2(ret1, ret2, 0b11011101));
 
-    _mm512_storeu_si512(result, _mm512_cvtepu16_epi32(_mm512_castsi512_si256(ret)));
     _mm512_storeu_si512(
-        result + 16, _mm512_cvtepu16_epi32(_mm512_extracti64x4_epi64(ret, 1))
+        accumulated_values, _mm512_cvtepu16_epi32(_mm512_castsi512_si256(ret))
+    );
+    _mm512_storeu_si512(
+        accumulated_values + 16, _mm512_cvtepu16_epi32(_mm512_extracti64x4_epi64(ret, 1))
     );
 }
 
@@ -141,11 +142,11 @@ void accumulate_chunk_avx512(
 void accumulate_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_chunk_avx512(codes, lookup_table, result, dim);
+        accumulate_chunk_avx512(codes, lookup_table, accumulated_values, dim);
         return;
     }
 
@@ -167,14 +168,14 @@ void accumulate_avx512(
         }
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {
-        result[lane] = static_cast<int32_t>(totals[lane]);
+        accumulated_values[lane] = static_cast<int32_t>(totals[lane]);
     }
 }
 
 void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
-    size_t num_codebook = dim >> 2;
+    size_t num_groups = dim >> 2;
 
-    for (size_t i = 0; i < num_codebook; i++) {
+    for (size_t group = 0; group < num_groups; ++group) {
         constexpr size_t kRegBits = 512;
         constexpr size_t kLaneBits = 128;
         constexpr size_t kByteBits = 8;
@@ -183,8 +184,8 @@ void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut) 
         constexpr size_t kCodePerIter = 2 * kRegBits / kByteBits;
         constexpr size_t kCodePerLine = kLaneBits / kByteBits;
 
-        uint8_t* fill_lo =
-            hc_lut + (i / kLutPerIter * kCodePerIter) + ((i % kLutPerIter) * kCodePerLine);
+        uint8_t* fill_lo = hc_lut + (group / kLutPerIter * kCodePerIter) +
+                           ((group % kLutPerIter) * kCodePerLine);
         uint8_t* fill_hi = fill_lo + (kRegBits / kByteBits);
 
         __m512i tmp = _mm512_cvtepi16_epi32(
@@ -202,7 +203,7 @@ namespace {
 
 void accumulate_hacc_chunk_avx512(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* accumulated_values,
     size_t dim
 ) {
@@ -215,9 +216,9 @@ void accumulate_hacc_chunk_avx512(
         }
     }
 
-    size_t num_codebook = dim >> 2;
+    size_t num_groups = dim >> 2;
 
-    for (size_t m = 0; m < num_codebook; m += 4) {
+    for (size_t group = 0; group < num_groups; group += 4) {
         __m512i c = _mm512_loadu_si512(codes);
         __m512i lo = _mm512_and_si512(c, low_mask);
         __m512i hi = _mm512_and_si512(_mm512_srli_epi16(c, 4), low_mask);
@@ -226,7 +227,7 @@ void accumulate_hacc_chunk_avx512(
         // accu[0][0-3] for lower 8-bit result
         // accu[1][0-3] for upper 8-bit result
         for (auto& i : accu) {
-            __m512i lut = _mm512_loadu_si512(hc_lut);
+            __m512i lut = _mm512_loadu_si512(lookup_table);
 
             __m512i res_lo = _mm512_shuffle_epi8(lut, lo);
             __m512i res_hi = _mm512_shuffle_epi8(lut, hi);
@@ -237,7 +238,7 @@ void accumulate_hacc_chunk_avx512(
             i[2] = _mm512_add_epi16(i[2], res_hi);
             i[3] = _mm512_add_epi16(i[3], _mm512_srli_epi16(res_hi, 8));
 
-            hc_lut += 64;
+            lookup_table += 64;
         }
         codes += 64;
     }
@@ -287,12 +288,12 @@ void accumulate_hacc_chunk_avx512(
 
 void accumulate_hacc_avx512(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* accumulated_values,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_hacc_chunk_avx512(codes, hc_lut, accumulated_values, dim);
+        accumulate_hacc_chunk_avx512(codes, lookup_table, accumulated_values, dim);
         return;
     }
 
@@ -301,7 +302,7 @@ void accumulate_hacc_avx512(
     for (size_t offset = 0; offset < dim;) {
         const size_t chunk_dim = std::min(kChunkDim, dim - offset);
         accumulate_hacc_chunk_avx512(
-            codes + offset * 4, hc_lut + offset * 8, chunk_result.data(), chunk_dim
+            codes + offset * 4, lookup_table + offset * 8, chunk_result.data(), chunk_dim
         );
         for (size_t lane = 0; lane < kBatchSize; ++lane) {
             totals[lane] += chunk_result[lane];
@@ -310,7 +311,7 @@ void accumulate_hacc_avx512(
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {
         if (totals[lane] > std::numeric_limits<int32_t>::max()) {
-            throw std::overflow_error("high-accuracy FastScan result exceeds int32_t");
+            throw std::overflow_error("FastScan high-accuracy result exceeds int32_t");
         }
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {

@@ -7,7 +7,9 @@
 #include "rabitqlib/core/detail/simd/quantization_dispatch.hpp"
 #include "rabitqlib/utils/bitops.hpp"
 #include "rescale_search.hpp"
+
 namespace rabitqlib::simd::detail {
+namespace {
 
 // Evaluate one candidate scale, processing eight coordinates per iteration.
 // For a_i = magnitudes[i], c_i = min(floor(scale*a_i), max_code), q_i = c_i+0.5,
@@ -19,7 +21,7 @@ namespace rabitqlib::simd::detail {
 // unequal comparable level/magnitude ratios differ by at least 2^-33 relatively.
 // Reciprocal multiplication has much less error, so its extreme indices remain
 // valid. Recompute those two endpoints by division to retain exact event scales.
-static RescaleSearchState evaluate_scale_state_avx512(
+RescaleSearchState evaluate_scale_state_avx512(
     const double* magnitudes,
     const double* reciprocals,
     size_t dim,
@@ -28,7 +30,7 @@ static RescaleSearchState evaluate_scale_state_avx512(
     double t_end,
     double scale
 ) {
-    __m512d z = _mm512_setzero_pd(), one = _mm512_set1_pd(1), half = _mm512_set1_pd(.5),
+    __m512d z = _mm512_setzero_pd(), one = _mm512_set1_pd(1), half = _mm512_set1_pd(0.5),
             vt = _mm512_set1_pd(scale), vcap = _mm512_set1_pd(max_code);
     __m512d guard = _mm512_set1_pd(
                 2 * std::numeric_limits<double>::epsilon() * (max_code + 1.0)
@@ -113,6 +115,7 @@ static RescaleSearchState evaluate_scale_state_avx512(
     return finish_scale_state(s, magnitudes, fi[fk], ni[nk], i, dim, max_code, scale);
 }
 
+}  // namespace
 }  // namespace rabitqlib::simd::detail
 
 namespace rabitqlib::simd {

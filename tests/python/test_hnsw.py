@@ -199,13 +199,13 @@ def test_search_before_build_raises(query_data):
 
 
 def test_save_rejects_unopenable_destination(built_hnsw, tmp_path):
-    with pytest.raises(RuntimeError, match="HNSW: cannot open index file for writing"):
+    with pytest.raises(RuntimeError, match="HNSW cannot open index file for writing"):
         built_hnsw.save(str(tmp_path / "missing" / "hnsw.index"))
 
 
 @pytest.mark.skipif(not Path("/dev/full").exists(), reason="/dev/full is unavailable")
 def test_save_reports_write_or_close_failure(built_hnsw):
-    with pytest.raises(RuntimeError, match="HNSW: failed to write index file"):
+    with pytest.raises(RuntimeError, match="HNSW failed to write index file"):
         built_hnsw.save("/dev/full")
 
 

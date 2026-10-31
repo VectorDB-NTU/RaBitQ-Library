@@ -13,7 +13,7 @@
 
 using namespace rabitqlib;
 
-TEST(IndexTypes, PreserveIdentifierAndCandidateRepresentation) {
+TEST(IndexTypesTest, PreserveIdentifierAndCandidateRepresentation) {
     static_assert(std::is_same_v<PID, uint32_t>);
     EXPECT_EQ(kPidMax, std::numeric_limits<uint32_t>::max());
     const AnnCandidate<float> candidate(7, 1.5F);
@@ -21,7 +21,7 @@ TEST(IndexTypes, PreserveIdentifierAndCandidateRepresentation) {
     EXPECT_EQ(candidate.distance, 1.5F);
 }
 
-TEST(ExactNearestNeighbor, SupportsRequestedWorkerCounts) {
+TEST(ExactNearestNeighborTest, SupportsRequestedWorkerCounts) {
     const std::array<float, 12> data{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
     const std::array<float, 3> query{7, 8, 9};
     for (size_t workers : {0U, 1U, 2U, 64U}) {

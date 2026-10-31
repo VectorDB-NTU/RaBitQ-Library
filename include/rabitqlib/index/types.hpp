@@ -5,7 +5,7 @@
 
 namespace rabitqlib {
 using PID = uint32_t;
-constexpr uint32_t kPidMax = 0xFFFFFFFF;
+inline constexpr PID kPidMax = 0xFFFFFFFF;
 
 template <typename T, typename TP = PID>
 struct AnnCandidate {
@@ -13,7 +13,8 @@ struct AnnCandidate {
     T distance = std::numeric_limits<T>::max();
 
     AnnCandidate() = default;
-    explicit AnnCandidate(TP vec_id, T dis) : id(vec_id), distance(dis) {}
+    explicit AnnCandidate(TP candidate_id, T candidate_distance)
+        : id(candidate_id), distance(candidate_distance) {}
 
     friend bool operator<(const AnnCandidate& first, const AnnCandidate& second) {
         return first.distance < second.distance;

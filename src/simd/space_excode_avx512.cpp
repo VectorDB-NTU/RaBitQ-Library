@@ -6,6 +6,7 @@
 
 #include "packed_tail_avx2.hpp"
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
+#include "rabitqlib/utils/bitops.hpp"
 
 namespace rabitqlib::simd::excode_ipimpl {
 
@@ -37,7 +38,7 @@ inline __m512 excode_ip_tail_sum_avx512(
     const __m512i shifts = _mm512_load_si512(kOffsets.data());
     const __m512i mask = _mm512_set1_epi32((1U << Bits) - 1);
     for (size_t i = 0; i < 32; i += 16) {
-        const __m128i packed = simd::detail::load_excode_tail<Bits>(compact);
+        const __m128i packed = detail::load_excode_tail<Bits>(compact);
         __m512i words;
         if constexpr (Bits == 2) {
             // All 16 codes fit in one word; broadcast it instead of gathering bytes.
@@ -51,20 +52,6 @@ inline __m512 excode_ip_tail_sum_avx512(
         compact += 2 * Bits;
     }
     return sum;
-}
-
-[[nodiscard]] inline uint64_t load_u64(const uint8_t* data) noexcept {
-    uint64_t value = 0;
-    std::memcpy(&value, data, sizeof(value));
-    return value;
-}
-
-[[nodiscard]] inline __m128i set_u64x(uint64_t high, uint64_t low) noexcept {
-    int64_t signed_high = 0;
-    int64_t signed_low = 0;
-    std::memcpy(&signed_high, &high, sizeof(signed_high));
-    std::memcpy(&signed_low, &low, sizeof(signed_low));
-    return _mm_set_epi64x(signed_high, signed_low);
 }
 }  // namespace
 
@@ -152,7 +139,7 @@ float ip64_fxu3_avx512(
         __m128i compact2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code));
         compact_code += 16;
 
-        const uint64_t top_bit = load_u64(compact_code);
+        const uint64_t top_bit = bitops::load_word(compact_code, sizeof(uint64_t));
         compact_code += 8;
 
         __m128i vec_00_to_15 = _mm_and_si128(compact2, mask);
@@ -161,13 +148,13 @@ float ip64_fxu3_avx512(
         __m128i vec_48_to_63 = _mm_and_si128(_mm_srli_epi16(compact2, 6), mask);
 
         __m128i top_00_to_15 =
-            _mm_and_si128(set_u64x(top_bit << 1, top_bit << 2), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit << 1, top_bit << 2), top_mask);
         __m128i top_16_to_31 =
-            _mm_and_si128(set_u64x(top_bit >> 1, top_bit >> 0), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit >> 1, top_bit >> 0), top_mask);
         __m128i top_32_to_47 =
-            _mm_and_si128(set_u64x(top_bit >> 3, top_bit >> 2), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit >> 3, top_bit >> 2), top_mask);
         __m128i top_48_to_63 =
-            _mm_and_si128(set_u64x(top_bit >> 5, top_bit >> 4), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit >> 5, top_bit >> 4), top_mask);
 
         vec_00_to_15 = _mm_or_si128(top_00_to_15, vec_00_to_15);
         vec_16_to_31 = _mm_or_si128(top_16_to_31, vec_16_to_31);
@@ -244,7 +231,7 @@ float ip64_fxu5_avx512(
             _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + 16));
         compact_code += 32;
 
-        const uint64_t top_bit = load_u64(compact_code);
+        const uint64_t top_bit = bitops::load_word(compact_code, sizeof(uint64_t));
         compact_code += 8;
 
         __m128i vec_00_to_15 = _mm_and_si128(compact4_1, mask);
@@ -253,13 +240,13 @@ float ip64_fxu5_avx512(
         __m128i vec_48_to_63 = _mm_and_si128(_mm_srli_epi16(compact4_2, 4), mask);
 
         __m128i top_00_to_15 =
-            _mm_and_si128(set_u64x(top_bit << 3, top_bit << 4), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit << 3, top_bit << 4), top_mask);
         __m128i top_16_to_31 =
-            _mm_and_si128(set_u64x(top_bit << 1, top_bit << 2), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit << 1, top_bit << 2), top_mask);
         __m128i top_32_to_47 =
-            _mm_and_si128(set_u64x(top_bit >> 1, top_bit >> 0), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit >> 1, top_bit >> 0), top_mask);
         __m128i top_48_to_63 =
-            _mm_and_si128(set_u64x(top_bit >> 3, top_bit >> 2), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit >> 3, top_bit >> 2), top_mask);
 
         vec_00_to_15 = _mm_or_si128(top_00_to_15, vec_00_to_15);
         vec_16_to_31 = _mm_or_si128(top_16_to_31, vec_16_to_31);
@@ -372,17 +359,17 @@ float ip64_fxu7_avx512(
             _mm_srli_epi16(_mm_and_si128(cpt3, mask2), 2)
         );
 
-        const uint64_t top_bit = load_u64(compact_code);
+        const uint64_t top_bit = bitops::load_word(compact_code, sizeof(uint64_t));
         compact_code += 8;
 
         __m128i top_00_to_15 =
-            _mm_and_si128(set_u64x(top_bit << 5, top_bit << 6), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit << 5, top_bit << 6), top_mask);
         __m128i top_16_to_31 =
-            _mm_and_si128(set_u64x(top_bit << 3, top_bit << 4), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit << 3, top_bit << 4), top_mask);
         __m128i top_32_to_47 =
-            _mm_and_si128(set_u64x(top_bit << 1, top_bit << 2), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit << 1, top_bit << 2), top_mask);
         __m128i top_48_to_63 =
-            _mm_and_si128(set_u64x(top_bit >> 1, top_bit << 0), top_mask);
+            _mm_and_si128(detail::set_u64x(top_bit >> 1, top_bit << 0), top_mask);
 
         vec_00_to_15 = _mm_or_si128(top_00_to_15, vec_00_to_15);
         vec_16_to_31 = _mm_or_si128(top_16_to_31, vec_16_to_31);
@@ -418,12 +405,12 @@ float ip64_fxu7_avx512(
 }
 
 float ip16_fxu8_avx512(
-    const float* __restrict__ query, const uint8_t* __restrict__ code, size_t dim
+    const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
     __m512 sum0 = _mm512_setzero_ps(), sum1 = sum0, sum2 = sum0, sum3 = sum0;
     const auto unpack_code = [&](size_t k) {
         return _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(code + k))
+            _mm_loadu_si128(reinterpret_cast<const __m128i*>(compact_code + k))
         ));
     };
     size_t i = 0;

@@ -360,10 +360,10 @@ jobs:
         env:
           OMP_NUM_THREADS: "2"
         run: |
-          simd_filter='CpuFeatures.*:FloatDistance.*:MatrixDispatchTest.*:FastScan*.*:BatchEstimatorTest.*'
-          simd_filter+=':FhtDispatchTest.*:FlipSignTest.*:KacsWalkTest.*:ExcodeIp.*:MaskIpX0Q.*'
-          simd_filter+=':PortableKernels.*:QueryPreparation.*:WarmupIpX0Q.*:PackBinary.*'
-          simd_filter+=':ExplicitSimd/RabitqRescaleBackendTest.*:QGEstimatorTest.*'
+          simd_filter='CpuFeaturesTest.*:FloatDistanceTest.*:MatrixDispatchTest.*:FastScan*.*'
+          simd_filter+=':FhtDispatchTest.*:FlipSignTest.*:KacsWalkTest.*:ExcodeIpTest.*:MaskIpX0QTest.*'
+          simd_filter+=':PortableKernelsTest.*:QueryPreparationTest.*:WarmupIpX0QTest.*:PackBinaryTest.*'
+          simd_filter+=':ExplicitSimd/RabitqRescaleBackendTest.*:QgEstimatorTest.*'
           simd_filter+=':QGKMeansTest.TrainsAndReturnsAssignmentsForFinalCentroids'
           simd_filter+=':RaBitQKMeansTest.FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts'
           simd_filter+=':IvfPersistenceTest.ReloadsRawAndQuantizedStorage'

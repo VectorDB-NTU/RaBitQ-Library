@@ -148,8 +148,8 @@ bool supports_avx512_core(const Features& detected) {
 }  // namespace detail
 
 const Features& features() {
-    static const Features detected = detect_features();
-    return detected;
+    static const Features kDetected = detect_features();
+    return kDetected;
 }
 
 bool has_neon() { return features().neon; }

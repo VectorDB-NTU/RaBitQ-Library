@@ -30,38 +30,36 @@
 
 namespace rabitqlib::hnsw {
 
-struct HnswPruningTestAccess {
+struct HnswTestAccess {
     static void quantize(HierarchicalNSW& index, PID id, const float* rotated) {
         const auto* centroid =
             reinterpret_cast<const float*>(index.centroids_memory_.get());
         quant::quantize_compact_one_bit(
-            rotated, centroid, index.padded_dim_, index.get_bindata_by_internalid(id)
+            rotated, centroid, index.padded_dim_, index.bin_data(id)
         );
     }
 
     static float distance(const HierarchicalNSW& index, PID target, PID query) {
         detail::QuantQuery cached;
-        return index.get_quant_dist(target, query, cached);
+        return index.quantized_distance(target, query, cached);
     }
 
     static std::vector<PID> connect(HierarchicalNSW& index, PID incoming) {
-        PID* neighbors = index.get_linklist0(0);
-        index.set_list_count(neighbors, index.base_layer_max_degree_);
+        PID* neighbors = index.level0_links(0);
+        index.set_link_count(neighbors, index.base_layer_max_degree_);
         for (size_t i = 0; i < index.base_layer_max_degree_; ++i) {
             neighbors[i + 1] = static_cast<PID>(i + 1);
         }
-        std::fill_n(
-            index.get_linklist0(incoming), index.base_layer_max_degree_ + 1, PID{0}
-        );
+        std::fill_n(index.level0_links(incoming), index.base_layer_max_degree_ + 1, PID{0});
         detail::QuantQuery cached;
         maxheap<std::pair<float, PID>> candidates;
-        candidates.emplace(index.get_quant_dist(0, incoming, cached), 0);
+        candidates.emplace(index.quantized_distance(0, incoming, cached), 0);
         index.mutually_connect_quant(incoming, candidates, 0, cached);
-        return {neighbors + 1, neighbors + 1 + index.get_list_count(neighbors)};
+        return {neighbors + 1, neighbors + 1 + index.link_count(neighbors)};
     }
 
     static PID entry_point_label(const HierarchicalNSW& index) {
-        return index.get_external_label(index.entry_point_id_);
+        return index.external_label(index.entry_point_id_);
     }
 
     static PID internal_id(const HierarchicalNSW& index, PID label) {
@@ -69,7 +67,7 @@ struct HnswPruningTestAccess {
     }
 
     static void set_raw_cluster_id(HierarchicalNSW& index, PID label, PID value) {
-        index.set_raw_clusterid(index.label_lookup_.at(label), value);
+        index.set_raw_cluster_id(index.label_lookup_.at(label), value);
     }
 
     // Give internal slot i the label count - 1 - i, as parallel construction can
@@ -86,7 +84,7 @@ struct HnswPruningTestAccess {
 };
 
 namespace {
-TEST(HnswQuantQuery, MovesPreserveOwnedQueryAndLeaveSourceReusable) {
+TEST(HnswQuantQueryTest, MovesPreserveOwnedQueryAndLeaveSourceReusable) {
     using detail::QuantQuery;
     static_assert(!std::is_copy_constructible_v<QuantQuery>);
     static_assert(!std::is_copy_assignable_v<QuantQuery>);
@@ -144,7 +142,7 @@ TEST(HnswSearchTest, EqualDistancesUseExternalLabelOrder) {
             index.construct(
                 1, centroid.data(), kCount, data.data(), clusters.data(), 1, true
             );
-            HnswPruningTestAccess::reverse_labels(index);
+            HnswTestAccess::reverse_labels(index);
             const PID removed = 3;
             index.remove(&removed, 1);
             for (size_t threads : {1U, 3U}) {
@@ -182,17 +180,15 @@ TEST(HnswPruningTest, ScoresNewAndExistingNeighborsWithTheSameQuery) {
     // Set codes directly in the rotated domain to avoid random rotation changing
     // the asymmetry, then fill node 0's base-layer list to force pruning.
     for (PID id = 0; id < kCount; ++id) {
-        HnswPruningTestAccess::quantize(index, id, data.data() + (id * kDim));
+        HnswTestAccess::quantize(index, id, data.data() + (id * kDim));
     }
-    const float existing_distance = HnswPruningTestAccess::distance(index, 1, 0);
-    EXPECT_LT(HnswPruningTestAccess::distance(index, kIncoming, 0), existing_distance);
-    EXPECT_GT(HnswPruningTestAccess::distance(index, 0, kIncoming), existing_distance);
+    const float existing_distance = HnswTestAccess::distance(index, 1, 0);
+    EXPECT_LT(HnswTestAccess::distance(index, kIncoming, 0), existing_distance);
+    EXPECT_GT(HnswTestAccess::distance(index, 0, kIncoming), existing_distance);
 
     // The new point is closest when node 0 is the query. Its duplicate existing
     // neighbors are pruned; the reversed estimate instead retains an old point.
-    EXPECT_EQ(
-        HnswPruningTestAccess::connect(index, kIncoming), std::vector<PID>{kIncoming}
-    );
+    EXPECT_EQ(HnswTestAccess::connect(index, kIncoming), std::vector<PID>{kIncoming});
 }
 
 TEST(HnswConfigurationTest, RejectsUnsupportedMetric) {
@@ -203,26 +199,26 @@ TEST(HnswConfigurationTest, RejectsUnsupportedMetric) {
 }
 
 TEST(HnswOneBitSearchTest, UsesBinaryEstimateForEntryPoint) {
-    constexpr size_t dim = 64;
-    constexpr size_t count = 8;
-    std::vector<float> data(count * dim);
-    std::vector<float> centroid(dim);
-    std::vector<float> query(dim);
+    constexpr size_t kDim = 64;
+    constexpr size_t kCount = 8;
+    std::vector<float> data(kCount * kDim);
+    std::vector<float> centroid(kDim);
+    std::vector<float> query(kDim);
 
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         centroid[i] = static_cast<float>(static_cast<int>(i % 13) - 6) / 5.0F;
         query[i] = centroid[i];
     }
-    for (size_t point = 0; point < count; ++point) {
-        for (size_t i = 0; i < dim; ++i) {
-            data[(point * dim) + i] =
+    for (size_t point = 0; point < kCount; ++point) {
+        for (size_t i = 0; i < kDim; ++i) {
+            data[(point * kDim) + i] =
                 centroid[i] + static_cast<float>((point + 1) * ((i % 11) + 1));
         }
     }
 
-    std::vector<PID> cluster_ids(count, 0);
-    HierarchicalNSW index(count, dim, 1, 2, 10, 100, METRIC_L2);
-    index.construct(1, centroid.data(), count, data.data(), cluster_ids.data(), 1, false);
+    std::vector<PID> cluster_ids(kCount, 0);
+    HierarchicalNSW index(kCount, kDim, 1, 2, 10, 100, METRIC_L2);
+    index.construct(1, centroid.data(), kCount, data.data(), cluster_ids.data(), 1, false);
 
     const auto results = index.search(query.data(), 1, 1, 10, 1);
 
@@ -230,14 +226,14 @@ TEST(HnswOneBitSearchTest, UsesBinaryEstimateForEntryPoint) {
     ASSERT_EQ(results[0].size(), 1U);
     ASSERT_EQ(results[0][0].second, 0U);
     EXPECT_TRUE(std::isfinite(results[0][0].first));
-    const float exact_distance = euclidean_sqr(query.data(), data.data(), dim);
+    const float exact_distance = euclidean_sqr(query.data(), data.data(), kDim);
     EXPECT_NEAR(results[0][0].first, exact_distance, exact_distance * 0.1F);
 }
 
 TEST(HnswConstructionTest, ParallelConstructionProducesSearchableIndex) {
     constexpr size_t kDim = 64;
     constexpr size_t kCount = 512;
-    constexpr size_t kQueries = 16;
+    constexpr size_t kNumQueries = 16;
     std::mt19937 generator(42);
     std::uniform_real_distribution<float> distribution(-1, 1);
     std::vector<float> data(kCount * kDim);
@@ -249,9 +245,9 @@ TEST(HnswConstructionTest, ParallelConstructionProducesSearchableIndex) {
     HierarchicalNSW index(kCount, kDim, 4, 8, 50);
     index.construct(1, centroid.data(), kCount, data.data(), cluster_ids.data(), 8, false);
 
-    const auto results = index.search(data.data(), kQueries, 1, kCount, 1);
-    ASSERT_EQ(results.size(), kQueries);
-    for (size_t i = 0; i < kQueries; ++i) {
+    const auto results = index.search(data.data(), kNumQueries, 1, kCount, 1);
+    ASSERT_EQ(results.size(), kNumQueries);
+    for (size_t i = 0; i < kNumQueries; ++i) {
         ASSERT_EQ(results[i].size(), 1U);
         EXPECT_EQ(results[i][0].second, i);
         EXPECT_TRUE(std::isfinite(results[i][0].first));
@@ -845,7 +841,7 @@ TEST_F(HnswSaveTest, RejectsUnopenableDestination) {
         index_.save((path_ + "/index").c_str());
         FAIL() << "Saving to a missing directory must fail";
     } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "HNSW: cannot open index file for writing");
+        EXPECT_STREQ(error.what(), "HNSW cannot open index file for writing");
     }
 }
 
@@ -891,7 +887,7 @@ TEST_F(HnswSaveTest, ReportsWriteOrCloseFailure) {
         index_.save("/dev/full");
         FAIL() << "Saving to a full destination must fail";
     } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "HNSW: failed to write index file");
+        EXPECT_STREQ(error.what(), "HNSW failed to write index file");
     }
 }
 
@@ -1062,7 +1058,7 @@ TEST(HnswConstructionTest, SeedReproducesRotationCodesAndSerialSearch) {
 
 TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
     constexpr size_t kCount = 120;
-    constexpr size_t kQueries = 8;
+    constexpr size_t kNumQueries = 8;
     for (const auto& config : remove_cases()) {
         SCOPED_TRACE(
             ::testing::Message()
@@ -1070,7 +1066,7 @@ TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
         );
         AddFixture fixture(kCount, 59);
         auto index = build_for_remove(fixture, kCount, kCount, config);
-        const Results before = search_everything(*index, fixture, kQueries);
+        const Results before = search_everything(*index, fixture, kNumQueries);
 
         // Every third point, the last one, and a repeated label.
         std::vector<PID> labels;
@@ -1092,11 +1088,12 @@ TEST(HnswRemoveTest, ExcludesRemovedPointsAndKeepsSurvivors) {
 
         // Survivors keep their order and their distances.
         EXPECT_EQ(
-            search_everything(*index, fixture, kQueries), without_removed(before, removed)
+            search_everything(*index, fixture, kNumQueries),
+            without_removed(before, removed)
         );
 
         // A small ef still fills k with live points only.
-        const auto top = index->search(fixture.data.data(), kQueries, 10, 10, 1);
+        const auto top = index->search(fixture.data.data(), kNumQueries, 10, 10, 1);
         for (const auto& hits : top) {
             EXPECT_EQ(hits.size(), 10U);
             for (const auto& hit : hits) {
@@ -1117,7 +1114,7 @@ TEST(HnswRemoveTest, RemovingTheEntryPointKeepsSearchWorking) {
         AddFixture fixture(kCount, 61);
         auto index = build_for_remove(fixture, kCount, kCount, config);
         const Results before = search_everything(*index, fixture, 1);
-        const PID entry = HnswPruningTestAccess::entry_point_label(*index);
+        const PID entry = HnswTestAccess::entry_point_label(*index);
         std::vector<bool> removed(kCount, false);
         removed[entry] = true;
         ASSERT_EQ(index->remove(&entry, 1), 1U);
@@ -1171,7 +1168,7 @@ TEST(HnswRemoveTest, UsesLabelsNotInternalIds) {
     const RemoveCase config{METRIC_L2, 4};
     AddFixture fixture(kCount, 71);
     auto index = build_for_remove(fixture, kCount, kCount, config);
-    HnswPruningTestAccess::reverse_labels(*index);
+    HnswTestAccess::reverse_labels(*index);
     const Results before = search_everything(*index, fixture, 1);
 
     // Every fifth label below kCount / 2: no removed label shares a slot with
@@ -1317,13 +1314,13 @@ TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
     ASSERT_NO_THROW(loaded.load(path.c_str()));
 
     // Cluster 1 does not exist in a one-cluster index, marked or not.
-    HnswPruningTestAccess::set_raw_cluster_id(*index, one, 0x80000001U);
+    HnswTestAccess::set_raw_cluster_id(*index, one, 0x80000001U);
     index->save(path.c_str());
     try {
         loaded.load(path.c_str());
         FAIL() << "A marked out-of-range cluster ID must be rejected";
     } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "HNSW: invalid or truncated index file");
+        EXPECT_STREQ(error.what(), "HNSW index file is invalid or truncated");
     }
 }
 
@@ -1333,7 +1330,7 @@ TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
 TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
     using namespace rabitqlib;
     using namespace rabitqlib::hnsw;
-    constexpr size_t count = 24;
+    constexpr size_t kCount = 24;
     using Search = decltype(&hnsw::detail::search_knn_sorted_generic);
     std::vector<Search> backends{hnsw::detail::search_knn_sorted};
 #if defined(__x86_64__) || defined(_M_X64)
@@ -1355,7 +1352,7 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
     for (size_t dim : {64U, 96U, 128U, 160U, 256U, 544U, 576U}) {
         std::mt19937 random(642);
         std::uniform_real_distribution<float> value(-1, 1);
-        std::vector<float> data(count * dim), centroid(dim, 0), query(dim);
+        std::vector<float> data(kCount * dim), centroid(dim, 0), query(dim);
         for (auto& x : data) {
             x = value(random);
         }
@@ -1367,26 +1364,19 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
                 SCOPED_TRACE(dim);
                 SCOPED_TRACE(bits);
                 SCOPED_TRACE(metric);
-                std::vector<PID> clusters(count, 0);
-                HierarchicalNSW index(count, dim, bits, 8, count, 42, metric);
+                std::vector<PID> clusters(kCount, 0);
+                HierarchicalNSW index(kCount, dim, bits, 8, kCount, 42, metric);
                 index.construct(
-                    1, centroid.data(), count - 4, data.data(), clusters.data(), 1, true
+                    1, centroid.data(), kCount - 4, data.data(), clusters.data(), 1, true
                 );
                 // Insertion reconstructs stored sign/extra-bit tails before linking.
-                index.add(data.data() + (count - 4) * dim, 4, clusters.data(), true, 1);
+                index.add(data.data() + (kCount - 4) * dim, 4, clusters.data(), true, 1);
+                // backends[0] is the dispatched entry point that batch search uses.
                 const auto reference =
-                    hnsw::detail::search_knn_sorted_generic(index, query.data(), 5, count);
-                const auto ordered =
-                    hnsw::detail::search_knn_sorted(index, query.data(), 5, count);
-                auto heap = hnsw::detail::search_knn(index, query.data(), 5, count);
-                ASSERT_EQ(heap.size(), ordered.size());
-                for (auto it = ordered.rbegin(); it != ordered.rend(); ++it) {
-                    EXPECT_EQ(heap.top(), *it);
-                    heap.pop();
-                }
+                    hnsw::detail::search_knn_sorted_generic(index, query.data(), 5, kCount);
                 for (auto search : backends) {
                     const auto& expected = reference;
-                    auto actual = search(index, query.data(), 5, count);
+                    auto actual = search(index, query.data(), 5, kCount);
                     ASSERT_EQ(actual.size(), expected.size());
                     for (size_t i = 0; i < expected.size(); ++i) {
                         EXPECT_EQ(actual[i].second, expected[i].second);
@@ -1404,10 +1394,10 @@ TEST(HnswPaddingTest, TailDimensionsMatchEveryAvailableSearchBackend) {
 
 TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
     using namespace rabitqlib;
-    constexpr size_t kCount = 129, kDim = 65, kQueries = 13, k = 5;
+    constexpr size_t kCount = 129, kDim = 65, kNumQueries = 13, kTopK = 5;
     std::mt19937 random(314);
     std::normal_distribution<float> value;
-    std::vector<float> data(kCount * kDim), queries(kQueries * kDim), centroid(kDim, 0);
+    std::vector<float> data(kCount * kDim), queries(kNumQueries * kDim), centroid(kDim, 0);
     for (auto& x : data) {
         x = value(random);
     }
@@ -1423,21 +1413,22 @@ TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
             index.construct(
                 1, centroid.data(), kCount, data.data(), clusters.data(), 1, true
             );
-            const auto narrow = index.search(queries.data(), kQueries, k, k, 1);
-            const auto wide = index.search(queries.data(), kQueries, k, 96, 1);
+            const auto narrow = index.search(queries.data(), kNumQueries, kTopK, kTopK, 1);
+            const auto wide = index.search(queries.data(), kNumQueries, kTopK, 96, 1);
             std::promise<void> start;
             const auto ready = start.get_future().share();
             const auto run = [&](size_t ef, size_t threads, const auto& expected) {
                 ready.wait();
                 for (size_t i = 0; i < 16; ++i) {
-                    if (index.search(queries.data(), kQueries, k, ef, threads) !=
+                    if (index.search(queries.data(), kNumQueries, kTopK, ef, threads) !=
                         expected) {
                         return false;
                     }
                 }
                 return true;
             };
-            auto first = std::async(std::launch::async, [&] { return run(k, 1, narrow); });
+            auto first =
+                std::async(std::launch::async, [&] { return run(kTopK, 1, narrow); });
             auto second = std::async(std::launch::async, [&] { return run(96, 2, wide); });
             start.set_value();
             EXPECT_TRUE(first.get());
@@ -1446,7 +1437,7 @@ TEST(HnswSearchTest, ConcurrentCallsKeepIndependentSearchWindows) {
     }
 }
 
-TEST(HnswSearchValidation, RejectsZeroKBeforeParallelSearch) {
+TEST(HnswSearchValidationTest, RejectsZeroKBeforeParallelSearch) {
     using namespace rabitqlib;
     std::vector<float> data(128, 0.5F), center(64, 0.0F);
     PID clusters[2] = {0, 0};

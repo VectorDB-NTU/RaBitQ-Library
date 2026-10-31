@@ -97,9 +97,9 @@ struct Scratch {
 template <typename T>
 inline RowMajorArrayMap<T> scratch_array(T* external, size_t dim, RowMajorArray<T>& owned) {
     if (external == nullptr) {
-        owned.resize(1, static_cast<long>(dim));
+        owned.resize(1, static_cast<Eigen::Index>(dim));
         external = owned.data();
     }
-    return RowMajorArrayMap<T>(external, 1, static_cast<long>(dim));
+    return RowMajorArrayMap<T>(external, 1, static_cast<Eigen::Index>(dim));
 }
 }  // namespace rabitqlib::quant::rabitq_impl

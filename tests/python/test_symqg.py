@@ -161,6 +161,14 @@ def test_wrong_query_dim_raises(built_symqg):
         built_symqg.search(bad_queries, k=1, ef=_EF)
 
 
+def test_save_before_build_raises(tmp_path):
+    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
+    with pytest.raises(
+        RuntimeError, match="^SymqgIndex must be built or loaded before save$"
+    ):
+        idx.save(str(tmp_path / "unbuilt.index"))
+
+
 def test_search_before_build_raises():
     idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     queries = np.zeros((5, DIM), dtype=np.float32)

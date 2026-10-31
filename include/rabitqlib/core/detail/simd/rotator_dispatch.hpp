@@ -19,24 +19,8 @@ void fht_rotate(
     const uint8_t* flip
 );
 
-void flip_sign_neon(const uint8_t* flip, float* data, size_t dim);
-void kacs_walk_neon(float* data, size_t len);
-void fht_rotate_neon(
-    const float* data,
-    float* rotated_data,
-    size_t dim,
-    size_t padded_dim,
-    size_t trunc_dim,
-    float scale_factor,
-    const uint8_t* flip
-);
-
 void flip_sign_generic(const uint8_t* flip, float* data, size_t dim);
-void flip_sign_avx2(const uint8_t* flip, float* data, size_t dim);
-
 void kacs_walk_generic(float* data, size_t len);
-void kacs_walk_avx2(float* data, size_t len);
-
 void fht_rotate_generic(
     const float* data,
     float* rotated_data,
@@ -46,6 +30,9 @@ void fht_rotate_generic(
     float scale_factor,
     const uint8_t* flip
 );
+
+void flip_sign_avx2(const uint8_t* flip, float* data, size_t dim);
+void kacs_walk_avx2(float* data, size_t len);
 void fht_rotate_avx2(
     const float* data,
     float* rotated_data,
@@ -57,10 +44,20 @@ void fht_rotate_avx2(
 );
 
 void flip_sign_avx512(const uint8_t* flip, float* data, size_t dim);
-
 void kacs_walk_avx512(float* data, size_t len);
-
 void fht_rotate_avx512(
+    const float* data,
+    float* rotated_data,
+    size_t dim,
+    size_t padded_dim,
+    size_t trunc_dim,
+    float scale_factor,
+    const uint8_t* flip
+);
+
+void flip_sign_neon(const uint8_t* flip, float* data, size_t dim);
+void kacs_walk_neon(float* data, size_t len);
+void fht_rotate_neon(
     const float* data,
     float* rotated_data,
     size_t dim,

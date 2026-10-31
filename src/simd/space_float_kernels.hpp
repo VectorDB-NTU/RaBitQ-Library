@@ -43,7 +43,7 @@ inline Vec tail_load(const float* p, size_t remaining) {
 enum class FloatOperation { SquaredL2, Dot, InnerProductDistance, SquaredNorm };
 
 template <FloatOperation Op>
-inline float raw_float(const float* a, const float* b, size_t n) {
+inline float raw_float(const float* a, const float* b, size_t dim) {
     Vec s0 = zero(), s1 = zero(), s2 = zero(), s3 = zero();
     size_t i = 0;
     auto accumulate = [](Vec sum, Vec x, Vec y) {
@@ -64,22 +64,22 @@ inline float raw_float(const float* a, const float* b, size_t n) {
             return accumulate(sum, x, load(b + at));
         }
     };
-    for (; n - i >= kWidth * 4; i += kWidth * 4) {
+    for (; dim - i >= kWidth * 4; i += kWidth * 4) {
         s0 = step(s0, i);
         s1 = step(s1, i + kWidth);
         s2 = step(s2, i + kWidth * 2);
         s3 = step(s3, i + kWidth * 3);
     }
     Vec sum = add(add(s0, s1), add(s2, s3));
-    for (; n - i >= kWidth; i += kWidth) {
+    for (; dim - i >= kWidth; i += kWidth) {
         sum = step(sum, i);
     }
-    if (i < n) {
-        Vec x = tail_load(a + i, n - i);
+    if (i < dim) {
+        Vec x = tail_load(a + i, dim - i);
         if constexpr (Op == FloatOperation::SquaredNorm) {
             sum = accumulate(sum, x, x);
         } else {
-            sum = accumulate(sum, x, tail_load(b + i, n - i));
+            sum = accumulate(sum, x, tail_load(b + i, dim - i));
         }
     }
     float result = reduce(sum);

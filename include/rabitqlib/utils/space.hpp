@@ -29,7 +29,7 @@ namespace scalar_impl {
 template <typename T>
 void scalar_quantize_normal(
     T* __restrict__ result,
-    const float* __restrict__ vec0,
+    const float* __restrict__ data,
     size_t dim,
     float lo,
     float delta
@@ -40,7 +40,7 @@ void scalar_quantize_normal(
     }
     float one_over_delta = 1.0F / delta;
 
-    ConstRowMajorArrayMap<float> v0(vec0, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<float> v0(data, 1, static_cast<long>(dim));
     RowMajorArrayMap<T> res(result, 1, dim);
 
     // round to nearest integer, then cast to integer
@@ -50,17 +50,17 @@ void scalar_quantize_normal(
 template <typename T>
 void scalar_quantize_optimized(
     T* __restrict__ result,
-    const float* __restrict__ vec0,
+    const float* __restrict__ data,
     size_t dim,
     float lo,
     float delta
 ) {
     if constexpr (std::is_same_v<T, uint8_t>) {
-        simd::scalar_quantize_uint8(result, vec0, dim, lo, delta);
+        simd::scalar_quantize_uint8(result, data, dim, lo, delta);
     } else if constexpr (std::is_same_v<T, uint16_t>) {
-        simd::scalar_quantize_uint16(result, vec0, dim, lo, delta);
+        simd::scalar_quantize_uint16(result, data, dim, lo, delta);
     } else {
-        scalar_quantize_normal(result, vec0, dim, lo, delta);
+        scalar_quantize_normal(result, data, dim, lo, delta);
     }
 }
 }  // namespace scalar_impl
@@ -189,7 +189,7 @@ inline std::vector<T> compute_centroid(
 #if RABITQ_USE_OPENMP
     const int thread_count = detail::openmp_team_size(num_threads, num_points);
 #else
-    (void)num_threads;
+    static_cast<void>(num_threads);
     constexpr int thread_count = 1;
 #endif
     std::vector<std::vector<T>> all_results(thread_count, std::vector<T>(dim, 0));
@@ -229,6 +229,8 @@ inline std::vector<T> compute_centroid(
 
 namespace excode_ipimpl {
 
+// Compatibility names: despite the _avx suffix, these call the runtime-selected
+// kernel for their ex_bits (AVX-512, AVX2, NEON or generic), like select_excode_ipfunc.
 float ip16_fxu1_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 );
@@ -267,6 +269,7 @@ using ex_ipfunc = float (*)(const float*, const uint8_t*, size_t);
 
 ex_ipfunc select_excode_ipfunc(size_t ex_bits);
 
+// ISA-flagged sources include this header, so its scalar helpers keep internal linkage.
 static inline uint32_t reverse_bits(uint32_t n) {
     n = ((n >> 1) & 0x55555555) | ((n << 1) & 0xaaaaaaaa);
     n = ((n >> 2) & 0x33333333) | ((n << 2) & 0xcccccccc);
@@ -288,10 +291,12 @@ static inline uint64_t reverse_bits_u64(uint64_t n) {
 
 // padded_dim is a multiple of 32. Transposed queries need ceil(padded_dim / 64) * b_query
 // uint64_t words, including a zero-extended final partial word in each bit plane.
-void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query);
+void new_transpose_bin(
+    const uint16_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
+);
 
 void new_transpose_bin_512(
-    const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+    const uint8_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 );
 
 float mask_ip_x0_q(const float* query, const uint8_t* data, size_t padded_dim);
@@ -337,7 +342,7 @@ inline uint32_t ip_byte_bin(
 ) {
     uint32_t ret = 0;
     size_t offset = (padded_dim + 63) / 64;
-    for (size_t i = 0; i < b_query; i++) {
+    for (size_t i = 0; i < b_query; ++i) {
         ret += (ip_bin_bin(q, d, padded_dim) << i);
         q += offset;
     }

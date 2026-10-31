@@ -27,7 +27,7 @@ float warmup_ip_x0_q_512(
 
 namespace detail {
 // Scalar word-interleaved query planes; distinct from the 512-coordinate layout.
-// Keep the shared loop local to each translation unit's ISA configuration.
+// Internal linkage: ISA-flagged sources include this header.
 static inline float ip_x0_q_impl(
     const uint64_t* data,
     const uint64_t* query,
@@ -44,19 +44,19 @@ static inline float ip_x0_q_impl(
     size_t ppc = 0;
 
     for (size_t i = 0; i < num_blk; ++i) {
-        const uint64_t x = rabitqlib::bitops::load_word(it_data, sizeof(uint64_t));
+        const uint64_t x = bitops::load_word(it_data, sizeof(uint64_t));
         ppc += bitops::popcount64(x);
 
         for (size_t j = 0; j < b_query; ++j) {
-            uint64_t y = *static_cast<const uint64_t*>(it_query);
+            const uint64_t y = *it_query;
             ip += (bitops::popcount64(x & y) << j);
-            it_query++;
+            ++it_query;
         }
         it_data += sizeof(uint64_t);
     }
 
     if (padded_dim % 64 != 0) {
-        const uint64_t x = rabitqlib::bitops::load_word(it_data, (padded_dim % 64) / 8);
+        const uint64_t x = bitops::load_word(it_data, (padded_dim % 64) / 8);
         ppc += bitops::popcount64(x);
         for (size_t j = 0; j < b_query; ++j) {
             ip += (bitops::popcount64(x & *it_query) << j);
@@ -68,7 +68,7 @@ static inline float ip_x0_q_impl(
 }
 }  // namespace detail
 
-template <uint32_t b_query>
+template <uint32_t BQuery>
 inline float warmup_ip_x0_q(
     const uint64_t* data,
     const uint64_t* query,
@@ -77,7 +77,7 @@ inline float warmup_ip_x0_q(
     size_t padded_dim,
     [[maybe_unused]] size_t unused_query_bits = 0  // not used
 ) {
-    return detail::ip_x0_q_impl(data, query, delta, vl, padded_dim, b_query);
+    return detail::ip_x0_q_impl(data, query, delta, vl, padded_dim, BQuery);
 }
 
 }  // namespace rabitqlib

@@ -75,12 +75,11 @@ inline void qg_batch_estdist(
     }
     if constexpr (std::is_same_v<T, float>) {
         simd::qg_batch_estdist(batch_data, query_wrapper, padded_dim, estimated_distances);
-        return;
+    } else {
+        fastscan::detail::qg_batch_estdist_impl<T, fastscan::accumulate>(
+            batch_data, query_wrapper, padded_dim, estimated_distances
+        );
     }
-
-    fastscan::detail::qg_batch_estdist_impl<T, fastscan::accumulate>(
-        batch_data, query_wrapper, padded_dim, estimated_distances
-    );
 }
 
 }  // namespace rabitqlib

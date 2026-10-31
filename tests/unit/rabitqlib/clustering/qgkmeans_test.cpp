@@ -148,13 +148,13 @@ TEST(QGKMeansTest, UsesRawGraphStorageByDefaultAndRejectsUnsupportedBits) {
 }
 
 TEST(QGAssignerTest, QuantizedSearchReturnsExactDistancesToOriginalCentroids) {
-    constexpr size_t kDimension = 65;  // Exercise the padded quantized domain.
+    constexpr size_t kDim = 65;  // Exercise the padded quantized domain.
     constexpr size_t kClusters = 33;
-    constexpr size_t kQueries = 20;
+    constexpr size_t kNumQueries = 20;
     std::mt19937 rng(123);
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
-    std::vector<float> centroids(kClusters * kDimension);
-    std::vector<float> queries(kQueries * kDimension);
+    std::vector<float> centroids(kClusters * kDim);
+    std::vector<float> queries(kNumQueries * kDim);
     std::generate(centroids.begin(), centroids.end(), [&] { return distribution(rng); });
     std::generate(queries.begin(), queries.end(), [&] { return distribution(rng); });
 
@@ -162,31 +162,35 @@ TEST(QGAssignerTest, QuantizedSearchReturnsExactDistancesToOriginalCentroids) {
         SCOPED_TRACE(bits);
         for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
             SCOPED_TRACE(static_cast<int>(metric));
-            QGAssigner assigner(kDimension, kClusters, 32, 33, 33, 2, 1, 42, metric, bits);
-            std::vector<PID> labels(kQueries);
-            std::vector<float> distances(kQueries);
+            QGAssigner assigner(kDim, kClusters, 32, 33, 33, 2, 1, 42, metric, bits);
+            std::vector<PID> assignments(kNumQueries);
+            std::vector<float> distances(kNumQueries);
             assigner.assign(
-                centroids.data(), queries.data(), kQueries, labels.data(), distances.data()
+                centroids.data(),
+                queries.data(),
+                kNumQueries,
+                assignments.data(),
+                distances.data()
             );
 
             symqg::QuantizedGraph<float> graph(
-                kClusters, kDimension, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                kClusters, kDim, 32, metric, RotatorType::FhtKacRotator, bits, 42
             );
             symqg::QGBuilder builder(graph, 33, centroids.data(), 1, 42);
             builder.build(2);
             graph.set_ef(33);
             bool saw_estimate_difference = false;
-            for (size_t i = 0; i < kQueries; ++i) {
-                PID expected_label = kPidMax;
+            for (size_t i = 0; i < kNumQueries; ++i) {
+                PID expected_cluster_id = kPidMax;
                 float estimated_distance = 0;
                 graph.search(
-                    queries.data() + i * kDimension, 1, &expected_label, &estimated_distance
+                    queries.data() + i * kDim, 1, &expected_cluster_id, &estimated_distance
                 );
-                ASSERT_EQ(labels[i], expected_label);
+                ASSERT_EQ(assignments[i], expected_cluster_id);
                 double exact_distance = metric == METRIC_L2 ? 0.0 : 1.0;
-                for (size_t dim = 0; dim < kDimension; ++dim) {
-                    const double x = queries[i * kDimension + dim];
-                    const double c = centroids[labels[i] * kDimension + dim];
+                for (size_t dim = 0; dim < kDim; ++dim) {
+                    const double x = queries[i * kDim + dim];
+                    const double c = centroids[assignments[i] * kDim + dim];
                     exact_distance += metric == METRIC_L2 ? (x - c) * (x - c) : -x * c;
                 }
                 EXPECT_NEAR(distances[i], exact_distance, 1e-5);
@@ -199,13 +203,13 @@ TEST(QGAssignerTest, QuantizedSearchReturnsExactDistancesToOriginalCentroids) {
 }
 
 TEST(QGAssignerTest, GroupedQueriesPreserveIndependentSearchHintsAcrossRebuilds) {
-    constexpr size_t kDimension = 65;
+    constexpr size_t kDim = 65;
     constexpr size_t kClusters = 65;
-    constexpr size_t kQueries = 129;
+    constexpr size_t kNumQueries = 129;
     constexpr uint32_t kEf = 8;
     std::mt19937 rng(823);
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
-    std::vector<float> initial(kClusters * kDimension), queries(kQueries * kDimension);
+    std::vector<float> initial(kClusters * kDim), queries(kNumQueries * kDim);
     std::generate(initial.begin(), initial.end(), [&] { return distribution(rng); });
     std::generate(queries.begin(), queries.end(), [&] { return distribution(rng); });
     for (const uint32_t bits : {0U, 4U, 8U}) {
@@ -216,10 +220,10 @@ TEST(QGAssignerTest, GroupedQueriesPreserveIndependentSearchHintsAcrossRebuilds)
                 );
                 auto centroids = initial;
                 QGAssigner assigner(
-                    kDimension, kClusters, 32, 64, kEf, 1, threads, 42, metric, bits
+                    kDim, kClusters, 32, 64, kEf, 1, threads, 42, metric, bits
                 );
                 symqg::QuantizedGraph<float> graph(
-                    kClusters, kDimension, 32, metric, RotatorType::FhtKacRotator, bits, 42
+                    kClusters, kDim, 32, metric, RotatorType::FhtKacRotator, bits, 42
                 );
                 symqg::QGBuilder builder(
                     graph,
@@ -239,7 +243,7 @@ TEST(QGAssignerTest, GroupedQueriesPreserveIndependentSearchHintsAcrossRebuilds)
                 visited.initialize(kClusters, std::min(size_t{kEf} * kEf, kClusters / 10));
                 std::vector<PID> previous;
                 for (const size_t count :
-                     {kQueries, kQueries, kQueries - 2, kQueries - 2}) {
+                     {kNumQueries, kNumQueries, kNumQueries - 2, kNumQueries - 2}) {
                     for (float& value : centroids) {
                         value += 0.01F;
                     }
@@ -260,7 +264,7 @@ TEST(QGAssignerTest, GroupedQueriesPreserveIndependentSearchHintsAcrossRebuilds)
                         const PID hint =
                             previous.size() == count ? previous[point] : kPidMax;
                         graph.search_with_scratch(
-                            queries.data() + point * kDimension,
+                            queries.data() + point * kDim,
                             1,
                             &expected[point],
                             &expected_distances[point],
@@ -275,9 +279,9 @@ TEST(QGAssignerTest, GroupedQueriesPreserveIndependentSearchHintsAcrossRebuilds)
                         );
                         if (bits != 0) {
                             expected_distances[point] = distance(
-                                queries.data() + point * kDimension,
-                                centroids.data() + expected[point] * kDimension,
-                                kDimension
+                                queries.data() + point * kDim,
+                                centroids.data() + expected[point] * kDim,
+                                kDim
                             );
                         }
                     }
@@ -330,35 +334,35 @@ std::vector<float> separated_points(size_t num_points, size_t dimension) {
 }
 
 TEST(QGAssignerTest, ReusesVisitedStateAcrossQueriesAndAssignerSizes) {
-    constexpr size_t kDimension = 64;
-    constexpr size_t kQueries = 256;
+    constexpr size_t kDim = 64;
+    constexpr size_t kNumQueries = 256;
     for (const uint32_t threads : {1U, 4U}) {
         SCOPED_TRACE(threads);
         for (const size_t clusters : {33U, 65U, 33U}) {
             SCOPED_TRACE(clusters);
-            const auto centroids = separated_points(clusters, kDimension);
-            std::vector<float> queries(kQueries * kDimension);
-            std::vector<PID> labels(kQueries);
-            std::vector<float> distances(kQueries);
-            QGAssigner assigner(kDimension, clusters, 32, 128, 128, 2, threads, 42);
+            const auto centroids = separated_points(clusters, kDim);
+            std::vector<float> queries(kNumQueries * kDim);
+            std::vector<PID> assignments(kNumQueries);
+            std::vector<float> distances(kNumQueries);
+            QGAssigner assigner(kDim, clusters, 32, 128, 128, 2, threads, 42);
             for (size_t round = 0; round < 2; ++round) {
-                for (size_t point = 0; point < kQueries; ++point) {
+                for (size_t point = 0; point < kNumQueries; ++point) {
                     const size_t cluster = (point + round) % clusters;
                     std::copy_n(
-                        centroids.data() + cluster * kDimension,
-                        kDimension,
-                        queries.data() + point * kDimension
+                        centroids.data() + cluster * kDim,
+                        kDim,
+                        queries.data() + point * kDim
                     );
                 }
                 assigner.assign(
                     centroids.data(),
                     queries.data(),
-                    kQueries,
-                    labels.data(),
+                    kNumQueries,
+                    assignments.data(),
                     distances.data()
                 );
-                for (size_t point = 0; point < kQueries; ++point) {
-                    EXPECT_EQ(labels[point], (point + round) % clusters);
+                for (size_t point = 0; point < kNumQueries; ++point) {
+                    EXPECT_EQ(assignments[point], (point + round) % clusters);
                     EXPECT_EQ(distances[point], 0.0F);
                 }
             }
@@ -368,15 +372,15 @@ TEST(QGAssignerTest, ReusesVisitedStateAcrossQueriesAndAssignerSizes) {
 
 TEST(QGKMeansTest, WarnsWhenThereAreTooFewPointsPerCentroid) {
     constexpr size_t kClusters = 33;
-    constexpr size_t kDimension = 64;
-    const std::vector<float> data = separated_points(kClusters, kDimension);
+    constexpr size_t kDim = 64;
+    const std::vector<float> data = separated_points(kClusters, kDim);
     QGKMeansParameters parameters = exact_search_parameters();
     parameters.niter = 1;
     parameters.verbose = true;
     parameters.min_points_per_centroid = 39;
 
     testing::internal::CaptureStderr();
-    QGKMeans clustering(kDimension, kClusters, parameters);
+    QGKMeans clustering(kDim, kClusters, parameters);
     clustering.train(kClusters, data.data());
     const std::string warning = testing::internal::GetCapturedStderr();
 
@@ -388,8 +392,8 @@ TEST(QGKMeansTest, WarnsWhenThereAreTooFewPointsPerCentroid) {
 
 TEST(QGKMeansTest, UsesFaissEarlyStopThresholdByDefault) {
     constexpr size_t kClusters = 33;
-    constexpr size_t kDimension = 64;
-    const std::vector<float> data = separated_points(kClusters, kDimension);
+    constexpr size_t kDim = 64;
+    const std::vector<float> data = separated_points(kClusters, kDim);
     QGKMeansParameters parameters = exact_search_parameters();
 
     EXPECT_DOUBLE_EQ(parameters.early_stop_threshold, 0.0);
@@ -397,13 +401,13 @@ TEST(QGKMeansTest, UsesFaissEarlyStopThresholdByDefault) {
 
 TEST(QGKMeansTest, StopsAtFaissEarlyStopThreshold) {
     constexpr size_t kClusters = 33;
-    constexpr size_t kDimension = 64;
-    const std::vector<float> data = separated_points(kClusters * 2, kDimension);
+    constexpr size_t kDim = 64;
+    const std::vector<float> data = separated_points(kClusters * 2, kDim);
     QGKMeansParameters parameters = exact_search_parameters();
     parameters.early_stop_threshold = 1.0;
 
     const QGKMeans result =
-        train_qgkmeans(kDimension, kClusters, parameters, data.data(), kClusters * 2);
+        train_qgkmeans(kDim, kClusters, parameters, data.data(), kClusters * 2);
 
     ASSERT_EQ(result.iteration_stats.size(), 2U);
 }
@@ -411,8 +415,8 @@ TEST(QGKMeansTest, StopsAtFaissEarlyStopThreshold) {
 TEST(QGKMeansTest, ExactFinalAssignmentReturnsNearestCentroidForEveryPoint) {
     constexpr size_t kPoints = 100;
     constexpr size_t kClusters = 33;
-    constexpr size_t kDimension = 64;
-    std::vector<float> data(kPoints * kDimension);
+    constexpr size_t kDim = 64;
+    std::vector<float> data(kPoints * kDim);
     std::mt19937 rng(123);
     std::uniform_real_distribution<float> distribution(-10.0F, 10.0F);
     std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
@@ -421,7 +425,7 @@ TEST(QGKMeansTest, ExactFinalAssignmentReturnsNearestCentroidForEveryPoint) {
     parameters.niter = 2;
     parameters.final_assignment = FinalAssignmentMode::Exact;
     const QGKMeans result =
-        train_qgkmeans(kDimension, kClusters, parameters, data.data(), kPoints);
+        train_qgkmeans(kDim, kClusters, parameters, data.data(), kPoints);
 
     EXPECT_DOUBLE_EQ(
         result.final_obj,
@@ -432,10 +436,9 @@ TEST(QGKMeansTest, ExactFinalAssignmentReturnsNearestCentroidForEveryPoint) {
         double expected_distance = std::numeric_limits<double>::infinity();
         for (size_t cluster = 0; cluster < kClusters; ++cluster) {
             double distance = 0.0;
-            for (size_t dim = 0; dim < kDimension; ++dim) {
-                const double difference =
-                    static_cast<double>(data[point * kDimension + dim]) -
-                    result.centroids[cluster * kDimension + dim];
+            for (size_t dim = 0; dim < kDim; ++dim) {
+                const double difference = static_cast<double>(data[point * kDim + dim]) -
+                                          result.centroids[cluster * kDim + dim];
                 distance += difference * difference;
             }
             if (distance < expected_distance) {
@@ -456,7 +459,7 @@ void expect_exact_assignment_matches_scalar(
 ) {
     const size_t points = data.size() / dimension;
     const size_t clusters = centroids.size() / dimension;
-    std::vector<PID> expected_labels(points);
+    std::vector<PID> expected_assignments(points);
     std::vector<float> expected_distances(points);
     for (size_t point = 0; point < points; ++point) {
         double best = std::numeric_limits<double>::infinity();
@@ -477,7 +480,7 @@ void expect_exact_assignment_matches_scalar(
             }
             if (distance < best) {
                 best = distance;
-                expected_labels[point] = static_cast<PID>(cluster);
+                expected_assignments[point] = static_cast<PID>(cluster);
             }
         }
         expected_distances[point] = static_cast<float>(best);
@@ -489,13 +492,13 @@ void expect_exact_assignment_matches_scalar(
         const std::vector<PID> previous(points, static_cast<PID>(clusters - 1));
         for (const int hint_mode : {0, 1, 2}) {
             SCOPED_TRACE(hint_mode);
-            std::vector<PID> labels =
+            std::vector<PID> assignments =
                 hint_mode == 2 ? previous : std::vector<PID>(points, kPidMax);
             std::vector<float> distances(points, std::numeric_limits<float>::quiet_NaN());
-            const PID* hints = hint_mode == 0
-                                   ? nullptr
-                                   : (hint_mode == 1 ? previous.data() : labels.data());
-            detail::exact_assign(
+            const PID* hints =
+                hint_mode == 0 ? nullptr
+                               : (hint_mode == 1 ? previous.data() : assignments.data());
+            clustering::detail::exact_assign(
                 data.data(),
                 centroids.data(),
                 points,
@@ -503,11 +506,11 @@ void expect_exact_assignment_matches_scalar(
                 clusters,
                 spherical,
                 threads,
-                labels.data(),
+                assignments.data(),
                 distances.data(),
                 hints
             );
-            EXPECT_EQ(labels, expected_labels);
+            EXPECT_EQ(assignments, expected_assignments);
             EXPECT_EQ(distances, expected_distances);
         }
     }
@@ -532,30 +535,30 @@ TEST(QGKMeansTest, ExactAssignmentMatchesScalarAcrossMatrixTileTails) {
 }
 
 TEST(QGKMeansTest, ExactAssignmentMatchesScalarAtMaximumDimension) {
-    constexpr size_t kDimension = 65536;
+    constexpr size_t kDim = 65536;
     std::mt19937 rng(963);
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
-    std::vector<float> data(3 * kDimension);
-    std::vector<float> centroids(3 * kDimension);
+    std::vector<float> data(3 * kDim);
+    std::vector<float> centroids(3 * kDim);
     std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
     std::generate(centroids.begin(), centroids.end(), [&] { return distribution(rng); });
     for (const bool spherical : {false, true}) {
         SCOPED_TRACE(spherical);
-        expect_exact_assignment_matches_scalar(data, centroids, kDimension, spherical);
+        expect_exact_assignment_matches_scalar(data, centroids, kDim, spherical);
     }
 }
 
 TEST(QGKMeansTest, ExactAssignmentMatchesScalarWithManyPointBlocks) {
-    constexpr size_t kDimension = 17;
+    constexpr size_t kDim = 17;
     std::mt19937 rng(385);
     std::uniform_real_distribution<float> distribution(-2.0F, 2.0F);
-    std::vector<float> data(4097 * kDimension);
-    std::vector<float> centroids(257 * kDimension);
+    std::vector<float> data(4097 * kDim);
+    std::vector<float> centroids(257 * kDim);
     std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
     std::generate(centroids.begin(), centroids.end(), [&] { return distribution(rng); });
     for (const bool spherical : {false, true}) {
         SCOPED_TRACE(spherical);
-        expect_exact_assignment_matches_scalar(data, centroids, kDimension, spherical);
+        expect_exact_assignment_matches_scalar(data, centroids, kDim, spherical);
     }
 }
 
@@ -583,25 +586,25 @@ TEST(QGKMeansTest, ExactAssignmentPreservesCallerOpenMPSettings) {
 #else
     omp_set_nested(1);
 #endif
-    constexpr size_t kDimension = 65;
-    const std::vector<float> centroids(3 * kDimension, 1.0F);
+    constexpr size_t kDim = 65;
+    const std::vector<float> centroids(3 * kDim, 1.0F);
     // Cover a single worker, a partial row block, and multiple workers.
     for (const size_t points : {3U, 65U, 513U}) {
         SCOPED_TRACE(points);
-        const std::vector<float> data(points * kDimension, 0.0F);
-        std::vector<PID> labels(points);
+        const std::vector<float> data(points * kDim, 0.0F);
+        std::vector<PID> assignments(points);
         std::vector<float> distances(points);
         for (const uint32_t threads : {1U, 4U}) {
             SCOPED_TRACE(threads);
-            detail::exact_assign(
+            clustering::detail::exact_assign(
                 data.data(),
                 centroids.data(),
                 points,
-                kDimension,
+                kDim,
                 3,
                 false,
                 threads,
-                labels.data(),
+                assignments.data(),
                 distances.data()
             );
             EXPECT_EQ(omp_get_max_threads(), 3);
@@ -615,92 +618,91 @@ TEST(QGKMeansTest, ExactAssignmentPreservesCallerOpenMPSettings) {
 }
 
 TEST(QGKMeansTest, ExactAssignmentPreservesLowestIndexForTiesAcrossTiles) {
-    constexpr size_t kDimension = 65;
-    std::vector<float> data(65 * kDimension, 0.0F);
-    std::vector<float> centroids(257 * kDimension, 4.0F);
+    constexpr size_t kDim = 65;
+    std::vector<float> data(65 * kDim, 0.0F);
+    std::vector<float> centroids(257 * kDim, 4.0F);
     // Centroids 3 and 256 tie, while preceding centroids are worse for every row.
-    std::fill_n(centroids.data() + 3 * kDimension, kDimension, 0.0F);
-    std::fill_n(centroids.data() + 256 * kDimension, kDimension, 0.0F);
-    centroids[3 * kDimension] = -1.0F;
-    centroids[256 * kDimension] = 1.0F;
-    expect_exact_assignment_matches_scalar(data, centroids, kDimension, false);
+    std::fill_n(centroids.data() + 3 * kDim, kDim, 0.0F);
+    std::fill_n(centroids.data() + 256 * kDim, kDim, 0.0F);
+    centroids[3 * kDim] = -1.0F;
+    centroids[256 * kDim] = 1.0F;
+    expect_exact_assignment_matches_scalar(data, centroids, kDim, false);
     std::fill(data.begin(), data.end(), 1.0F);
     std::fill(centroids.begin(), centroids.end(), 0.0F);
-    centroids[3 * kDimension] = 1.0F;
-    centroids[256 * kDimension] = 1.0F;
-    expect_exact_assignment_matches_scalar(data, centroids, kDimension, true);
+    centroids[3 * kDim] = 1.0F;
+    centroids[256 * kDim] = 1.0F;
+    expect_exact_assignment_matches_scalar(data, centroids, kDim, true);
 }
 
 TEST(QGKMeansTest, ExactAssignmentRefinesLargeOffsetL2Distances) {
-    constexpr size_t kDimension = 129;
+    constexpr size_t kDim = 129;
     std::mt19937 rng(51);
     std::uniform_real_distribution<float> distribution(-0.125F, 0.125F);
-    std::vector<float> data(65 * kDimension);
-    std::vector<float> centroids(257 * kDimension);
+    std::vector<float> data(65 * kDim);
+    std::vector<float> centroids(257 * kDim);
     auto shifted = [&] { return 100000.0F + distribution(rng); };
     std::generate(data.begin(), data.end(), shifted);
     std::generate(centroids.begin(), centroids.end(), shifted);
     // Include a zero-distance winner at the tail of the centroid matrix.
-    std::copy_n(data.data(), kDimension, centroids.data() + 256 * kDimension);
-    expect_exact_assignment_matches_scalar(data, centroids, kDimension, false);
+    std::copy_n(data.data(), kDim, centroids.data() + 256 * kDim);
+    expect_exact_assignment_matches_scalar(data, centroids, kDim, false);
 }
 
 TEST(QGKMeansTest, ExactAssignmentResolvesFloatNearTiesAndTinyDistances) {
-    constexpr size_t kDimension = 65;
-    std::vector<float> data(65 * kDimension, 0.0F);
-    std::vector<float> centroids(257 * kDimension, 2.0F);
-    std::fill_n(centroids.data(), kDimension, 0.0F);
-    std::fill_n(centroids.data() + 256 * kDimension, kDimension, 0.0F);
+    constexpr size_t kDim = 65;
+    std::vector<float> data(65 * kDim, 0.0F);
+    std::vector<float> centroids(257 * kDim, 2.0F);
+    std::fill_n(centroids.data(), kDim, 0.0F);
+    std::fill_n(centroids.data() + 256 * kDim, kDim, 0.0F);
     // Both squared distances round to 1 in float, but centroid 256 is nearer.
     centroids[0] = 1.0F;
     centroids[1] = 0.0001F;
-    centroids[256 * kDimension] = 1.0F;
-    expect_exact_assignment_matches_scalar(data, centroids, kDimension, false);
+    centroids[256 * kDim] = 1.0F;
+    expect_exact_assignment_matches_scalar(data, centroids, kDim, false);
     for (float& value : centroids) {
         value *= 1e-22F;
     }
-    expect_exact_assignment_matches_scalar(data, centroids, kDimension, false);
+    expect_exact_assignment_matches_scalar(data, centroids, kDim, false);
     std::fill(centroids.begin(), centroids.end(), 0.0F);
     for (const bool spherical : {false, true}) {
         SCOPED_TRACE(spherical);
-        expect_exact_assignment_matches_scalar(data, centroids, kDimension, spherical);
+        expect_exact_assignment_matches_scalar(data, centroids, kDim, spherical);
     }
 }
 
 TEST(QGKMeansTest, ExactAssignmentRefinesInnerProductCancellation) {
-    constexpr size_t kDimension = 129;
-    std::vector<float> data(65 * kDimension, 100000.0F);
-    std::vector<float> centroids(257 * kDimension);
+    constexpr size_t kDim = 129;
+    std::vector<float> data(65 * kDim, 100000.0F);
+    std::vector<float> centroids(257 * kDim);
     for (size_t point = 0; point < 65; ++point) {
-        data[point * kDimension + kDimension - 1] = 1.0F;
+        data[point * kDim + kDim - 1] = 1.0F;
     }
     for (size_t cluster = 0; cluster < 257; ++cluster) {
-        for (size_t dim = 0; dim + 1 < kDimension; ++dim) {
-            centroids[cluster * kDimension + dim] = dim % 2 == 0 ? 100000.0F : -100000.0F;
+        for (size_t dim = 0; dim + 1 < kDim; ++dim) {
+            centroids[cluster * kDim + dim] = dim % 2 == 0 ? 100000.0F : -100000.0F;
         }
-        centroids[cluster * kDimension + kDimension - 1] =
-            1.0F + static_cast<float>(cluster) / 4096.0F;
+        centroids[cluster * kDim + kDim - 1] = 1.0F + static_cast<float>(cluster) / 4096.0F;
     }
-    expect_exact_assignment_matches_scalar(data, centroids, kDimension, true);
+    expect_exact_assignment_matches_scalar(data, centroids, kDim, true);
 }
 
 TEST(QGKMeansTest, SphericalModeNormalizesCentroidsAndUsesInnerProduct) {
     constexpr size_t kPoints = 100;
     constexpr size_t kClusters = 33;
-    constexpr size_t kDimension = 64;
-    std::vector<float> data(kPoints * kDimension);
+    constexpr size_t kDim = 64;
+    std::vector<float> data(kPoints * kDim);
     std::mt19937 rng(456);
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
     std::generate(data.begin(), data.end(), [&] { return distribution(rng); });
     for (size_t point = 0; point < kPoints; ++point) {
         double squared_norm = 0.0;
-        for (size_t dim = 0; dim < kDimension; ++dim) {
-            squared_norm += static_cast<double>(data[point * kDimension + dim]) *
-                            data[point * kDimension + dim];
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            squared_norm +=
+                static_cast<double>(data[point * kDim + dim]) * data[point * kDim + dim];
         }
         const float scale = 1.0F / std::sqrt(static_cast<float>(squared_norm));
-        for (size_t dim = 0; dim < kDimension; ++dim) {
-            data[point * kDimension + dim] *= scale;
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            data[point * kDim + dim] *= scale;
         }
     }
 
@@ -709,14 +711,13 @@ TEST(QGKMeansTest, SphericalModeNormalizesCentroidsAndUsesInnerProduct) {
     parameters.spherical = true;
     parameters.final_assignment = FinalAssignmentMode::Exact;
     const QGKMeans result =
-        train_qgkmeans(kDimension, kClusters, parameters, data.data(), kPoints);
+        train_qgkmeans(kDim, kClusters, parameters, data.data(), kPoints);
 
     for (size_t cluster = 0; cluster < kClusters; ++cluster) {
         double squared_norm = 0.0;
-        for (size_t dim = 0; dim < kDimension; ++dim) {
-            squared_norm +=
-                static_cast<double>(result.centroids[cluster * kDimension + dim]) *
-                result.centroids[cluster * kDimension + dim];
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            squared_norm += static_cast<double>(result.centroids[cluster * kDim + dim]) *
+                            result.centroids[cluster * kDim + dim];
         }
         EXPECT_NEAR(squared_norm, 1.0, 1e-5);
     }
@@ -730,9 +731,9 @@ TEST(QGKMeansTest, SphericalModeNormalizesCentroidsAndUsesInnerProduct) {
         double expected_distance = std::numeric_limits<double>::infinity();
         for (size_t cluster = 0; cluster < kClusters; ++cluster) {
             double distance = 1.0;
-            for (size_t dim = 0; dim < kDimension; ++dim) {
-                distance -= static_cast<double>(data[point * kDimension + dim]) *
-                            result.centroids[cluster * kDimension + dim];
+            for (size_t dim = 0; dim < kDim; ++dim) {
+                distance -= static_cast<double>(data[point * kDim + dim]) *
+                            result.centroids[cluster * kDim + dim];
             }
             if (distance < expected_distance) {
                 expected = static_cast<PID>(cluster);
@@ -745,20 +746,20 @@ TEST(QGKMeansTest, SphericalModeNormalizesCentroidsAndUsesInnerProduct) {
 }
 
 TEST(QGKMeansTest, ObjectiveTerminationMatchesFaissAbsoluteRelativeChange) {
-    EXPECT_TRUE(detail::should_terminate_by_objective(100.0, 101.0, 0.01));
-    EXPECT_TRUE(detail::should_terminate_by_objective(100.0, 99.0, 0.01));
-    EXPECT_FALSE(detail::should_terminate_by_objective(100.0, 98.0, 0.01));
-    EXPECT_TRUE(detail::should_terminate_by_objective(0.0, 0.0, 0.0));
-    EXPECT_FALSE(detail::should_terminate_by_objective(0.0, 1.0, 1.0));
+    EXPECT_TRUE(clustering::detail::should_terminate_by_objective(100.0, 101.0, 0.01));
+    EXPECT_TRUE(clustering::detail::should_terminate_by_objective(100.0, 99.0, 0.01));
+    EXPECT_FALSE(clustering::detail::should_terminate_by_objective(100.0, 98.0, 0.01));
+    EXPECT_TRUE(clustering::detail::should_terminate_by_objective(0.0, 0.0, 0.0));
+    EXPECT_FALSE(clustering::detail::should_terminate_by_objective(0.0, 1.0, 1.0));
 }
 
 TEST(QGKMeansTest, TrainsAndReturnsAssignmentsForFinalCentroids) {
     constexpr size_t kClusters = 33;
-    constexpr size_t kDimension = 64;
-    std::vector<float> data(kClusters * kDimension);
+    constexpr size_t kDim = 64;
+    std::vector<float> data(kClusters * kDim);
     for (size_t point = 0; point < kClusters; ++point) {
-        for (size_t dim = 0; dim < kDimension; ++dim) {
-            data[point * kDimension + dim] =
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            data[point * kDim + dim] =
                 static_cast<float>(point * 10) + static_cast<float>(dim) / 64.0F;
         }
     }
@@ -768,9 +769,9 @@ TEST(QGKMeansTest, TrainsAndReturnsAssignmentsForFinalCentroids) {
     parameters.num_threads = 2;
 
     const QGKMeans result =
-        train_qgkmeans(kDimension, kClusters, parameters, data.data(), kClusters);
+        train_qgkmeans(kDim, kClusters, parameters, data.data(), kClusters);
 
-    ASSERT_EQ(result.centroids.size(), kClusters * kDimension);
+    ASSERT_EQ(result.centroids.size(), kClusters * kDim);
     ASSERT_EQ(result.assignments.size(), kClusters);
     ASSERT_EQ(result.distances.size(), kClusters);
     ASSERT_EQ(result.iteration_stats.size(), 1U);
@@ -779,17 +780,17 @@ TEST(QGKMeansTest, TrainsAndReturnsAssignmentsForFinalCentroids) {
         EXPECT_TRUE(std::isfinite(result.distances[point]));
         EXPECT_FLOAT_EQ(result.distances[point], 0.0F);
         const size_t cluster = result.assignments[point];
-        for (size_t dim = 0; dim < kDimension; ++dim) {
+        for (size_t dim = 0; dim < kDim; ++dim) {
             EXPECT_FLOAT_EQ(
-                result.centroids[cluster * kDimension + dim], data[point * kDimension + dim]
+                result.centroids[cluster * kDim + dim], data[point * kDim + dim]
             );
         }
     }
 }
 
 TEST(QGKMeansTest, RetrainsOnOwnedCentroidsLikeAnIndependentCopy) {
-    constexpr size_t kDimension = 65, kInitialClusters = 35, kClusters = 33;
-    const auto data = separated_points(kInitialClusters, kDimension);
+    constexpr size_t kDim = 65, kInitialClusters = 35, kClusters = 33;
+    const auto data = separated_points(kInitialClusters, kDim);
     for (const uint32_t bits : {0U, 4U, 8U}) {
         for (const auto mode :
              {FinalAssignmentMode::SymphonyQG, FinalAssignmentMode::Exact}) {
@@ -802,18 +803,18 @@ TEST(QGKMeansTest, RetrainsOnOwnedCentroidsLikeAnIndependentCopy) {
                 parameters.niter = 2;
                 parameters.quantization_bits = bits;
                 parameters.final_assignment = mode;
-                QGKMeans clustering(kDimension, kInitialClusters, parameters);
+                QGKMeans clustering(kDim, kInitialClusters, parameters);
                 clustering.train(kInitialClusters, data.data());
                 const auto original = clustering.centroids;
-                const float* input = original.data() + offset * kDimension;
+                const float* input = original.data() + offset * kDim;
                 const size_t count = kInitialClusters - offset;
 
-                QGKMeans reference(kDimension, kClusters, parameters);
+                QGKMeans reference(kDim, kClusters, parameters);
                 reference.train(count, input);
                 // Shrink the output while training on its former contents, including
                 // a subrange that does not start at centroids.data().
                 clustering.k = kClusters;
-                clustering.train(count, clustering.centroids.data() + offset * kDimension);
+                clustering.train(count, clustering.centroids.data() + offset * kDim);
 
                 EXPECT_EQ(clustering.centroids, reference.centroids);
                 EXPECT_EQ(clustering.assignments, reference.assignments);
@@ -823,11 +824,11 @@ TEST(QGKMeansTest, RetrainsOnOwnedCentroidsLikeAnIndependentCopy) {
                 for (size_t point = 0; point < count; ++point) {
                     ASSERT_LT(clustering.assignments[point], kClusters);
                     double distance = 0;
-                    for (size_t dim = 0; dim < kDimension; ++dim) {
+                    for (size_t dim = 0; dim < kDim; ++dim) {
                         const double difference =
-                            static_cast<double>(input[point * kDimension + dim]) -
-                            clustering.centroids
-                                [clustering.assignments[point] * kDimension + dim];
+                            static_cast<double>(input[point * kDim + dim]) -
+                            clustering
+                                .centroids[clustering.assignments[point] * kDim + dim];
                         distance += difference * difference;
                     }
                     EXPECT_NEAR(
@@ -846,38 +847,37 @@ TEST(QGKMeansTest, RetrainsOnOwnedCentroidsLikeAnIndependentCopy) {
 }
 
 TEST(QGKMeansTest, EmptyClusterRecoveryDoesNotPerturbConstantData) {
-    constexpr size_t kPoints = 100, kDimension = 64;
+    constexpr size_t kPoints = 100, kDim = 64;
     auto parameters = exact_search_parameters();
     parameters.niter = 10;
     for (bool spherical : {false, true}) {
         SCOPED_TRACE(spherical);
         parameters.spherical = spherical;
-        std::vector<float> data(kPoints * kDimension, 0.0F);
+        std::vector<float> data(kPoints * kDim, 0.0F);
         for (size_t point = 0; point < kPoints; ++point) {
-            data[point * kDimension] = 1.0F;
+            data[point * kDim] = 1.0F;
         }
-        const auto clustering =
-            train_qgkmeans(kDimension, 33, parameters, data.data(), kPoints);
+        const auto clustering = train_qgkmeans(kDim, 33, parameters, data.data(), kPoints);
         EXPECT_LT(clustering.iteration_stats.size(), parameters.niter);
         EXPECT_EQ(clustering.final_obj, 0.0);
         for (size_t cluster = 0; cluster < 33; ++cluster) {
-            for (size_t dim = 0; dim < kDimension; ++dim) {
-                EXPECT_EQ(clustering.centroids[cluster * kDimension + dim], data[dim]);
+            for (size_t dim = 0; dim < kDim; ++dim) {
+                EXPECT_EQ(clustering.centroids[cluster * kDim + dim], data[dim]);
             }
         }
     }
 }
 
 TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
-    constexpr size_t kDimension = 64, kClusters = 33, kPoints = kClusters + 8;
+    constexpr size_t kDim = 64, kClusters = 33, kPoints = kClusters + 8;
     const auto normalize = [=](float* row) {
         double squared_norm = 0;
-        for (size_t dim = 0; dim < kDimension; ++dim) {
+        for (size_t dim = 0; dim < kDim; ++dim) {
             squared_norm += static_cast<double>(row[dim]) * row[dim];
         }
         if (squared_norm != 0) {
             const double scale = 1.0 / std::sqrt(squared_norm);
-            for (size_t dim = 0; dim < kDimension; ++dim) {
+            for (size_t dim = 0; dim < kDim; ++dim) {
                 row[dim] = static_cast<float>(row[dim] * scale);
             }
         }
@@ -892,13 +892,13 @@ TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
             SCOPED_TRACE(::testing::Message() << spherical << "/" << empty_clusters);
             // Force duplicate initial seeds while all other initial centroids are
             // distinct basis vectors. Only the duplicate seeds have extra points.
-            std::vector<float> data(kPoints * kDimension);
+            std::vector<float> data(kPoints * kDim);
             for (size_t cluster = 0; cluster < kClusters; ++cluster) {
                 const size_t axis = cluster <= empty_clusters ? 0 : cluster;
-                data[indices[cluster] * kDimension + axis] = 1.0F;
+                data[indices[cluster] * kDim + axis] = 1.0F;
             }
             for (size_t extra = 0; extra < 8; ++extra) {
-                float* row = data.data() + indices[kClusters + extra] * kDimension;
+                float* row = data.data() + indices[kClusters + extra] * kDim;
                 row[0] = 1.0F;
                 row[kClusters] = static_cast<float>(4 - extra / 2) / 8.0F *
                                  (extra % 2 == 0 ? 1.0F : -1.0F);
@@ -906,63 +906,54 @@ TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
                     normalize(row);
                 }
             }
-            std::vector<float> initial(kClusters * kDimension);
+            std::vector<float> initial(kClusters * kDim);
             for (size_t cluster = 0; cluster < kClusters; ++cluster) {
                 std::copy_n(
-                    data.data() + indices[cluster] * kDimension,
-                    kDimension,
-                    initial.data() + cluster * kDimension
+                    data.data() + indices[cluster] * kDim,
+                    kDim,
+                    initial.data() + cluster * kDim
                 );
             }
             QGAssigner reference(
-                kDimension,
-                kClusters,
-                32,
-                33,
-                33,
-                2,
-                1,
-                42,
-                spherical ? METRIC_IP : METRIC_L2
+                kDim, kClusters, 32, 33, 33, 2, 1, 42, spherical ? METRIC_IP : METRIC_L2
             );
-            std::vector<PID> labels(kPoints);
+            std::vector<PID> assignments(kPoints);
             std::vector<float> distances(kPoints);
             reference.assign(
-                initial.data(), data.data(), kPoints, labels.data(), distances.data()
+                initial.data(), data.data(), kPoints, assignments.data(), distances.data()
             );
 
             // Derive occupied means from the public initial assignment. Empty
             // centroids receive selected rows without changing these donor means.
             std::vector<size_t> counts(kClusters);
-            std::vector<double> sums(kClusters * kDimension);
+            std::vector<double> sums(kClusters * kDim);
             for (size_t point = 0; point < kPoints; ++point) {
-                ++counts[labels[point]];
-                for (size_t dim = 0; dim < kDimension; ++dim) {
-                    sums[labels[point] * kDimension + dim] +=
-                        data[point * kDimension + dim];
+                ++counts[assignments[point]];
+                for (size_t dim = 0; dim < kDim; ++dim) {
+                    sums[assignments[point] * kDim + dim] += data[point * kDim + dim];
                 }
             }
             ASSERT_EQ(std::count(counts.begin(), counts.end(), size_t{0}), empty_clusters);
-            std::vector<float> means(kClusters * kDimension);
+            std::vector<float> means(kClusters * kDim);
             for (size_t cluster = 0; cluster < kClusters; ++cluster) {
                 if (counts[cluster] != 0) {
-                    for (size_t dim = 0; dim < kDimension; ++dim) {
-                        means[cluster * kDimension + dim] = static_cast<float>(
-                            sums[cluster * kDimension + dim] /
+                    for (size_t dim = 0; dim < kDim; ++dim) {
+                        means[cluster * kDim + dim] = static_cast<float>(
+                            sums[cluster * kDim + dim] /
                             static_cast<double>(counts[cluster])
                         );
                     }
                     if (spherical) {
-                        normalize(means.data() + cluster * kDimension);
+                        normalize(means.data() + cluster * kDim);
                     }
                 }
             }
             const auto distance = spherical ? dot_product_dis<float> : euclidean_sqr<float>;
             for (size_t point = 0; point < kPoints; ++point) {
                 distances[point] = distance(
-                    data.data() + point * kDimension,
-                    means.data() + labels[point] * kDimension,
-                    kDimension
+                    data.data() + point * kDim,
+                    means.data() + assignments[point] * kDim,
+                    kDim
                 );
             }
             std::vector<size_t> candidates(kPoints);
@@ -979,20 +970,18 @@ TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
                 if (counts[cluster] != 0) {
                     continue;
                 }
-                while (counts[labels[candidates[next_candidate]]] <= 1) {
+                while (counts[assignments[candidates[next_candidate]]] <= 1) {
                     ++next_candidate;
                     ASSERT_LT(next_candidate, candidates.size());
                 }
                 const size_t point = candidates[next_candidate++];
                 std::copy_n(
-                    data.data() + point * kDimension,
-                    kDimension,
-                    means.data() + cluster * kDimension
+                    data.data() + point * kDim, kDim, means.data() + cluster * kDim
                 );
                 if (spherical) {
-                    normalize(means.data() + cluster * kDimension);
+                    normalize(means.data() + cluster * kDim);
                 }
-                --counts[labels[point]];
+                --counts[assignments[point]];
                 counts[cluster] = 1;
             }
             ASSERT_EQ(std::count(counts.begin(), counts.end(), size_t{0}), 0);
@@ -1004,27 +993,27 @@ TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
                 parameters.num_threads = threads;
                 parameters.final_assignment = FinalAssignmentMode::Exact;
                 const auto clustering =
-                    train_qgkmeans(kDimension, kClusters, parameters, data.data(), kPoints);
+                    train_qgkmeans(kDim, kClusters, parameters, data.data(), kPoints);
                 ASSERT_EQ(clustering.iteration_stats.front().nsplit, empty_clusters);
                 // Parallel graph construction may choose a different duplicate
-                // seed label, but occupied means and selected seeds must match.
+                // seed assignment, but occupied means and selected seeds must match.
                 std::vector<std::vector<float>> expected_rows, actual_rows;
                 for (size_t cluster = 0; cluster < kClusters; ++cluster) {
-                    const size_t offset = cluster * kDimension;
+                    const size_t offset = cluster * kDim;
                     expected_rows.emplace_back(
-                        means.data() + offset, means.data() + offset + kDimension
+                        means.data() + offset, means.data() + offset + kDim
                     );
                     actual_rows.emplace_back(
                         clustering.centroids.data() + offset,
-                        clustering.centroids.data() + offset + kDimension
+                        clustering.centroids.data() + offset + kDim
                     );
                 }
                 std::sort(expected_rows.begin(), expected_rows.end());
                 std::sort(actual_rows.begin(), actual_rows.end());
                 EXPECT_EQ(actual_rows, expected_rows);
                 std::fill(counts.begin(), counts.end(), size_t{0});
-                for (PID label : clustering.assignments) {
-                    ++counts[label];
+                for (PID cluster_id : clustering.assignments) {
+                    ++counts[cluster_id];
                 }
                 EXPECT_EQ(std::count(counts.begin(), counts.end(), size_t{0}), 0);
             }
@@ -1033,11 +1022,11 @@ TEST(QGKMeansTest, EmptyClusterRecoveryPreservesMeansAndFarthestSeedSelection) {
 }
 
 TEST(QGKMeansTest, RejectsNonfiniteTrainingDataWithoutReplacingResults) {
-    constexpr size_t kDimension = 64;
-    const auto data = separated_points(66, kDimension);
+    constexpr size_t kDim = 64;
+    const auto data = separated_points(66, kDim);
     auto parameters = exact_search_parameters();
     parameters.niter = 1;
-    QGKMeans clustering(kDimension, 33, parameters);
+    QGKMeans clustering(kDim, 33, parameters);
     clustering.train(66, data.data());
     const auto expected_centroids = clustering.centroids;
     const auto expected_assignments = clustering.assignments;
@@ -1059,10 +1048,10 @@ TEST(QGKMeansTest, RejectsNonfiniteTrainingDataWithoutReplacingResults) {
 }
 
 TEST(QGKMeansTest, AccumulatesShiftedClusterMeansAccurately) {
-    constexpr size_t kDimension = 64, kClusters = 33, kPoints = 10000;
+    constexpr size_t kDim = 64, kClusters = 33, kPoints = 10000;
     std::mt19937 rng(123);
     std::uniform_real_distribution<float> distribution(-1, 1);
-    std::vector<float> data(kPoints * kDimension);
+    std::vector<float> data(kPoints * kDim);
     for (auto& value : data) {
         value = 10000.0F + distribution(rng);
     }
@@ -1072,32 +1061,32 @@ TEST(QGKMeansTest, AccumulatesShiftedClusterMeansAccurately) {
     std::iota(indices.begin(), indices.end(), size_t{0});
     std::mt19937 initial_rng(42);
     std::shuffle(indices.begin(), indices.end(), initial_rng);
-    std::vector<float> initial_centroids(kClusters * kDimension);
+    std::vector<float> initial_centroids(kClusters * kDim);
     for (size_t cluster = 0; cluster < kClusters; ++cluster) {
         std::copy_n(
-            data.data() + indices[cluster] * kDimension,
-            kDimension,
-            initial_centroids.data() + cluster * kDimension
+            data.data() + indices[cluster] * kDim,
+            kDim,
+            initial_centroids.data() + cluster * kDim
         );
     }
-    QGAssigner assigner(kDimension, kClusters, 32, 33, 33, 2, 1, 42);
-    std::vector<PID> labels(kPoints);
+    QGAssigner assigner(kDim, kClusters, 32, 33, 33, 2, 1, 42);
+    std::vector<PID> assignments(kPoints);
     std::vector<float> distances(kPoints);
     assigner.assign(
-        initial_centroids.data(), data.data(), kPoints, labels.data(), distances.data()
+        initial_centroids.data(), data.data(), kPoints, assignments.data(), distances.data()
     );
-    std::vector<double> sums(kClusters * kDimension);
+    std::vector<double> sums(kClusters * kDim);
     std::vector<size_t> counts(kClusters);
     for (size_t point = 0; point < kPoints; ++point) {
-        ++counts[labels[point]];
-        for (size_t dim = 0; dim < kDimension; ++dim) {
-            sums[labels[point] * kDimension + dim] += data[point * kDimension + dim];
+        ++counts[assignments[point]];
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            sums[assignments[point] * kDim + dim] += data[point * kDim + dim];
         }
     }
     auto parameters = exact_search_parameters();
     parameters.niter = 1;
     const auto clustering =
-        train_qgkmeans(kDimension, kClusters, parameters, data.data(), kPoints);
+        train_qgkmeans(kDim, kClusters, parameters, data.data(), kPoints);
     EXPECT_EQ(
         clustering.iteration_stats.front().nsplit,
         std::count(counts.begin(), counts.end(), size_t{0})
@@ -1106,45 +1095,45 @@ TEST(QGKMeansTest, AccumulatesShiftedClusterMeansAccurately) {
         if (counts[cluster] == 0) {
             continue;
         }
-        for (size_t dim = 0; dim < kDimension; ++dim) {
+        for (size_t dim = 0; dim < kDim; ++dim) {
             EXPECT_FLOAT_EQ(
-                clustering.centroids[cluster * kDimension + dim],
-                static_cast<float>(sums[cluster * kDimension + dim] / counts[cluster])
+                clustering.centroids[cluster * kDim + dim],
+                static_cast<float>(sums[cluster * kDim + dim] / counts[cluster])
             );
         }
     }
 }
 
 TEST(QGKMeansTest, FinalAssignmentsRetainACloserPreviousCluster) {
-    constexpr size_t kDimension = 65, kClusters = 256, kPoints = 2048;
+    constexpr size_t kDim = 65, kClusters = 256, kPoints = 2048;
     const auto normalize = [=](float* row) {
         double norm = 0;
-        for (size_t dim = 0; dim < kDimension; ++dim) {
+        for (size_t dim = 0; dim < kDim; ++dim) {
             norm += static_cast<double>(row[dim]) * row[dim];
         }
         const double scale = 1.0 / std::sqrt(norm);
-        for (size_t dim = 0; dim < kDimension; ++dim) {
+        for (size_t dim = 0; dim < kDim; ++dim) {
             row[dim] = static_cast<float>(row[dim] * scale);
         }
     };
     for (bool spherical : {false, true}) {
         std::mt19937 rng(123);
         std::normal_distribution<float> normal;
-        std::vector<float> data(kPoints * kDimension);
+        std::vector<float> data(kPoints * kDim);
         std::generate(data.begin(), data.end(), [&] { return normal(rng); });
         if (spherical) {
             for (size_t point = 0; point < kPoints; ++point) {
-                normalize(data.data() + point * kDimension);
+                normalize(data.data() + point * kDim);
             }
         }
         std::vector<size_t> indices(kPoints);
         std::iota(indices.begin(), indices.end(), size_t{0});
         std::mt19937 init_rng(42);
         std::shuffle(indices.begin(), indices.end(), init_rng);
-        std::vector<float> initial(kClusters * kDimension);
+        std::vector<float> initial(kClusters * kDim);
         for (size_t cluster = 0; cluster < kClusters; ++cluster) {
-            float* row = initial.data() + cluster * kDimension;
-            std::copy_n(data.data() + indices[cluster] * kDimension, kDimension, row);
+            float* row = initial.data() + cluster * kDim;
+            std::copy_n(data.data() + indices[cluster] * kDim, kDim, row);
             if (spherical) {
                 normalize(row);
             }
@@ -1153,7 +1142,7 @@ TEST(QGKMeansTest, FinalAssignmentsRetainACloserPreviousCluster) {
         for (uint32_t bits : {0U, 4U, 8U}) {
             SCOPED_TRACE(::testing::Message() << spherical << "/" << bits);
             QGAssigner reference(
-                kDimension,
+                kDim,
                 kClusters,
                 32,
                 240,
@@ -1175,14 +1164,14 @@ TEST(QGKMeansTest, FinalAssignmentsRetainACloserPreviousCluster) {
             parameters.min_points_per_centroid = 1;
             parameters.spherical = spherical;
             parameters.quantization_bits = bits;
-            QGKMeans clustering(kDimension, kClusters, parameters);
+            QGKMeans clustering(kDim, kClusters, parameters);
             clustering.train(kPoints, data.data());
             const auto distance = spherical ? dot_product_dis<float> : euclidean_sqr<float>;
             for (size_t point = 0; point < kPoints; ++point) {
                 const float previous_distance = distance(
-                    data.data() + point * kDimension,
-                    clustering.centroids.data() + previous[point] * kDimension,
-                    kDimension
+                    data.data() + point * kDim,
+                    clustering.centroids.data() + previous[point] * kDim,
+                    kDim
                 );
                 EXPECT_LE(clustering.distances[point], previous_distance);
             }
@@ -1302,16 +1291,16 @@ namespace rabitqlib::qgkmeans {
 TEST(QGAssignerTest, PropagatesSearchFailureFromWorkers) {
     const std::vector<float> centroids(33 * 64, 0.0F);
     const std::vector<float> data(128 * 64, 1e19F);
-    std::vector<PID> labels(128, kPidMax);
+    std::vector<PID> assignments(128, kPidMax);
     std::vector<float> distances(128, -1.0F);
     QGAssigner assigner(64, 33, 32, 33, 33, 1, 2);
     EXPECT_THROW(
         assigner.assign(
-            centroids.data(), data.data(), 128, labels.data(), distances.data()
+            centroids.data(), data.data(), 128, assignments.data(), distances.data()
         ),
         std::runtime_error
     );
-    EXPECT_EQ(labels.front(), kPidMax);
+    EXPECT_EQ(assignments.front(), kPidMax);
     EXPECT_EQ(distances.front(), -1.0F);
 }
 
@@ -1331,11 +1320,11 @@ TEST(QGKMeansTest, RejectsFiniteOutOfRangeInputBeforeConstruction) {
 
 namespace rabitqlib::qgkmeans {
 TEST(QGKMeansTest, SupportsLargerPaddedDimensions) {
-    constexpr size_t k = 33;
+    constexpr size_t kClusters = 33;
     for (const size_t d : {4097U, 65535U, 65536U}) {
         SCOPED_TRACE(d);
-        std::vector<float> data(k * d, 0.0F);
-        for (size_t i = 0; i < k; ++i) {
+        std::vector<float> data(kClusters * d, 0.0F);
+        for (size_t i = 0; i < kClusters; ++i) {
             data[i * d + i] = 1.0F;
             data[i * d + d - 1] = static_cast<float>(i) / 64.0F;
         }
@@ -1349,10 +1338,10 @@ TEST(QGKMeansTest, SupportsLargerPaddedDimensions) {
             parameters.niter = 1;
             parameters.num_threads = 2;
             parameters.quantization_bits = bits;
-            QGKMeans model(d, k, parameters);
-            model.train(k, data.data());
+            QGKMeans model(d, kClusters, parameters);
+            model.train(kClusters, data.data());
             EXPECT_DOUBLE_EQ(model.final_obj, 0.0);
-            EXPECT_EQ(model.assignments.size(), k);
+            EXPECT_EQ(model.assignments.size(), kClusters);
         }
     }
     EXPECT_THROW(QGAssigner(65537, 33, 32, 33, 33, 1, 1), std::invalid_argument);
@@ -1376,19 +1365,17 @@ void normalize_reference_centroids(std::vector<float>& rows, size_t dim) {
 }
 
 void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrinsic_dim) {
-    constexpr size_t kDimension = 1024;
+    constexpr size_t kDim = 1024;
     constexpr size_t kPoints = 257;
     constexpr size_t kIterations = 3;
     std::mt19937 data_rng(823);
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
-    std::vector<float> x(kPoints * kDimension);
+    std::vector<float> x(kPoints * kDim);
     std::generate(x.begin(), x.end(), [&] { return distribution(data_rng); });
     // Low intrinsic dimension makes points change clusters during Lloyd updates.
     // Padding keeps the scalar-sum cache enabled without concentrating distances.
     for (size_t point = 0; point < kPoints; ++point) {
-        std::fill_n(
-            x.data() + point * kDimension + intrinsic_dim, kDimension - intrinsic_dim, 0.0F
-        );
+        std::fill_n(x.data() + point * kDim + intrinsic_dim, kDim - intrinsic_dim, 0.0F);
     }
     for (const uint32_t bits : {0U, 4U, 8U}) {
         for (const bool spherical : {false, true}) {
@@ -1406,7 +1393,7 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                 parameters.spherical = spherical;
                 parameters.ef_build = 128;
                 parameters.ef_search = ef_search;
-                QGKMeans model(kDimension, clusters, parameters);
+                QGKMeans model(kDim, clusters, parameters);
                 model.train(kPoints, x.data());
                 ASSERT_EQ(model.iteration_stats.size(), kIterations);
 
@@ -1414,19 +1401,19 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                 std::iota(initial_ids.begin(), initial_ids.end(), size_t{0});
                 std::mt19937 initialization_rng(parameters.seed);
                 std::shuffle(initial_ids.begin(), initial_ids.end(), initialization_rng);
-                std::vector<float> centroids(clusters * kDimension);
+                std::vector<float> centroids(clusters * kDim);
                 for (size_t cluster = 0; cluster < clusters; ++cluster) {
                     std::copy_n(
-                        x.data() + initial_ids[cluster] * kDimension,
-                        kDimension,
-                        centroids.data() + cluster * kDimension
+                        x.data() + initial_ids[cluster] * kDim,
+                        kDim,
+                        centroids.data() + cluster * kDim
                     );
                 }
                 if (spherical) {
-                    normalize_reference_centroids(centroids, kDimension);
+                    normalize_reference_centroids(centroids, kDim);
                 }
                 QGAssigner uncached(
-                    kDimension,
+                    kDim,
                     clusters,
                     32,
                     parameters.ef_build,
@@ -1437,40 +1424,46 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                     spherical ? METRIC_IP : METRIC_L2,
                     bits
                 );
-                std::vector<PID> labels(kPoints);
+                std::vector<PID> assignments(kPoints);
                 std::vector<float> distances(kPoints);
                 for (size_t iteration = 0; iteration < kIterations; ++iteration) {
                     SCOPED_TRACE(iteration);
                     // This public call intentionally never receives a prepared sum.
                     uncached.assign(
-                        centroids.data(), x.data(), kPoints, labels.data(), distances.data()
+                        centroids.data(),
+                        x.data(),
+                        kPoints,
+                        assignments.data(),
+                        distances.data()
                     );
                     const double objective =
                         std::accumulate(distances.begin(), distances.end(), 0.0);
                     EXPECT_EQ(model.iteration_stats[iteration].obj, objective);
                     if (iteration == 0) {
-                        EXPECT_FALSE(std::is_sorted(labels.begin(), labels.end()));
+                        EXPECT_FALSE(
+                            std::is_sorted(assignments.begin(), assignments.end())
+                        );
                     }
-                    std::vector<double> sums(clusters * kDimension, 0.0);
+                    std::vector<double> sums(clusters * kDim, 0.0);
                     std::vector<size_t> counts(clusters, 0);
                     for (size_t point = 0; point < kPoints; ++point) {
-                        ++counts[labels[point]];
-                        for (size_t j = 0; j < kDimension; ++j) {
-                            sums[labels[point] * kDimension + j] +=
-                                static_cast<double>(x[point * kDimension + j]);
+                        ++counts[assignments[point]];
+                        for (size_t j = 0; j < kDim; ++j) {
+                            sums[assignments[point] * kDim + j] +=
+                                static_cast<double>(x[point * kDim + j]);
                         }
                     }
                     for (size_t cluster = 0; cluster < clusters; ++cluster) {
                         // Keep this an independent Lloyd reference, without empty repair.
                         ASSERT_GT(counts[cluster], 0U);
                         const double scale = 1.0 / static_cast<double>(counts[cluster]);
-                        for (size_t j = 0; j < kDimension; ++j) {
-                            centroids[cluster * kDimension + j] =
-                                static_cast<float>(sums[cluster * kDimension + j] * scale);
+                        for (size_t j = 0; j < kDim; ++j) {
+                            centroids[cluster * kDim + j] =
+                                static_cast<float>(sums[cluster * kDim + j] * scale);
                         }
                     }
                     if (spherical) {
-                        normalize_reference_centroids(centroids, kDimension);
+                        normalize_reference_centroids(centroids, kDim);
                     }
                 }
                 // Compare state before the final assignment, whose safeguard is separate.

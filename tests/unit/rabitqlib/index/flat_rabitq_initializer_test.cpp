@@ -94,7 +94,7 @@ TEST(IvfInitializerTest, MatrixRotationAndExplicitRoutingRoundTrip) {
 }
 
 TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex) {
-    constexpr size_t kDim = 65, kCount = 33, kTopk = 5;
+    constexpr size_t kDim = 65, kCount = 33, kTopK = 5;
     std::mt19937 generator(9923);
     std::normal_distribution<float> normal;
     std::vector<float> data(kCount * kDim);
@@ -115,15 +115,15 @@ TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex
           InitializerType::Flat}) {
         IVF source(kCount, kDim, kCount, 5, METRIC_L2, RotatorType::FhtKacRotator, type);
         source.construct(data.data(), data.data(), labels.data(), false, 1);
-        std::array<PID, kTopk> expected_ids{}, actual_ids{};
-        std::array<float, kTopk> expected_distances{}, actual_distances{};
+        std::array<PID, kTopK> expected_ids{}, actual_ids{};
+        std::array<float, kTopK> expected_distances{}, actual_distances{};
         source.search(
-            data.data(), kTopk, 7, expected_ids.data(), expected_distances.data()
+            data.data(), kTopK, 7, expected_ids.data(), expected_distances.data()
         );
         source.save(path.c_str());
         target.load(path.c_str());
         EXPECT_EQ(target.initializer_type(), type);
-        target.search(data.data(), kTopk, 7, actual_ids.data(), actual_distances.data());
+        target.search(data.data(), kTopK, 7, actual_ids.data(), actual_distances.data());
         EXPECT_EQ(actual_ids, expected_ids);
         EXPECT_EQ(actual_distances, expected_distances);
         {
@@ -135,13 +135,13 @@ TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex
         }
         EXPECT_THROW(target.load(path.c_str()), std::runtime_error);
         EXPECT_EQ(target.initializer_type(), type);
-        target.search(data.data(), kTopk, 7, actual_ids.data(), actual_distances.data());
+        target.search(data.data(), kTopK, 7, actual_ids.data(), actual_distances.data());
         EXPECT_EQ(actual_ids, expected_ids);
         EXPECT_EQ(actual_distances, expected_distances);
     }
 }
 
-TEST(FlatRaBitQInitializerTest, TailBatchesMetricsAndExactReturnedDistances) {
+TEST(IvfFlatRaBitQInitializerTest, TailBatchesMetricsAndExactReturnedDistances) {
     std::mt19937 generator(141);
     std::normal_distribution<float> normal;
     for (size_t dim : {32U, 64U, 96U, 1056U}) {
@@ -189,7 +189,7 @@ TEST(FlatRaBitQInitializerTest, TailBatchesMetricsAndExactReturnedDistances) {
     }
 }
 
-TEST(FlatRaBitQInitializerTest, ZeroResidualsAndInnerProductMagnitude) {
+TEST(IvfFlatRaBitQInitializerTest, ZeroResidualsAndInnerProductMagnitude) {
     constexpr size_t kDim = 96, kCount = 33;
     std::vector<float> centroids(kDim * kCount, 0.0F), query(kDim, 0.0F);
     for (auto metric : {METRIC_L2, METRIC_IP}) {
@@ -216,7 +216,7 @@ TEST(FlatRaBitQInitializerTest, ZeroResidualsAndInnerProductMagnitude) {
     EXPECT_FLOAT_EQ(result[0].distance, -99.0F);
 }
 
-TEST(FlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
+TEST(IvfFlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
     constexpr size_t kDim = 96, kCount = 97;
     std::mt19937 generator(731);
     std::normal_distribution<float> normal;

@@ -48,7 +48,7 @@ TEST(FastScanDispatchTest, PointCodeAssignmentPropagatesUnsupportedCpuFromWorker
     labels.fill(kPidMax);
     std::array<float, kPoints> distances;
     distances.fill(-1.0F);
-    rabitqkmeans::detail::RaBitQAssigner assigner(
+    rabitqkmeans::detail::RaBitQAssignment assigner(
         kDim, kClusters, data.data(), kPoints, 2, rabitqkmeans::RaBitQKMeansParameters{}
     );
     try {

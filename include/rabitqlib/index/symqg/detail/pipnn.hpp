@@ -17,9 +17,9 @@ struct InitialGraph {
 
 InitialGraph build_initial_graph(
     const float* data,
-    size_t count,
+    size_t num_points,
     size_t dim,
-    size_t degree,
+    size_t max_degree,
     MetricType metric_type = METRIC_L2,
     size_t num_threads = std::numeric_limits<size_t>::max()
 );

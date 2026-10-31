@@ -49,45 +49,45 @@ struct IvfTestAccess {
 namespace {
 
 TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
-    constexpr size_t kNum = 97, kDim = 65, kClusters = 4, kQueries = 13, k = 7;
+    constexpr size_t kCount = 97, kDim = 65, kNumClusters = 4, kNumQueries = 13, kTopK = 7;
     std::mt19937 rng(73);
     std::uniform_real_distribution<float> random(-1, 1);
-    std::vector<float> data(kNum * kDim), centroids(kClusters * kDim);
-    std::vector<float> queries(kQueries * kDim);
-    std::vector<PID> labels(kNum);
+    std::vector<float> data(kCount * kDim), centroids(kNumClusters * kDim);
+    std::vector<float> queries(kNumQueries * kDim);
+    std::vector<PID> labels(kCount);
     std::generate(data.begin(), data.end(), [&] { return random(rng); });
     std::generate(centroids.begin(), centroids.end(), [&] { return random(rng); });
     std::generate(queries.begin(), queries.end(), [&] { return random(rng); });
-    for (size_t i = 0; i < kNum; ++i) {
-        labels[i] = static_cast<PID>(i % (kClusters - 1));
+    for (size_t i = 0; i < kCount; ++i) {
+        labels[i] = static_cast<PID>(i % (kNumClusters - 1));
     }
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 32U}) {
-            IVF index(kNum, kDim, kClusters, bits, metric);
+            IVF index(kCount, kDim, kNumClusters, bits, metric);
             EXPECT_EQ(index.padded_dim(), 96U);
             index.construct(data.data(), centroids.data(), labels.data(), false, 1);
-            std::array<PID, kQueries * k> expected{}, actual{}, ids_only{};
-            std::array<float, kQueries * k> expected_distances{}, actual_distances{};
+            std::array<PID, kNumQueries * kTopK> expected{}, actual{}, ids_only{};
+            std::array<float, kNumQueries * kTopK> expected_distances{}, actual_distances{};
             for (size_t nprobe : {1U, 99U}) {
                 for (std::optional<bool> hacc :
                      {std::optional<bool>{},
                       std::optional<bool>(false),
                       std::optional<bool>(true)}) {
-                    for (size_t i = 0; i < kQueries; ++i) {
+                    for (size_t i = 0; i < kNumQueries; ++i) {
                         index.search(
                             queries.data() + i * kDim,
-                            k,
+                            kTopK,
                             nprobe,
-                            expected.data() + i * k,
-                            expected_distances.data() + i * k,
+                            expected.data() + i * kTopK,
+                            expected_distances.data() + i * kTopK,
                             hacc.value_or(bits >= 4 && bits <= 9)
                         );
                     }
                     for (size_t threads : {1U, 4U}) {
                         index.search_batch(
                             queries.data(),
-                            kQueries,
-                            k,
+                            kNumQueries,
+                            kTopK,
                             nprobe,
                             actual.data(),
                             actual_distances.data(),
@@ -96,8 +96,8 @@ TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
                         );
                         index.search_batch(
                             queries.data(),
-                            kQueries,
-                            k,
+                            kNumQueries,
+                            kTopK,
                             nprobe,
                             ids_only.data(),
                             nullptr,
@@ -110,34 +110,40 @@ TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
                     }
                 }
             }
-            EXPECT_NO_THROW(index.search_batch(nullptr, 0, k, 1, nullptr));
+            EXPECT_NO_THROW(index.search_batch(nullptr, 0, kTopK, 1, nullptr));
             EXPECT_THROW(
                 index.search_batch(
-                    queries.data(), std::numeric_limits<size_t>::max(), k, 1, actual.data()
+                    queries.data(),
+                    std::numeric_limits<size_t>::max(),
+                    kTopK,
+                    1,
+                    actual.data()
                 ),
                 std::length_error
             );
             EXPECT_THROW(
-                index.search_batch(nullptr, 1, k, 1, actual.data()), std::invalid_argument
+                index.search_batch(nullptr, 1, kTopK, 1, actual.data()),
+                std::invalid_argument
             );
             EXPECT_THROW(
                 index.search_batch(queries.data(), 1, 0, 1, actual.data()),
                 std::invalid_argument
             );
             EXPECT_THROW(
-                index.search_batch(queries.data(), 1, k, 0, actual.data()),
+                index.search_batch(queries.data(), 1, kTopK, 0, actual.data()),
                 std::invalid_argument
             );
             EXPECT_THROW(
-                index.search_batch(queries.data(), 1, k, 1, nullptr), std::invalid_argument
+                index.search_batch(queries.data(), 1, kTopK, 1, nullptr),
+                std::invalid_argument
             );
-            std::vector<PID> removed(kNum);
+            std::vector<PID> removed(kCount);
             std::iota(removed.begin(), removed.end(), PID{0});
-            index.remove(removed.data(), kNum);
+            index.remove(removed.data(), kCount);
             index.search_batch(
                 queries.data(),
-                kQueries,
-                k,
+                kNumQueries,
+                kTopK,
                 4,
                 actual.data(),
                 actual_distances.data(),
@@ -211,26 +217,26 @@ TEST(IvfConfigurationTest, RejectsUnsupportedCountsAndNullConstructionInputs) {
 }
 
 TEST(IvfSearchTest, RawRerankingUsesOriginalCoordinates) {
-    constexpr size_t kNum = 33;
+    constexpr size_t kCount = 33;
     constexpr size_t kDim = 65;
-    std::vector<float> data(kNum * kDim);
+    std::vector<float> data(kCount * kDim);
     std::vector<float> centroid(kDim, 0);
     std::vector<float> query(kDim, 0.25F);
-    std::vector<PID> clusters(kNum, 0);
+    std::vector<PID> clusters(kCount, 0);
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = static_cast<float>(i % 71) / 71.0F;
     }
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (auto rotator : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
-            IVF index(kNum, kDim, 1, 32, metric, rotator);
+            IVF index(kCount, kDim, 1, 32, metric, rotator);
             EXPECT_EQ(index.nbits(), 32);
             index.construct(data.data(), centroid.data(), clusters.data(), false, 1);
             for (bool hacc : {false, true}) {
-                std::vector<PID> ids(kNum);
-                std::vector<float> distances(kNum);
-                index.search(query.data(), kNum, 1, ids.data(), distances.data(), hacc);
-                for (size_t i = 0; i < kNum; ++i) {
-                    ASSERT_LT(ids[i], kNum);
+                std::vector<PID> ids(kCount);
+                std::vector<float> distances(kCount);
+                index.search(query.data(), kCount, 1, ids.data(), distances.data(), hacc);
+                for (size_t i = 0; i < kCount; ++i) {
+                    ASSERT_LT(ids[i], kCount);
                     float expected = metric == METRIC_L2 ? 0.0F : 1.0F;
                     for (size_t j = 0; j < kDim; ++j) {
                         float value = data[ids[i] * kDim + j];
@@ -240,8 +246,8 @@ TEST(IvfSearchTest, RawRerankingUsesOriginalCoordinates) {
                     EXPECT_NEAR(distances[i], expected, 2e-5F);
                 }
                 EXPECT_TRUE(std::is_sorted(distances.begin(), distances.end()));
-                std::vector<PID> ids_only(kNum);
-                index.search(query.data(), kNum, 1, ids_only.data(), hacc);
+                std::vector<PID> ids_only(kCount);
+                index.search(query.data(), kCount, 1, ids_only.data(), hacc);
                 EXPECT_EQ(ids, ids_only);
             }
         }
@@ -249,12 +255,12 @@ TEST(IvfSearchTest, RawRerankingUsesOriginalCoordinates) {
 }
 
 TEST(IvfSearchTest, AutomaticHighAccuracyMatchesBitPolicy) {
-    constexpr size_t kNum = 33;
+    constexpr size_t kCount = 33;
     constexpr size_t kDim = 65;
-    std::vector<float> data(kNum * kDim);
+    std::vector<float> data(kCount * kDim);
     std::vector<float> centroid(kDim, 0);
     std::vector<float> query(kDim);
-    std::vector<PID> clusters(kNum, 0);
+    std::vector<PID> clusters(kCount, 0);
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = static_cast<float>(i % 71) / 71.0F;
     }
@@ -262,7 +268,7 @@ TEST(IvfSearchTest, AutomaticHighAccuracyMatchesBitPolicy) {
         query[i] = static_cast<float>(i % 13) / 13.0F;
     }
     for (size_t bits : {1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL, 32UL}) {
-        IVF index(kNum, kDim, 1, bits);
+        IVF index(kCount, kDim, 1, bits);
         index.construct(data.data(), centroid.data(), clusters.data(), false, 1);
         std::array<PID, 7> ids{}, expected_ids{}, ids_only{};
         std::array<float, 7> distances{}, expected_distances{};
@@ -311,16 +317,16 @@ TEST(IvfSearchTest, RejectsUnbuiltStateAndInvalidArguments) {
 }
 
 TEST(IvfSearchTest, FillsSentinelsWhenProbedClustersCannotFillK) {
-    constexpr size_t kNum = 2;
+    constexpr size_t kCount = 2;
     constexpr size_t kDim = 64;
-    std::array<float, kNum * kDim> data{};
-    std::array<float, kNum * kDim> centroids{};
+    std::array<float, kCount * kDim> data{};
+    std::array<float, kCount * kDim> centroids{};
     std::array<float, kDim> query{};
-    std::array<PID, kNum> clusters{1, 1};
+    std::array<PID, kCount> clusters{1, 1};
     std::fill(data.begin(), data.end(), 1.0F);
     std::fill(centroids.begin() + static_cast<ptrdiff_t>(kDim), centroids.end(), 1.0F);
 
-    IVF index(kNum, kDim, kNum, 32, MetricType::METRIC_L2, RotatorType::MatrixRotator);
+    IVF index(kCount, kDim, kCount, 32, MetricType::METRIC_L2, RotatorType::MatrixRotator);
     index.construct(data.data(), centroids.data(), clusters.data(), false, 1);
 
     PID result = kPidMax;
@@ -331,17 +337,17 @@ TEST(IvfSearchTest, FillsSentinelsWhenProbedClustersCannotFillK) {
 }
 
 TEST(IvfSearchTest, RoutesInnerProductQueriesByInnerProduct) {
-    constexpr size_t kNum = 2;
+    constexpr size_t kCount = 2;
     constexpr size_t kDim = 64;
-    std::vector<float> data(kNum * kDim, 0.0F);
-    std::vector<float> centroids(kNum * kDim, 0.0F);
-    std::array<PID, kNum> clusters{0, 1};
+    std::vector<float> data(kCount * kDim, 0.0F);
+    std::vector<float> centroids(kCount * kDim, 0.0F);
+    std::array<PID, kCount> clusters{0, 1};
     std::array<float, kDim> query{};
     data[0] = centroids[0] = 0.9F;
     data[kDim] = centroids[kDim] = 100.0F;
     query[0] = 1.0F;
 
-    IVF index(kNum, kDim, kNum, 32, METRIC_IP);
+    IVF index(kCount, kDim, kCount, 32, METRIC_IP);
     index.construct(data.data(), centroids.data(), clusters.data(), false, 1);
 
     PID result = kPidMax;
@@ -376,18 +382,18 @@ TEST(IvfSearchTest, RoutesInnerProductQueriesWithHNSWCentroids) {
 }
 
 TEST(IvfSearchTest, InnerProductRawRerankingUsesResidualNormForPruning) {
-    constexpr size_t kNum = 65;
+    constexpr size_t kCount = 65;
     constexpr size_t kDim = 64;
     constexpr size_t kTopK = 1;
-    std::vector<float> data(kNum * kDim);
+    std::vector<float> data(kCount * kDim);
     std::vector<float> centroids(2 * kDim, 0.0F);
-    std::vector<PID> clusters(kNum, 1);
+    std::vector<PID> clusters(kCount, 1);
     std::array<float, kDim> query{};
     query[0] = 1.0F;
     centroids[0] = 100.0F;
     centroids[kDim] = 50.0F;
 
-    for (size_t id = 0; id < kNum; ++id) {
+    for (size_t id = 0; id < kCount; ++id) {
         clusters[id] = id < 32 ? 0 : 1;
         data[id * kDim] = id < 32 ? 10.0F + static_cast<float>(id) * 0.01F : 0.0F;
         for (size_t d = 1; d < kDim; ++d) {
@@ -397,7 +403,7 @@ TEST(IvfSearchTest, InnerProductRawRerankingUsesResidualNormForPruning) {
     }
     data[32 * kDim] = 1000.0F;
 
-    IVF index(kNum, kDim, 2, 32, METRIC_IP);
+    IVF index(kCount, kDim, 2, 32, METRIC_IP);
     index.construct(data.data(), centroids.data(), clusters.data(), false, 1);
     for (bool use_hacc : {false, true}) {
         std::array<PID, kTopK> ids{};
@@ -409,30 +415,30 @@ TEST(IvfSearchTest, InnerProductRawRerankingUsesResidualNormForPruning) {
 }
 
 TEST(IvfPersistenceTest, ReloadsRawAndQuantizedStorage) {
-    constexpr size_t kNum = 33;
+    constexpr size_t kCount = 33;
     constexpr size_t kDim = 65;
-    std::vector<float> data(kNum * kDim, 1.0F);
+    std::vector<float> data(kCount * kDim, 1.0F);
     std::vector<float> centroid(kDim, 0.0F);
-    std::vector<PID> clusters(kNum, 0);
+    std::vector<PID> clusters(kCount, 0);
     const rabitq_test::TempFile path_file("rabitq_ivf_storage.index");
     const std::string& path = path_file.path();
     IVF loaded;
     for (auto rotator : {RotatorType::FhtKacRotator, RotatorType::MatrixRotator}) {
         for (size_t bits : {32UL, 1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL}) {
-            IVF index(kNum, kDim, 1, bits, METRIC_L2, rotator);
+            IVF index(kCount, kDim, 1, bits, METRIC_L2, rotator);
             index.construct(data.data(), centroid.data(), clusters.data(), false, 1);
             index.save(path.c_str());
             loaded.load(path.c_str());
             EXPECT_EQ(loaded.nbits(), bits);
             EXPECT_EQ(loaded.padded_dim(), index.padded_dim());
             EXPECT_EQ(loaded.rotator_type(), rotator);
-            std::vector<PID> ids(kNum);
-            std::vector<PID> loaded_ids(kNum);
-            std::vector<float> distances(kNum);
-            std::vector<float> loaded_distances(kNum);
-            index.search(centroid.data(), kNum, 1, ids.data(), distances.data(), true);
+            std::vector<PID> ids(kCount);
+            std::vector<PID> loaded_ids(kCount);
+            std::vector<float> distances(kCount);
+            std::vector<float> loaded_distances(kCount);
+            index.search(centroid.data(), kCount, 1, ids.data(), distances.data(), true);
             loaded.search(
-                centroid.data(), kNum, 1, loaded_ids.data(), loaded_distances.data(), true
+                centroid.data(), kCount, 1, loaded_ids.data(), loaded_distances.data(), true
             );
             EXPECT_EQ(ids, loaded_ids);
             EXPECT_EQ(distances, loaded_distances);
@@ -441,37 +447,37 @@ TEST(IvfPersistenceTest, ReloadsRawAndQuantizedStorage) {
 }
 
 TEST(IvfPersistenceTest, FailedLoadPreservesExistingIndex) {
-    constexpr size_t kTargetNum = 2;
+    constexpr size_t kTargetCount = 2;
     constexpr size_t kTargetDim = 64;
-    std::vector<float> target_data(kTargetNum * kTargetDim, 1.0F);
+    std::vector<float> target_data(kTargetCount * kTargetDim, 1.0F);
     std::vector<float> target_centroid(kTargetDim, 0.0F);
-    std::array<PID, kTargetNum> target_clusters{0, 0};
+    std::array<PID, kTargetCount> target_clusters{0, 0};
     std::fill(
         target_data.begin() + static_cast<ptrdiff_t>(kTargetDim), target_data.end(), 2.0F
     );
     const rabitq_test::TempFile path_file("rabitq_ivf_truncated.index");
     const std::string& path = path_file.path();
 
-    IVF target(kTargetNum, kTargetDim, 1, 32, METRIC_IP, RotatorType::MatrixRotator);
+    IVF target(kTargetCount, kTargetDim, 1, 32, METRIC_IP, RotatorType::MatrixRotator);
     target.construct(
         target_data.data(), target_centroid.data(), target_clusters.data(), false, 1
     );
-    std::array<PID, kTargetNum> expected_ids{};
-    std::array<float, kTargetNum> expected_distances{};
+    std::array<PID, kTargetCount> expected_ids{};
+    std::array<float, kTargetCount> expected_distances{};
     target.search(
         target_centroid.data(),
-        kTargetNum,
+        kTargetCount,
         1,
         expected_ids.data(),
         expected_distances.data()
     );
 
-    constexpr size_t kSourceNum = 33;
+    constexpr size_t kSourceCount = 33;
     constexpr size_t kSourceDim = 65;
-    std::vector<float> source_data(kSourceNum * kSourceDim, 0.25F);
+    std::vector<float> source_data(kSourceCount * kSourceDim, 0.25F);
     std::vector<float> source_centroid(kSourceDim, 0.5F);
-    std::vector<PID> source_clusters(kSourceNum, 0);
-    IVF source(kSourceNum, kSourceDim, 1, 4, METRIC_L2, RotatorType::FhtKacRotator);
+    std::vector<PID> source_clusters(kSourceCount, 0);
+    IVF source(kSourceCount, kSourceDim, 1, 4, METRIC_L2, RotatorType::FhtKacRotator);
     source.construct(
         source_data.data(), source_centroid.data(), source_clusters.data(), false, 1
     );
@@ -488,32 +494,32 @@ TEST(IvfPersistenceTest, FailedLoadPreservesExistingIndex) {
     output.close();
 
     EXPECT_ANY_THROW(target.load(path.c_str()));
-    EXPECT_EQ(target.max_elements(), kTargetNum);
+    EXPECT_EQ(target.max_elements(), kTargetCount);
     EXPECT_EQ(target.dimension(), kTargetDim);
     EXPECT_EQ(target.num_clusters(), 1U);
     EXPECT_EQ(target.nbits(), 32U);
     EXPECT_EQ(target.metric_type(), METRIC_IP);
     EXPECT_EQ(target.rotator_type(), RotatorType::MatrixRotator);
 
-    std::array<PID, kTargetNum> actual_ids{};
-    std::array<float, kTargetNum> actual_distances{};
+    std::array<PID, kTargetCount> actual_ids{};
+    std::array<float, kTargetCount> actual_distances{};
     target.search(
-        target_centroid.data(), kTargetNum, 1, actual_ids.data(), actual_distances.data()
+        target_centroid.data(), kTargetCount, 1, actual_ids.data(), actual_distances.data()
     );
     EXPECT_EQ(actual_ids, expected_ids);
     EXPECT_EQ(actual_distances, expected_distances);
 }
 
 TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
-    constexpr size_t kNum = 33;
+    constexpr size_t kCount = 33;
     constexpr size_t kDim = 64;
-    std::vector<float> data(kNum * kDim, 0.25F);
+    std::vector<float> data(kCount * kDim, 0.25F);
     std::vector<float> centroid(kDim, 0.0F);
-    std::vector<PID> clusters(kNum, 0);
+    std::vector<PID> clusters(kCount, 0);
     const rabitq_test::TempFile path_file("rabitq_ivf_bad_id.index");
     const std::string& path = path_file.path();
 
-    IVF source(kNum, kDim, 1, 4);
+    IVF source(kCount, kDim, 1, 4);
     source.construct(data.data(), centroid.data(), clusters.data(), false, 1);
     source.save(path.c_str());
 
@@ -531,7 +537,7 @@ TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
 // ── add / remove ────────────────────────────────────────────────────────────────────────
 
 constexpr size_t kDynDim = 65;  // Exercise padding and partially occupied FastScan batches.
-constexpr size_t kDynClusters = 4;
+constexpr size_t kDynNumClusters = 4;
 
 std::vector<float> random_rows(size_t rows, uint32_t seed) {
     std::mt19937 gen(seed);
@@ -550,7 +556,7 @@ std::vector<PID> nearest_centroids(
     std::vector<PID> assigned(count);
     for (size_t i = 0; i < count; ++i) {
         double best = std::numeric_limits<double>::infinity();
-        for (size_t c = 0; c < kDynClusters; ++c) {
+        for (size_t c = 0; c < kDynNumClusters; ++c) {
             double dist = 0;
             for (size_t d = 0; d < kDynDim; ++d) {
                 const double x = rows[i * kDynDim + d];
@@ -599,9 +605,11 @@ Hits search_everything(
     const size_t k = index.max_elements();
     Hits hits{std::vector<PID>(k), std::vector<float>(k)};
     if (hacc.has_value()) {
-        index.search(query, k, kDynClusters, hits.ids.data(), hits.distances.data(), *hacc);
+        index.search(
+            query, k, kDynNumClusters, hits.ids.data(), hits.distances.data(), *hacc
+        );
     } else {
-        index.search(query, k, kDynClusters, hits.ids.data(), hits.distances.data());
+        index.search(query, k, kDynNumClusters, hits.ids.data(), hits.distances.data());
     }
     return hits;
 }
@@ -692,7 +700,7 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
     constexpr size_t kOld = 200;
     constexpr size_t kNew = 200;
     const auto points = random_rows(kOld + kNew, 11);
-    const auto centroids = random_rows(kDynClusters, 12);
+    const auto centroids = random_rows(kDynNumClusters, 12);
     const float* extra = points.data() + (kOld * kDynDim);
     const rabitq_test::TempFile base_path_file("rabitq_ivf_add_base.index");
     const std::string& base_path = base_path_file.path();
@@ -707,7 +715,7 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
                 ::testing::Message()
                 << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
             );
-            IVF base(kOld, kDynDim, kDynClusters, bits, metric);
+            IVF base(kOld, kDynDim, kDynNumClusters, bits, metric);
             base.construct(points.data(), centroids.data(), assigned.data(), false, 1);
             base.save(base_path.c_str());
 
@@ -739,11 +747,11 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
             // Even clusters are reserved and grow in place; odd ones are rebuilt each time.
             IVF reserved;
             reserved.load(base_path.c_str());
-            std::vector<size_t> final_sizes(kDynClusters, 0);
+            std::vector<size_t> final_sizes(kDynNumClusters, 0);
             for (PID cluster : assigned) {
                 ++final_sizes[cluster];
             }
-            for (size_t i = 0; i < kDynClusters; i += 2) {
+            for (size_t i = 0; i < kDynNumClusters; i += 2) {
                 reserved.reserve(static_cast<PID>(i), final_sizes[i]);
             }
             const Cluster reserved_view = IvfTestAccess::cluster_view(reserved, 0);
@@ -772,17 +780,17 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
     // Cluster sizes 0, 1, 32, 97 cover empty, single, full-batch and tail clusters.
     constexpr size_t kOld = 130;
     const auto points = random_rows(kOld, 741);
-    const auto centroids = random_rows(kDynClusters, 742);
+    const auto centroids = random_rows(kDynNumClusters, 742);
     std::vector<PID> assigned(kOld, 3);
     assigned[0] = 1;
     std::fill(assigned.begin() + 1, assigned.begin() + 33, PID{2});
 
-    IVF index(kOld, kDynDim, kDynClusters, 4, METRIC_L2);
+    IVF index(kOld, kDynDim, kDynNumClusters, 4, METRIC_L2);
     index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
 
     std::vector<Cluster> before;
-    before.reserve(kDynClusters);
-    for (size_t i = 0; i < kDynClusters; ++i) {
+    before.reserve(kDynNumClusters);
+    for (size_t i = 0; i < kDynNumClusters; ++i) {
         before.push_back(IvfTestAccess::cluster_view(index, i));
     }
 
@@ -792,7 +800,7 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
     const std::vector<PID> new_cluster_ids(kNew, 0);
     index.add(extra.data(), kNew, new_cluster_ids.data(), false, 1);
 
-    for (size_t i = 0; i < kDynClusters; ++i) {
+    for (size_t i = 0; i < kDynNumClusters; ++i) {
         SCOPED_TRACE(::testing::Message() << "cluster=" << i);
         const Cluster after = IvfTestAccess::cluster_view(index, i);
         if (i == 0) {
@@ -808,15 +816,15 @@ TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
 }
 
 TEST(IvfAddTest, SparseInterleavedClustersPreserveRowOrderAndMatchRebuild) {
-    constexpr size_t kOld = 3, kCount = 9, kClusters = 257;
+    constexpr size_t kOld = 3, kCount = 9, kNumClusters = 257;
     const auto points = random_rows(kCount, 744);
-    const auto centroids = random_rows(kClusters, 745);
+    const auto centroids = random_rows(kNumClusters, 745);
     const std::array<PID, kCount> assigned{0, 128, 256, 256, 0, 256, 128, 0, 256};
     const rabitq_test::TempFile path_file("rabitq_ivf_sparse_add.index");
     const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 4U, 32U}) {
-            IVF index(kOld, kDynDim, kClusters, bits, metric);
+            IVF index(kOld, kDynDim, kNumClusters, bits, metric);
             index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
             index.reserve(256, 32);
             const Cluster reserved = IvfTestAccess::cluster_view(index, 256);
@@ -828,7 +836,7 @@ TEST(IvfAddTest, SparseInterleavedClustersPreserveRowOrderAndMatchRebuild) {
                 4
             );
             EXPECT_EQ(IvfTestAccess::cluster_view(index, 256).ids(), reserved.ids());
-            for (size_t i = 0; i < kClusters; ++i) {
+            for (size_t i = 0; i < kNumClusters; ++i) {
                 std::vector<PID> expected;
                 for (size_t row = 0; row < kCount; ++row) {
                     if (assigned[row] == i) {
@@ -853,12 +861,12 @@ TEST(IvfAddTest, SparseInterleavedClustersPreserveRowOrderAndMatchRebuild) {
 TEST(IvfAddTest, UnreservedClustersGrowToExactlyTheirNewSize) {
     constexpr size_t kOld = 40;
     const auto points = random_rows(kOld + 1, 851);
-    const auto centroids = random_rows(kDynClusters, 852);
+    const auto centroids = random_rows(kDynNumClusters, 852);
     const std::vector<PID> assigned(kOld, 0);
 
     for (size_t bits : {1UL, 4UL, 32UL}) {
         SCOPED_TRACE(::testing::Message() << "bits=" << bits);
-        IVF index(kOld, kDynDim, kDynClusters, bits, METRIC_L2);
+        IVF index(kOld, kDynDim, kDynNumClusters, bits, METRIC_L2);
         index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
         const PID route_to_zero = 0;
         index.add(points.data() + (kOld * kDynDim), 1, &route_to_zero, false, 1);
@@ -871,13 +879,13 @@ TEST(IvfReserveTest, ReservedClusterGrowsInPlaceUntilItsCapacityIsUsed) {
     constexpr size_t kOld = 40;
     constexpr size_t kReserved = kOld + 2;
     const auto points = random_rows(kReserved + 1, 861);
-    const auto centroids = random_rows(kDynClusters, 862);
+    const auto centroids = random_rows(kDynNumClusters, 862);
     const std::vector<PID> assigned(kOld, 0);
     const PID route_to_zero = 0;
 
     for (size_t bits : {1UL, 4UL, 32UL}) {
         SCOPED_TRACE(::testing::Message() << "bits=" << bits);
-        IVF index(kOld, kDynDim, kDynClusters, bits, METRIC_L2);
+        IVF index(kOld, kDynDim, kDynNumClusters, bits, METRIC_L2);
         index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
         index.reserve(0, kReserved);
         const Cluster reserved = IvfTestAccess::cluster_view(index, 0);
@@ -904,7 +912,7 @@ TEST(IvfReserveTest, ReservedClusterGrowsInPlaceUntilItsCapacityIsUsed) {
 TEST(IvfReserveTest, RejectsBadInputAndLeavesSavedBytesUnchanged) {
     constexpr size_t kOld = 40;
     const auto points = random_rows(kOld, 871);
-    const auto centroids = random_rows(kDynClusters, 872);
+    const auto centroids = random_rows(kDynNumClusters, 872);
     const std::vector<PID> assigned(kOld, 0);
     const rabitq_test::TempFile path_file("rabitq_ivf_reserve.index");
     const std::string& path = path_file.path();
@@ -915,22 +923,24 @@ TEST(IvfReserveTest, RejectsBadInputAndLeavesSavedBytesUnchanged) {
         } catch (const std::exception& error) { EXPECT_STREQ(error.what(), message); }
     };
 
-    IVF unbuilt(kOld, kDynDim, kDynClusters, 4);
+    IVF unbuilt(kOld, kDynDim, kDynNumClusters, 4);
     EXPECT_THROW(unbuilt.reserve(0, 1), std::logic_error);
     expect_message(
         [&] { unbuilt.reserve(0, 1); },
         "IVF index must be constructed or loaded before reserve"
     );
 
-    IVF index(kOld, kDynDim, kDynClusters, 4);
+    IVF index(kOld, kDynDim, kDynNumClusters, 4);
     index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
     const std::string expected = saved_bytes(index, path);
     const Cluster constructed = IvfTestAccess::cluster_view(index, 0);
 
-    EXPECT_THROW(index.reserve(static_cast<PID>(kDynClusters), 1), std::invalid_argument);
+    EXPECT_THROW(
+        index.reserve(static_cast<PID>(kDynNumClusters), 1), std::invalid_argument
+    );
     expect_message(
-        [&] { index.reserve(static_cast<PID>(kDynClusters), 1); },
-        "Cluster ID is out of range"
+        [&] { index.reserve(static_cast<PID>(kDynNumClusters), 1); },
+        "IVF cluster ID is out of range"
     );
     EXPECT_THROW(
         index.reserve(0, buffer::kSearchBufferMaxPointCount + 1), std::invalid_argument
@@ -952,7 +962,7 @@ TEST(IvfReserveTest, RejectsBadInputAndLeavesSavedBytesUnchanged) {
     EXPECT_TRUE(saved_bytes(index, path) == expected);
     IVF loaded;
     loaded.load(path.c_str());
-    for (size_t i = 0; i < kDynClusters; ++i) {
+    for (size_t i = 0; i < kDynNumClusters; ++i) {
         EXPECT_FALSE(IvfTestAccess::has_spare_capacity(loaded, i));
     }
 }
@@ -963,11 +973,11 @@ class FailingRotator : public Rotator<float> {
     FailingRotator(std::unique_ptr<Rotator<float>> inner, size_t fail_at)
         : Rotator<float>(0, inner->size()), inner_(std::move(inner)), fail_at_(fail_at) {}
 
-    void rotate(const float* src, float* dst) const override {
+    void rotate(const float* data, float* rotated_data) const override {
         if (calls_++ == fail_at_) {
             throw std::runtime_error("injected rotation failure");
         }
-        inner_->rotate(src, dst);
+        inner_->rotate(data, rotated_data);
     }
     void load(std::ifstream& input) override { inner_->load(input); }
     void save(std::ofstream& output) const override { inner_->save(output); }
@@ -988,7 +998,7 @@ TEST(IvfAddTest, FailedAddLeavesClustersGrowingInPlaceUnchanged) {
     constexpr size_t kOld = 70;
     constexpr size_t kInPlace = 3;
     const auto points = random_rows(kOld + 6, 881);
-    const auto centroids = random_rows(kDynClusters, 882);
+    const auto centroids = random_rows(kDynNumClusters, 882);
     std::vector<PID> assigned(kOld, 1);
     std::fill(assigned.begin(), assigned.begin() + 40, PID{0});
     const std::array<PID, 6> new_clusters{0, 0, 0, 1, 1, 1};
@@ -1000,7 +1010,7 @@ TEST(IvfAddTest, FailedAddLeavesClustersGrowingInPlaceUnchanged) {
 
     for (size_t bits : {1UL, 4UL, 32UL}) {
         SCOPED_TRACE(::testing::Message() << "bits=" << bits);
-        IVF index(kOld, kDynDim, kDynClusters, bits, METRIC_L2);
+        IVF index(kOld, kDynDim, kDynNumClusters, bits, METRIC_L2);
         index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
         index.save(base_path.c_str());
         index.reserve(0, 64);
@@ -1033,7 +1043,7 @@ TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAnd
     // Cluster sizes 0, 1, 32, 97 cover empty rows and multiple physical tail batches.
     constexpr size_t kCount = 130;
     const auto points = random_rows(kCount, 731);
-    const auto centroids = random_rows(kDynClusters, 732);
+    const auto centroids = random_rows(kDynNumClusters, 732);
     std::vector<PID> assigned(kCount, 3);
     assigned[0] = 1;
     std::fill(assigned.begin() + 1, assigned.begin() + 33, PID{2});
@@ -1045,7 +1055,7 @@ TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAnd
                 SCOPED_TRACE(
                     ::testing::Message() << "bits=" << bits << " metric=" << metric
                 );
-                IVF incremental(1, kDynDim, kDynClusters, bits, metric, rotation);
+                IVF incremental(1, kDynDim, kDynNumClusters, bits, metric, rotation);
                 incremental.construct(
                     points.data(), centroids.data(), assigned.data(), false, 1
                 );
@@ -1074,10 +1084,10 @@ TEST(IvfConstructionTest, RebuildMatchesIncrementalEncodingWithSkewedClustersAnd
 TEST(IvfAddTest, KeepsExistingDistancesAndQuantizesNewPointsAccurately) {
     constexpr size_t kOld = 150;
     constexpr size_t kNew = 150;
-    constexpr size_t kQueries = 8;
+    constexpr size_t kNumQueries = 8;
     const auto points = random_rows(kOld + kNew, 21);
-    const auto centroids = random_rows(kDynClusters, 22);
-    const auto queries = random_rows(kQueries, 23);
+    const auto centroids = random_rows(kDynNumClusters, 22);
+    const auto queries = random_rows(kNumQueries, 23);
 
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         const auto assigned =
@@ -1087,10 +1097,10 @@ TEST(IvfAddTest, KeepsExistingDistancesAndQuantizesNewPointsAccurately) {
                 ::testing::Message()
                 << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
             );
-            IVF index(kOld, kDynDim, kDynClusters, bits, metric);
+            IVF index(kOld, kDynDim, kDynNumClusters, bits, metric);
             index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
             std::vector<Hits> before;
-            for (size_t q = 0; q < kQueries; ++q) {
+            for (size_t q = 0; q < kNumQueries; ++q) {
                 before.push_back(search_everything(index, queries.data() + (q * kDynDim)));
             }
 
@@ -1098,7 +1108,7 @@ TEST(IvfAddTest, KeepsExistingDistancesAndQuantizesNewPointsAccurately) {
 
             double old_error = 0;
             double new_error = 0;
-            for (size_t q = 0; q < kQueries; ++q) {
+            for (size_t q = 0; q < kNumQueries; ++q) {
                 const float* query = queries.data() + (q * kDynDim);
                 const auto after = search_everything(index, query);
                 std::vector<float> by_id(kOld + kNew, std::nanf(""));
@@ -1118,8 +1128,8 @@ TEST(IvfAddTest, KeepsExistingDistancesAndQuantizesNewPointsAccurately) {
                     (id < kOld ? old_error : new_error) += error;
                 }
             }
-            old_error /= kQueries * kOld;
-            new_error /= kQueries * kNew;
+            old_error /= kNumQueries * kOld;
+            new_error /= kNumQueries * kNew;
             // Mis-encoded points would be off by the spread of the data, not by a factor.
             EXPECT_LT(new_error, 3 * old_error + 1e-4) << old_error << " vs " << new_error;
         }
@@ -1130,10 +1140,10 @@ TEST(IvfAddTest, AddedRawVectorsAreRerankedExactly) {
     constexpr size_t kOld = 40;
     constexpr size_t kNew = 60;
     const auto points = random_rows(kOld + kNew, 31);
-    const auto centroids = random_rows(kDynClusters, 32);
+    const auto centroids = random_rows(kDynNumClusters, 32);
     const auto queries = random_rows(3, 33);
     for (auto metric : {METRIC_L2, METRIC_IP}) {
-        IVF index(kOld, kDynDim, kDynClusters, 32, metric);
+        IVF index(kOld, kDynDim, kDynNumClusters, 32, metric);
         const auto assigned = nearest_centroids(centroids, points.data(), kOld, metric);
         index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
         index.add(points.data() + (kOld * kDynDim), kNew, nullptr, false, 1);
@@ -1156,7 +1166,7 @@ TEST(IvfAddTest, FasterQuantizationIsSupportedAndDeterministic) {
     constexpr size_t kOld = 100;
     constexpr size_t kNew = 50;
     const auto points = random_rows(kOld + kNew, 41);
-    const auto centroids = random_rows(kDynClusters, 42);
+    const auto centroids = random_rows(kDynNumClusters, 42);
     const auto assigned =
         nearest_centroids(centroids, points.data(), kOld + kNew, METRIC_L2);
     const rabitq_test::TempFile base_path_file("rabitq_ivf_add_faster_base.index");
@@ -1164,7 +1174,7 @@ TEST(IvfAddTest, FasterQuantizationIsSupportedAndDeterministic) {
     const rabitq_test::TempFile path_file("rabitq_ivf_add_faster.index");
     const std::string& path = path_file.path();
 
-    IVF base(kOld, kDynDim, kDynClusters, 5);
+    IVF base(kOld, kDynDim, kDynNumClusters, 5);
     base.construct(points.data(), centroids.data(), assigned.data(), true, 1);
     base.save(base_path.c_str());
     IVF first;
@@ -1213,23 +1223,23 @@ TEST(IvfAddTest, RoutesNewPointsWithHNSWCentroids) {
 }
 
 TEST(IvfAddTest, RejectsBadInputAndLeavesTheIndexUnchanged) {
-    constexpr size_t kNum = 70;
-    const auto points = random_rows(kNum + 1, 51);
-    const auto centroids = random_rows(kDynClusters, 52);
-    const auto assigned = nearest_centroids(centroids, points.data(), kNum, METRIC_L2);
+    constexpr size_t kCount = 70;
+    const auto points = random_rows(kCount + 1, 51);
+    const auto centroids = random_rows(kDynNumClusters, 52);
+    const auto assigned = nearest_centroids(centroids, points.data(), kCount, METRIC_L2);
     const rabitq_test::TempFile path_file("rabitq_ivf_add_reject.index");
     const std::string& path = path_file.path();
 
-    IVF unbuilt(kNum, kDynDim, kDynClusters, 4);
+    IVF unbuilt(kCount, kDynDim, kDynNumClusters, 4);
     EXPECT_THROW(unbuilt.add(points.data(), 1), std::logic_error);
     IVF unconfigured;
     EXPECT_THROW(unconfigured.add(points.data(), 1), std::logic_error);
 
-    IVF index(kNum, kDynDim, kDynClusters, 4);
+    IVF index(kCount, kDynDim, kDynNumClusters, 4);
     index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
     const std::string expected = saved_bytes(index, path);
 
-    const std::array<PID, 2> bad_clusters{0, static_cast<PID>(kDynClusters)};
+    const std::array<PID, 2> bad_clusters{0, static_cast<PID>(kDynNumClusters)};
     EXPECT_THROW(index.add(points.data(), 2, bad_clusters.data()), std::invalid_argument);
     EXPECT_THROW(index.add(nullptr, 1), std::invalid_argument);
     // The ID check happens before the data is read.
@@ -1238,31 +1248,31 @@ TEST(IvfAddTest, RejectsBadInputAndLeavesTheIndexUnchanged) {
     );
     EXPECT_NO_THROW(index.add(nullptr, 0));
     EXPECT_NO_THROW(index.add(points.data(), 0));
-    EXPECT_EQ(index.max_elements(), kNum);
+    EXPECT_EQ(index.max_elements(), kCount);
     EXPECT_TRUE(saved_bytes(index, path) == expected);
 }
 
 TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
-    constexpr size_t kNum = 200;
-    constexpr size_t kQueries = 5;
-    const auto points = random_rows(kNum, 61);
-    const auto centroids = random_rows(kDynClusters, 62);
-    const auto queries = random_rows(kQueries, 63);
+    constexpr size_t kCount = 200;
+    constexpr size_t kNumQueries = 5;
+    const auto points = random_rows(kCount, 61);
+    const auto centroids = random_rows(kDynNumClusters, 62);
+    const auto queries = random_rows(kNumQueries, 63);
 
     std::vector<PID> removed_ids;
-    std::vector<bool> is_removed(kNum, false);
-    for (PID id = 0; id < kNum; id += 3) {
+    std::vector<bool> is_removed(kCount, false);
+    for (PID id = 0; id < kCount; id += 3) {
         removed_ids.push_back(id);
         is_removed[id] = true;
     }
-    removed_ids.push_back(kNum - 1);  // the last point sits in a partial batch
-    is_removed[kNum - 1] = true;
+    removed_ids.push_back(kCount - 1);  // the last point sits in a partial batch
+    is_removed[kCount - 1] = true;
     removed_ids.push_back(0);  // repeated IDs count once
     const size_t unique_removed =
         static_cast<size_t>(std::count(is_removed.begin(), is_removed.end(), true));
 
     for (auto metric : {METRIC_L2, METRIC_IP}) {
-        const auto assigned = nearest_centroids(centroids, points.data(), kNum, metric);
+        const auto assigned = nearest_centroids(centroids, points.data(), kCount, metric);
         // 1-3 bits use standard FastScan, 4-9 bits and raw storage exercise other paths too
         for (size_t bits : {1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL, 8UL, 9UL, 32UL}) {
             for (bool hacc : {false, true}) {
@@ -1270,10 +1280,10 @@ TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
                     ::testing::Message() << "metric=" << (metric == METRIC_L2 ? "l2" : "ip")
                                          << " bits=" << bits << " hacc=" << hacc
                 );
-                IVF index(kNum, kDynDim, kDynClusters, bits, metric);
+                IVF index(kCount, kDynDim, kDynNumClusters, bits, metric);
                 index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
                 std::vector<Hits> before;
-                for (size_t q = 0; q < kQueries; ++q) {
+                for (size_t q = 0; q < kNumQueries; ++q) {
                     before.push_back(
                         search_everything(index, queries.data() + (q * kDynDim), hacc)
                     );
@@ -1283,14 +1293,14 @@ TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
                     index.remove(removed_ids.data(), removed_ids.size()), unique_removed
                 );
                 EXPECT_EQ(index.remove(removed_ids.data(), removed_ids.size()), 0U);
-                EXPECT_EQ(index.max_elements(), kNum);
+                EXPECT_EQ(index.max_elements(), kCount);
 
-                for (size_t q = 0; q < kQueries; ++q) {
+                for (size_t q = 0; q < kNumQueries; ++q) {
                     const auto after =
                         search_everything(index, queries.data() + (q * kDynDim), hacc);
                     // Survivors keep their order and distances; the rest are sentinels.
                     size_t next = 0;
-                    for (size_t r = 0; r < kNum; ++r) {
+                    for (size_t r = 0; r < kCount; ++r) {
                         if (is_removed[before[q].ids[r]]) {
                             continue;
                         }
@@ -1298,8 +1308,8 @@ TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
                         ASSERT_EQ(after.distances[next], before[q].distances[r]);
                         ++next;
                     }
-                    ASSERT_EQ(next, kNum - unique_removed);
-                    for (size_t r = next; r < kNum; ++r) {
+                    ASSERT_EQ(next, kCount - unique_removed);
+                    for (size_t r = next; r < kCount; ++r) {
                         EXPECT_EQ(after.ids[r], kPidMax);
                         EXPECT_EQ(
                             after.distances[r], std::numeric_limits<float>::infinity()
@@ -1312,13 +1322,13 @@ TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
                     index.search(
                         queries.data() + (q * kDynDim),
                         top.size(),
-                        kDynClusters,
+                        kDynNumClusters,
                         top.data(),
                         top_distances.data(),
                         hacc
                     );
                     for (size_t r = 0; r < top.size(); ++r) {
-                        ASSERT_LT(top[r], kNum);
+                        ASSERT_LT(top[r], kCount);
                         EXPECT_FALSE(is_removed[top[r]]);
                         EXPECT_TRUE(std::isfinite(top_distances[r]));
                     }
@@ -1331,10 +1341,10 @@ TEST(IvfRemoveTest, ExcludesRemovedPointsOnEveryScanPath) {
 TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
     constexpr size_t kOld = 100;
     constexpr size_t kNew = 60;
-    constexpr size_t kQueries = 4;
+    constexpr size_t kNumQueries = 4;
     const auto points = random_rows(kOld + kNew, 71);
-    const auto centroids = random_rows(kDynClusters, 72);
-    const auto queries = random_rows(kQueries, 73);
+    const auto centroids = random_rows(kDynNumClusters, 72);
+    const auto queries = random_rows(kNumQueries, 73);
     const std::vector<PID> removed{1, 33, 34, 98, 99};
     const rabitq_test::TempFile path_file("rabitq_ivf_remove.index");
     const std::string& path = path_file.path();
@@ -1363,7 +1373,7 @@ TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
                     ::testing::Message() << "metric=" << (metric == METRIC_L2 ? "l2" : "ip")
                                          << " bits=" << bits << " hacc=" << hacc
                 );
-                IVF index(kOld, kDynDim, kDynClusters, bits, metric);
+                IVF index(kOld, kDynDim, kDynNumClusters, bits, metric);
                 index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
                 ASSERT_EQ(index.remove(removed.data(), removed.size()), removed.size());
                 index.save(path.c_str());
@@ -1371,7 +1381,7 @@ TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
                 IVF loaded;
                 loaded.load(path.c_str());
                 ASSERT_EQ(loaded.max_elements(), kOld);
-                for (size_t q = 0; q < kQueries; ++q) {
+                for (size_t q = 0; q < kNumQueries; ++q) {
                     const float* query = queries.data() + (q * kDynDim);
                     const auto expected = search_everything(index, query, hacc);
                     const auto actual = search_everything(loaded, query, hacc);
@@ -1387,7 +1397,7 @@ TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
                 index.add(added, kNew, nullptr, false, 1);
                 loaded.add(added, kNew, nullptr, false, 1);
                 ASSERT_EQ(loaded.max_elements(), kOld + kNew);
-                for (size_t q = 0; q < kQueries; ++q) {
+                for (size_t q = 0; q < kNumQueries; ++q) {
                     const float* query = queries.data() + (q * kDynDim);
                     const auto expected = search_everything(index, query, hacc);
                     const auto actual = search_everything(loaded, query, hacc);
@@ -1401,35 +1411,35 @@ TEST(IvfRemoveTest, SurvivesSaveLoadAndLaterAdds) {
 }
 
 TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
-    constexpr size_t kNum = 70;
-    const auto points = random_rows(kNum, 81);
-    const auto centroids = random_rows(kDynClusters, 82);
-    const auto assigned = nearest_centroids(centroids, points.data(), kNum, METRIC_L2);
+    constexpr size_t kCount = 70;
+    const auto points = random_rows(kCount, 81);
+    const auto centroids = random_rows(kDynNumClusters, 82);
+    const auto assigned = nearest_centroids(centroids, points.data(), kCount, METRIC_L2);
     const rabitq_test::TempFile path_file("rabitq_ivf_remove_reject.index");
     const std::string& path = path_file.path();
 
     const PID id = 0;
-    IVF unbuilt(kNum, kDynDim, kDynClusters, 4);
+    IVF unbuilt(kCount, kDynDim, kDynNumClusters, 4);
     EXPECT_THROW(unbuilt.remove(&id, 1), std::logic_error);
 
-    IVF index(kNum, kDynDim, kDynClusters, 4);
+    IVF index(kCount, kDynDim, kDynNumClusters, 4);
     index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
     const std::string expected = saved_bytes(index, path);
 
-    const std::array<PID, 2> out_of_range{3, static_cast<PID>(kNum)};
+    const std::array<PID, 2> out_of_range{3, static_cast<PID>(kCount)};
     EXPECT_THROW(index.remove(out_of_range.data(), 2), std::invalid_argument);
     EXPECT_THROW(index.remove(nullptr, 1), std::invalid_argument);
     EXPECT_EQ(index.remove(nullptr, 0), 0U);
     EXPECT_TRUE(saved_bytes(index, path) == expected);
 
     // Removing everything leaves a searchable index that returns only sentinels.
-    std::vector<PID> everything(kNum);
-    for (size_t i = 0; i < kNum; ++i) {
+    std::vector<PID> everything(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
         everything[i] = static_cast<PID>(i);
     }
-    EXPECT_EQ(index.remove(everything.data(), kNum), kNum);
+    EXPECT_EQ(index.remove(everything.data(), kCount), kCount);
     const auto hits = search_everything(index, points.data());
-    for (size_t r = 0; r < kNum; ++r) {
+    for (size_t r = 0; r < kCount; ++r) {
         EXPECT_EQ(hits.ids[r], kPidMax);
     }
 }
@@ -1437,7 +1447,7 @@ TEST(IvfRemoveTest, RejectsBadInputAndRemovesNothingOnFailure) {
 }  // namespace
 }  // namespace rabitqlib::ivf
 
-TEST(IVFSidecarValidation, RejectsMismatchedVectorStorage) {
+TEST(IvfSidecarValidationTest, RejectsMismatchedVectorStorage) {
     using namespace rabitqlib;
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         for (const size_t sidecar_dim : {64U, 128U}) {

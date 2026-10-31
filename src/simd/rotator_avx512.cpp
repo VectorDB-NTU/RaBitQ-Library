@@ -77,6 +77,7 @@ void flip_sign_avx512(const uint8_t* flip, float* data, size_t dim) {
         vec3 = _mm512_mask_xor_ps(vec3, mask3, vec3, sign_flip);
         _mm512_storeu_ps(&data[i + 48], vec3);
     }
+    // Requires dim % 32 == 0: a partial chunk holds exactly 32 floats.
     if (i < dim) {
         uint32_t bits;
         std::memcpy(&bits, flip + i / 8, sizeof(bits));

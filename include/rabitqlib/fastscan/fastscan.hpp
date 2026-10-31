@@ -9,7 +9,7 @@
 
 namespace rabitqlib::fastscan {
 
-constexpr static std::array<int, 16> kPos = {
+inline constexpr std::array<int, 16> kPos = {
     3 /*0000*/,
     3 /*0001*/,
     2 /*0010*/,
@@ -34,18 +34,18 @@ constexpr static std::array<int, 16> kPos = {
 void accumulate(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 );
 
-// pack lookup table for fastscan, for each 4 dim, we have 16 (2^4) different results
-// ! dim % 4 == 0
+// Build one 16-entry table of subset sums for each group of 4 query coordinates.
+// Requires dim % 4 == 0.
 template <typename T>
 inline void pack_lut(size_t dim, const T* __restrict__ query, T* __restrict__ lut) {
-    size_t num_codebook = dim >> 2;
+    size_t num_groups = dim >> 2;
     // Preserve +0 when the first selected coordinate is -0.
     volatile T zero = 0;
-    for (size_t i = 0; i < num_codebook; ++i) {
+    for (size_t group = 0; group < num_groups; ++group) {
         lut[0] = zero;
         for (size_t j = 1; j < 16; ++j) {
             const size_t lowbit = j & (size_t{0} - j);

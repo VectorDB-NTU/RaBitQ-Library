@@ -24,15 +24,17 @@ inline void split_batch_estdist_impl(
     bool use_hacc
 ) {
     ConstBatchDataMap<float> cur_batch(batch_data, padded_dim);
-    std::array<int32_t, fastscan::kBatchSize> accu_values{};
-    RowMajorArrayMap<int32_t> accu_arr(accu_values.data(), 1, fastscan::kBatchSize);
+    std::array<int32_t, fastscan::kBatchSize> accumulated_values{};
+    RowMajorArrayMap<int32_t> accumulated_arr(
+        accumulated_values.data(), 1, fastscan::kBatchSize
+    );
     if (use_hacc) {
         AccumulateHacc(
-            cur_batch.bin_code(), query_wrapper.lut(), accu_values.data(), padded_dim
+            cur_batch.bin_code(), query_wrapper.lut(), accumulated_values.data(), padded_dim
         );
     } else {
         Accumulate(
-            cur_batch.bin_code(), query_wrapper.lut(), accu_values.data(), padded_dim
+            cur_batch.bin_code(), query_wrapper.lut(), accumulated_values.data(), padded_dim
         );
     }
 
@@ -50,17 +52,19 @@ inline void split_batch_estdist_impl(
         f_error_values.data(), 1, fastscan::kBatchSize
     );
 
-    RowMajorArrayMap<float> est_dist_arr(estimated_distances, 1, fastscan::kBatchSize);
+    RowMajorArrayMap<float> estimated_distances_arr(
+        estimated_distances, 1, fastscan::kBatchSize
+    );
     RowMajorArrayMap<float> ip_x0_qr_arr(ip_x0_qr, 1, fastscan::kBatchSize);
-    RowMajorArrayMap<float> low_dist_arr(lower_bounds, 1, fastscan::kBatchSize);
+    RowMajorArrayMap<float> lower_bounds_arr(lower_bounds, 1, fastscan::kBatchSize);
 
-    ip_x0_qr_arr = query_wrapper.delta() * (accu_arr.template cast<float>()) +
+    ip_x0_qr_arr = query_wrapper.delta() * (accumulated_arr.template cast<float>()) +
                    query_wrapper.sum_vl_lut();
 
-    est_dist_arr = f_add_arr + query_wrapper.g_add() +
-                   f_rescale_arr * (ip_x0_qr_arr + query_wrapper.k1xsumq());
+    estimated_distances_arr = f_add_arr + query_wrapper.g_add() +
+                              f_rescale_arr * (ip_x0_qr_arr + query_wrapper.k1xsumq());
 
-    low_dist_arr = est_dist_arr - f_error_arr * query_wrapper.g_error();
+    lower_bounds_arr = estimated_distances_arr - f_error_arr * query_wrapper.g_error();
 }
 
 }  // namespace

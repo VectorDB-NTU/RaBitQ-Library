@@ -86,6 +86,15 @@ inline void accumulate_excode_tail_avx2(
     }
 }
 
+// Build a vector from two 64-bit words without a signed narrowing conversion.
+[[nodiscard]] inline __m128i set_u64x(uint64_t high, uint64_t low) noexcept {
+    int64_t signed_high = 0;
+    int64_t signed_low = 0;
+    std::memcpy(&signed_high, &high, sizeof(signed_high));
+    std::memcpy(&signed_low, &low, sizeof(signed_low));
+    return _mm_set_epi64x(signed_high, signed_low);
+}
+
 // Sum the eight lanes as a tree rather than serially.
 inline float reduce_add_avx2(__m256 v) {
     __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(v), _mm256_extractf128_ps(v, 1));

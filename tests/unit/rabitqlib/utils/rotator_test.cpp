@@ -645,7 +645,7 @@ TEST(FhtDispatchTest, AvxBackendsMatchBitwiseForCompactTails) {
 }
 #endif
 
-TEST(MatrixRotatorFactory, DoublePreservesNormAndRejectsFloatOnlyRotation) {
+TEST(MatrixRotatorFactoryTest, DoublePreservesNormAndRejectsFloatOnlyRotation) {
     const size_t dim = 64;
     std::unique_ptr<Rotator<double>> rotator(
         choose_rotator<double>(dim, RotatorType::MatrixRotator)

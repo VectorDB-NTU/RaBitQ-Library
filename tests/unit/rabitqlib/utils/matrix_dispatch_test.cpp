@@ -234,24 +234,24 @@ TEST(MatrixDispatchTest, IndexedAccumulationMatchesOrderedReferenceWithUnaligned
 }
 
 TEST(MatrixDispatchTest, IndexedAccumulationPreservesPointOrderUnderCancellation) {
-    constexpr size_t kDimension = 65;
+    constexpr size_t kDim = 65;
     const std::vector<float> values{1e7F, 1e7F, 1e-10F, -1e7F, -1e7F, 1e-10F};
     const std::vector<uint32_t> labels{0, 1, 0, 1, 0, 1};
-    std::vector<float> data(values.size() * kDimension);
+    std::vector<float> data(values.size() * kDim);
     std::vector<size_t> point_ids(values.size());
     std::iota(point_ids.begin(), point_ids.end(), size_t{0});
     for (size_t point = 0; point < values.size(); ++point) {
-        std::fill_n(data.data() + point * kDimension, kDimension, values[point]);
+        std::fill_n(data.data() + point * kDim, kDim, values[point]);
     }
     for (const auto& backend : accumulation_backends()) {
         SCOPED_TRACE(backend.first);
-        std::vector<double> sums(2 * kDimension);
+        std::vector<double> sums(2 * kDim);
         std::vector<size_t> counts(2);
         backend.second(
             data.data(),
             point_ids.data(),
             3,
-            kDimension,
+            kDim,
             labels.data(),
             sums.data(),
             counts.data()
@@ -260,15 +260,15 @@ TEST(MatrixDispatchTest, IndexedAccumulationPreservesPointOrderUnderCancellation
             data.data(),
             point_ids.data() + 3,
             3,
-            kDimension,
+            kDim,
             labels.data(),
             sums.data(),
             counts.data()
         );
         EXPECT_EQ(counts, (std::vector<size_t>{3, 3}));
-        for (size_t coordinate = 0; coordinate < kDimension; ++coordinate) {
+        for (size_t coordinate = 0; coordinate < kDim; ++coordinate) {
             EXPECT_DOUBLE_EQ(sums[coordinate], 0.0);
-            EXPECT_DOUBLE_EQ(sums[kDimension + coordinate], static_cast<double>(1e-10F));
+            EXPECT_DOUBLE_EQ(sums[kDim + coordinate], static_cast<double>(1e-10F));
         }
     }
 }

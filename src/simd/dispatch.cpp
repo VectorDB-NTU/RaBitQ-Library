@@ -17,11 +17,11 @@
 namespace rabitqlib::simd {
 
 void accumulate_cluster_sums(
-    const float* x,
+    const float* data,
     const size_t* point_ids,
     size_t count,
     size_t dim,
-    const uint32_t* labels,
+    const uint32_t* assignments,
     double* sums,
     size_t* counts
 ) {
@@ -31,7 +31,7 @@ void accumulate_cluster_sums(
         accumulate_cluster_sums_generic
     );
 
-    kAccumulateClusterSumsFn(x, point_ids, count, dim, labels, sums, counts);
+    kAccumulateClusterSumsFn(data, point_ids, count, dim, assignments, sums, counts);
 }
 
 void matrix_product(
@@ -120,16 +120,8 @@ float l2norm_sqr(const float* a, size_t dim) {
     static const auto kL2normSqrFn = RABITQ_RESOLVE_NEON(
         l2norm_sqr_neon, l2norm_sqr_avx512, l2norm_sqr_avx2, l2norm_sqr_generic
     );
-    return kL2normSqrFn(a, dim);
-}
 
-// With zero extra bits there is no extra code to contribute to the inner
-// product, so the ex_bits == 0 slot must be a constant-zero stub rather than
-// a duplicate of the 1-bit implementation.
-static float ip_fxu0(
-    const float* /*query*/, const uint8_t* /*compact_code*/, size_t /*dim*/
-) {
-    return 0.0F;
+    return kL2normSqrFn(a, dim);
 }
 
 double best_rescale_factor(
@@ -151,13 +143,13 @@ double best_rescale_factor_with_workspace(
     double* promoted,
     double* reciprocals
 ) {
-    static const auto kBestRescaleWorkspaceFn = RABITQ_RESOLVE(
+    static const auto kBestRescaleFactorWithWorkspaceFn = RABITQ_RESOLVE(
         best_rescale_factor_with_workspace_avx512,
         best_rescale_factor_with_workspace_avx2,
         best_rescale_factor_with_workspace_generic
     );
 
-    return kBestRescaleWorkspaceFn(
+    return kBestRescaleFactorWithWorkspaceFn(
         magnitudes, dim, max_code, start, end, promoted, reciprocals
     );
 }
@@ -178,64 +170,6 @@ void fht_rotate(
     kFhtRotateFn(data, rotated_data, dim, padded_dim, trunc_dim, scale_factor, flip);
 }
 
-using ExcodeIpTable = std::array<float (*)(const float*, const uint8_t*, size_t), 9>;
-
-static ExcodeIpTable resolve_excode_ip_table() {
-    const auto generic = ExcodeIpTable{
-        ip_fxu0,
-        excode_ipimpl::ip16_fxu1_generic,
-        excode_ipimpl::ip64_fxu2_generic,
-        excode_ipimpl::ip64_fxu3_generic,
-        excode_ipimpl::ip16_fxu4_generic,
-        excode_ipimpl::ip64_fxu5_generic,
-        excode_ipimpl::ip64_fxu6_generic,
-        excode_ipimpl::ip64_fxu7_generic,
-        excode_ipimpl::ip16_fxu8_generic,
-    };
-#if defined(__aarch64__) || defined(_M_ARM64)
-    return resolve_optional_kernel(
-        ExcodeIpTable{
-            ip_fxu0,
-            excode_ipimpl::ip16_fxu1_neon,
-            excode_ipimpl::ip64_fxu2_neon,
-            excode_ipimpl::ip64_fxu3_neon,
-            excode_ipimpl::ip16_fxu4_neon,
-            excode_ipimpl::ip64_fxu5_neon,
-            excode_ipimpl::ip64_fxu6_neon,
-            excode_ipimpl::ip64_fxu7_neon,
-            excode_ipimpl::ip16_fxu8_neon},
-        generic,
-        cpu::has_neon()
-    );
-#else
-    return RABITQ_RESOLVE(
-        (ExcodeIpTable{
-            ip_fxu0,
-            excode_ipimpl::ip16_fxu1_avx512,
-            excode_ipimpl::ip64_fxu2_avx512,
-            excode_ipimpl::ip64_fxu3_avx512,
-            excode_ipimpl::ip16_fxu4_avx512,
-            excode_ipimpl::ip64_fxu5_avx512,
-            excode_ipimpl::ip64_fxu6_avx512,
-            excode_ipimpl::ip64_fxu7_avx512,
-            excode_ipimpl::ip16_fxu8_avx512,
-        }),
-        (ExcodeIpTable{
-            ip_fxu0,
-            excode_ipimpl::ip16_fxu1_avx2,
-            excode_ipimpl::ip64_fxu2_avx2,
-            excode_ipimpl::ip64_fxu3_avx2,
-            excode_ipimpl::ip16_fxu4_avx2,
-            excode_ipimpl::ip64_fxu5_avx2,
-            excode_ipimpl::ip64_fxu6_avx2,
-            excode_ipimpl::ip64_fxu7_avx2,
-            excode_ipimpl::ip16_fxu8_avx2,
-        }),
-        generic
-    );
-#endif
-}
-
 void flip_sign(const uint8_t* flip, float* data, size_t dim) {
     static const auto kFlipSignFn = RABITQ_RESOLVE_NEON(
         flip_sign_neon, flip_sign_avx512, flip_sign_avx2, flip_sign_generic
@@ -248,11 +182,12 @@ void kacs_walk(float* data, size_t len) {
     static const auto kKacsWalkFn = RABITQ_RESOLVE_NEON(
         kacs_walk_neon, kacs_walk_avx512, kacs_walk_avx2, kacs_walk_generic
     );
+
     kKacsWalkFn(data, len);
 }
 
 void scalar_quantize_uint8(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint8_t* result, const float* data, size_t dim, float lo, float delta
 ) {
     static const auto kScalarQuantizeUint8Fn = RABITQ_RESOLVE_NEON(
         scalar_quantize_uint8_neon,
@@ -261,11 +196,11 @@ void scalar_quantize_uint8(
         scalar_quantize_uint8_generic
     );
 
-    kScalarQuantizeUint8Fn(result, vec0, dim, lo, delta);
+    kScalarQuantizeUint8Fn(result, data, dim, lo, delta);
 }
 
 void scalar_quantize_uint16(
-    uint16_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint16_t* result, const float* data, size_t dim, float lo, float delta
 ) {
     static const auto kScalarQuantizeUint16Fn = RABITQ_RESOLVE_NEON(
         scalar_quantize_uint16_neon,
@@ -274,7 +209,7 @@ void scalar_quantize_uint16(
         scalar_quantize_uint16_generic
     );
 
-    kScalarQuantizeUint16Fn(result, vec0, dim, lo, delta);
+    kScalarQuantizeUint16Fn(result, data, dim, lo, delta);
 }
 
 void packing_2bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
@@ -325,68 +260,131 @@ void packing_7bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     kPacking7BitExcodeFn(o_raw, o_compact, dim);
 }
 
+namespace {
+// ex_bits is in [0, kMaxExBits]; the table holds one kernel per value.
+constexpr size_t kMaxExBits = 8;
+using ExcodeIpTable = std::array<ex_ipfunc, kMaxExBits + 1>;
+
+// With zero extra bits there is no extra code to contribute to the inner
+// product, so the ex_bits == 0 slot must be a constant-zero stub rather than
+// a duplicate of the 1-bit implementation.
+float ip_fxu0(const float* /*query*/, const uint8_t* /*compact_code*/, size_t /*dim*/) {
+    return 0.0F;
+}
+
+const ExcodeIpTable& excode_ip_table() {
+    static const auto kExcodeIpTable = RABITQ_RESOLVE_NEON(
+        (ExcodeIpTable{
+            ip_fxu0,
+            excode_ipimpl::ip16_fxu1_neon,
+            excode_ipimpl::ip64_fxu2_neon,
+            excode_ipimpl::ip64_fxu3_neon,
+            excode_ipimpl::ip16_fxu4_neon,
+            excode_ipimpl::ip64_fxu5_neon,
+            excode_ipimpl::ip64_fxu6_neon,
+            excode_ipimpl::ip64_fxu7_neon,
+            excode_ipimpl::ip16_fxu8_neon,
+        }),
+        (ExcodeIpTable{
+            ip_fxu0,
+            excode_ipimpl::ip16_fxu1_avx512,
+            excode_ipimpl::ip64_fxu2_avx512,
+            excode_ipimpl::ip64_fxu3_avx512,
+            excode_ipimpl::ip16_fxu4_avx512,
+            excode_ipimpl::ip64_fxu5_avx512,
+            excode_ipimpl::ip64_fxu6_avx512,
+            excode_ipimpl::ip64_fxu7_avx512,
+            excode_ipimpl::ip16_fxu8_avx512,
+        }),
+        (ExcodeIpTable{
+            ip_fxu0,
+            excode_ipimpl::ip16_fxu1_avx2,
+            excode_ipimpl::ip64_fxu2_avx2,
+            excode_ipimpl::ip64_fxu3_avx2,
+            excode_ipimpl::ip16_fxu4_avx2,
+            excode_ipimpl::ip64_fxu5_avx2,
+            excode_ipimpl::ip64_fxu6_avx2,
+            excode_ipimpl::ip64_fxu7_avx2,
+            excode_ipimpl::ip16_fxu8_avx2,
+        }),
+        (ExcodeIpTable{
+            ip_fxu0,
+            excode_ipimpl::ip16_fxu1_generic,
+            excode_ipimpl::ip64_fxu2_generic,
+            excode_ipimpl::ip64_fxu3_generic,
+            excode_ipimpl::ip16_fxu4_generic,
+            excode_ipimpl::ip64_fxu5_generic,
+            excode_ipimpl::ip64_fxu6_generic,
+            excode_ipimpl::ip64_fxu7_generic,
+            excode_ipimpl::ip16_fxu8_generic,
+        })
+    );
+
+    return kExcodeIpTable;
+}
+}  // namespace
+
 }  // namespace rabitqlib::simd
 
 namespace rabitqlib {
 
-static const simd::ExcodeIpTable& excode_ip_table() {
-    static const auto table = simd::resolve_excode_ip_table();
-    return table;
-}
-
 using MaskIpX0QFn = float (*)(const float*, const uint8_t*, size_t);
+using WarmupIpX0Q512Fn =
+    float (*)(const uint8_t*, const uint64_t*, float, float, size_t, size_t);
 
 ex_ipfunc select_excode_ipfunc(size_t ex_bits) {
-    if (ex_bits <= 8) {
-        return excode_ip_table()[ex_bits];
+    if (ex_bits <= simd::kMaxExBits) {
+        return simd::excode_ip_table()[ex_bits];
     }
 
-    throw std::invalid_argument("Bad IP function for IVF");
+    throw std::invalid_argument("ex_bits must be in [0, 8]");
 }
 
 float excode_ipimpl::ip16_fxu1_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[1](query, compact_code, dim);
+    return simd::excode_ip_table()[1](query, compact_code, dim);
 }
 
 float excode_ipimpl::ip64_fxu2_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[2](query, compact_code, dim);
+    return simd::excode_ip_table()[2](query, compact_code, dim);
 }
 
 float excode_ipimpl::ip64_fxu3_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[3](query, compact_code, dim);
+    return simd::excode_ip_table()[3](query, compact_code, dim);
 }
 
 float excode_ipimpl::ip16_fxu4_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[4](query, compact_code, dim);
+    return simd::excode_ip_table()[4](query, compact_code, dim);
 }
 
 float excode_ipimpl::ip64_fxu5_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[5](query, compact_code, dim);
+    return simd::excode_ip_table()[5](query, compact_code, dim);
 }
 
 float excode_ipimpl::ip64_fxu6_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[6](query, compact_code, dim);
+    return simd::excode_ip_table()[6](query, compact_code, dim);
 }
 
 float excode_ipimpl::ip64_fxu7_avx(
     const float* __restrict__ query, const uint8_t* __restrict__ compact_code, size_t dim
 ) {
-    return excode_ip_table()[7](query, compact_code, dim);
+    return simd::excode_ip_table()[7](query, compact_code, dim);
 }
 
-void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query) {
+void new_transpose_bin(
+    const uint16_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
+) {
     static const auto kNewTransposeBinFn = RABITQ_RESOLVE_NEON(
         simd::new_transpose_bin_neon,
         simd::new_transpose_bin_avx512,
@@ -394,11 +392,11 @@ void new_transpose_bin(const uint16_t* q, uint64_t* tq, size_t padded_dim, size_
         simd::new_transpose_bin_generic
     );
 
-    kNewTransposeBinFn(q, tq, padded_dim, b_query);
+    kNewTransposeBinFn(query, transposed_query, padded_dim, b_query);
 }
 
 void new_transpose_bin_512(
-    const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+    const uint8_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
     static const auto kNewTransposeBin512Fn = RABITQ_RESOLVE_NEON(
         simd::new_transpose_bin_512_neon,
@@ -407,11 +405,11 @@ void new_transpose_bin_512(
         simd::new_transpose_bin_512_generic
     );
 
-    kNewTransposeBin512Fn(q, tq, padded_dim, b_query);
+    kNewTransposeBin512Fn(query, transposed_query, padded_dim, b_query);
 }
 
 float mask_ip_x0_q(const float* query, const uint8_t* data, size_t padded_dim) {
-    static const MaskIpX0QFn kMaskIpX0QFn = RABITQ_RESOLVE_NEON(
+    static const auto kMaskIpX0QFn = RABITQ_RESOLVE_NEON(
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_neon),
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx512),
         static_cast<MaskIpX0QFn>(simd::mask_ip_x0_q_avx2),
@@ -425,13 +423,6 @@ float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim) 
     return mask_ip_x0_q(query, reinterpret_cast<const uint8_t*>(data), padded_dim);
 }
 
-}  // namespace rabitqlib
-
-namespace rabitqlib {
-
-using WarmupIpX0Q512Fn =
-    float (*)(const uint8_t*, const uint64_t*, float, float, size_t, size_t);
-
 float warmup_ip_x0_q_512(
     const uint8_t* data,
     const uint64_t* query,
@@ -440,11 +431,11 @@ float warmup_ip_x0_q_512(
     size_t padded_dim,
     size_t b_query
 ) {
-    static const WarmupIpX0Q512Fn kWarmupIpX0Q512Fn = RABITQ_RESOLVE_NEON(
+    static const auto kWarmupIpX0Q512Fn = RABITQ_RESOLVE_NEON(
         static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_neon),
-        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx512),
-        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_avx2),
-        static_cast<WarmupIpX0Q512Fn>(rabitqlib::simd::warmup_ip_x0_q_512_generic),
+        static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_avx512),
+        static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_avx2),
+        static_cast<WarmupIpX0Q512Fn>(simd::warmup_ip_x0_q_512_generic),
         cpu::has_avx512_popcnt()
     );
 

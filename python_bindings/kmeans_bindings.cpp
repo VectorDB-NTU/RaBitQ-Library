@@ -17,6 +17,7 @@
 namespace py = pybind11;
 
 namespace rabitqlib::python_bindings {
+namespace {
 
 // Without a base object, pybind11 copies the data into a new array.
 template <typename T>
@@ -27,7 +28,7 @@ py::array_t<T> vector_to_array(const std::vector<T>& values) {
 template <typename Clustering>
 py::array_t<float> centroids_to_array(const Clustering& clustering, const char* name) {
     if (clustering.centroids.empty()) {
-        throw std::logic_error(std::string(name) + " has not been trained");
+        throw std::runtime_error(std::string(name) + " has not been trained");
     }
     const auto shape = std::vector<py::ssize_t>{
         static_cast<py::ssize_t>(clustering.k), static_cast<py::ssize_t>(clustering.d)};
@@ -129,6 +130,7 @@ void bind_clustering(py::module_& m, const char* native_name, const char* public
         .def_readonly("iteration_stats", &Clustering::iteration_stats);
 }
 
+}  // namespace
 }  // namespace rabitqlib::python_bindings
 
 void register_kmeans(py::module_& m) {

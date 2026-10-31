@@ -29,7 +29,7 @@
 
 namespace rabitqlib::quant::rabitq_impl {
 
-constexpr float kConstEpsilon = 1.9;
+inline constexpr float kConstEpsilon = 1.9;
 
 // Arithmetic only: callers own residual/centered storage and choose rescale arithmetic.
 template <typename T>
@@ -100,11 +100,9 @@ inline T direct_rescale(T l2_sqr, T residual_code_ip, MetricType metric_type) {
                                       : -l2_sqr / residual_code_ip;
 }
 
-/**
- * Inverse of pack_binary_to_bytes<uint64_t>: write each coordinate's sign bit (0 or
- * 1) to signs. Full 64-coordinate words come first, followed by a final partial word
- * of any multiple of 8 coordinates.
- */
+// Inverse of pack_binary_to_bytes<uint64_t>: write each coordinate's sign bit (0 or
+// 1) to signs. Full 64-coordinate words come first, followed by a final partial word
+// of any multiple of 8 coordinates.
 inline void unpack_sign_bits(const uint8_t* packed, size_t dim, uint16_t* signs) {
     for (size_t start = 0; start < dim; start += 64) {
         const size_t width = std::min(size_t{64}, dim - start);
@@ -151,12 +149,12 @@ inline void one_bit_code_with_factor_into(
     } else {
         // Wider vectors benefit from Eigen's packet width rather than the
         // compiler's narrower vectorization of the fused multi-output loop.
-        RowMajorArrayMap<T> residual_arr(residual, 1, static_cast<long>(dim));
-        RowMajorArrayMap<T> xu_cb(centered, 1, static_cast<long>(dim));
-        ConstRowMajorArrayMap<T> data_arr(data, 1, dim);
-        ConstRowMajorArrayMap<T> cent_arr(centroid, 1, dim);
+        RowMajorArrayMap<T> residual_arr(residual, 1, static_cast<Eigen::Index>(dim));
+        RowMajorArrayMap<T> xu_cb(centered, 1, static_cast<Eigen::Index>(dim));
+        ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<Eigen::Index>(dim));
+        ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<Eigen::Index>(dim));
         residual_arr = data_arr - cent_arr;
-        RowMajorArrayMap<int> x_u(binary_code, 1, static_cast<long>(dim));
+        RowMajorArrayMap<int> x_u(binary_code, 1, static_cast<Eigen::Index>(dim));
         x_u = (residual_arr > 0).template cast<int>();
         xu_cb = x_u.template cast<T>() + T{-0.5};
     }
@@ -192,12 +190,12 @@ inline void one_bit_code_with_factor(
     thread_local RowMajorArray<T> centered;
     // Eigen's resize frees the old allocation before allocating its replacement.
     // Allocate first so failure leaves the thread-local owner safe to reuse/destroy.
-    if (residual.size() != static_cast<long>(dim)) {
-        RowMajorArray<T> replacement(1, static_cast<long>(dim));
+    if (residual.size() != static_cast<Eigen::Index>(dim)) {
+        RowMajorArray<T> replacement(1, static_cast<Eigen::Index>(dim));
         residual.swap(replacement);
     }
-    if (centered.size() != static_cast<long>(dim)) {
-        RowMajorArray<T> replacement(1, static_cast<long>(dim));
+    if (centered.size() != static_cast<Eigen::Index>(dim)) {
+        RowMajorArray<T> replacement(1, static_cast<Eigen::Index>(dim));
         centered.swap(replacement);
     }
     one_bit_code_with_factor_into(
@@ -222,7 +220,7 @@ inline void one_bit_code_with_factor(
  * Factors have the same meaning as in one_bit_code_with_factor_into, including
  * the query-independent, probabilistic error factor f_error.
  */
-template <typename T, typename TC>
+template <typename T, typename TP>
 inline void one_bit_compact_code_to_bytes(
     const T* data,
     const T* centroid,
@@ -246,21 +244,21 @@ inline void one_bit_compact_code_to_bytes(
         metric_type
     );
 
-    pack_binary_to_bytes<TC>(binary_code.data(), compact_code, padded_dim);
+    pack_binary_to_bytes<TP>(binary_code.data(), compact_code, padded_dim);
 }
 
-template <typename T, typename TC>
+template <typename T, typename TP>
 inline void one_bit_compact_code(
     const T* data,
     const T* centroid,
     size_t padded_dim,
-    TC* compact_code,
+    TP* compact_code,
     T& f_add,
     T& f_rescale,
     T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
-    one_bit_compact_code_to_bytes<T, TC>(
+    one_bit_compact_code_to_bytes<T, TP>(
         data,
         centroid,
         padded_dim,
@@ -275,7 +273,7 @@ inline void one_bit_compact_code(
 // Requires a positive padded_dim divisible by 8.
 template <
     typename T,
-    typename TC,
+    typename TP,
     bool Parallel = false,
     typename FAdd,
     typename FRescale,
@@ -283,9 +281,9 @@ template <
 inline void one_bit_compact_codes(
     const T* data,
     const T* centroid,
-    size_t num,
+    size_t num_points,
     size_t padded_dim,
-    TC* compact_code,
+    TP* compact_code,
     FAdd f_add,
     FRescale f_rescale,
     FError f_error,
@@ -295,7 +293,7 @@ inline void one_bit_compact_codes(
         T add;
         T rescale;
         T error;
-        one_bit_compact_code_to_bytes<T, TC>(
+        one_bit_compact_code_to_bytes<T, TP>(
             data + (padded_dim * i),
             centroid,
             padded_dim,
@@ -313,7 +311,8 @@ inline void one_bit_compact_codes(
     if constexpr (Parallel) {
         std::exception_ptr failure;
 #pragma omp parallel for
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num); ++index) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points);
+             ++index) {
             try {
                 encode_one(static_cast<size_t>(index));
             } catch (...) {
@@ -332,7 +331,7 @@ inline void one_bit_compact_codes(
 #endif
     {
         // No serialized OpenMP region: an outer caller can catch scratch failures.
-        for (size_t i = 0; i < num; ++i) {
+        for (size_t i = 0; i < num_points; ++i) {
             encode_one(i);
         }
     }
@@ -342,6 +341,7 @@ inline void one_bit_compact_codes(
 
 namespace ex_bits {
 // Lower endpoint of the scale search as a fraction of t_end, indexed by ex_bits.
+// Internal linkage lets the encoder address the table directly instead of through the GOT.
 constexpr std::array<float, 9> kTightStart = {
     0,
     0.15,
@@ -542,15 +542,15 @@ inline T quantize_ex(const T* o_abs, TP* code, size_t dim, size_t ex_bits) {
 }
 
 // For given dim and ex_bits, use random vectors to get the const rescale factor
-inline double get_const_scaling_factors(size_t dim, size_t ex_bits) {
-    constexpr long kConstNum = 100;
+inline double const_scaling_factor(size_t dim, size_t ex_bits) {
+    constexpr Eigen::Index kConstNum = 100;
 
     RowMajorArray<double> rand = random_gaussian_matrix<double>(kConstNum, dim, 42);
 
     rand = rand.rowwise().normalized().abs();
 
     double sum = 0;
-    for (long j = 0; j < kConstNum; ++j) {
+    for (Eigen::Index j = 0; j < kConstNum; ++j) {
         sum += best_rescale_factor(&rand(j, 0), dim, ex_bits);
     }
 
@@ -560,27 +560,22 @@ inline double get_const_scaling_factors(size_t dim, size_t ex_bits) {
 }
 
 template <typename T, typename TP>
-T faster_quantize_ex(const T* o_abs, TP* code, size_t dim, size_t ex_bits, double t_const) {
+inline T faster_quantize_ex(
+    const T* o_abs, TP* code, size_t dim, size_t ex_bits, double t_const
+) {
     constexpr double kEps = 1e-5;
+    const int max_code = (1 << ex_bits) - 1;
     double ipnorm = 0;
-
-    for (size_t i = 0; i < dim; i++) {
-        int tmp_code = static_cast<int>((t_const * o_abs[i]) + kEps);
-        if (tmp_code >= (1 << ex_bits)) {
-            tmp_code = (1 << ex_bits) - 1;
-        }
-        code[i] = static_cast<TP>(tmp_code);
-
-        // ip * norm = unnormalized ip
-        ipnorm += (tmp_code + 0.5) * o_abs[i];
+    for (size_t i = 0; i < dim; ++i) {
+        const double magnitude = static_cast<double>(o_abs[i]);
+        const int value =
+            std::min(static_cast<int>((t_const * magnitude) + kEps), max_code);
+        code[i] = static_cast<TP>(value);
+        // Unnormalized inner product: ip * norm.
+        ipnorm += (value + 0.5) * magnitude;
     }
-
-    T ipnorm_inv = static_cast<double>(1 / ipnorm);  // 1 / (ip*norm)
-    if (!std::isnormal(ipnorm_inv)) {
-        ipnorm_inv = 1.F;
-    }
-
-    return ipnorm_inv;
+    const T ipnorm_inv = static_cast<T>(1 / ipnorm);
+    return std::isnormal(ipnorm_inv) ? ipnorm_inv : static_cast<T>(1);
 }
 
 template <typename T, typename TP>
@@ -593,7 +588,7 @@ inline T ex_bits_code_with_norm(
     double t_const,
     Scratch<T>* scratch
 ) {
-    ConstRowMajorArrayMap<T> res_arr(residual, 1, dim);
+    ConstRowMajorArrayMap<T> residual_arr(residual, 1, static_cast<Eigen::Index>(dim));
     T ipnorm_inv = 1;
     if (residual_norm == 0) {
         // Match code_with_factor_from_residual(): no magnitude bits, so skip the revert.
@@ -604,7 +599,7 @@ inline T ex_bits_code_with_norm(
         auto abs_res = scratch_array(
             scratch == nullptr ? nullptr : scratch->absolute, dim, owned_absolute
         );
-        abs_res = res_arr.abs() / residual_norm;
+        abs_res = residual_arr.abs() / residual_norm;
         if (t_const > 0) {
             ipnorm_inv = faster_quantize_ex(abs_res.data(), ex_code, dim, ex_bits, t_const);
         } else {
@@ -616,7 +611,7 @@ inline T ex_bits_code_with_norm(
     // Revert codes for negative or zero dims
     int32_t mask = (1 << ex_bits) - 1;
     for (size_t j = 0; j < dim; ++j) {
-        if (res_arr.data()[j] <= 0) {
+        if (residual_arr.data()[j] <= 0) {
             TP tmp = ex_code[j];
             ex_code[j] = (~tmp) & mask;
         }
@@ -685,9 +680,11 @@ inline void code_with_factor_from_residual(
     RowMajorArray<int> owned_total;
     auto total_code =
         scratch_array(scratch == nullptr ? nullptr : scratch->total, dim, owned_total);
-    total_code = RowMajorArrayMap<TP>(ex_code, 1, dim).template cast<int>();
+    total_code = RowMajorArrayMap<TP>(ex_code, 1, static_cast<Eigen::Index>(dim))
+                     .template cast<int>();
     for (size_t i = 0; i < dim; ++i) {
-        total_code(0, static_cast<long>(i)) += static_cast<int>(residual[i] > 0) << ex_bits;
+        total_code(0, static_cast<Eigen::Index>(i)) += static_cast<int>(residual[i] > 0)
+                                                       << ex_bits;
     }
 
     // Full-code factors use the metric-specific derivation in
@@ -714,7 +711,7 @@ inline void code_with_factor_from_residual(
                                             : ipnorm_inv * -factors.residual_norm;
     f_error_ex = factors.error;
     if constexpr (FullCode) {
-        RowMajorArrayMap<TP>(ex_code, 1, static_cast<long>(dim)) =
+        RowMajorArrayMap<TP>(ex_code, 1, static_cast<Eigen::Index>(dim)) =
             total_code.template cast<TP>();
     }
 }
@@ -733,8 +730,8 @@ inline void ex_bits_code_with_factor(
     double t_const = -1
 ) {
     RowMajorArray<T> residual =
-        ConstRowMajorArrayMap<T>(data, 1, static_cast<long>(dim)) -
-        ConstRowMajorArrayMap<T>(centroid, 1, static_cast<long>(dim));
+        ConstRowMajorArrayMap<T>(data, 1, static_cast<Eigen::Index>(dim)) -
+        ConstRowMajorArrayMap<T>(centroid, 1, static_cast<Eigen::Index>(dim));
     code_with_factor_from_residual<false>(
         residual.data(),
         l2norm_sqr<T>(residual.data(), dim),
@@ -791,8 +788,8 @@ inline void combined_code(
 ) {
     const size_t ex_bits = total_bits - 1;
 
-    ConstRowMajorArrayMap<T> res_arr(residual, 1, static_cast<long>(dim));
-    RowMajorArrayMap<TP> code_arr(total_code, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<T> residual_arr(residual, 1, static_cast<Eigen::Index>(dim));
+    RowMajorArrayMap<TP> code_arr(total_code, 1, static_cast<Eigen::Index>(dim));
 
     if (ex_bits > 0) {
         ex_bits::ex_bits_code<T, TP>(residual, dim, ex_bits, total_code, t_const);
@@ -800,9 +797,11 @@ inline void combined_code(
         code_arr.setZero();
     }
 
-    code_arr += (res_arr > 0).template cast<TP>() * static_cast<TP>(1 << ex_bits);
+    code_arr += (residual_arr > 0).template cast<TP>() * static_cast<TP>(1 << ex_bits);
 }
 
+// The per-ISA HNSW search sources include this header, so these entry points keep
+// internal linkage (see "Implementation linkage" in docs/development.md).
 template <typename T, typename TP>
 static inline void rabitq_scalar_impl(
     const T* data,
@@ -817,8 +816,8 @@ static inline void rabitq_scalar_impl(
 ) {
     size_t ex_bits = total_bits - 1;
 
-    ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<long>(dim));
-    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<Eigen::Index>(dim));
+    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<Eigen::Index>(dim));
     RowMajorArray<T> residual_arr = data_arr - cent_arr;
 
     if (l2norm_sqr(residual_arr.data(), dim) == 0) {
@@ -831,7 +830,7 @@ static inline void rabitq_scalar_impl(
     combined_code<T, TP>(residual_arr.data(), dim, total_bits, total_code, t_const);
 
     float cb = -(static_cast<float>(1 << ex_bits) - 0.5F);
-    RowMajorArrayMap<TP> total_code_arr(total_code, 1, dim);
+    RowMajorArrayMap<TP> total_code_arr(total_code, 1, static_cast<Eigen::Index>(dim));
     RowMajorArray<T> u_cb = total_code_arr.template cast<T>() + cb;
 
     T norm_data = std::sqrt(l2norm_sqr(residual_arr.data(), dim));
@@ -870,8 +869,8 @@ static inline void rabitq_full_impl_with_scratch(
         auto residual = scratch_array(
             scratch == nullptr ? nullptr : scratch->residual, dim, owned_residual
         );
-        residual = ConstRowMajorArrayMap<T>(data, 1, static_cast<long>(dim)) -
-                   ConstRowMajorArrayMap<T>(centroid, 1, static_cast<long>(dim));
+        residual = ConstRowMajorArrayMap<T>(data, 1, static_cast<Eigen::Index>(dim)) -
+                   ConstRowMajorArrayMap<T>(centroid, 1, static_cast<Eigen::Index>(dim));
         ex_bits::code_with_factor_from_residual<true>(
             residual.data(),
             l2norm_sqr<T>(residual.data(), dim),
@@ -916,6 +915,7 @@ static inline void rabitq_full_impl_with_scratch(
         total_code[i] = static_cast<TP>(binary_code[i]);
     }
 }
+
 template <typename T, typename TP>
 static inline void rabitq_full_impl(
     const T* data,
@@ -948,7 +948,7 @@ static inline void rabitq_full_impl(
 
 namespace xy_bits {
 
-constexpr size_t kMaxCombinedBits = 9;
+inline constexpr size_t kMaxCombinedBits = 9;
 
 static_assert(
     ex_bits::kTightStart.size() >= kMaxCombinedBits,
@@ -993,7 +993,7 @@ inline void code_factors(
     T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
-    ConstRowMajorArrayMap<int> code_arr(code, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<int> code_arr(code, 1, static_cast<Eigen::Index>(dim));
     RowMajorArray<T> xu_cb = code_arr.template cast<T>() + cb;
 
     const T l2_sqr = l2norm_sqr<T>(residual, dim);
@@ -1025,8 +1025,8 @@ inline void split_code_with_factor(
 ) {
     validate_bit_size(base_bits, ex_bits);
 
-    ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<long>(dim));
-    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<long>(dim));
+    ConstRowMajorArrayMap<T> data_arr(data, 1, static_cast<Eigen::Index>(dim));
+    ConstRowMajorArrayMap<T> cent_arr(centroid, 1, static_cast<Eigen::Index>(dim));
     RowMajorArray<T> residual_arr = data_arr - cent_arr;
     const T* residual = residual_arr.data();
 
@@ -1061,7 +1061,7 @@ inline void split_code_with_factor(
         centroid,
         dim,
         base_code_int.data(),
-        -(static_cast<float>((1U << base_bits) - 1) / 2.F),
+        -(static_cast<float>((1U << base_bits) - 1) / 2.0F),
         f_add_base,
         f_rescale_base,
         f_error_base,
@@ -1086,7 +1086,7 @@ inline void split_code_with_factor(
         centroid,
         dim,
         total_code.data(),
-        -(static_cast<float>((1U << total_bits) - 1) / 2.F),
+        -(static_cast<float>((1U << total_bits) - 1) / 2.0F),
         f_add_ex,
         f_rescale_ex,
         f_error_ex,

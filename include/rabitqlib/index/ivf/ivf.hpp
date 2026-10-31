@@ -55,12 +55,13 @@ class IVF {
             return reinterpret_cast<const char*>(batch_storage.data());
         }
 
-        [[nodiscard]] char* ex_data() {
+        // Raw vectors with raw reranking, extra-bit codes otherwise.
+        [[nodiscard]] char* rerank_data() {
             return raw_reranking_ ? reinterpret_cast<char*>(raw_storage.data())
                                   : reinterpret_cast<char*>(ex_storage.data());
         }
 
-        [[nodiscard]] const char* ex_data() const {
+        [[nodiscard]] const char* rerank_data() const {
             return raw_reranking_ ? reinterpret_cast<const char*>(raw_storage.data())
                                   : reinterpret_cast<const char*>(ex_storage.data());
         }
@@ -87,7 +88,7 @@ class IVF {
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     std::unique_ptr<Rotator<float>> rotator_;
     std::vector<Cluster> clusters_;
-    MetricType metric_type_ = rabitqlib::METRIC_L2;
+    MetricType metric_type_ = METRIC_L2;
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
     static constexpr uint64_t kRawFormatMagic = 0x3157415251464252ULL;
@@ -96,26 +97,26 @@ class IVF {
     static constexpr uint32_t kFormatVersion = 2;
 
     void quantize_cluster(
-        Cluster&,
-        const std::vector<PID>&,
-        const float*,
-        const float*,
-        float*,
-        float*,
-        const quant::RabitqConfig&
+        Cluster& cluster,
+        const std::vector<PID>& point_ids,
+        const float* data,
+        const float* centroid,
+        float* rotated_centroid,
+        float* rotated_data,
+        const quant::RabitqConfig& config
     );
 
     void extend_cluster(
-        const Cluster&,
-        const std::vector<PID>&,
-        const float*,
-        const float*,
-        PID,
-        char*,
-        char*,
-        PID*,
-        char*,
-        const quant::RabitqConfig&
+        const Cluster& old_cluster,
+        const std::vector<PID>& rows,
+        const float* data,
+        const float* rotated_centroid,
+        PID first_pid,
+        char* batch_dst,
+        char* rerank_dst,
+        PID* ids_dst,
+        char* tail_dst,
+        const quant::RabitqConfig& config
     ) const;
 
     // True if `num_points` points cannot be addressed by the storage size computations
@@ -125,12 +126,18 @@ class IVF {
         return sizeof(PID) * cluster_size;
     }
 
-    // get num of bytes used for 1-bit code and corresponding factors
+    // Bytes of one FastScan batch of 1-bit codes and factors
+    [[nodiscard]] inline size_t batch_bytes() const;
+
+    // Bytes of the whole batches holding `cluster_size` points' 1-bit codes and factors
     [[nodiscard]] size_t batch_data_bytes(size_t cluster_size) const;
+
+    // True if points carry extra-bit codes or raw vectors for reranking
+    [[nodiscard]] bool has_rerank_data() const { return raw_reranking_ || ex_bits_ > 0; }
 
     [[nodiscard]] inline size_t rerank_vector_bytes() const;
 
-    [[nodiscard]] inline size_t ex_data_bytes(size_t cluster_size) const;
+    [[nodiscard]] inline size_t rerank_data_bytes(size_t cluster_size) const;
 
     // Size every buffer of a cluster's storage for `num_points` points
     void resize_storage(ClusterStorage& cs, size_t num_points) const;
@@ -139,34 +146,38 @@ class IVF {
 
     [[nodiscard]] bool has_capacity(const ClusterStorage& cs, size_t num_points) const;
 
-    void allocate_memory(const std::vector<size_t>&);
+    // Reset the index and allocate a new initializer and per-cluster storage
+    void allocate_storage(const std::vector<size_t>& cluster_sizes);
 
-    void init_clusters(const std::vector<size_t>&);
+    // Create the non-owning cluster views over the allocated storage
+    void create_cluster_views(const std::vector<size_t>& cluster_sizes);
 
-    void free_memory();
+    void free_storage();
 
     void swap(IVF& other) noexcept;
 
     inline void search_cluster(
-        const Cluster&,
-        const SplitBatchQuery<float>&,
-        buffer::SearchBuffer<float>&,
-        bool,
-        const float*
+        const Cluster& cluster,
+        const SplitBatchQuery<float>& query_wrapper,
+        buffer::SearchBuffer<float>& result_pool,
+        bool use_hacc,
+        const float* query
     ) const;
 
     inline void scan_one_batch(
         const char* batch_data,
-        const char* ex_data,
+        const char* rerank_data,
         const PID* ids,
         const SplitBatchQuery<float>& query_wrapper,
         buffer::SearchBuffer<float>& result_pool,
-        size_t num_points,
-        bool,
-        const float*
+        size_t batch_size,
+        bool use_hacc,
+        const float* query
     ) const;
 
-    inline void validate_search(const float*, size_t, size_t, const PID*) const;
+    inline void validate_search(
+        const float* query, size_t k, size_t nprobe, const PID* result_ids
+    ) const;
 
     // Write the index file, and any initializer sidecar, at exactly this path.
     void write_file(const char* filename) const;
@@ -180,9 +191,9 @@ class IVF {
         size_t dim,
         size_t num_clusters,
         size_t total_bits,
-        MetricType metric_type = rabitqlib::METRIC_L2,
+        MetricType metric_type = METRIC_L2,
         RotatorType rotator_type = RotatorType::FhtKacRotator,
-        InitializerType initializer = InitializerType::Auto
+        InitializerType initializer_type = InitializerType::Auto
     );
 
     ~IVF();
@@ -200,9 +211,19 @@ class IVF {
     [[nodiscard]] RotatorType rotator_type() const { return rotator_type_; }
     [[nodiscard]] InitializerType initializer_type() const { return initializer_type_; }
 
-    // fast_quantization selects fixed-scale extra-bit quantization instead of exact scale
-    // search, trading quantization accuracy for speed. One-bit and raw storage are
-    // unaffected.
+    /**
+     * @brief Quantize every point into its cluster and build the centroid initializer.
+     *
+     * Replaces any existing contents of the index.
+     *
+     * @param data Data points (max_elements() * dim)
+     * @param centroids Centroid vectors (num_clusters() * dim)
+     * @param cluster_ids Cluster ID of each data point
+     * @param fast_quantization Select fixed-scale extra-bit quantization instead of exact
+     * scale search, trading quantization accuracy for speed; one-bit and raw storage are
+     * unaffected
+     * @param num_threads Threads used for quantization and initializer construction
+     */
     void construct(
         const float* data,
         const float* centroids,
@@ -317,9 +338,9 @@ class IVF {
         size_t num_threads = 1
     ) const;
 
-    [[nodiscard]] size_t padded_dim() const { return this->padded_dim_; }
+    [[nodiscard]] size_t padded_dim() const { return padded_dim_; }
 
-    [[nodiscard]] size_t num_clusters() const { return this->num_clusters_; }
+    [[nodiscard]] size_t num_clusters() const { return num_clusters_; }
 };
 
 }  // namespace rabitqlib::ivf

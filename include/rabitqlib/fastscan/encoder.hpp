@@ -15,23 +15,23 @@
 namespace rabitqlib::quant {
 // Single-batch entry points accept 0..32 rows. Zero rows leave output unchanged.
 // Allocate full BatchDataMap/QGBatchDataMap storage even for a partial batch;
-// only the first num factors/results are meaningful. Inputs are borrowed for the call.
-// Parallel=true enables OpenMP when built with it, otherwise encoding remains serial.
+// only the first batch_size factors/results are meaningful. Inputs are borrowed for the
+// call. Parallel=true enables OpenMP when built with it, otherwise encoding remains serial.
 template <typename T, bool Parallel = false>
 inline void quantize_one_batch(
     const T* data,
     const T* centroid,
-    size_t num,
+    size_t batch_size,
     size_t padded_dim,
     char* batch_data,
     MetricType metric_type = METRIC_L2
 ) {
-    if (num > fastscan::kBatchSize) {
+    if (batch_size > fastscan::kBatchSize) {
         throw std::invalid_argument(
             "FastScan single-batch encoding accepts at most 32 vectors"
         );
     }
-    if (num == 0) {
+    if (batch_size == 0) {
         return;
     }
     BatchDataMap<T> this_batch(batch_data, padded_dim);
@@ -39,7 +39,7 @@ inline void quantize_one_batch(
     rabitq_impl::one_bit::one_bit_batch_code<T, Parallel>(
         data,
         centroid,
-        num,
+        batch_size,
         padded_dim,
         this_batch.bin_code(),
         this_batch.f_add(),
@@ -52,41 +52,41 @@ inline void quantize_one_batch(
 template <typename T, bool Parallel = false>
 inline void quantize_one_batch(
     const T* data,
-    size_t num,
+    size_t batch_size,
     size_t padded_dim,
     char* batch_data,
     MetricType metric_type = METRIC_L2
 ) {
     std::vector<T> centroid(padded_dim, 0);
     quantize_one_batch<T, Parallel>(
-        data, centroid.data(), num, padded_dim, batch_data, metric_type
+        data, centroid.data(), batch_size, padded_dim, batch_data, metric_type
     );
 }
 
 template <typename T>
-static inline void quantize_qg_batch(
+inline void quantize_qg_batch(
     const T* data,
     const T* centroid,
-    size_t num,
+    size_t batch_size,
     size_t padded_dim,
     char* batch_data,
     MetricType metric_type = METRIC_L2
 ) {
-    if (num > fastscan::kBatchSize) {
+    if (batch_size > fastscan::kBatchSize) {
         throw std::invalid_argument(
             "FastScan single-batch encoding accepts at most 32 vectors"
         );
     }
-    if (num == 0) {
+    if (batch_size == 0) {
         return;
     }
-    std::array<T, fastscan::kBatchSize> f_error{};  // we dont need this factor for qg
+    std::array<T, fastscan::kBatchSize> f_error{};  // QG batches do not store f_error
     QGBatchDataMap<T> cur_batch(batch_data, padded_dim);
 
     rabitq_impl::one_bit::one_bit_batch_code<T>(
         data,
         centroid,
-        num,
+        batch_size,
         padded_dim,
         cur_batch.bin_code(),
         cur_batch.f_add(),
@@ -97,21 +97,23 @@ static inline void quantize_qg_batch(
 }
 
 template <typename T>
-static inline void quantize_qg_batch(
+inline void quantize_qg_batch(
     const T* data,
-    size_t num,
+    size_t batch_size,
     size_t padded_dim,
     char* batch_data,
     MetricType metric_type = METRIC_L2
 ) {
     std::vector<T> centroid(padded_dim, 0);
-    quantize_qg_batch(data, centroid.data(), num, padded_dim, batch_data, metric_type);
+    quantize_qg_batch(
+        data, centroid.data(), batch_size, padded_dim, batch_data, metric_type
+    );
 }
 
 inline void quantize_split_batch(
     const float* data,
     const float* centroid,
-    size_t num_points,
+    size_t batch_size,
     size_t padded_dim,
     size_t ex_bits,
     char* batch_data,
@@ -119,10 +121,10 @@ inline void quantize_split_batch(
     MetricType metric_type = METRIC_L2,
     RabitqConfig config = RabitqConfig()
 ) {
-    quantize_one_batch(data, centroid, num_points, padded_dim, batch_data, metric_type);
+    quantize_one_batch(data, centroid, batch_size, padded_dim, batch_data, metric_type);
 
     if (ex_bits > 0) {
-        for (size_t i = 0; i < num_points; ++i) {
+        for (size_t i = 0; i < batch_size; ++i) {
             quantize_compact_ex_bits(
                 data, centroid, padded_dim, ex_bits, ex_data, metric_type, config
             );

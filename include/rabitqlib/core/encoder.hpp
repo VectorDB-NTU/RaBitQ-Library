@@ -17,8 +17,7 @@ namespace rabitqlib::quant {
 inline RabitqConfig faster_config(size_t dim, size_t total_bits) {
     RabitqConfig config;
     if (total_bits > 1) {
-        config.t_const =
-            rabitq_impl::ex_bits::get_const_scaling_factors(dim, total_bits - 1);
+        config.t_const = rabitq_impl::ex_bits::const_scaling_factor(dim, total_bits - 1);
     }
     return config;
 }
@@ -51,30 +50,30 @@ inline void quantize_compact_one_bit(
     cur_bin_data.f_error() = f_error;
 }
 
-template <typename T, typename TC>
+template <typename T, typename CodePointer>
 inline void quantize_compact_one_bit(
     const T* data,
     const T* centroid,
     size_t padded_dim,
-    TC compact_code,
+    CodePointer compact_code,
     T& f_add,
     T& f_rescale,
-    T& ferror,
+    T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
     rabitq_impl::one_bit::one_bit_compact_code(
-        data, centroid, padded_dim, compact_code, f_add, f_rescale, ferror, metric_type
+        data, centroid, padded_dim, compact_code, f_add, f_rescale, f_error, metric_type
     );
 }
 
-template <typename T, typename TC>
+template <typename T, typename CodePointer>
 inline void quantize_compact_one_bit(
     const T* data,
     size_t padded_dim,
-    TC compact_code,
+    CodePointer compact_code,
     T& f_add,
     T& f_rescale,
-    T& ferror,
+    T& f_error,
     MetricType metric_type = METRIC_L2
 ) {
     std::vector<T> centroid(padded_dim, 0);
@@ -85,7 +84,7 @@ inline void quantize_compact_one_bit(
         compact_code,
         f_add,
         f_rescale,
-        ferror,
+        f_error,
         metric_type
     );
 }
@@ -102,10 +101,10 @@ inline void quantize_compact_ex_bits(
 ) {
     ExDataMap<T> cur_ex_data(ex_data, padded_dim, ex_bits);
 
-    // we do not use this error factor here
+    // The ex-code error factor is not stored.
     T f_add_ex;
     T f_rescale_ex;
-    T ex_error;
+    T f_error_ex;
 
     rabitq_impl::ex_bits::ex_bits_compact_code(
         data,
@@ -115,7 +114,7 @@ inline void quantize_compact_ex_bits(
         cur_ex_data.ex_code(),
         f_add_ex,
         f_rescale_ex,
-        ex_error,
+        f_error_ex,
         metric_type,
         config.t_const
     );
@@ -265,9 +264,10 @@ template <typename T, typename TP>
 inline void reconstruct_vec(
     const TP* quantized_vec, T delta, T vl, size_t dim, T* results
 ) {
-    RowMajorArrayMap<T> result_arr(results, 1, dim);
+    const auto cols = static_cast<Eigen::Index>(dim);
+    RowMajorArrayMap<T> result_arr(results, 1, cols);
     result_arr =
-        (ConstRowMajorArrayMap<TP>(quantized_vec, 1, dim).template cast<T>() * delta) + vl;
+        (ConstRowMajorArrayMap<TP>(quantized_vec, 1, cols).template cast<T>() * delta) + vl;
 }
 
 template <typename T, typename TP>
@@ -282,34 +282,35 @@ inline void reconstruct_full_vec(
 ) {
     const T code_center = -static_cast<T>((static_cast<size_t>(1) << bits) - 1) / 2;
     const T scale = metric_type == METRIC_L2 ? -f_rescale / 2 : -f_rescale;
-    RowMajorArrayMap<T> result_arr(results, 1, dim);
+    const auto cols = static_cast<Eigen::Index>(dim);
+    RowMajorArrayMap<T> result_arr(results, 1, cols);
     result_arr =
-        ConstRowMajorArrayMap<T>(centroid, 1, dim) +
-        scale * (ConstRowMajorArrayMap<TP>(quantized_vec, 1, dim).template cast<T>() +
+        ConstRowMajorArrayMap<T>(centroid, 1, cols) +
+        scale * (ConstRowMajorArrayMap<TP>(quantized_vec, 1, cols).template cast<T>() +
                  code_center);
 }
 
 namespace detail {
-template <typename TF>
-inline TF full_est_dist_from_ip(
-    TF ip, size_t bits, TF f_add, TF f_rescale, TF g_add, TF k1xsumq
+template <typename T>
+inline T full_est_dist_from_ip(
+    T ip, size_t bits, T f_add, T f_rescale, T g_add, T k1xsumq
 ) {
     return f_add + g_add +
            (f_rescale * (ip + k1xsumq * static_cast<float>((1 << bits) - 1)));
 }
 }  // namespace detail
 
-template <typename TF, typename TI>
-inline TF full_est_dist(
-    const TI* quantized_vec,
-    const TF* query,
-    TF (*ip_func)(const TF*, const TI*, size_t),
+template <typename T, typename TP>
+inline T full_est_dist(
+    const TP* quantized_vec,
+    const T* query,
+    T (*ip_func)(const T*, const TP*, size_t),
     size_t dim,
     size_t bits,
-    TF f_add,
-    TF f_rescale,
-    TF g_add,
-    TF k1xsumq
+    T f_add,
+    T f_rescale,
+    T g_add,
+    T k1xsumq
 ) {
     return detail::full_est_dist_from_ip(
         ip_func(query, quantized_vec, dim), bits, f_add, f_rescale, g_add, k1xsumq

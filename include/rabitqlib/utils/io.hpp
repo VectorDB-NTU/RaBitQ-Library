@@ -52,8 +52,7 @@ void read_value(std::ifstream& input, T& value, const char* description) {
 }  // namespace io_impl
 
 inline size_t get_filesize(const char* filename) {
-    const auto file_size =
-        std::filesystem::file_size(rabitqlib::io_impl::filesystem_path(filename));
+    const auto file_size = std::filesystem::file_size(io_impl::filesystem_path(filename));
     if (file_size > std::numeric_limits<size_t>::max()) {
         throw std::length_error("File is too large to address");
     }
@@ -61,11 +60,11 @@ inline size_t get_filesize(const char* filename) {
 }
 
 inline bool file_exists(const char* filename) {
-    return std::filesystem::exists(rabitqlib::io_impl::filesystem_path(filename));
+    return std::filesystem::exists(io_impl::filesystem_path(filename));
 }
 
 // load .*vecs file to a matrix (e.g., RowMajorFloatMat)
-template <typename T, class M>
+template <typename T, typename M>
 void load_vecs(const char* filename, M& row_mat) {
     if (!file_exists(filename)) {
         throw std::runtime_error("File does not exist: " + std::string(filename));
@@ -77,7 +76,7 @@ void load_vecs(const char* filename, M& row_mat) {
     if (file_size < sizeof(uint32_t)) {
         throw std::runtime_error("Vector file is too small to contain a dimension");
     }
-    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
+    std::ifstream input(io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open vector file: " + std::string(filename));
     }
@@ -99,7 +98,7 @@ void load_vecs(const char* filename, M& row_mat) {
 
     input.seekg(0, std::ifstream::beg);
 
-    for (size_t i = 0; i < rows; i++) {
+    for (size_t i = 0; i < rows; ++i) {
         uint32_t row_cols = 0;
         io_impl::read_value(input, row_cols, "row dimension");
         if (row_cols != stored_cols) {
@@ -114,7 +113,7 @@ void load_vecs(const char* filename, M& row_mat) {
 }
 
 // load .*bin file to a matrix (e.g., RowMajorFloatMat)
-template <typename T, class M>
+template <typename T, typename M>
 void load_bin(const char* filename, M& row_mat) {
     if (!file_exists(filename)) {
         throw std::runtime_error("File does not exist: " + std::string(filename));
@@ -126,7 +125,7 @@ void load_bin(const char* filename, M& row_mat) {
     if (file_size < 2 * sizeof(uint32_t)) {
         throw std::runtime_error("Binary matrix file is too small to contain its header");
     }
-    std::ifstream input(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
+    std::ifstream input(io_impl::filesystem_path(filename), std::ios::binary);
     if (!input.is_open()) {
         throw std::runtime_error(
             "Cannot open binary matrix file: " + std::string(filename)

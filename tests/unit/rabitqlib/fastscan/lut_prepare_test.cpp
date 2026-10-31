@@ -77,12 +77,12 @@ struct SavedEnvironment {
     ~SavedEnvironment() { std::fesetenv(&environment); }
 };
 
-template <class T>
+template <typename T>
 void expect_bits_equal(T a, T b) {
     EXPECT_EQ(std::memcmp(&a, &b, sizeof(T)), 0);
 }
 
-TEST(LutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
+TEST(FastScanLutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
     const float tiny = std::numeric_limits<float>::denorm_min();
     const std::array<std::array<float, 4>, 6> patterns{
         {{1, 2, 4, 8},
@@ -126,7 +126,7 @@ TEST(LutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
     }
 }
 
-TEST(LutPreparationTest, WrapperPreservesExceptionalAndSignedZeroBounds) {
+TEST(FastScanLutPreparationTest, WrapperPreservesExceptionalAndSignedZeroBounds) {
     const SavedEnvironment saved;
     for (int rounding : {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO}) {
         ASSERT_EQ(std::fesetround(rounding), 0);
@@ -159,7 +159,7 @@ TEST(LutPreparationTest, WrapperPreservesExceptionalAndSignedZeroBounds) {
     }
 }
 
-TEST(LutPreparationTest, Uint8PathPreservesHalfBoundariesFlagsAndZeroRange) {
+TEST(FastScanLutPreparationTest, Uint8PathPreservesHalfBoundariesFlagsAndZeroRange) {
     const SavedEnvironment saved;
     std::vector<float> boundaries{0, -0.0F, 255};
     for (int value = 0; value < 255; ++value) {
@@ -256,10 +256,10 @@ void check_prepared_lut() {
     }
 }
 
-TEST(LutPreparationTest, FloatLutPreservesStandardAndHaccCodes) {
+TEST(FastScanLutPreparationTest, FloatLutPreservesStandardAndHaccCodes) {
     check_prepared_lut<float>();
 }
-TEST(LutPreparationTest, DoubleLutRetainsOriginalPreparation) {
+TEST(FastScanLutPreparationTest, DoubleLutRetainsOriginalPreparation) {
     check_prepared_lut<double>();
 }
 }  // namespace

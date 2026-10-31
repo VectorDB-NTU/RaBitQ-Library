@@ -37,7 +37,7 @@ inline void kacs_walk_rescale(float* data, size_t dim, float factor) {
 #endif
 }
 // Both backends and all compilers use the same AVX butterfly ordering.
-template <auto flip_sign, auto kacs_walk, auto kacs_flip = nullptr>
+template <auto FlipSign, auto KacsWalk, auto KacsFlip = nullptr>
 void fht_rotate_impl(
     const float* data,
     float* rotated_data,
@@ -48,9 +48,9 @@ void fht_rotate_impl(
     const uint8_t* flip
 ) {
     void (*fht)(float*, float) = nullptr;
-#define RABITQ_FHT_CASE(log_dim)             \
-    case size_t{1} << (log_dim):             \
-        fht = fht_intrinsics<log_dim, true>; \
+#define RABITQ_FHT_CASE(log_dim)       \
+    case size_t{1} << (log_dim):       \
+        fht = fht_impl<log_dim, true>; \
         break;
     switch (trunc_dim) {
         RABITQ_FHT_CASE(6)
@@ -74,23 +74,23 @@ void fht_rotate_impl(
 
     if (trunc_dim == padded_dim) {
         for (size_t round = 0; round < 4; ++round) {
-            flip_sign(flip + round * (padded_dim / 8), rotated_data, padded_dim);
+            FlipSign(flip + round * (padded_dim / 8), rotated_data, padded_dim);
             fht(rotated_data, scale_factor);
         }
         return;
     }
 
     const auto walk_and_flip = [&](const uint8_t* signs) {
-        if constexpr (kacs_flip != nullptr) {
-            kacs_flip(signs, rotated_data, padded_dim);
+        if constexpr (KacsFlip != nullptr) {
+            KacsFlip(signs, rotated_data, padded_dim);
         } else {
-            kacs_walk(rotated_data, padded_dim);
-            flip_sign(signs, rotated_data, padded_dim);
+            KacsWalk(rotated_data, padded_dim);
+            FlipSign(signs, rotated_data, padded_dim);
         }
     };
     size_t start = padded_dim - trunc_dim;
 
-    flip_sign(flip, rotated_data, padded_dim);
+    FlipSign(flip, rotated_data, padded_dim);
     fht(rotated_data, scale_factor);
     walk_and_flip(flip + (padded_dim / 8));
     fht(rotated_data + start, scale_factor);

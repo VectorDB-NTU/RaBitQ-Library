@@ -12,7 +12,7 @@ namespace rabitqlib::quant::v1 {
 
 // Stable C++ source API. This header exposes no index, Eigen, or SIMD implementation.
 // See docs/docs/rabitq/core_api.md for the complete ownership/numerical contract.
-enum class CodeLayout : std::uint8_t { UnpackedU16 = 0, SplitPacked = 1 };
+enum class CodeLayout : uint8_t { UnpackedU16 = 0, SplitPacked = 1 };
 
 struct Parameters {
     // Working dimension >= 2; SplitPacked additionally requires dim % 32 == 0.
@@ -84,7 +84,9 @@ QueryState prepare_query(
 );
 
 // Full float-query estimation, including at one bit; no quantized-query filter is implied.
-inline float compute(const QueryState& query, CodeView code, const Factors& factors);
+inline float compute(
+    const QueryState& query_wrapper, CodeView code, const Factors& factors
+);
 
 class QueryState {
    public:
@@ -103,17 +105,19 @@ class QueryState {
     float (*extra_ip_)(const float*, const uint8_t*, size_t) = nullptr;
 
     static float compute_checked(
-        const QueryState& query, const CodeView& code, const Factors& factors
+        const QueryState& query_wrapper, const CodeView& code, const Factors& factors
     );
 
     friend QueryState prepare_query(const Parameters&, const float*, const float*);
     friend float compute(const QueryState&, CodeView, const Factors&);
 };
 
-inline float compute(const QueryState& query, CodeView code, const Factors& factors) {
+inline float compute(
+    const QueryState& query_wrapper, CodeView code, const Factors& factors
+) {
     // Keep the public value semantics; the compiled implementation borrows this
     // local view instead of passing the entire aggregate through its call ABI.
-    return QueryState::compute_checked(query, code, factors);
+    return QueryState::compute_checked(query_wrapper, code, factors);
 }
 
 }  // namespace rabitqlib::quant::v1

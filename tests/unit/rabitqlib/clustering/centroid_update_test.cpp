@@ -36,12 +36,14 @@ class RecordedAssignment {
     )
         : dim_(d), clusters_(k), points_(n), parameters_(parameters) {}
 
-    void assign(const float* centroids, PID* labels, float* distances, bool final = false) {
+    void assign(
+        const float* centroids, PID* assignments, float* distances, bool final = false
+    ) {
         if (!final) {
             parameters_.initial_centroids->assign(centroids, centroids + clusters_ * dim_);
         }
         for (size_t point = 0; point < points_; ++point) {
-            labels[point] = static_cast<PID>(point % parameters_.occupied_clusters);
+            assignments[point] = static_cast<PID>(point % parameters_.occupied_clusters);
             distances[point] = 0;
         }
     }

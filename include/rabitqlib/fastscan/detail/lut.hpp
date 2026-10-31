@@ -183,8 +183,8 @@ class Lut {
     [[nodiscard]] size_t padded_dim() const { return lut_.empty() ? 0 : table_length_ / 4; }
     [[nodiscard]] bool use_hacc() const { return lut_.size() > table_length_; }
 
-    [[nodiscard]] const uint8_t* lut() const { return lut_.data(); };
-    [[nodiscard]] T delta() const { return delta_; };
-    [[nodiscard]] T sum_vl() const { return sum_vl_lut_; };
+    [[nodiscard]] const uint8_t* lut() const { return lut_.data(); }
+    [[nodiscard]] T delta() const { return delta_; }
+    [[nodiscard]] T sum_vl() const { return sum_vl_lut_; }
 };
 }  // namespace rabitqlib

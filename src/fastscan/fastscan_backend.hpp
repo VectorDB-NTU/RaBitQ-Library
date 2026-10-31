@@ -7,7 +7,7 @@
 namespace rabitqlib::fastscan::detail {
 
 // Standard LUTs use consecutive 16-entry tables on every backend. HACC stores
-// low/high byte planes in groups of two tables (32 bytes) or four (64 bytes).
+// low/high byte planes for two tables at a time (32 bytes) or four (64 bytes).
 // This describes transient query scratch, never persisted codes.
 enum class HaccLutLayout { Pair32, Quad64 };
 

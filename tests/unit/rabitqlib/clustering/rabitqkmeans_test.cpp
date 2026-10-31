@@ -40,7 +40,7 @@ void normalize_reference_centroids(std::vector<float>& rows, size_t dim) {
     }
 }
 
-std::vector<PID> scalar_rabitq_labels(
+std::vector<PID> scalar_rabitq_assignments(
     const std::vector<float>& centroids,
     const std::vector<float>& data,
     size_t dim,
@@ -80,7 +80,7 @@ std::vector<PID> scalar_rabitq_labels(
     }
     const auto distance =
         metric == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
-    std::vector<PID> labels(points);
+    std::vector<PID> assignments(points);
     std::vector<float> best(points, std::numeric_limits<float>::infinity()), query(padded);
     for (size_t cluster = 0; cluster < clusters; ++cluster) {
         const float* centroid = centroids.data() + cluster * dim;
@@ -110,11 +110,11 @@ std::vector<PID> scalar_rabitq_labels(
                 batch.f_add()[index] + prepared.g_add() + batch.f_rescale()[index] * ip;
             if (estimate < best[point]) {
                 best[point] = estimate;
-                labels[point] = static_cast<PID>(cluster);
+                assignments[point] = static_cast<PID>(cluster);
             }
         }
     }
-    return labels;
+    return assignments;
 }
 
 double scalar_centroid_distance(const float* x, const float* c, size_t dim, bool ip) {
@@ -160,7 +160,7 @@ TEST(RaBitQKMeansTest, ValidatesCommonParametersBeforeAllocation) {
     );
 }
 
-TEST(RaBitQAssignerTest, MatchesScalarPointCodesAcrossBatchTailsAndMovingCentroids) {
+TEST(RaBitQAssignmentTest, MatchesScalarPointCodesAcrossBatchTailsAndMovingCentroids) {
     constexpr uint32_t kSeed = 53;
     std::mt19937 rng(157);
     std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
@@ -189,23 +189,24 @@ TEST(RaBitQAssignerTest, MatchesScalarPointCodesAcrossBatchTailsAndMovingCentroi
                         RaBitQKMeansParameters parameters;
                         parameters.seed = kSeed;
                         parameters.spherical = metric == METRIC_IP;
-                        detail::RaBitQAssigner assigner(
+                        detail::RaBitQAssignment assigner(
                             dim, clusters, data.data(), points, threads, parameters
                         );
                         for (size_t pass = 0; pass < 2; ++pass) {
                             for (float& value : centers) {
                                 value = value * 0.75F + 0.125F;
                             }
-                            const auto expected =
-                                scalar_rabitq_labels(centers, data, dim, kSeed, metric);
-                            std::vector<PID> labels(points, kPidMax);
+                            const auto expected = scalar_rabitq_assignments(
+                                centers, data, dim, kSeed, metric
+                            );
+                            std::vector<PID> assignments(points, kPidMax);
                             std::vector<float> distances(points);
                             assigner.assign(
-                                centers.data(), labels.data(), distances.data()
+                                centers.data(), assignments.data(), distances.data()
                             );
-                            EXPECT_EQ(labels, expected);
+                            EXPECT_EQ(assignments, expected);
                             for (size_t point = 0; point < points; ++point) {
-                                ASSERT_LT(labels[point], clusters);
+                                ASSERT_LT(assignments[point], clusters);
                                 const float* vector = data.data() + point * dim;
                                 const auto exact_distance = metric == METRIC_IP
                                                                 ? dot_product_dis<float>
@@ -213,7 +214,9 @@ TEST(RaBitQAssignerTest, MatchesScalarPointCodesAcrossBatchTailsAndMovingCentroi
                                 EXPECT_EQ(
                                     distances[point],
                                     exact_distance(
-                                        vector, centers.data() + labels[point] * dim, dim
+                                        vector,
+                                        centers.data() + assignments[point] * dim,
+                                        dim
                                     )
                                 );
                                 PID nearest = 0;
@@ -230,7 +233,7 @@ TEST(RaBitQAssignerTest, MatchesScalarPointCodesAcrossBatchTailsAndMovingCentroi
                                         nearest = static_cast<PID>(cluster);
                                     }
                                 }
-                                if (clusters > 32 && labels[point] != nearest) {
+                                if (clusters > 32 && assignments[point] != nearest) {
                                     ++approximate_choices_above_batch_size;
                                 }
                             }
@@ -244,7 +247,7 @@ TEST(RaBitQAssignerTest, MatchesScalarPointCodesAcrossBatchTailsAndMovingCentroi
     EXPECT_GT(approximate_choices_above_batch_size, 0U);
 }
 
-TEST(RaBitQAssignerTest, ZeroAndDuplicateResidualsChooseFirstLogicalCentroid) {
+TEST(RaBitQAssignmentTest, ZeroAndDuplicateResidualsChooseFirstLogicalCentroid) {
     constexpr size_t kDim = 65, kPoints = 65;
     for (const size_t clusters : {1U, 2U, 16U, 31U, 32U, 33U, 65U}) {
         for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
@@ -253,13 +256,13 @@ TEST(RaBitQAssignerTest, ZeroAndDuplicateResidualsChooseFirstLogicalCentroid) {
                     data(kPoints * kDim, value);
                 RaBitQKMeansParameters parameters;
                 parameters.spherical = metric == METRIC_IP;
-                detail::RaBitQAssigner assigner(
+                detail::RaBitQAssignment assigner(
                     kDim, clusters, data.data(), kPoints, 2, parameters
                 );
-                std::vector<PID> labels(kPoints, kPidMax);
+                std::vector<PID> assignments(kPoints, kPidMax);
                 std::vector<float> distances(kPoints);
-                assigner.assign(centers.data(), labels.data(), distances.data());
-                EXPECT_EQ(labels, (std::vector<PID>(kPoints, 0)));
+                assigner.assign(centers.data(), assignments.data(), distances.data());
+                EXPECT_EQ(assignments, (std::vector<PID>(kPoints, 0)));
                 const double expected = scalar_centroid_distance(
                     data.data(), centers.data(), kDim, metric == METRIC_IP
                 );
@@ -271,7 +274,7 @@ TEST(RaBitQAssignerTest, ZeroAndDuplicateResidualsChooseFirstLogicalCentroid) {
     }
 }
 
-TEST(RaBitQAssignerTest, KeepsCentroidDependentCorrectionForZeroResidualPointCodes) {
+TEST(RaBitQAssignmentTest, KeepsCentroidDependentCorrectionForZeroResidualPointCodes) {
     constexpr size_t kDim = 65, kPoints = 33;
     for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
         std::vector<float> data(kPoints * kDim), centers(2 * kDim);
@@ -286,11 +289,11 @@ TEST(RaBitQAssignerTest, KeepsCentroidDependentCorrectionForZeroResidualPointCod
         }
         RaBitQKMeansParameters parameters;
         parameters.spherical = metric == METRIC_IP;
-        detail::RaBitQAssigner assigner(kDim, 2, data.data(), kPoints, 2, parameters);
-        std::vector<PID> labels(kPoints, kPidMax);
+        detail::RaBitQAssignment assigner(kDim, 2, data.data(), kPoints, 2, parameters);
+        std::vector<PID> assignments(kPoints, kPidMax);
         std::vector<float> distances(kPoints);
-        assigner.assign(centers.data(), labels.data(), distances.data());
-        EXPECT_EQ(labels, (std::vector<PID>(kPoints, 1)));
+        assigner.assign(centers.data(), assignments.data(), distances.data());
+        EXPECT_EQ(assignments, (std::vector<PID>(kPoints, 1)));
         EXPECT_EQ(distances, (std::vector<float>(kPoints, 0.0F)));
     }
 }
@@ -317,7 +320,8 @@ TEST(RaBitQKMeansTest, FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts) {
                 normalize_reference_centroids(initial, kDim);
             }
             const auto metric = spherical ? METRIC_IP : METRIC_L2;
-            const auto expected = scalar_rabitq_labels(initial, data, kDim, 42, metric);
+            const auto expected =
+                scalar_rabitq_assignments(initial, data, kDim, 42, metric);
             const auto distance = spherical ? dot_product_dis<float> : euclidean_sqr<float>;
             double expected_objective = 0;
             for (size_t point = 0; point < kPoints; ++point) {
@@ -372,7 +376,7 @@ TEST(RaBitQKMeansTest, FinalModesKeepFlatLloydAssignmentsAcrossClusterCounts) {
                     }
                 }
                 const auto approximate =
-                    scalar_rabitq_labels(model.centroids, data, kDim, 42, metric);
+                    scalar_rabitq_assignments(model.centroids, data, kDim, 42, metric);
                 for (size_t point = 0; point < kPoints; ++point) {
                     PID nearest = 0;
                     double best = std::numeric_limits<double>::infinity();

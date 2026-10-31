@@ -23,13 +23,17 @@
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::ivf {
-inline InitializerType resolve_initializer_type(InitializerType type, size_t clusters) {
+inline InitializerType resolve_initializer_type(InitializerType type, size_t num_clusters) {
+    // Auto routes through the cheapest initializer that stays fast at this cluster count.
+    constexpr size_t kFlatMaxClusters = 5000;
+    constexpr size_t kFlatRaBitQMaxClusters = 60000;
     switch (type) {
         case InitializerType::Auto:
-            if (clusters < 5000) {
+            if (num_clusters < kFlatMaxClusters) {
                 return InitializerType::Flat;
             }
-            return clusters < 60000 ? InitializerType::FlatRaBitQ : InitializerType::HNSW;
+            return num_clusters < kFlatRaBitQMaxClusters ? InitializerType::FlatRaBitQ
+                                                         : InitializerType::HNSW;
         case InitializerType::Flat:
         case InitializerType::FlatRaBitQ:
         case InitializerType::HNSW:
@@ -50,17 +54,17 @@ class Initializer {
     explicit Initializer(size_t dim, size_t num_clusters)
         : dim_(dim), num_cluster_(num_clusters) {}
     virtual ~Initializer() = 0;
-    [[nodiscard]] virtual const float* centroid(PID) const = 0;
-    virtual void add_vectors(const float*, size_t) = 0;
+    [[nodiscard]] virtual const float* centroid(PID id) const = 0;
+    virtual void add_vectors(const float* centroids, size_t num_threads) = 0;
     // Resize the output to min(nprobe, number of clusters) and fill it with the
     // nearest centroids in no particular order; the caller need not presize it.
     virtual void centroids_distances(
-        const float*, size_t, std::vector<AnnCandidate<float>>&
+        const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const = 0;
-    virtual void load(std::ifstream&, const char*) = 0;
-    virtual void save(std::ofstream&, const char*) const = 0;
+    virtual void load(std::ifstream& input, const char* filename) = 0;
+    virtual void save(std::ofstream& output, const char* filename) const = 0;
 };
-inline Initializer::~Initializer() {}
+inline Initializer::~Initializer() = default;
 
 class FlatInitializer : public Initializer {
    private:
@@ -69,7 +73,7 @@ class FlatInitializer : public Initializer {
 
    public:
     explicit FlatInitializer(
-        size_t dim, size_t num_clusters, MetricType metric_type = MetricType::METRIC_L2
+        size_t dim, size_t num_clusters, MetricType metric_type = METRIC_L2
     )
         : Initializer(dim, num_clusters)
         , centroids_(num_cluster_ * dim_)
@@ -83,14 +87,14 @@ class FlatInitializer : public Initializer {
         return &centroids_[id * dim_];
     }
 
-    void add_vectors(const float* centroids, size_t) override {
+    void add_vectors(const float* centroids, size_t /*num_threads*/) override {
         std::memcpy(centroids_.data(), centroids, sizeof(float) * num_cluster_ * dim_);
     }
 
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
-        std::vector<AnnCandidate<float>> centroid_candidates(this->num_cluster_);
+        std::vector<AnnCandidate<float>> centroid_candidates(num_cluster_);
         for (PID i = 0; i < num_cluster_; ++i) {
             centroid_candidates[i].id = i;
             centroid_candidates[i].distance =
@@ -110,14 +114,14 @@ class FlatInitializer : public Initializer {
     }
 
     // The flat initializer stores its centroids inline in the index file stream.
-    void save(std::ofstream& output, const char*) const override {
+    void save(std::ofstream& output, const char* /*filename*/) const override {
         output.write(
             reinterpret_cast<const char*>(centroids_.data()),
             static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
         );
     }
 
-    void load(std::ifstream& input, const char*) override {
+    void load(std::ifstream& input, const char* /*filename*/) override {
         input.read(
             reinterpret_cast<char*>(centroids_.data()),
             static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
@@ -136,15 +140,15 @@ class FlatRaBitQInitializer : public Initializer {
 
    public:
     explicit FlatRaBitQInitializer(
-        size_t dim, size_t num_clusters, MetricType metric = METRIC_L2
+        size_t dim, size_t num_clusters, MetricType metric_type = METRIC_L2
     );
     [[nodiscard]] const float* centroid(PID id) const override;
     void add_vectors(const float* centroids, size_t num_threads) override;
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override;
-    void save(std::ofstream& output, const char*) const override;
-    void load(std::ifstream& input, const char*) override;
+    void save(std::ofstream& output, const char* filename) const override;
+    void load(std::ifstream& input, const char* filename) override;
 };
 
 // Keep centroid routing on the same runtime-selected distance kernels as flat IVF.
@@ -190,8 +194,11 @@ class CentroidIPSpace : public hnswlib::SpaceInterface<float> {
 
 class HNSWInitializer : public Initializer {
    private:
-    int M_ = 16;
-    int ef_construction_ = 400;
+    // Fixed hnswlib graph parameters for centroid routing.
+    static constexpr size_t kM = 16;
+    static constexpr size_t kEfConstruction = 400;
+    static constexpr size_t kMinSearchEf = 768;
+
     std::unique_ptr<hnswlib::HierarchicalNSW<float>> alg_hnsw_;
     CentroidL2Space l2_space_;
     CentroidIPSpace ip_space_;
@@ -221,7 +228,7 @@ class HNSWInitializer : public Initializer {
 
    public:
     explicit HNSWInitializer(
-        size_t dim, size_t num_clusters, MetricType metric_type = MetricType::METRIC_L2
+        size_t dim, size_t num_clusters, MetricType metric_type = METRIC_L2
     )
         : Initializer(dim, num_clusters)
         , l2_space_(dim)
@@ -234,15 +241,13 @@ class HNSWInitializer : public Initializer {
         , metric_type_(metric_type) {
         validate_metric_type(metric_type_);
         alg_hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(
-            space_, num_cluster_, M_, ef_construction_
+            space_, num_cluster_, kM, kEfConstruction
         );
     }
 
     void add_vectors(const float* centroids, size_t num_threads) override {
-        size_t start = 0;
-        size_t rows = num_cluster_;
-        rabitqlib::index_detail::parallel_for(
-            start, rows, num_threads, [&](size_t row, size_t /*thread_id*/) {
+        index_detail::parallel_for(
+            0, num_cluster_, num_threads, [&](size_t row, size_t /*thread*/) {
                 alg_hnsw_->addPoint(centroids + (row * dim_), row);
             }
         );
@@ -265,7 +270,7 @@ class HNSWInitializer : public Initializer {
         }
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
             alg_hnsw_->searchKnnWithEf(
-                query, num_probes, std::max(size_t{768}, 2 * num_probes)
+                query, num_probes, std::max(kMinSearchEf, 2 * num_probes)
             );
         if (result.size() != num_probes) {
             throw std::runtime_error("HNSW centroid graph returned too few candidates");
@@ -281,24 +286,24 @@ class HNSWInitializer : public Initializer {
     }
 
     // The HNSW initializer stores its graph in a separate hnswlib sidecar file.
-    void save(std::ofstream&, const char* filename) const override {
-        std::string hnsw(filename);
-        hnsw += ".hnsw";
-        alg_hnsw_->saveIndex(hnsw);
+    void save(std::ofstream& /*output*/, const char* filename) const override {
+        alg_hnsw_->saveIndex(std::string(filename) + detail::kHnswSidecarSuffix);
     }
 
-    void load(std::ifstream&, const char* filename) override {
-        std::string hnsw(filename);
-        hnsw += ".hnsw";
-        detail::validate_hnsw_sidecar_file(hnsw, num_cluster_, space_->get_data_size());
-        alg_hnsw_->loadIndex(hnsw, space_, num_cluster_);
+    void load(std::ifstream& /*input*/, const char* filename) override {
+        const std::string sidecar = std::string(filename) + detail::kHnswSidecarSuffix;
+        detail::validate_hnsw_sidecar_file(sidecar, num_cluster_, space_->get_data_size());
+        alg_hnsw_->loadIndex(sidecar, space_, num_cluster_);
         const auto& graph = *alg_hnsw_;
+        // validate_hnsw_sidecar_file already checked these header fields, and loadIndex
+        // reads them again from a second open of the file. Recheck the loaded values so
+        // a sidecar replaced in between cannot give centroid() an out-of-record offset.
         if (graph.offsetData_ > graph.label_offset_ ||
             graph.label_offset_ > graph.size_data_per_element_ ||
             graph.label_offset_ - graph.offsetData_ != space_->get_data_size() ||
             graph.size_data_per_element_ - graph.label_offset_ !=
                 sizeof(hnswlib::labeltype)) {
-            throw std::runtime_error("HNSW centroid layout does not match IVF dimension");
+            throw std::runtime_error("HNSW centroid sidecar changed while loading");
         }
         detail::validate_hnsw_centroid_graph(graph);
         rebuild_label_lookup();

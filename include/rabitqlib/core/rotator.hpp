@@ -32,16 +32,16 @@ class Rotator {
 
    public:
     explicit Rotator() = default;
-    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim) {};
+    explicit Rotator(size_t dim, size_t padded_dim) : dim_(dim), padded_dim_(padded_dim) {}
     virtual ~Rotator() = default;
-    virtual void rotate(const T* src, T* dst) const = 0;
+    virtual void rotate(const T* data, T* rotated_data) const = 0;
     virtual void load(std::ifstream&) = 0;
     virtual void save(std::ofstream&) const = 0;
     // Buffer I/O
     virtual void load(const char* data) = 0;
     virtual void save(char* data) const = 0;
-    virtual size_t dump_bytes() const = 0;
-    [[nodiscard]] size_t size() const { return this->padded_dim_; }
+    [[nodiscard]] virtual size_t dump_bytes() const = 0;
+    [[nodiscard]] size_t size() const { return padded_dim_; }
 };
 
 namespace rotator_impl {
@@ -131,26 +131,29 @@ class MatrixRotator : public Rotator<T> {
         std::memcpy(data, rand_mat_.data(), MatrixRotator<T>::dump_bytes());
     }
 
-    size_t dump_bytes() const override {
+    [[nodiscard]] size_t dump_bytes() const override {
         return sizeof(T) * this->dim_ * this->padded_dim_;
     }
 
-    void rotate(const T* vec, T* rotated_vec) const override {
+    void rotate(const T* data, T* rotated_data) const override {
         if constexpr (std::is_same_v<T, float>) {
             // Match Eigen's alias-safe assignment: callers may rotate in place.
             std::vector<float> result(this->padded_dim_);
             simd::matrix_product(
-                vec, rand_mat_.data(), result.data(), 1, this->dim_, this->padded_dim_
+                data, rand_mat_.data(), result.data(), 1, this->dim_, this->padded_dim_
             );
-            std::copy(result.begin(), result.end(), rotated_vec);
+            std::copy(result.begin(), result.end(), rotated_data);
         } else {
-            ConstRowMajorMatrixMap<T> v(vec, 1, this->dim_);
-            RowMajorMatrixMap<T> rv(rotated_vec, 1, this->padded_dim_);
-            rv = v * this->rand_mat_;
+            ConstRowMajorMatrixMap<T> v(data, 1, static_cast<Eigen::Index>(this->dim_));
+            RowMajorMatrixMap<T> rv(
+                rotated_data, 1, static_cast<Eigen::Index>(this->padded_dim_)
+            );
+            rv = v * rand_mat_;
         }
     }
 };
 
+// Internal linkage: the per-ISA HNSW search sources include this header.
 static inline void flip_sign(const uint8_t* flip, float* data, size_t dim) {
     simd::flip_sign(flip, data, dim);
 }
@@ -212,15 +215,17 @@ class FhtKacRotator : public Rotator<float> {
         std::memcpy(data, flip_.data(), FhtKacRotator::dump_bytes());
     }
 
-    size_t dump_bytes() const override { return sizeof(uint8_t) * flip_.size(); }
+    [[nodiscard]] size_t dump_bytes() const override {
+        return sizeof(uint8_t) * flip_.size();
+    }
 
     FhtKacRotator(const FhtKacRotator&) = default;
 
     FhtKacRotator& operator=(const FhtKacRotator& other) {
         // Preserve the old dimensions if copying the sign storage fails.
         flip_ = other.flip_;
-        this->dim_ = other.dim_;
-        this->padded_dim_ = other.padded_dim_;
+        dim_ = other.dim_;
+        padded_dim_ = other.padded_dim_;
         trunc_dim_ = other.trunc_dim_;
         scale_factor_ = other.scale_factor_;
         return *this;
@@ -228,9 +233,9 @@ class FhtKacRotator : public Rotator<float> {
 
     static void kacs_walk(float* data, size_t len) { simd::kacs_walk(data, len); }
 
-    void rotate(const float* data, float* rotated_vec) const override {
+    void rotate(const float* data, float* rotated_data) const override {
         simd::fht_rotate(
-            data, rotated_vec, dim_, padded_dim_, trunc_dim_, scale_factor_, flip_.data()
+            data, rotated_data, dim_, padded_dim_, trunc_dim_, scale_factor_, flip_.data()
         );
     }
 };

@@ -24,24 +24,26 @@
 
 namespace rabitqlib::ivf {
 FlatRaBitQInitializer::FlatRaBitQInitializer(
-    size_t dim, size_t num_clusters, MetricType metric
+    size_t dim, size_t num_clusters, MetricType metric_type
 )
-    : Initializer(dim, num_clusters), metric_type_(metric) {
-    validate_metric_type(metric);
+    : Initializer(dim, num_clusters), metric_type_(metric_type) {
+    validate_metric_type(metric_type);
     const size_t max_size = std::numeric_limits<size_t>::max();
     if (dim == 0 || dim % 32 != 0 || dim > max_size / 32 || num_clusters == 0 ||
         num_clusters > buffer::kSearchBufferMaxPointCount ||
         num_clusters > max_size / sizeof(float) / dim) {
-        throw std::invalid_argument("Invalid Flat RaBitQ initializer dimensions");
+        throw std::invalid_argument("IVF Flat RaBitQ initializer dimensions are invalid");
     }
-    const size_t batches = div_round_up(num_clusters, fastscan::kBatchSize);
+    const size_t num_batches = div_round_up(num_clusters, fastscan::kBatchSize);
     const size_t batch_bytes = BatchDataMap<float>::data_bytes(dim);
-    if (batches > max_size / batch_bytes) {
-        throw std::invalid_argument("Flat RaBitQ initializer storage overflow");
+    if (num_batches > max_size / batch_bytes) {
+        throw std::invalid_argument(
+            "IVF Flat RaBitQ initializer storage exceeds addressable memory"
+        );
     }
     centroids_.resize(num_clusters * dim);
     global_centroid_.resize(dim);
-    batch_data_.resize(batches * batch_bytes);
+    batch_data_.resize(num_batches * batch_bytes);
 }
 
 const float* FlatRaBitQInitializer::centroid(PID id) const {
@@ -58,11 +60,11 @@ void FlatRaBitQInitializer::add_vectors(const float* centroids, size_t num_threa
         global_centroid_[d] = static_cast<float>(sum / static_cast<double>(num_cluster_));
     }
     const size_t batch_bytes = BatchDataMap<float>::data_bytes(dim_);
-    rabitqlib::index_detail::parallel_for(
+    index_detail::parallel_for(
         0,
         div_round_up(num_cluster_, fastscan::kBatchSize),
         num_threads,
-        [&](size_t batch, size_t) {
+        [&](size_t batch, size_t /*thread*/) {
             const size_t first = batch * fastscan::kBatchSize;
             quant::quantize_split_batch(
                 centroids_.data() + first * dim_,
@@ -81,17 +83,17 @@ void FlatRaBitQInitializer::add_vectors(const float* centroids, size_t num_threa
 void FlatRaBitQInitializer::centroids_distances(
     const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
 ) const {
-    const size_t nprobed = std::min(nprobe, num_cluster_);
-    candidates.resize(nprobed);
-    if (nprobed == 0) {
+    const size_t num_probes = std::min(nprobe, num_cluster_);
+    candidates.resize(num_probes);
+    if (num_probes == 0) {
         return;
     }
     const auto exact_distance = [&](PID id) {
         return metric_type_ == METRIC_L2 ? euclidean_sqr(query, centroid(id), dim_)
                                          : dot_product_dis(query, centroid(id), dim_);
     };
-    if (nprobed == num_cluster_) {
-        for (size_t i = 0; i < nprobed; ++i) {
+    if (num_probes == num_cluster_) {
+        for (size_t i = 0; i < num_probes; ++i) {
             candidates[i] = AnnCandidate<float>(static_cast<PID>(i), exact_distance(i));
         }
         std::sort(candidates.begin(), candidates.end());
@@ -103,9 +105,13 @@ void FlatRaBitQInitializer::centroids_distances(
             metric_type_ == METRIC_IP ? dot_product(query, global_centroid_.data(), dim_)
                                       : 0.0F
         );
-        std::vector<float> lower(num_cluster_);
-        std::vector<AnnCandidate<float>> upper(num_cluster_);
-        std::array<float, fastscan::kBatchSize> estimates{}, lows{}, ips{};
+        // Use twice the standard RaBitQ error margin for centroid routing:
+        // missing a centroid also skips all vectors in its IVF list.
+        constexpr float kRoutingErrorScale = 2.0F;
+        std::vector<float> cluster_lower_bounds(num_cluster_);
+        std::vector<AnnCandidate<float>> cluster_upper_bounds(num_cluster_);
+        std::array<float, fastscan::kBatchSize> estimated_distances{}, lower_bounds{},
+            ip_x0_qr{};
         const size_t batch_bytes = BatchDataMap<float>::data_bytes(dim_);
         for (size_t first = 0; first < num_cluster_; first += fastscan::kBatchSize) {
             split_batch_estdist(
@@ -113,37 +119,42 @@ void FlatRaBitQInitializer::centroids_distances(
                     (first / fastscan::kBatchSize) * batch_bytes,
                 query_wrapper,
                 dim_,
-                estimates.data(),
-                lows.data(),
-                ips.data(),
+                estimated_distances.data(),
+                lower_bounds.data(),
+                ip_x0_qr.data(),
                 false
             );
-            const size_t count = std::min(fastscan::kBatchSize, num_cluster_ - first);
-            for (size_t j = 0; j < count; ++j) {
-                // Use twice the standard RaBitQ error margin for centroid routing:
-                // missing a centroid also skips all vectors in its IVF list.
-                lower[first + j] = estimates[j] - 2.0F * (estimates[j] - lows[j]);
-                upper[first + j] = AnnCandidate<float>(
-                    static_cast<PID>(first + j), 2 * estimates[j] - lower[first + j]
+            const size_t batch_size = std::min(fastscan::kBatchSize, num_cluster_ - first);
+            for (size_t j = 0; j < batch_size; ++j) {
+                cluster_lower_bounds[first + j] =
+                    estimated_distances[j] -
+                    kRoutingErrorScale * (estimated_distances[j] - lower_bounds[j]);
+                cluster_upper_bounds[first + j] = AnnCandidate<float>(
+                    static_cast<PID>(first + j),
+                    2 * estimated_distances[j] - cluster_lower_bounds[first + j]
                 );
             }
         }
         std::nth_element(
-            upper.begin(), upper.begin() + static_cast<std::ptrdiff_t>(nprobed), upper.end()
+            cluster_upper_bounds.begin(),
+            cluster_upper_bounds.begin() + static_cast<std::ptrdiff_t>(num_probes),
+            cluster_upper_bounds.end()
         );
-        buffer::SearchBuffer<float> result_pool(nprobed);
+        buffer::SearchBuffer<float> result_pool(num_probes);
         // Seed with exact distances: an estimated upper bound need not hold for
         // every vector. Always fill the result before pruning other candidates.
-        for (size_t i = 0; i < nprobed; ++i) {
-            result_pool.insert(upper[i].id, exact_distance(upper[i].id));
+        for (size_t i = 0; i < num_probes; ++i) {
+            result_pool.insert(
+                cluster_upper_bounds[i].id, exact_distance(cluster_upper_bounds[i].id)
+            );
         }
-        for (size_t i = nprobed; i < num_cluster_; ++i) {
-            const PID id = upper[i].id;
-            if (lower[id] <= result_pool.top_dist()) {
+        for (size_t i = num_probes; i < num_cluster_; ++i) {
+            const PID id = cluster_upper_bounds[i].id;
+            if (cluster_lower_bounds[id] <= result_pool.top_dist()) {
                 result_pool.insert(id, exact_distance(id));
             }
         }
-        std::copy_n(result_pool.data().begin(), nprobed, candidates.begin());
+        std::copy_n(result_pool.data().begin(), num_probes, candidates.begin());
     }
     if (metric_type_ == METRIC_L2) {
         for (auto& candidate : candidates) {
@@ -152,7 +163,7 @@ void FlatRaBitQInitializer::centroids_distances(
     }
 }
 
-void FlatRaBitQInitializer::save(std::ofstream& output, const char*) const {
+void FlatRaBitQInitializer::save(std::ofstream& output, const char* /*filename*/) const {
     output.write(
         reinterpret_cast<const char*>(centroids_.data()),
         static_cast<std::streamsize>(centroids_.size() * sizeof(float))
@@ -166,11 +177,11 @@ void FlatRaBitQInitializer::save(std::ofstream& output, const char*) const {
         static_cast<std::streamsize>(batch_data_.size())
     );
     if (!output) {
-        throw std::runtime_error("Cannot write Flat RaBitQ initializer");
+        throw std::runtime_error("IVF Flat RaBitQ initializer cannot be written");
     }
 }
 
-void FlatRaBitQInitializer::load(std::ifstream& input, const char*) {
+void FlatRaBitQInitializer::load(std::ifstream& input, const char* /*filename*/) {
     input.read(
         reinterpret_cast<char*>(centroids_.data()),
         static_cast<std::streamsize>(centroids_.size() * sizeof(float))
@@ -184,7 +195,7 @@ void FlatRaBitQInitializer::load(std::ifstream& input, const char*) {
         static_cast<std::streamsize>(batch_data_.size())
     );
     if (!input) {
-        throw std::runtime_error("Cannot read Flat RaBitQ initializer");
+        throw std::runtime_error("IVF Flat RaBitQ initializer cannot be read");
     }
 }
 }  // namespace rabitqlib::ivf

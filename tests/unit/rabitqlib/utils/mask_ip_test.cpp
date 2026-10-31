@@ -11,7 +11,7 @@
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 
-TEST(MaskIpX0Q, BackendsMatchScalarAcrossBlocksAndAlignments) {
+TEST(MaskIpX0QTest, BackendsMatchScalarAcrossBlocksAndAlignments) {
     using namespace rabitqlib;
     using Function = float (*)(const float*, const uint8_t*, size_t);
     std::vector<Function> functions{
@@ -78,17 +78,17 @@ TEST(MaskIpX0Q, BackendsMatchScalarAcrossBlocksAndAlignments) {
     }
 }
 
-TEST(MaskIpX0Q, DispatchPreservesEveryStoredBitPosition) {
+TEST(MaskIpX0QTest, DispatchPreservesEveryStoredBitPosition) {
     using namespace rabitqlib;
-    constexpr size_t dim = 192;
-    std::vector<float> query(dim);
-    for (size_t i = 0; i < dim; ++i) {
+    constexpr size_t kDim = 192;
+    std::vector<float> query(kDim);
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<float>(i + 1);
     }
-    for (size_t bit = 0; bit < dim; ++bit) {
+    for (size_t bit = 0; bit < kDim; ++bit) {
         SCOPED_TRACE(bit);
-        std::vector<uint64_t> words((dim + 63) / 64, 0);
+        std::vector<uint64_t> words((kDim + 63) / 64, 0);
         words[bit / 64] = uint64_t{1} << (63 - bit % 64);
-        EXPECT_EQ(mask_ip_x0_q(query.data(), words.data(), dim), query[bit]);
+        EXPECT_EQ(mask_ip_x0_q(query.data(), words.data(), kDim), query[bit]);
     }
 }

@@ -74,7 +74,7 @@ class HashBasedVisitedSet {
         size_t bit_size = 0;
         size_t bit = size;
         while (bit != 0) {
-            bit_size++;
+            ++bit_size;
             bit >>= 1;
         }
         // Limit per-visit spillover allocations while keeping the direct table sublinear.
@@ -89,23 +89,23 @@ class HashBasedVisitedSet {
 
     [[nodiscard]] bool initialized() const noexcept { return !table_.empty(); }
 
-    [[nodiscard]] bool get(PID data_id) const {
-        PID val = this->table_[hash1(data_id)];
-        if (val == data_id) {
+    [[nodiscard]] bool get(PID internal_id) const {
+        PID val = table_[hash1(internal_id)];
+        if (val == internal_id) {
             return true;
         }
-        return (val != kPidMax && stl_hash_.find(data_id) != stl_hash_.end());
+        return (val != kPidMax && stl_hash_.find(internal_id) != stl_hash_.end());
     }
 
-    void set(PID data_id) {
-        PID& val = table_[hash1(data_id)];
-        if (val == data_id) {
+    void set(PID internal_id) {
+        PID& val = table_[hash1(internal_id)];
+        if (val == internal_id) {
             return;
         }
         if (val == kPidMax) {
-            val = data_id;
+            val = internal_id;
         } else {
-            stl_hash_.emplace(data_id);
+            stl_hash_.emplace(internal_id);
         }
     }
 };

@@ -7,19 +7,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <stdexcept>
 #include <vector>
 
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 #include "rabitqlib/core/detail/simd/warmup_dispatch.hpp"
-#include "rabitqlib/utils/bitops.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/warmup_space.hpp"
 
 using namespace rabitqlib;
 
-TEST(SpaceHelpers, CentroidSupportsRequestedWorkerCounts) {
+TEST(SpaceHelpersTest, CentroidSupportsRequestedWorkerCounts) {
     const std::array<float, 12> data{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
     for (size_t workers : {0U, 1U, 2U, 64U}) {
         const auto centroid = compute_centroid(data.data(), 4, 3, workers);
@@ -30,69 +28,30 @@ TEST(SpaceHelpers, CentroidSupportsRequestedWorkerCounts) {
     }
 }
 
-TEST(BitOps, Popcount64MatchesBitReference) {
-    const auto check = [](uint64_t value) {
-        unsigned expected = 0;
-        for (size_t bit = 0; bit < 64; ++bit) {
-            expected += static_cast<unsigned>((value >> bit) & 1U);
-        }
-        EXPECT_EQ(bitops::popcount64(value), expected) << value;
-    };
-    check(0);
-    check(std::numeric_limits<uint64_t>::max());
-    check(0x8000000000000001ULL);
-    for (size_t bit = 0; bit < 64; ++bit) {
-        check(uint64_t{1} << bit);
-        check(~(uint64_t{1} << bit));
-    }
-    uint64_t value = 17;
-    for (size_t i = 0; i < 1024; ++i) {
-        value = value * 6364136223846793005ULL + 1442695040888963407ULL;
-        check(value);
-    }
-}
-
-TEST(BitOps, CompactWordLoadsZeroExtendWithoutReadingPastInput) {
-    for (size_t bytes = 1; bytes <= 8; ++bytes) {
-        for (size_t offset : {0U, 1U}) {
-            SCOPED_TRACE(bytes);
-            SCOPED_TRACE(offset);
-            std::vector<uint8_t> storage(bytes + offset);
-            uint64_t expected = 0;
-            for (size_t i = 0; i < bytes; ++i) {
-                const auto value = static_cast<uint8_t>(0x80U + i * 17U);
-                storage[offset + i] = value;
-                expected |= uint64_t{value} << (8 * i);
-            }
-            EXPECT_EQ(bitops::load_word(storage.data() + offset, bytes), expected);
-        }
-    }
-}
-
-TEST(PackBinary, SupportsUnalignedOutput) {
-    constexpr size_t dim = 128;
-    std::array<int, dim> binary_code{};
-    for (size_t i = 0; i < dim; ++i) {
+TEST(PackBinaryTest, SupportsUnalignedOutput) {
+    constexpr size_t kDim = 128;
+    std::array<int, kDim> binary_code{};
+    for (size_t i = 0; i < kDim; ++i) {
         binary_code[i] = (i % 3) == 0;
     }
 
     alignas(uint64_t) std::array<uint8_t, (2 * sizeof(uint64_t)) + 1> storage{};
     auto* output = storage.data() + 1;
     ASSERT_NE(reinterpret_cast<uintptr_t>(output) % alignof(uint64_t), 0U);
-    pack_binary_to_bytes<uint64_t>(binary_code.data(), output, dim);
+    pack_binary_to_bytes<uint64_t>(binary_code.data(), output, kDim);
 
     const std::array<uint64_t, 2> packed{
         load_unaligned_u64(storage.data() + 1),
         load_unaligned_u64(storage.data() + 1 + sizeof(uint64_t)),
     };
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         const size_t word = i / 64;
         const auto bit = static_cast<int>((packed[word] >> (63 - (i % 64))) & 1U);
         EXPECT_EQ(bit, binary_code[i]) << "bit " << i;
     }
 }
 
-TEST(PackBinary, AllWordSizesPreserveFullAndPartialWordLayout) {
+TEST(PackBinaryTest, AllWordSizesPreserveFullAndPartialWordLayout) {
     const auto check = [](auto word_type) {
         using Word = decltype(word_type);
         constexpr size_t kWordBits = sizeof(Word) * 8;
@@ -126,12 +85,12 @@ TEST(PackBinary, AllWordSizesPreserveFullAndPartialWordLayout) {
     check(uint64_t{});
 }
 
-TEST(MaskIpX0Q, SupportsUnalignedCodes) {
-    constexpr size_t dim = 128;
-    std::array<int, dim> binary_code{};
-    std::array<float, dim> query{};
+TEST(MaskIpX0QTest, SupportsUnalignedCodes) {
+    constexpr size_t kDim = 128;
+    std::array<int, kDim> binary_code{};
+    std::array<float, kDim> query{};
     float expected = 0;
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         binary_code[i] = (i % 3) == 0;
         query[i] = static_cast<float>(i + 1);
         expected += binary_code[i] != 0 ? query[i] : 0;
@@ -140,24 +99,24 @@ TEST(MaskIpX0Q, SupportsUnalignedCodes) {
     alignas(uint64_t) std::array<uint8_t, (2 * sizeof(uint64_t)) + 1> storage{};
     auto* codes = storage.data() + 1;
     ASSERT_NE(reinterpret_cast<uintptr_t>(codes) % alignof(uint64_t), 0U);
-    pack_binary_to_bytes<uint64_t>(binary_code.data(), codes, dim);
+    pack_binary_to_bytes<uint64_t>(binary_code.data(), codes, kDim);
 
 #if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx2()) {
-        EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx2(query.data(), codes, dim), expected);
+        EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx2(query.data(), codes, kDim), expected);
     }
 #endif
 #if defined(__x86_64__) || defined(_M_X64)
     if (cpu::has_avx512_core()) {
-        EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx512(query.data(), codes, dim), expected);
+        EXPECT_FLOAT_EQ(simd::mask_ip_x0_q_avx512(query.data(), codes, kDim), expected);
     }
 #endif
-    EXPECT_FLOAT_EQ(mask_ip_x0_q(query.data(), codes, dim), expected);
+    EXPECT_FLOAT_EQ(mask_ip_x0_q(query.data(), codes, kDim), expected);
 }
 
-TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
-    constexpr float delta = 0.5F;
-    constexpr float vl = -0.25F;
+TEST(WarmupIpX0QTest, SupportsUnalignedCodes) {
+    constexpr float kDelta = 0.5F;
+    constexpr float kVl = -0.25F;
     for (size_t dim :
          {0UL,
           64UL,
@@ -217,16 +176,16 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
                 query_offset += chunks * b_query;
             }
 
-            const float expected = delta * static_cast<float>(weighted_intersection) +
-                                   vl * static_cast<float>(data_popcount);
+            const float expected = kDelta * static_cast<float>(weighted_intersection) +
+                                   kVl * static_cast<float>(data_popcount);
             EXPECT_FLOAT_EQ(
-                warmup_ip_x0_q_512(codes, query.data(), delta, vl, dim, b_query), expected
+                warmup_ip_x0_q_512(codes, query.data(), kDelta, kVl, dim, b_query), expected
             );
 #if defined(__x86_64__) || defined(_M_X64)
             if (cpu::has_avx2()) {
                 EXPECT_FLOAT_EQ(
                     simd::warmup_ip_x0_q_512_avx2(
-                        codes, query.data(), delta, vl, dim, b_query
+                        codes, query.data(), kDelta, kVl, dim, b_query
                     ),
                     expected
                 );
@@ -236,7 +195,7 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
             if (cpu::has_avx512_popcnt()) {
                 EXPECT_FLOAT_EQ(
                     simd::warmup_ip_x0_q_512_avx512(
-                        codes, query.data(), delta, vl, dim, b_query
+                        codes, query.data(), kDelta, kVl, dim, b_query
                     ),
                     expected
                 );
@@ -246,7 +205,7 @@ TEST(WarmupIpX0Q, SupportsUnalignedCodes) {
     }
 }
 
-TEST(WarmupIpX0Q, RejectsQueryWidthsBeyondByte) {
+TEST(WarmupIpX0QTest, RejectsQueryWidthsBeyondByte) {
     const std::array<uint8_t, 8> data{};
     const std::array<uint64_t, 9> query{};
     EXPECT_THROW(
@@ -271,7 +230,7 @@ TEST(WarmupIpX0Q, RejectsQueryWidthsBeyondByte) {
 #endif
 }
 
-TEST(Select_IP_Func, returns_stable_function_pointer) {
+TEST(SelectExcodeIpFuncTest, ReturnsStableFunctionPointer) {
     for (size_t bits = 0; bits <= 8; ++bits) {
         SCOPED_TRACE(bits);
         const auto ip_func = select_excode_ipfunc(bits);
@@ -289,12 +248,12 @@ TEST(Select_IP_Func, returns_stable_function_pointer) {
     }
 }
 
-TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
-    constexpr size_t dim = 64;
-    std::vector<float> query(dim);
-    std::vector<uint8_t> codes(dim / 8);
+TEST(SelectExcodeIpFuncTest, ZeroExBitsContributesNothing) {
+    constexpr size_t kDim = 64;
+    std::vector<float> query(kDim);
+    std::vector<uint8_t> codes(kDim / 8);
 
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<float>(i) + 1.0F;
     }
     for (size_t i = 0; i < codes.size(); ++i) {
@@ -303,52 +262,65 @@ TEST(Select_IP_Func, zero_ex_bits_contributes_nothing) {
 
     ex_ipfunc ip_func = select_excode_ipfunc(0);
     ASSERT_NE(ip_func, nullptr);
-    ASSERT_EQ(ip_func(query.data(), codes.data(), dim), 0.0F);
+    ASSERT_EQ(ip_func(query.data(), codes.data(), kDim), 0.0F);
 }
 
-TEST(ip16_fxu1_avx, ip_works) {
-    constexpr size_t dim = 64;
-    float query[dim];
-    uint8_t codes[dim / 8];
+TEST(SelectExcodeIpFuncTest, RejectsExBitsAboveEight) {
+    try {
+        select_excode_ipfunc(9);
+        FAIL() << "ex_bits above 8 must be rejected";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "ex_bits must be in [0, 8]");
+    }
+}
 
-    for (size_t i = 0; i < dim; ++i) {
+TEST(LegacyExcodeIpTest, Ip16Fxu1AvxMatchesReference) {
+    constexpr size_t kDim = 64;
+    float query[kDim];
+    uint8_t codes[kDim / 8];
+
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<float>((i * 37 + 11) % 101) * 0.25F;
     }
 
-    for (size_t i = 0; i < dim / 8; ++i) {
+    for (size_t i = 0; i < kDim / 8; ++i) {
         codes[i] = static_cast<uint8_t>(i * 53 + 19);
     }
 
     float expected = 0.0F;
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         expected += query[i] * static_cast<float>((codes[i / 8] >> (i % 8)) & 1U);
     }
-    ASSERT_NEAR(rabitqlib::excode_ipimpl::ip16_fxu1_avx(query, codes, dim), expected, 0.1F);
+    ASSERT_NEAR(
+        rabitqlib::excode_ipimpl::ip16_fxu1_avx(query, codes, kDim), expected, 0.1F
+    );
 }
 
-TEST(ip64_fxu2_avx, ip_works) {
-    constexpr size_t dim = 64 * 4;
-    float query[dim];
-    uint8_t codes[dim / 4];
+TEST(LegacyExcodeIpTest, Ip64Fxu2AvxMatchesReference) {
+    constexpr size_t kDim = 64 * 4;
+    float query[kDim];
+    uint8_t codes[kDim / 4];
 
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<float>((i * 37 + 11) % 101) * 0.25F;
     }
 
-    for (size_t i = 0; i < dim / 4; ++i) {
+    for (size_t i = 0; i < kDim / 4; ++i) {
         codes[i] = static_cast<uint8_t>(i * 53 + 19);
     }
 
     float expected = 0.0F;
-    for (size_t i = 0; i < dim; ++i) {
+    for (size_t i = 0; i < kDim; ++i) {
         const uint8_t packed = codes[(i / 64) * 16 + (i % 16)];
         const auto code = static_cast<uint8_t>((packed >> (2 * ((i % 64) / 16))) & 3U);
         expected += query[i] * static_cast<float>(code);
     }
-    ASSERT_NEAR(rabitqlib::excode_ipimpl::ip64_fxu2_avx(query, codes, dim), expected, 0.1F);
+    ASSERT_NEAR(
+        rabitqlib::excode_ipimpl::ip64_fxu2_avx(query, codes, kDim), expected, 0.1F
+    );
 }
 
-TEST(PackBinary, CompactTailWordsMatchBinaryArithmetic) {
+TEST(PackBinaryTest, CompactTailWordsMatchBinaryArithmetic) {
     for (size_t dim : {64U, 96U, 128U, 160U}) {
         std::vector<int> signs(dim);
         std::vector<uint16_t> values(dim);

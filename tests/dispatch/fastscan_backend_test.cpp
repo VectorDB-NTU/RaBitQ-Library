@@ -18,7 +18,7 @@
 namespace rabitqlib::fastscan {
 namespace {
 
-TEST(FastScanBackendContract, SelectedHaccLayoutMatchesProducerAndConsumer) {
+TEST(FastScanBackendContractTest, SelectedHaccLayoutMatchesProducerAndConsumer) {
     const auto& backend = detail::selected_backend();
     const size_t tables_per_plane =
         backend.hacc_layout == detail::HaccLutLayout::Quad64 ? 4 : 2;
@@ -60,7 +60,7 @@ TEST(FastScanBackendContract, SelectedHaccLayoutMatchesProducerAndConsumer) {
     }
 }
 
-TEST(FastScanBackendContract, StandardLutIsSharedAcrossSupportedConsumers) {
+TEST(FastScanBackendContractTest, StandardLutIsSharedAcrossSupportedConsumers) {
     constexpr size_t kDim = 64;
     const auto& backend = detail::selected_backend();
     std::array<float, kDim> query{};
@@ -100,7 +100,7 @@ TEST(FastScanBackendContract, StandardLutIsSharedAcrossSupportedConsumers) {
 #endif
 }
 
-TEST(FastScanBackendContract, ExplicitCorrectionBackendsConsumeHostLut) {
+TEST(FastScanBackendContractTest, ExplicitCorrectionBackendsConsumeHostLut) {
     const auto& selected = detail::selected_backend();
     using Estimator = decltype(selected.split);
     std::vector<Estimator> backends{selected.split};

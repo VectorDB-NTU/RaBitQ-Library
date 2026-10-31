@@ -9,6 +9,13 @@
 #include "rabitqlib/fastscan/detail/lut.hpp"
 
 namespace rabitqlib {
+namespace fastscan::detail {
+// Offset -(2^bits - 1) / 2 that centers an unsigned bits-bit code.
+constexpr float code_center(size_t bits) {
+    return -static_cast<float>((1 << bits) - 1) / 2.0F;
+}
+}  // namespace fastscan::detail
+
 /**
  * @brief Own a standard FastScan LUT; the query input is not retained.
  */
@@ -17,7 +24,7 @@ class BatchQuery {
    private:
     Lut<T> lookup_table_;  // Owns the prepared bytes; reset scratch is never retained.
     T G_add_ = 0;
-    T G_k1xSumq_ = 0;  // G_k1xSumq
+    T G_k1xSumq_ = 0;
     MetricType metric_type_ = METRIC_L2;
 
     static Lut<T> make_lut(
@@ -28,7 +35,7 @@ class BatchQuery {
     }
 
     static T query_correction(const T* rotated_query, size_t padded_dim) {
-        constexpr float c_1 = -((1 << 1) - 1) / 2.F;
+        constexpr float c_1 = fastscan::detail::code_center(1);
         const T sumq =
             std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
         return sumq * c_1;
@@ -119,8 +126,8 @@ class SplitBatchQuery {
     MetricType metric_type_ = METRIC_L2;
 
     void prepare_coefficients(const T* rotated_query, size_t padded_dim, size_t ex_bits) {
-        const float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
-        const float c_b = -static_cast<float>((1 << (ex_bits + 1)) - 1) / 2.F;
+        constexpr float c_1 = fastscan::detail::code_center(1);
+        const float c_b = fastscan::detail::code_center(ex_bits + 1);
         const T sumq =
             std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
 

@@ -16,7 +16,7 @@
 #include "rabitqlib/utils/warmup_space.hpp"
 
 namespace rabitqlib {
-TEST(PortableKernels, PackingMatchesDispatchedBytesAndDotProducts) {
+TEST(PortableKernelsTest, PackingMatchesDispatchedBytesAndDotProducts) {
     using Pack = void (*)(const uint8_t*, uint8_t*, size_t);
     const std::array<Pack, 6> pack{
         simd::packing_2bit_excode_generic,
@@ -70,7 +70,7 @@ TEST(PortableKernels, PackingMatchesDispatchedBytesAndDotProducts) {
     }
 }
 
-TEST(PortableKernels, QueryTransposeAndWarmupMatchIntegerReference) {
+TEST(PortableKernelsTest, QueryTransposeAndWarmupMatchIntegerReference) {
     for (size_t dim : {64U, 96U, 128U, 448U, 512U, 544U, 576U, 960U, 1024U, 1088U}) {
         for (size_t bits = 0; bits <= 8; ++bits) {
             SCOPED_TRACE(dim);
@@ -130,7 +130,7 @@ TEST(PortableKernels, QueryTransposeAndWarmupMatchIntegerReference) {
     );
 }
 
-TEST(PortableKernels, Uint16TransposePreservesAllBitPlanes) {
+TEST(PortableKernelsTest, Uint16TransposePreservesAllBitPlanes) {
     constexpr size_t kDim = 192;
     std::array<uint16_t, kDim> query{};
     for (size_t i = 0; i < kDim; ++i) {
@@ -152,11 +152,11 @@ TEST(PortableKernels, Uint16TransposePreservesAllBitPlanes) {
 }
 }  // namespace rabitqlib
 
-TEST(PortableKernels, ExtraBitTailsPreserveFullBlockBytesAndUseCompactBitStream) {
+TEST(PortableKernelsTest, ExtraBitTailsPreserveFullBlockBytesAndUseCompactBitStream) {
     using namespace rabitqlib;
     for (size_t bits : {2U, 3U, 5U, 6U, 7U}) {
-        constexpr size_t tail = 32;
-        const size_t dim = 128 + tail;
+        constexpr size_t kTail = 32;
+        const size_t dim = 128 + kTail;
         std::vector<uint8_t> raw(dim), packed(dim * bits / 8 + 2, 0xA5);
         std::vector<uint8_t> full(128 * bits / 8);
         for (size_t i = 0; i < dim; ++i) {
@@ -173,7 +173,7 @@ TEST(PortableKernels, ExtraBitTailsPreserveFullBlockBytesAndUseCompactBitStream)
         EXPECT_TRUE(std::equal(full.begin(), full.end(), packed.begin() + 1));
         // Independent byte-by-byte definition: bit j holds bit j % bits
         // of coordinate j / bits, with no gaps or rounded word storage.
-        for (size_t byte = 0; byte < tail * bits / 8; ++byte) {
+        for (size_t byte = 0; byte < kTail * bits / 8; ++byte) {
             uint8_t expected = 0;
             for (size_t b = 0; b < 8; ++b) {
                 const size_t pos = byte * 8 + b;
@@ -184,7 +184,7 @@ TEST(PortableKernels, ExtraBitTailsPreserveFullBlockBytesAndUseCompactBitStream)
     }
 }
 
-TEST(PortableKernels, PackingMatchesReferenceForMaximumAndIsolatedCodes) {
+TEST(PortableKernelsTest, PackingMatchesReferenceForMaximumAndIsolatedCodes) {
     using namespace rabitqlib;
     using Pack = void (*)(const uint8_t*, uint8_t*, size_t);
     const std::array<Pack, 6> generic{

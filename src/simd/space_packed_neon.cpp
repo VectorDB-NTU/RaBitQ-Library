@@ -128,11 +128,11 @@ float packed_ip(const float* query, const uint8_t* compact, size_t dim) {
 }  // namespace
 
 namespace excode_ipimpl {
-#define RABITQ_NEON_IP(Block, Bits)                         \
-    float ip##Block##_fxu##Bits##_neon(                     \
-        const float* query, const uint8_t* code, size_t dim \
-    ) {                                                     \
-        return packed_ip<Bits>(query, code, dim);           \
+#define RABITQ_NEON_IP(Block, Bits)                                 \
+    float ip##Block##_fxu##Bits##_neon(                             \
+        const float* query, const uint8_t* compact_code, size_t dim \
+    ) {                                                             \
+        return packed_ip<Bits>(query, compact_code, dim);           \
     }
 RABITQ_NEON_IP(16, 1)
 RABITQ_NEON_IP(64, 2)
@@ -145,32 +145,32 @@ RABITQ_NEON_IP(16, 8)
 #undef RABITQ_NEON_IP
 }  // namespace excode_ipimpl
 
-float mask_ip_x0_q_neon(const float* query, const uint8_t* data, size_t dim) {
-    return detail::mask_ip_neon(query, data, dim);
+float mask_ip_x0_q_neon(const float* query, const uint8_t* data, size_t padded_dim) {
+    return detail::mask_ip_neon(query, data, padded_dim);
 }
-float mask_ip_x0_q_neon(const float* query, const uint64_t* data, size_t dim) {
-    return detail::mask_ip_neon(query, reinterpret_cast<const uint8_t*>(data), dim);
+float mask_ip_x0_q_neon(const float* query, const uint64_t* data, size_t padded_dim) {
+    return detail::mask_ip_neon(query, reinterpret_cast<const uint8_t*>(data), padded_dim);
 }
 float warmup_ip_x0_q_512_neon(
     const uint8_t* data,
     const uint64_t* query,
     float delta,
     float vl,
-    size_t dim,
-    size_t bits
+    size_t padded_dim,
+    size_t b_query
 ) {
-    return detail::warmup_ip_neon(data, query, delta, vl, dim, bits);
+    return detail::warmup_ip_neon(data, query, delta, vl, padded_dim, b_query);
 }
 float warmup_ip_x0_q_512_neon(
     const uint64_t* data,
     const uint64_t* query,
     float delta,
     float vl,
-    size_t dim,
-    size_t bits
+    size_t padded_dim,
+    size_t b_query
 ) {
     return detail::warmup_ip_neon(
-        reinterpret_cast<const uint8_t*>(data), query, delta, vl, dim, bits
+        reinterpret_cast<const uint8_t*>(data), query, delta, vl, padded_dim, b_query
     );
 }
 }  // namespace rabitqlib::simd

@@ -36,12 +36,14 @@ struct RescaleSearchState {
 
 // Keep executable helpers local to each translation unit. This header is
 // compiled with different ISA flags; merging external inline/template symbols
-// could make the AVX2 backend call an AVX512-compiled helper.
+// could make the AVX2 backend call an AVX512-compiled helper. BoundedRescaleState
+// is TU-local as well: its default member initializers give it a constructor.
+namespace {
 
 // Recover exact event scales at the boundary coordinates a vector evaluator selected
 // (size_t max for none): it compares reciprocal products, while the heap sweep
 // divides. Then score coordinates [tail, dim) with the scalar definitions.
-static inline RescaleSearchState finish_scale_state(
+inline RescaleSearchState finish_scale_state(
     RescaleSearchState s,
     const double* magnitudes,
     size_t first_index,
@@ -69,7 +71,7 @@ static inline RescaleSearchState finish_scale_state(
     }
     for (size_t i = tail; i < dim; ++i) {
         int c = quantized_level_at_scale(magnitudes[i], scale, max_code);
-        double q = c + .5;
+        double q = c + 0.5;
         s.numerator += magnitudes[i] * q;
         s.squared_norm += q * q;
         if (c > 0) {
@@ -84,7 +86,7 @@ static inline RescaleSearchState finish_scale_state(
 
 // Finite IEEE-754 binary64 neighbors for outward-rounded bounds.
 // Adjusting the representation leaves the floating-point rounding mode unchanged.
-static inline double next_double_up(double value) {
+inline double next_double_up(double value) {
     static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8);
     // Both signed zeros step to the smallest positive subnormal.
     if (value == 0) {
@@ -98,7 +100,7 @@ static inline double next_double_up(double value) {
     return value;
 }
 
-static inline double next_double_down(double value) {
+inline double next_double_down(double value) {
     // Both signed zeros step to the smallest-magnitude negative subnormal.
     if (value == 0) {
         return -std::numeric_limits<double>::denorm_min();
@@ -110,9 +112,6 @@ static inline double next_double_down(double value) {
     return value;
 }
 
-// Its default member initializers give it a constructor, so keep the type
-// TU-local as well.
-namespace {
 struct BoundedRescaleState {
     RescaleSearchState state{};
     // Enclose the true dot product despite SIMD summation rounding. S is exact
@@ -122,7 +121,6 @@ struct BoundedRescaleState {
     double score_lower = 0;
     double score_upper = 0;
 };
-}  // namespace
 
 // Upper bound on squared cosine similarity for every code between two evaluated
 // states. Here a_i = input[i] is a rotated, normalized residual magnitude, and
@@ -131,7 +129,7 @@ struct BoundedRescaleState {
 // so maximizing squared cosine also maximizes cosine, the heap sweep's objective.
 // This bounds the whole interval; comparing endpoint scores alone cannot
 // exclude a better interior code because the score need not be monotonic.
-static inline double interval_squared_cosine_upper_bound(
+inline double interval_squared_cosine_upper_bound(
     const BoundedRescaleState& left, const BoundedRescaleState& right
 ) {
     const double endpoints = std::max(left.score_upper, right.score_upper);
@@ -235,7 +233,7 @@ static inline double interval_squared_cosine_upper_bound(
 // Return false on ambiguous scores or work limits: the caller discards the
 // tentative result and runs the exact heap sweep, preserving its tie order.
 template <typename Evaluator>
-static bool try_find_best_scale_by_interval_search(
+bool try_find_best_scale_by_interval_search(
     const float* input,
     size_t dim,
     int max_code,
@@ -396,7 +394,7 @@ static bool try_find_best_scale_by_interval_search(
 
 // The searched scale, or -1 to ask the caller to rerun the exact heap search.
 template <typename Evaluator>
-static double best_scale_or_fallback(
+double best_scale_or_fallback(
     const float* input,
     size_t dim,
     int max_code,
@@ -422,4 +420,5 @@ static double best_scale_or_fallback(
                : -1;
 }
 
+}  // namespace
 }  // namespace rabitqlib::simd::detail

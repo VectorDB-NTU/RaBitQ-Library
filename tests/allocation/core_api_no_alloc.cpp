@@ -133,13 +133,13 @@ bool has_neon() { return false; }
 
 int main() {
     namespace api = rabitqlib::quant::v1;
-    constexpr size_t max_dim = 4096;
-    alignas(std::max_align_t) std::array<std::byte, max_dim * 64 + 1024> memory{};
-    std::array<float, max_dim> data{}, centroid{}, query{}, rotated{};
-    std::array<uint8_t, max_dim * 2> raw{}, restored{};
-    std::array<uint8_t, max_dim / 8> signs{};
-    std::array<uint8_t, max_dim> extra{};
-    for (size_t i = 0; i < max_dim; ++i) {
+    constexpr size_t kMaxDim = 4096;
+    alignas(std::max_align_t) std::array<std::byte, kMaxDim * 64 + 1024> memory{};
+    std::array<float, kMaxDim> data{}, centroid{}, query{}, rotated{};
+    std::array<uint8_t, kMaxDim * 2> raw{}, restored{};
+    std::array<uint8_t, kMaxDim / 8> signs{};
+    std::array<uint8_t, kMaxDim> extra{};
+    for (size_t i = 0; i < kMaxDim; ++i) {
         data[i] = static_cast<float>(static_cast<int>(i % 19) - 9) / 11;
         centroid[i] = static_cast<float>(static_cast<int>(i % 7) - 3) / 13;
         query[i] = static_cast<float>(static_cast<int>(i % 23) - 11) / 17;

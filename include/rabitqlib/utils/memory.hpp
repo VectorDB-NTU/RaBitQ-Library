@@ -37,8 +37,8 @@ inline void advise_huge_pages(void* ptr, size_t size) {
 #if defined(__linux__)
     madvise(ptr, size, MADV_HUGEPAGE);
 #else
-    (void)ptr;
-    (void)size;
+    static_cast<void>(ptr);
+    static_cast<void>(size);
 #endif
 }
 
@@ -92,7 +92,7 @@ class AlignedAllocator {
     using value_type = T;
     using is_always_equal = std::true_type;
 
-    template <class U>
+    template <typename U>
     struct rebind {
         using other = ReboundAllocator<U>;
     };
@@ -116,15 +116,15 @@ class AlignedAllocator {
         return false;
     }
 
-    [[nodiscard]] T* allocate(std::size_t n) {
-        if (n > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+    [[nodiscard]] T* allocate(size_t n) {
+        if (n > std::numeric_limits<size_t>::max() / sizeof(T)) {
             throw std::bad_array_new_length();
         }
 
         return align_allocate<Alignment, T, HugePage>(n * sizeof(T));
     }
 
-    void deallocate(T* ptr, [[maybe_unused]] std::size_t n) { aligned_deallocate(ptr); }
+    void deallocate(T* ptr, [[maybe_unused]] size_t n) { aligned_deallocate(ptr); }
 };
 
 // Retain alignment and object lifetimes without zero-filling scalar storage.
@@ -159,6 +159,8 @@ inline T* huge_page_allocate(size_t nbytes) {
     return align_allocate<kAlignment, T, true>(nbytes);
 }
 
+// The prefetch helpers are also compiled into ISA-specific HNSW search translation
+// units, so the whole call chain keeps internal linkage.
 static inline void prefetch_l1(const void* addr) {
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
     _mm_prefetch(static_cast<const char*>(addr), _MM_HINT_T0);
@@ -169,7 +171,7 @@ static inline void prefetch_l1(const void* addr) {
 
 static inline void prefetch_l2(const void* addr) {
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
-    _mm_prefetch((const char*)addr, _MM_HINT_T1);
+    _mm_prefetch(static_cast<const char*>(addr), _MM_HINT_T1);
 #else
     __builtin_prefetch(addr, 0, 2);
 #endif
@@ -177,7 +179,7 @@ static inline void prefetch_l2(const void* addr) {
 
 // Prefetch num_lines 64-byte lines (at most 20) starting at ptr.
 template <void (*Prefetch)(const void*)>
-inline void mem_prefetch_lines(const char* ptr, size_t num_lines) {
+static inline void mem_prefetch_lines(const char* ptr, size_t num_lines) {
     // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
     // NOLINTBEGIN(bugprone-branch-clone)
     switch (num_lines) {
@@ -268,11 +270,11 @@ inline void mem_prefetch_lines(const char* ptr, size_t num_lines) {
     // NOLINTEND(bugprone-branch-clone)
 }
 
-inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
+static inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
     mem_prefetch_lines<prefetch_l1>(ptr, num_lines);
 }
 
-inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
+static inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
     mem_prefetch_lines<prefetch_l2>(ptr, num_lines);
 }
 }  // namespace rabitqlib::memory

@@ -122,8 +122,8 @@ def test_rejects_development_only_padding(tmp_path, kind, bits):
     cls = {"ivf": IvfIndex, "hnsw": HnswIndex, "qg": SymqgIndex}[kind]
     message = {
         "ivf": "Invalid padded dimension in IVF index file",
-        "hnsw": "HNSW: invalid or truncated index file",
-        "qg": "Invalid padded dimension in quantized graph file",
+        "hnsw": "HNSW index file is invalid or truncated",
+        "qg": "QuantizedGraph file has an invalid padded dimension",
     }[kind]
     with pytest.raises(RuntimeError, match=f"^{message}$"):
         cls.load(str(path))

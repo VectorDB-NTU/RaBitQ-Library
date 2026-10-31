@@ -27,11 +27,11 @@ inline void parallel_for(
     num_threads = std::min(resolve_num_threads(num_threads), end - start);
 
     if (num_threads == 1) {
-        for (size_t id = start; id < end; id++) {
+        for (size_t id = start; id < end; ++id) {
             fn(id, 0);
         }
     } else {
-#if defined(_OPENMP) && _OPENMP >= 201307
+#if RABITQ_USE_OPENMP && defined(_OPENMP) && _OPENMP >= 201307
         if ((reuse_workers && omp_get_level() == 0) ||
             omp_get_proc_bind() != omp_proc_bind_false) {
             // Independent query batches can reuse workers; graph insertion keeps
@@ -86,12 +86,9 @@ inline void parallel_for(
                                 last_except_mutex
                             );
                             last_exception = std::current_exception();
-                            /*
-                             * This will work even when current is the largest value that
-                             * size_t can fit, because fetch_add returns the previous value
-                             * before the increment (what will result in overflow
-                             * and produce 0 instead of current + 1).
-                             */
+                            // This works even when current is the largest size_t value:
+                            // fetch_add returns the value before the increment, which
+                            // would otherwise overflow to 0 instead of current + 1.
                             current = end;
                             break;
                         }
