@@ -52,6 +52,8 @@ class Initializer {
     virtual ~Initializer() = 0;
     [[nodiscard]] virtual const float* centroid(PID) const = 0;
     virtual void add_vectors(const float*, size_t) = 0;
+    // Resize the output to min(nprobe, number of clusters) and fill it with the
+    // nearest centroids in no particular order; the caller need not presize it.
     virtual void centroids_distances(
         const float*, size_t, std::vector<AnnCandidate<float>>&
     ) const = 0;
@@ -96,20 +98,18 @@ class FlatInitializer : public Initializer {
                     ? dot_product_dis(query, centroid(i), dim_)
                     : std::sqrt(euclidean_sqr(query, centroid(i), dim_));
         }
+        const size_t num_probes = std::min(nprobe, num_cluster_);
         std::partial_sort(
             centroid_candidates.begin(),
-            centroid_candidates.begin() + static_cast<long>(nprobe),
+            centroid_candidates.begin() + static_cast<std::ptrdiff_t>(num_probes),
             centroid_candidates.end()
         );
 
-        std::memcpy(
-            candidates.data(),
-            centroid_candidates.data(),
-            sizeof(AnnCandidate<float>) * nprobe
-        );
+        candidates.resize(num_probes);
+        std::copy_n(centroid_candidates.begin(), num_probes, candidates.begin());
     }
 
-    // for flat initer, we save & load into the ifstream
+    // The flat initializer stores its centroids inline in the index file stream.
     void save(std::ofstream& output, const char*) const override {
         output.write(
             reinterpret_cast<const char*>(centroids_.data()),
@@ -258,13 +258,20 @@ class HNSWInitializer : public Initializer {
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
+        const size_t num_probes = std::min(nprobe, num_cluster_);
+        candidates.resize(num_probes);
+        if (num_probes == 0) {
+            return;
+        }
         std::priority_queue<std::pair<float, hnswlib::labeltype>> result =
-            alg_hnsw_->searchKnnWithEf(query, nprobe, std::max(size_t{768}, 2 * nprobe));
-        if (result.size() != nprobe) {
+            alg_hnsw_->searchKnnWithEf(
+                query, num_probes, std::max(size_t{768}, 2 * num_probes)
+            );
+        if (result.size() != num_probes) {
             throw std::runtime_error("HNSW centroid graph returned too few candidates");
         }
 
-        for (size_t i = 0; i < nprobe; ++i) {
+        for (size_t i = 0; i < num_probes; ++i) {
             candidates[i].distance = metric_type_ == METRIC_IP
                                          ? result.top().first
                                          : std::sqrt(result.top().first);
@@ -273,7 +280,7 @@ class HNSWInitializer : public Initializer {
         }
     }
 
-    // for hnsw initer, we save & load into a separate file by hnswlib
+    // The HNSW initializer stores its graph in a separate hnswlib sidecar file.
     void save(std::ofstream&, const char* filename) const override {
         std::string hnsw(filename);
         hnsw += ".hnsw";
