@@ -3,6 +3,52 @@
 Compare RaBitQ-Library, Faiss, and SuperKMeans on one Intel Xeon Gold 6418H:
 [IVF indexes](ivf.md), [graph indexes](graphs.md), and [k-means](kmeans.md).
 
+## Key results
+
+![GIST1M: queries per second and index size for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG](figures/homepage-gist1m.svg){ .chart }
+
+On GIST1M, each bar is the fastest measured setting with Recall@10 >= 90%,
+without interpolation. IVF-RaBitQ/HNSW-RaBitQ use 5 total bits (one sign bit plus
+four extra bits) and SymphonyQG uses 4 bits. Actual recall and total storage
+differ; this is neither an exact-recall nor an equal-memory comparison.
+
+| Configuration | Measured Recall@10 | Queries / second | Index GiB | Selected search setting |
+| --- | ---: | ---: | ---: | --- |
+| IVF-RaBitQ · 5-bit | 92.82% | 1,038 | 0.60 | `nprobe=128` |
+| HNSW-RaBitQ · 5-bit | 92.70% | 1,866 | 0.72 | `ef=512` |
+| SymphonyQG · 4-bit | 90.36% | 3,086 | 4.39 | `ef=512` |
+
+These use the 0.7.1 measurements with one search thread and one query per call.
+Each setting has one timing pass. QPS includes Python call overhead after warm-up
+and excludes loading. Index size is serialized storage including sidecars, not
+resident or peak RAM. The figure and this table are a static export:
+`reproduce.py` does not regenerate them, so update both by hand after new runs.
+
+Full curves, baselines, construction costs and other precisions:
+[IVF indexes](ivf.md) · [graph indexes](graphs.md) · [k-means](kmeans.md).
+
+## Reading the figures
+
+Recall@10 is the mean fraction of exact top-10 neighbors returned. Each figure
+groups methods with similar storage per dimension into panels that share the QPS
+axis. Faint markers show all measured settings within the axis range; lines connect
+each method's Pareto frontier. QPS uses a logarithmic axis. The recall axis starts
+at 0.5, or lower so every method's best recall sits at least 0.1 inside the axis;
+settings below the start are clipped, and the CSV contains every measured point.
+
+## Reading the indexing tables
+
+| Column | Meaning |
+| --- | --- |
+| Train | Training or centroid clustering time |
+| Construct | Encoding and index construction after training |
+| Total | Construction including setup and training, excluding saving |
+| Save | Serialization time |
+| Index GiB | Serialized files, including sidecars and retained raw vectors |
+
+Times are seconds. Data preparation, ground-truth generation, and correctness
+checks are outside construction timing.
+
 ## Datasets and ground truth
 
 | Dataset | Base vectors | Dimensions | ANN metric | Queries |
@@ -31,6 +77,32 @@ L2 ground truth for OpenAI.
 | Compiler / CMake | RaBitQ 0.7.1: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; retained baselines: GCC 13.1.0 / 3.28.3, Release |
 | RaBitQ-Library | 0.7.1, measured 2026-10-23 (Asia/Singapore) |
 | Baselines | Faiss 1.15.0, SuperKMeans 0.2.0; Intel MKL 2020.4, GNU OpenMP |
+
+## Construction and search settings
+
+IVF uses 4,096 clusters. HNSW uses `M=16` and `efConstruction=200`;
+SymphonyQG uses degree 32. Family pages list all method settings.
+
+| Family | Search grid |
+| --- | --- |
+| IVF | `nprobe=1,2,4,8,16,32,64,128,256,512` |
+| Faiss IVF with RFlat | Above × `k_factor=1,2,5,10,20` |
+| Graph | `ef=16,32,64,128,256,512,1024` |
+
+Each setting searches all 1,000 queries at `k=10`, after warm-up. QPS is queries
+divided by elapsed search time, including Python call overhead and excluding
+index loading. Each setting has one timing pass.
+
+## Scope and limitations
+
+Each method has one build or fit per dataset; results do not measure run-to-run
+variation.
+The committed CSVs support checking the displayed tables and plotted points,
+but do not include raw run logs or measurement binaries. The 0.7.1 raw records,
+logs, indexes, source/build manifest and validation logs are not published.
+Historical baseline raw logs and
+binaries are not included. No run-to-run or shared-host noise correction is
+applied. The experiments in the cited papers are separate measurements.
 
 ## Package installation
 
@@ -80,62 +152,23 @@ source benchmarks/env.sh
 The installer builds RaBitQ from the selected checkout, Faiss 1.15.0, and SuperKMeans 0.2.0
 in the active environment. Both baselines link to MKL with GNU OpenMP. Build logs
 and verification records are saved in `build/benchmark-baselines/`.
-Use `--dry-run` to preview installation commands. The installer defaults to the
-historical GCC 13 toolchain; it does not recreate the GCC 14.3.0 wheel used for
-the 0.7.1 measurements. Match the recorded compiler and native-optimization
-setting when comparing new library timings.
-
-## Construction and search settings
-
-IVF uses 4,096 clusters. HNSW uses `M=16` and `efConstruction=200`;
-SymphonyQG uses degree 32. Family pages list all method settings.
-
-| Family | Search grid |
-| --- | --- |
-| IVF | `nprobe=1,2,4,8,16,32,64,128,256,512` |
-| Faiss IVF with RFlat | Above × `k_factor=1,2,5,10,20` |
-| Graph | `ef=16,32,64,128,256,512,1024` |
-
-Each setting searches all 1,000 queries at `k=10`, after warm-up. QPS is queries
-divided by elapsed search time, including Python call overhead and excluding
-index loading. Each setting has one timing pass.
-
-## Reading the figures
-
-Recall@10 is the mean fraction of exact top-10 neighbors returned. Faint markers
-show all measured settings; lines connect each method's Pareto frontier. QPS uses
-a logarithmic axis. The CSV contains every measured point.
-
-## Reading the indexing tables
-
-| Column | Meaning |
-| --- | --- |
-| Train | Training or centroid clustering time |
-| Construct | Encoding and index construction after training |
-| Total | Construction including setup and training, excluding saving |
-| Save | Serialization time |
-| Index GiB | Serialized files, including sidecars and retained raw vectors |
-
-Times are seconds. Data preparation, ground-truth generation, and correctness
-checks are outside construction timing.
-
-## Scope and limitations
-
-Each method has one build or fit per dataset; results do not measure run-to-run
-variation.
-The committed CSVs support checking the displayed tables and plotted points,
-but do not include raw run logs or measurement binaries. The 0.7.1 raw records,
-logs and indexes are retained locally under
-`results/benchmarks-0.7.1-20261023/`. The source/build manifest, wheel hashes,
-validation logs and execution status are retained in the local release task records.
-Historical baseline raw logs and
-binaries are not included. No run-to-run or shared-host noise correction is
-applied. The experiments in the cited papers are separate measurements.
+Use `--dry-run` to check prerequisites and print the installation commands
+without running them. The installer defaults to the historical GCC 13 toolchain
+and builds RaBitQ with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=ON`; it does not
+recreate the GCC 14.3.0, native-optimization-OFF wheel used for the 0.7.1
+measurements. Match the recorded compiler and native-optimization setting when
+comparing new library timings.
 
 ## Data and reproduction
 
 Run from the selected checkout's repository root after installation. Use the
-same checkout for installation and measurement:
+same checkout for installation and measurement. The runners target the recorded
+hardware: the download, build and query stages run under
+`numactl --cpunodebind=0 --membind=0`, ANN
+construction uses 48 threads on socket 0, and the runners stop with an error when
+the process spans more than one socket, the socket has fewer CPUs than threads,
+or k-means does not see 24 physical cores and 48 logical CPUs. Other hosts
+need script changes.
 
 ```bash
 # Prepare data, run all benchmarks, and export results
@@ -172,7 +205,8 @@ workspace require additional space.
 
 Existing results are skipped. Use a fresh `--output-dir` to repeat measurements;
 this changes raw result and log paths, while documentation exports retain the
-paths above. Partial exports preserve unselected results.
+paths above. Partial exports preserve unselected results; figure subtitles name
+the CPU recorded by the selected records, and retained rows are not rechecked.
 
 Use `--stage build`, `--stage query`, or `--stage export` for one stage. Querying
 reuses saved indexes; export runs no experiments. `--dry-run` previews commands;
@@ -183,27 +217,3 @@ reuses saved indexes; export runs no experiments. `--dry-run` previews commands;
 
 [Query CSV](figures/qps-recall-points.csv) · [Indexing CSV](figures/indexing.csv) ·
 [K-means CSV](figures/kmeans.csv)
-
-## Selected GIST1M configurations
-
-The comparison uses IVF-RaBitQ/HNSW-RaBitQ at 5 total bits (one sign bit plus four extra bits)
-and SymphonyQG at 4 bits. For each GIST1M configuration, the QPS bar selects
-the fastest measured setting with Recall@10 >= 90%, without interpolation.
-Actual recall and total storage differ; this is neither an exact-recall nor an
-equal-memory comparison. The tables below identify the selected CSV rows for the
-[comparison figure](figures/homepage-gist1m.svg).
-
-### GIST1M
-
-| Configuration | Measured Recall@10 | Selected search setting |
-| --- | ---: | --- |
-| IVF-RaBitQ · 5-bit | 92.82% | `nprobe=128` |
-| HNSW-RaBitQ · 5-bit | 92.70% | `ef=512` |
-| SymphonyQG · 4-bit | 90.36% | `ef=512` |
-
-The figures use the 0.7.1 measurements described above, with one search thread
-and one query per call. Each setting has one timing pass. QPS includes Python
-call overhead after warm-up and excludes loading. Index size is serialized
-storage including sidecars, not resident or peak RAM.
-See [IVF-RaBitQ results](ivf.md) and [graph results](graphs.md) for full curves,
-construction costs, and additional precision/storage configurations.

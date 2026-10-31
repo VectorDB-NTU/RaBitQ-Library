@@ -13,8 +13,10 @@ hide:
 # Vector search with<br>compact RaBitQ codes. { #compact-vector-search-with-rabitq }
 
 <p class="hero-description">Compress vectors and search for nearest neighbors.
-Use ready-made indexes in Python or C++, or integrate quantization and distance
-estimation into your own C++ search engine.</p>
+RaBitQ estimates distances from 1–9-bit codes with a theoretical error bound,
+and its multi-bit extension is asymptotically optimal. Use ready-made indexes in
+Python or <span class="nowrap">C++</span>, or integrate quantization and distance
+estimation into your own <span class="nowrap">C++</span> search engine.</p>
 
 <div class="hero-actions" id="start-here" markdown>
 
@@ -48,6 +50,8 @@ of clusters probed to balance storage, recall, and query time.
 
 **Updates:** append and remove vectors.
 
+**GIST1M, 5-bit:** 1,038 QPS at 92.8% Recall@10; 0.60 GiB index.
+
 </div>
 
 <div class="feature-card" markdown>
@@ -59,6 +63,8 @@ search window and graph degree alongside the code precision.
 
 **Updates:** append and remove vectors.
 
+**GIST1M, 5-bit:** 1,866 QPS at 92.7% Recall@10; 0.72 GiB index.
+
 </div>
 
 <div class="feature-card" markdown>
@@ -69,6 +75,8 @@ Build a graph directly from vectors, without a separate clustering step.
 Combine batched neighbor scoring with raw or 4/8-bit vector storage.
 
 **Updates:** rebuild to change the dataset.
+
+**GIST1M, 4-bit:** 3,086 QPS at 90.4% Recall@10; 4.39 GiB index.
 
 </div>
 
@@ -87,9 +95,11 @@ For input shapes, distance conventions, memory estimates, and threading, see
 
 ## Compare measured performance
 
-See the [benchmarks](benchmarks/bench.md) for datasets, settings, measured
-results, and limitations. Evaluate recall and query time on your own dataset
-when choosing an index.
+The GIST1M numbers above are the fastest measured setting with Recall@10 ≥ 90%,
+using one search thread and one query per call with RaBitQ-Library 0.7.1; index
+size is serialized storage. See the [benchmark results](benchmarks/bench.md#key-results)
+for datasets, baselines, settings, and limitations. Evaluate recall and query time
+on your own dataset when choosing an index.
 
 ## Built with RaBitQ-Library
 

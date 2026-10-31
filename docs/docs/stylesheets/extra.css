@@ -71,12 +71,15 @@ body { -webkit-font-smoothing: antialiased; }
 .md-header__button.md-logo { color: var(--md-typeset-a-color); }
 .md-grid { max-width: 68rem; }
 .md-main__inner { margin-top: 1.6rem; }
+/* Tables, code and figures use the full column; prose keeps a readable measure. */
 .md-content__inner {
   box-sizing: border-box;
-  max-width: 34rem;
+  max-width: 44rem;
   margin-inline: auto;
   padding-inline: 1rem;
 }
+.md-typeset > :is(p, ul, ol, dl, blockquote, h2, h3, h4) { max-width: 34rem; }
+.md-typeset > p:has(> img.chart) { max-width: none; }
 .md-content__inner:has(.hero) { max-width: none; }
 .hero .hero-logo {
   display: block;
@@ -150,6 +153,12 @@ body { -webkit-font-smoothing: antialiased; }
   border-left: 2px solid var(--rq-line);
 }
 .md-typeset :is(.admonition, details) { border-radius: .4rem; box-shadow: none; }
+.md-typeset img.chart {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--rq-line);
+  border-radius: .4rem;
+}
 
 .md-typeset .md-button {
   padding: .55em 1.3em;
@@ -208,6 +217,7 @@ body { -webkit-font-smoothing: antialiased; }
   font-size: .9rem;
   line-height: 1.65;
 }
+.hero .nowrap { white-space: nowrap; }
 .hero .hero-actions {
   display: flex;
   flex-wrap: wrap;
@@ -287,6 +297,9 @@ body { -webkit-font-smoothing: antialiased; }
   .hero h1 { font-size: clamp(1.65rem, 7.5vw, 2.4rem); }
   .hero .hero-description { font-size: .86rem; }
   .feature-grid { grid-template-columns: 1fr; gap: 1rem; }
+  /* Keep chart text legible; the figure scrolls sideways instead of shrinking. */
+  .md-typeset > p:has(> img.chart) { overflow-x: auto; }
+  .md-typeset img.chart { width: 36rem; max-width: none; }
   .md-typeset pre > code,
   .md-typeset .highlight pre > code { padding: .8rem; }
 }

@@ -7,6 +7,30 @@ See the [source revisions, environments and comparison limits](bench.md#package-
 Compare **QGKMeans**, **Faiss K-means**, and **SuperKMeans** using their Python APIs.
 Metrics are total time, WCSS, and recall@10 with 1% of clusters probed.
 
+## Results
+
+### GIST1M
+
+<!-- kmeans:gist1m:start -->
+| Method | Total time (s) | WCSS | Recall@10 (40 probes) | Iterations |
+| --- | ---: | ---: | ---: | ---: |
+| QGKMeans | 14.88 | 1034709 | 0.815900 | 25 |
+| Faiss K-means | 84.17 | 1034624.88 | 0.815700 | 25 |
+| SuperKMeans | 28.14 | 1034648.39 | 0.820700 | 25 |
+<!-- kmeans:gist1m:end -->
+
+### DBpedia
+
+<!-- kmeans:dbpedia:start -->
+| Method | Total time (s) | WCSS | Recall@10 (40 probes) | Iterations |
+| --- | ---: | ---: | ---: | ---: |
+| QGKMeans | 22.35 | 620213.444 | 0.894400 | 25 |
+| Faiss K-means | 171.03 | 620737.534 | 0.894700 | 25 |
+| SuperKMeans | 35.23 | 620268.628 | 0.896800 | 24 |
+<!-- kmeans:dbpedia:end -->
+
+[Download measurements (CSV)](figures/kmeans.csv)
+
 ## Settings
 
 | Setting | Value |
@@ -48,30 +72,6 @@ and initializers; the same seed does not guarantee identical starting centroids.
 
 Exact assignments are checked on 128 base vectors using float64 distances,
 outside timing.
-
-## Results
-
-### GIST1M
-
-<!-- kmeans:gist1m:start -->
-| Method | Total time (s) | WCSS | Recall@10 (40 probes) | Iterations |
-| --- | ---: | ---: | ---: | ---: |
-| QGKMeans | 14.88 | 1034709 | 0.815900 | 25 |
-| Faiss K-means | 84.17 | 1034624.88 | 0.815700 | 25 |
-| SuperKMeans | 28.14 | 1034648.39 | 0.820700 | 25 |
-<!-- kmeans:gist1m:end -->
-
-### DBpedia
-
-<!-- kmeans:dbpedia:start -->
-| Method | Total time (s) | WCSS | Recall@10 (40 probes) | Iterations |
-| --- | ---: | ---: | ---: | ---: |
-| QGKMeans | 22.35 | 620213.444 | 0.894400 | 25 |
-| Faiss K-means | 171.03 | 620737.534 | 0.894700 | 25 |
-| SuperKMeans | 35.23 | 620268.628 | 0.896800 | 24 |
-<!-- kmeans:dbpedia:end -->
-
-[Download measurements (CSV)](figures/kmeans.csv)
 
 ## Reproduction
 
