@@ -32,6 +32,7 @@
 #include "rabitqlib/index/symqg/detail/search_scratch.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/bitops.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/path.hpp"
@@ -452,6 +453,7 @@ void QuantizedGraph<float>::search_impl(
     const float* query, uint32_t k, uint32_t* result_ids, float* distances, size_t ef_search
 ) {
     validate_search(query, k, result_ids, distances, ef_search);
+    check_coordinates(query, dim_, dim_, "QuantizedGraph search query");
     detail::SearchScratch scratch(padded_dim_, max_degree_, ef_search, k);
     thread_local VisitedSet visited;
     thread_local size_t visited_size = 0;
@@ -498,6 +500,7 @@ void QuantizedGraph<float>::search_batch_with_ef(
         search_impl(queries, k, result_ids, distances, ef_search);
         return;
     }
+    check_coordinates(queries, num_queries * dim_, dim_, "QuantizedGraph search queries");
 
     const int num_workers = rabitqlib::detail::openmp_team_size(num_threads, num_queries);
     index_detail::ParallelException failure;
@@ -808,6 +811,7 @@ void detail::search_with_workspace(
     const float* k1xsumq
 ) {
     graph.validate_search(query, k, result_ids, distances, graph.default_ef_search_);
+    check_coordinates(query, graph.dim_, graph.dim_, "QuantizedGraph search query");
     graph.search_with_scratch_impl(query, k, result_ids, distances, scratch, hint, k1xsumq);
 }
 

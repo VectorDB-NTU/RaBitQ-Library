@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -11,6 +12,7 @@
 #include <future>
 #include <ios>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -25,6 +27,7 @@
 #include "rabitqlib/index/hnsw/hnsw_quant.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "temp_file.hpp"
 
@@ -1322,6 +1325,109 @@ TEST(HnswRemoveTest, LoadRejectsAnOutOfRangeClusterEvenWithTheMark) {
     } catch (const std::runtime_error& error) {
         EXPECT_STREQ(error.what(), "HNSW index file is invalid or truncated");
     }
+}
+
+TEST(HnswInputTest, RejectsNonFiniteAndOversizedCoordinatesBeforeMutation) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kCount = 16;
+    constexpr size_t kClusters = 2;
+    std::mt19937 gen(905);
+    std::normal_distribution<float> normal;
+    std::vector<float> data(kCount * kDim);
+    std::vector<float> centroids(kClusters * kDim);
+    std::vector<float> extra(2 * kDim);
+    std::vector<float> queries(2 * kDim);
+    for (auto* values : {&data, &centroids, &extra, &queries}) {
+        for (auto& value : *values) {
+            value = normal(gen);
+        }
+    }
+    std::vector<PID> cluster_ids(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        cluster_ids[i] = static_cast<PID>(i % kClusters);
+    }
+    const float bound = max_coordinate_magnitude(kDim);
+    const std::array<float, 4> rejected{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+        2.0F * bound,
+    };
+    const auto message_for = [](float value, const char* what) {
+        return std::string(what) + (std::isfinite(value)
+                                        ? " exceeds the safe float32 coordinate range"
+                                        : " must contain only finite values");
+    };
+    const auto expect_message = [](const auto& call, const std::string& message) {
+        try {
+            call();
+            ADD_FAILURE() << "expected: " << message;
+        } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+    };
+
+    HierarchicalNSW index(kCount + 2, kDim, 4, 8, 32);
+    for (float value : rejected) {
+        auto bad_data = data;
+        bad_data[kDim + 3] = value;
+        expect_message(
+            [&] {
+                index.construct(
+                    kClusters,
+                    centroids.data(),
+                    kCount,
+                    bad_data.data(),
+                    cluster_ids.data(),
+                    1
+                );
+            },
+            message_for(value, "HNSW construction data")
+        );
+        auto bad_centroids = centroids;
+        bad_centroids.back() = value;
+        expect_message(
+            [&] {
+                index.construct(
+                    kClusters,
+                    bad_centroids.data(),
+                    kCount,
+                    data.data(),
+                    cluster_ids.data(),
+                    1
+                );
+            },
+            message_for(value, "HNSW construction centroids")
+        );
+        EXPECT_EQ(index.num_stored_points(), 0U);
+    }
+    ASSERT_NO_THROW(index.construct(
+        kClusters, centroids.data(), kCount, data.data(), cluster_ids.data(), 1
+    ));
+    ASSERT_EQ(index.num_stored_points(), kCount);
+
+    for (float value : rejected) {
+        auto bad_extra = extra;
+        bad_extra[kDim] = value;
+        expect_message(
+            [&] { index.add(bad_extra.data(), 2, nullptr, false, 1); },
+            message_for(value, "HNSW add data")
+        );
+        EXPECT_EQ(index.num_stored_points(), kCount);
+        auto bad_queries = queries;
+        bad_queries[kDim + 1] = value;
+        expect_message(
+            [&] { index.search(bad_queries.data(), 2, 3, 10, 1); },
+            message_for(value, "HNSW search queries")
+        );
+    }
+    // The bound itself is accepted everywhere.
+    auto edge = extra;
+    edge[0] = bound;
+    edge[kDim] = -bound;
+    ASSERT_NO_THROW(index.add(edge.data(), 2, nullptr, false, 1));
+    EXPECT_EQ(index.num_stored_points(), kCount + 2);
+    auto edge_queries = queries;
+    edge_queries[0] = bound;
+    EXPECT_EQ(index.search(edge_queries.data(), 2, 3, 10, 1).size(), 2U);
 }
 
 }  // namespace

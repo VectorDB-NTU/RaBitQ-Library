@@ -38,6 +38,7 @@
 #include "rabitqlib/index/ivf/cluster.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -210,6 +211,8 @@ void IVF::construct(
         id_lists[cluster_id].push_back(static_cast<PID>(i));
         cluster_sizes[cluster_id] += 1;
     }
+    check_coordinates(data, max_elements_ * dim_, dim_, "IVF construction data");
+    check_coordinates(centroids, num_clusters_ * dim_, dim_, "IVF construction centroids");
 
     allocate_storage(cluster_sizes);
     create_cluster_views(cluster_sizes);
@@ -356,6 +359,7 @@ void IVF::add(
     if (exceeds_storage(new_num_points)) {
         throw std::invalid_argument("IVF configuration exceeds addressable storage");
     }
+    check_coordinates(data, num_points * dim_, dim_, "IVF add data");
 
     // Assign every new point to a cluster
     std::vector<PID> assigned(num_points);
@@ -977,6 +981,7 @@ void IVF::search(
     bool use_hacc
 ) const {
     validate_search(query, k, nprobe, result_ids);
+    check_coordinates(query, dim_, dim_, "IVF search query");
 
     nprobe = std::min(nprobe, num_clusters_);  // Probe at most every cluster
     std::vector<float> rotated_query(padded_dim_);
@@ -1039,6 +1044,7 @@ void IVF::search_batch(
     if (num_queries > max_values / dim_ || num_queries > max_values / k) {
         throw std::length_error("IVF query batch is too large");
     }
+    check_coordinates(queries, num_queries * dim_, dim_, "IVF search queries");
     nprobe = std::min(nprobe, num_clusters_);
     const bool hacc = use_hacc.value_or(!raw_reranking_ && ex_bits_ > 2);
     const size_t num_workers =

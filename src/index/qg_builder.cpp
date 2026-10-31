@@ -25,6 +25,7 @@
 #include "rabitqlib/index/symqg/detail/pipnn.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
@@ -100,6 +101,7 @@ void QGBuilder::reset(const float* data) {
     if (data == nullptr) {
         throw std::invalid_argument("QuantizedGraph build data must not be null");
     }
+    check_coordinates(data, num_points_ * dim_, dim_, "QuantizedGraph build data");
     if (initialization_ == QGInitialization::PiPNN) {
         auto initial = detail::build_initial_graph(
             data, num_points_, dim_, max_degree_, qg_.metric_type_, num_workers_

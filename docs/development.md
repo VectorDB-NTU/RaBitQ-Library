@@ -334,6 +334,16 @@ Keep validation at the public operation boundary and reuse only invariants estab
 for that operation. Buffer contents and per-record factors may change between calls:
 validate them again even when reusing a query or workspace.
 
+**Index inputs**
+
+Every index entry point that accepts float data, centroids or queries calls
+`check_coordinates` from `utils/input_checks.hpp` after its shape checks and before
+mutating state: non-finite values and magnitudes above the clustering bound raise
+`std::invalid_argument`. The core `quantize_*` encoders and `Lut` rely on that (the
+LUT additionally rejects non-finite rotated queries) because quantization converts
+floats to integers, which is undefined for NaN. Keep the check at the boundary rather
+than inside per-vector kernels.
+
 **Python conversion**
 
 `ensure_*` returns a normalized NumPy owner retained across GIL release;

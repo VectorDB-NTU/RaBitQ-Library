@@ -40,6 +40,7 @@
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 #include "temp_file.hpp"
@@ -2114,5 +2115,80 @@ TEST(QgSearchTest, ExplicitWindowsAreIndependentOfDefaultAndConcurrentCalls) {
             EXPECT_NO_THROW(graph.search_batch_with_ef(nullptr, 0, 0, nullptr, nullptr, 0));
         }
     }
+}
+}  // namespace rabitqlib::symqg
+
+namespace rabitqlib::symqg {
+TEST(QgInputTest, RejectsNonFiniteAndOversizedCoordinatesBeforeMutation) {
+    constexpr size_t kCount = 33, kDim = 64;
+    std::vector<float> data(kCount * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.17F);
+    }
+    const float bound = max_coordinate_magnitude(kDim);
+    const std::array<float, 4> rejected{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+        2.0F * bound,
+    };
+    const auto message_for = [](float value, const char* what) {
+        return std::string(what) + (std::isfinite(value)
+                                        ? " exceeds the safe float32 coordinate range"
+                                        : " must contain only finite values");
+    };
+    const auto expect_message = [](const auto& call, const std::string& message) {
+        try {
+            call();
+            ADD_FAILURE() << "expected: " << message;
+        } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+    };
+
+    for (float value : rejected) {
+        auto bad_data = data;
+        bad_data[kDim + 5] = value;
+        for (auto init : {QGInitialization::Random, QGInitialization::PiPNN}) {
+            QuantizedGraph<float> graph(kCount, kDim, 32);
+            expect_message(
+                [&] { QGBuilder(graph, 32, bad_data.data(), 1, init); },
+                message_for(value, "QuantizedGraph build data")
+            );
+            EXPECT_EQ(graph.num_points(), 0U);
+        }
+    }
+
+    QuantizedGraph<float> graph(kCount, kDim, 32);
+    QGBuilder builder(graph, 32, data.data(), 1, QGInitialization::Random);
+    builder.build(2);
+    graph.set_ef(10);
+    const std::vector<float> queries(data.begin(), data.begin() + 2 * kDim);
+    std::vector<uint32_t> result_ids(2 * 3);
+    std::vector<float> distances(2 * 3);
+    for (float value : rejected) {
+        auto bad_query = queries;
+        bad_query[0] = value;
+        expect_message(
+            [&] { graph.search(bad_query.data(), 3, result_ids.data(), distances.data()); },
+            message_for(value, "QuantizedGraph search query")
+        );
+        auto bad_batch = queries;
+        bad_batch[kDim + 1] = value;
+        expect_message(
+            [&] {
+                graph.search_batch(
+                    bad_batch.data(), 2, 3, result_ids.data(), distances.data(), 1
+                );
+            },
+            message_for(value, "QuantizedGraph search queries")
+        );
+    }
+    auto edge_query = queries;
+    edge_query[0] = bound;
+    ASSERT_NO_THROW(
+        graph.search(edge_query.data(), 3, result_ids.data(), distances.data())
+    );
+    ASSERT_NO_THROW(
+        graph.search_batch(edge_query.data(), 2, 3, result_ids.data(), distances.data(), 1)
+    );
 }
 }  // namespace rabitqlib::symqg

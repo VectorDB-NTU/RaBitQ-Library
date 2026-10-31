@@ -122,6 +122,8 @@ inline void quantize_compact_ex_bits(
     cur_ex_data.f_rescale_ex() = f_rescale_ex;
 }
 
+// The per-vector encoders assume finite inputs; callers validate once per batch
+// (see utils/input_checks.hpp) because quantization converts floats to integers.
 inline void quantize_split_single(
     const float* data,
     const float* centroid,

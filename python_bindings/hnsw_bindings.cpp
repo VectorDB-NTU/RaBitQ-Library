@@ -311,7 +311,9 @@ random_seed : int, optional
 Notes
 -----
 Build or load the index before searching or saving. Concurrent reads are
-supported; an overlapping mutation raises RuntimeError.)doc";
+supported; an overlapping mutation raises RuntimeError.
+Data, centroids and queries must be finite float32 values within the index
+coordinate range; other values raise ValueError.)doc";
 
     py::class_<HnswIndex>(m, "HnswIndex", kIndexDoc)
         .def(

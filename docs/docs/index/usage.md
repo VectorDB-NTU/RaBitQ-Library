@@ -14,6 +14,14 @@ as the indexed data.
 Arrays whose data pointers are not aligned for float32 are copied into aligned
 storage before native processing; inputs remain unchanged.
 
+Data, centroids and queries must be finite. Coordinates are also limited to the
+magnitude the clustering APIs accept, `sqrt(sqrt(FLT_MAX) / (64 * dim))` (about
+`5e7` for `dim = 128`), so that squared distances and their products stay inside
+float32. `build`, `add` and `search` raise `ValueError` (C++:
+`std::invalid_argument`) for NaN, infinite, or larger coordinates before changing
+the index. The C++ `quantize_*` encoders in `core/encoder.hpp` assume their
+callers have validated the input.
+
 These limits apply to the Python indexes. The C++ [stable core API](../rabitq/core_api.md)
 accepts working dimensions from 2, with multiples of 32 required for `SplitPacked`.
 C++ [MatrixRotator](../rabitq/rotator.md) has separate dimension and storage requirements;

@@ -94,6 +94,8 @@ class IvfIndex:
     -----
     Build or load the index before searching or saving. Concurrent reads are
     supported; an overlapping mutation raises RuntimeError.
+    Data, centroids and queries must be finite float32 values within the index
+    coordinate range; other values raise ValueError.
 
     Examples
     --------
@@ -140,6 +142,8 @@ class IvfIndex:
         -----
         Build or load the index before searching or saving. Concurrent reads are
         supported; an overlapping mutation raises RuntimeError.
+        Data, centroids and queries must be finite float32 values within the index
+        coordinate range; other values raise ValueError.
 
         Examples
         --------
@@ -388,6 +392,8 @@ class HnswIndex:
     -----
     Build or load the index before searching or saving. Concurrent reads are
     supported; an overlapping mutation raises RuntimeError.
+    Data, centroids and queries must be finite float32 values within the index
+    coordinate range; other values raise ValueError.
     """
 
     def __init__(
@@ -424,6 +430,8 @@ class HnswIndex:
         -----
         Build or load the index before searching or saving. Concurrent reads are
         supported; an overlapping mutation raises RuntimeError.
+        Data, centroids and queries must be finite float32 values within the index
+        coordinate range; other values raise ValueError.
         """
 
     def __repr__(self) -> str:
@@ -641,6 +649,8 @@ class SymqgIndex:
     -----
     Build or load the index before searching or saving. Concurrent reads are
     supported; an overlapping mutation raises RuntimeError.
+    Data, centroids and queries must be finite float32 values within the index
+    coordinate range; other values raise ValueError.
     """
 
     def __init__(
@@ -669,6 +679,8 @@ class SymqgIndex:
         -----
         Build or load the index before searching or saving. Concurrent reads are
         supported; an overlapping mutation raises RuntimeError.
+        Data, centroids and queries must be finite float32 values within the index
+        coordinate range; other values raise ValueError.
         """
 
     def __repr__(self) -> str:

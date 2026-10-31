@@ -12,6 +12,7 @@
 #include "rabitqlib/fastscan/detail/lut_prepare.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib {
@@ -67,6 +68,10 @@ class Lut {
             throw std::invalid_argument(
                 "Lut::reset requires uint16 scratch for high-accuracy lookup tables"
             );
+        }
+        // Table quantization converts query-derived values to integers.
+        if (!all_finite(rotated_query, padded_dim)) {
+            throw std::invalid_argument("Lut::reset requires a finite query");
         }
         lut_.resize(shape.storage_length);
         table_length_ = shape.table_length;
