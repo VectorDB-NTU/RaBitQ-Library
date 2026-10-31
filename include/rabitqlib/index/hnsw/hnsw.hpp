@@ -362,6 +362,9 @@ class HierarchicalNSW {
 
     int get_random_level(double reverse_size);
 
+    // Write the index file at exactly this path.
+    void write_file(const char* filename) const;
+
     PID* get_linklist(PID internal_id, int level) {
         return reinterpret_cast<PID*>(
             link_lists_[internal_id].get() + ((level - 1) * upper_layer_links_bytes_)

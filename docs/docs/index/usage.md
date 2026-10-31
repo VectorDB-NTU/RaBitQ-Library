@@ -141,6 +141,12 @@ bytes, but non-UTF-8 filenames require filesystem support. Windows byte paths us
 UTF-8. Embedded null characters are rejected before file access. IVF HNSW sidecars
 use the same path conversion.
 
+`save` writes a temporary file beside the destination and renames it into place, so a
+failed save leaves an existing index unchanged. A replaced file keeps its permission
+bits, but not its owner or other hard links. Symbolic links and other non-regular
+destinations are written in place. IVF renames its HNSW sidecar before the index file;
+a failure between the two renames can leave a new sidecar beside the old index.
+
 ## Index file compatibility
 
 The compatibility suite loads frozen files written by v0.5.2, compares search

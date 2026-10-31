@@ -15,10 +15,12 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "file_replacement.hpp"
 #include "ivf_search.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
@@ -703,6 +705,16 @@ void IVF::save(const char* filename) const {
         throw std::invalid_argument("IVF save filename must not be empty");
     }
 
+    // An HNSW initializer writes its sidecar next to the path it is given.
+    const auto write = [this](const std::string& path) { write_file(path.c_str()); };
+    if (initializer_type_ == InitializerType::HNSW) {
+        index_detail::save_replacing(filename, {".hnsw"}, write);
+    } else {
+        index_detail::save_replacing(filename, {}, write);
+    }
+}
+
+void IVF::write_file(const char* filename) const {
     std::ofstream output(rabitqlib::io_impl::filesystem_path(filename), std::ios::binary);
     output.exceptions(std::ios::failbit | std::ios::badbit);
     const uint32_t flags = raw_reranking_ ? 1 : 0;
