@@ -370,8 +370,8 @@ TEST(SplitBatchQueryAllocation, InitialPreparationAndGrowthFailurePreserveState)
         EXPECT_EQ(query.use_hacc(), original.use_hacc());
         EXPECT_EQ(query.delta(), original.delta());
         EXPECT_EQ(query.sum_vl_lut(), original.sum_vl_lut());
-        EXPECT_EQ(query.k1xsumq(), original.k1xsumq());
-        EXPECT_EQ(query.kbxsumq(), original.kbxsumq());
+        EXPECT_EQ(query.g_k1xsumq(), original.g_k1xsumq());
+        EXPECT_EQ(query.g_kbxsumq(), original.g_kbxsumq());
         EXPECT_EQ(query.g_add(), original.g_add());
         EXPECT_EQ(query.g_error(), original.g_error());
         if (prepared) {

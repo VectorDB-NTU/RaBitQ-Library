@@ -121,7 +121,7 @@ TEST(HnswQuantQueryTest, MovesPreserveOwnedQueryAndLeaveSourceReusable) {
     EXPECT_EQ(retained.id, 7U);
     EXPECT_EQ(retained.prepared->rotated_query(), retained.rotated.data());
     EXPECT_EQ(retained.prepared->rotated_query()[63], 0.5F);
-    EXPECT_EQ(retained.prepared->kbxsumq(), -240.0F);
+    EXPECT_EQ(retained.prepared->g_kbxsumq(), -240.0F);
     EXPECT_EQ(retained.prepared->g_add(), -2.0F);
     auto& alias = retained;
     retained = std::move(alias);

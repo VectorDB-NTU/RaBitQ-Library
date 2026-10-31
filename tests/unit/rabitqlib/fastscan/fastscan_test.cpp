@@ -186,7 +186,7 @@ TEST(FastScanBatchEstimatorTest, RejectedQueryResetPreservesMetricAndCorrections
         }
         query.set_g_add(9);
         EXPECT_EQ(query.g_add(), metric == METRIC_L2 ? 9 : 8);
-        EXPECT_EQ(query.k1xsumq(), -16.0F);
+        EXPECT_EQ(query.g_k1xsumq(), -16.0F);
     }
 }
 
@@ -648,7 +648,7 @@ TEST(FastScanBatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTai
                     expected_dist[lane] = static_cast<float>(batch.f_add()[lane]) +
                                           q.g_add() +
                                           static_cast<float>(batch.f_rescale()[lane]) *
-                                              (expected_ip[lane] + q.k1xsumq());
+                                              (expected_ip[lane] + q.g_k1xsumq());
                     expected_low[lane] =
                         expected_dist[lane] -
                         static_cast<float>(batch.f_error()[lane]) * q.g_error();
@@ -698,7 +698,7 @@ TEST(FastScanHighAccuracyTest, AccumulatesAcrossChunks) {
     const int32_t scalar_accumulator = int32_t{65535} * static_cast<int32_t>(kDim / 4);
     const float expected_ip =
         q_obj.delta() * static_cast<float>(scalar_accumulator) + q_obj.sum_vl_lut();
-    const float expected_distance = expected_ip + q_obj.k1xsumq();
+    const float expected_distance = expected_ip + q_obj.g_k1xsumq();
 
     std::array<float, fastscan::kBatchSize> estimated{};
     std::array<float, fastscan::kBatchSize> lower{};

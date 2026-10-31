@@ -462,11 +462,11 @@ TEST(BatchQueryTest, PreparedSumPreservesLookupTableAndMetric) {
         }
         for (const MetricType metric : {METRIC_L2, METRIC_IP}) {
             reference.reset(query.data(), dimension, scratch.data(), metric);
-            const float prepared_sum = reference.k1xsumq();
+            const float prepared_sum = reference.g_k1xsumq();
             prepared.set_g_add(17.0F);
             prepared.reset(query.data(), dimension, scratch.data(), metric, &prepared_sum);
             EXPECT_EQ(prepared.g_add(), 0.0F);
-            EXPECT_EQ(prepared.k1xsumq(), reference.k1xsumq());
+            EXPECT_EQ(prepared.g_k1xsumq(), reference.g_k1xsumq());
             EXPECT_EQ(prepared.delta(), reference.delta());
             EXPECT_EQ(prepared.sum_vl_lut(), reference.sum_vl_lut());
             EXPECT_TRUE(
@@ -1620,7 +1620,7 @@ TEST(QgEstimatorTest, AccumulatesBeyondUint16Range) {
         }
 
         const float expected = q_obj.delta() * static_cast<float>(scalar_accumulator) +
-                               q_obj.sum_vl_lut() + q_obj.k1xsumq();
+                               q_obj.sum_vl_lut() + q_obj.g_k1xsumq();
         std::array<float, fastscan::kBatchSize> estimated{};
         qg_batch_estdist(batch_data.data(), q_obj, padded_dim, estimated.data());
 

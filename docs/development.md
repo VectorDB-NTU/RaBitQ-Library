@@ -604,7 +604,7 @@ These conventions apply to new internal variables and compatible renaming work.
 | --- | --- |
 | Dimensions and counts | `dim`, `padded_dim`, `num_points`, `num_queries`, `num_clusters` |
 | Index state | `max_elements_`, `num_stored_points_`, `num_points()` |
-| Identity and outputs | `internal_id`, `node_id`, `label`, `cluster_id`, `result_ids`, `distances` |
+| Identity and outputs | `internal_id`, `label`, `cluster_id`, `result_ids`, `distances` |
 | Search | `candidate_set`, `search_pool`, `result_pool`, `ef_search`, `ef_construction`, `nprobe` |
 | Storage | `*_offset_`; record/link byte sizes named after the stored object |
 | Parallelism and encoding | `num_threads`, `num_workers`, `fast_quantization` |
@@ -630,7 +630,7 @@ counts from capacity only after construction completes.
 
 **Point identity**
 
-`internal_id` or `node_id` for graph slots; `label` for a caller-visible HNSW label;
+`internal_id` for graph slots; `label` for a caller-visible HNSW label;
 `cluster_id` for centroid routing. Never assume an external label equals an internal slot.
 
 **Search outputs**

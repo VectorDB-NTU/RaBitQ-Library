@@ -101,7 +101,7 @@ class QueryState {
     size_t total_bits_ = 0;
     MetricType metric_ = METRIC_L2;
     float g_add_ = 0;
-    float k1xsumq_ = 0;
+    float g_k1xsumq_ = 0;
     float (*extra_ip_)(const float*, const uint8_t*, size_t) = nullptr;
 
     static float compute_checked(
