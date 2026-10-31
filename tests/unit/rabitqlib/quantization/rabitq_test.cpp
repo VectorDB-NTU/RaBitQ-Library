@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -673,6 +674,83 @@ TEST(RabitqSignConventionTest, ZeroResidualDoesNotInflateReconstructionNorm) {
     const double tan_sq = ((c * c * qq) / nsq) - 1.0;
     EXPECT_LT(tan_sq, 1e-3) << "reconstruction norm inflated, tan^2 = "
                             << std::to_string(tan_sq);
+}
+
+TEST(RabitqPreconditionTest, EncodersRejectSingleDimensionInput) {
+    const std::array<float, 1> data{0.5F};
+    const std::array<float, 1> centroid{0.0F};
+    std::array<uint16_t, 1> code{};
+    float f_add = 0;
+    float f_rescale = 0;
+    float f_error = 0;
+    // code_factor_terms divides by dim - 1; every advanced encoder reaches it.
+    EXPECT_THROW(
+        quantize_full_single(
+            data.data(), centroid.data(), 1, 4, code.data(), f_add, f_rescale, f_error
+        ),
+        std::invalid_argument
+    );
+    EXPECT_THROW(
+        quantize_full_single(data.data(), 1, 1, code.data(), f_add, f_rescale, f_error),
+        std::invalid_argument
+    );
+}
+
+TEST(RabitqPreconditionTest, FullCodeRejectsBitWidthsTheElementTypeCannotHold) {
+    constexpr size_t kDim = 64;
+    std::array<float, kDim> data;
+    data.fill(0.25F);
+    const std::array<float, kDim> centroid{};
+    std::array<uint8_t, kDim> narrow{};
+    std::array<uint16_t, kDim> wide{};
+    float f_add = 0;
+    float f_rescale = 0;
+    float f_error = 0;
+    // Nine bits (sign plus eight magnitude bits) need more than eight bits per code.
+    EXPECT_THROW(
+        quantize_full_single(
+            data.data(), centroid.data(), kDim, 9, narrow.data(), f_add, f_rescale, f_error
+        ),
+        std::invalid_argument
+    );
+    EXPECT_NO_THROW(quantize_full_single(
+        data.data(), centroid.data(), kDim, 8, narrow.data(), f_add, f_rescale, f_error
+    ));
+    EXPECT_NO_THROW(quantize_full_single(
+        data.data(), centroid.data(), kDim, 9, wide.data(), f_add, f_rescale, f_error
+    ));
+    for (size_t bits : {0U, 10U}) {
+        EXPECT_THROW(
+            quantize_full_single(
+                data.data(),
+                centroid.data(),
+                kDim,
+                bits,
+                wide.data(),
+                f_add,
+                f_rescale,
+                f_error
+            ),
+            std::invalid_argument
+        );
+    }
+}
+
+TEST(RabitqPreconditionTest, SplitSingleQueryRequiresPaddedDimensionMultipleOf32) {
+    std::vector<float> query(96, 0.5F);
+    for (size_t padded_dim : {0U, 16U, 48U, 95U}) {
+        SCOPED_TRACE(padded_dim);
+        EXPECT_THROW(
+            (SplitSingleQuery<float>(query.data(), padded_dim, 3, RabitqConfig{})),
+            std::invalid_argument
+        );
+    }
+    for (size_t padded_dim : {32U, 64U, 96U}) {
+        SCOPED_TRACE(padded_dim);
+        EXPECT_NO_THROW(
+            (SplitSingleQuery<float>(query.data(), padded_dim, 3, RabitqConfig{}))
+        );
+    }
 }
 
 }  // namespace
