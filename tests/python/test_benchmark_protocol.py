@@ -186,3 +186,62 @@ def test_kmeans_export_rejects_wrong_metric_before_writing(tmp_path):
     with pytest.raises(ValueError, match="unexpected benchmark configuration"):
         publish(tmp_path / "results", docs, datasets=["gist1m"], methods=["faiss"])
     assert page.read_text() == "original content"
+
+
+def _write_sweep(directory, name, cpu):
+    (directory / "gist1m").mkdir(parents=True, exist_ok=True)
+    (directory / "sweeps" / "gist1m").mkdir(parents=True, exist_ok=True)
+    record = {
+        "config": {"query_count": 10},
+        "build": {"cpu_placement": {"allowed_cpus": [0]}},
+        "hardware": {"cpu": cpu},
+    }
+    (directory / "gist1m" / f"{name}.json").write_text(json.dumps(record))
+    sweep = {
+        "status": "single_query_set",
+        "dataset": "gist1m",
+        "query_count": 10,
+        "query_points": [
+            {"setting": {"nprobe": 1}, "recall": 0.9, "one_query_service_s": 0.01}
+        ],
+        "thread_environment": dict.fromkeys(
+            ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"), "1"
+        ),
+        "cpu_affinity": [0],
+    }
+    (directory / "sweeps" / "gist1m" / f"{name}.json").write_text(json.dumps(sweep))
+
+
+@pytest.mark.parametrize("cpus", [("CPU A", "CPU A"), ("CPU A", "CPU B")])
+def test_plot_subtitle_uses_the_recorded_cpu(tmp_path, monkeypatch, cpus):
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path))
+    pytest.importorskip("matplotlib")
+    plot_results = importlib.import_module("benchmarks.plot_results")
+    monkeypatch.setattr(plot_results, "validate_record", lambda *_: None)
+    monkeypatch.setattr(plot_results, "settings", lambda _: [{"nprobe": 1}])
+    methods = ("rabitq-ivf-1p4", "faiss-rabitqfs-1p4")
+    for name, cpu in zip(methods, cpus):
+        _write_sweep(tmp_path / "in", name, cpu)
+    output = tmp_path / "out"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "plot_results.py",
+            "--input-dir",
+            str(tmp_path / "in"),
+            "--output-dir",
+            str(output),
+            "--datasets",
+            "gist1m",
+            "--methods",
+            *methods,
+        ],
+    )
+    if cpus[0] != cpus[1]:
+        with pytest.raises(ValueError, match="selected records span CPUs"):
+            plot_results.main()
+        assert not (output / "ivf-gist1m-qps-recall.svg").exists()
+        return
+    plot_results.main()
+    assert "CPU: CPU A" in (output / "ivf-gist1m-qps-recall.svg").read_text()

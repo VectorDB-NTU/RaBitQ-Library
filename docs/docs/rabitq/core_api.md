@@ -260,7 +260,7 @@ it is not a representative random-rotation quality benchmark.
 cmake -S sample/cpp/stable_core -B build-stable-example \
   -DCMAKE_PREFIX_PATH="<core-install-prefix>"
 cmake --build build-stable-example
-ctest --test-dir build-stable-example --output-on-failure
+ctest --no-tests=error --test-dir build-stable-example --output-on-failure
 ```
 
 The frozen v1 consumer (`tests/fixtures/core_api_v1/consumer.cpp`) is compiled

@@ -140,6 +140,10 @@ ruff check --fix python_bindings sample/python tests/python tests/test_mypy.py t
 ruff format python_bindings sample/python tests/python tests/test_mypy.py tests/test_pyright.py benchmarks
 ```
 
+`check-python.sh` does not cover the CI automation in `.github/scripts`; CI also
+runs `ruff format --check .github/scripts` and `ruff check .github/scripts`, so
+run both after changing those scripts.
+
 ### Shell scripts
 
 Run ShellCheck after changing a contributor or automation script:
@@ -167,8 +171,10 @@ It recompiles the library sources from `compile_commands.json` with that build's
 (extra arguments such as `-O1` are appended) and fails when copies of a weak function
 differ between ISA flag sets. CI checks the Release (`-O3`) configuration; with GCC 14
 the check also passes at `-O1` and `-O2 -g`, which is what the sanitizer and
-RelWithDebInfo configurations compile. Debug (`-O0`) still emits standard-library
-helpers (`std::min`, `std::round`, `std::fill`) per source and is not clean. The FastScan
+RelWithDebInfo configurations compile. Debug (`-O0`) is not clean: it emits
+standard-library helpers (`std::min`, `std::round`, `std::fill`) and small
+first-party inline functions (for example `SearchBuffer` and query accessors) per
+source. The FastScan
 estimator correction is written as plain loops rather than Eigen expressions so that no
 ISA source instantiates a shared Eigen helper; keep it that way, since a static library
 only hides such sharing while its generic objects precede the ISA objects. The script
@@ -197,6 +203,7 @@ cmake -S . -B build-tidy -G Ninja \
     -DRABITQ_BUILD_SAMPLES=OFF \
     -DRABITQ_BUILD_TESTS=OFF \
     -DRABITQ_BUILD_PYTHON_BINDINGS=ON \
+    -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
     -DCMAKE_BUILD_TYPE=Release \
     -Dpybind11_DIR="$pybind11_DIR"
 CXX=clang++-23 ./scripts/check-tidy.sh build-tidy
@@ -538,7 +545,9 @@ that corrupt or mismatched files are reported before allocation, without treatin
 crafted file as a supported input.
 
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
-serialized fields for new formats, validate sizes before allocation, check every read, and retain a
+serialized fields for new formats (the current IVF, HNSW and QG bodies still store several
+`size_t` fields; change those only with a format version bump), validate sizes before
+allocation, check every read, and retain a
 compatibility test fixture or an explicit rejection path. Review each affected format;
 changes to shared serialization helpers require auditing every format using them.
 IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG have separate formats. SymphonyQG includes a versioned quantized format plus a legacy
@@ -703,7 +712,7 @@ public and protected names, Python keywords, field order and numerical operation
   role is clear.
 - Clustering's private state uses `dim_`, `num_points_`, `num_clusters_`,
   `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and graph parameter
-  names compatible. Retain the existing private `niter_` graph iteration name.
+  names compatible. The private graph iteration count is `graph_build_iterations_`.
   Per-point centroid IDs are `assignments` (arrays) and `cluster_id` (scalars);
   `label` stays reserved for HNSW's caller-visible labels.
 - FHT backend arguments use `rotated_data`, `padded_dim`, `trunc_dim` and
@@ -878,8 +887,10 @@ nothing in an old file is reinterpreted. A file that has removals is rejected by
 through 0.5.1, whose `load` range-checks every cluster ID; that rejection is the compatibility path.
 This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW-RaBitQ code:
 
-- Read cluster IDs only through `cluster_id_of`, which masks the bit. Estimators,
-  routing, and the `add` reconstruction index centroids with it.
+- Read cluster IDs only through the masking accessors. Internal code (estimators,
+  routing, and the `add` reconstruction) uses the unchecked private `stored_cluster_id`;
+  the public `cluster_id_of` adds storage and bounds checks and must stay out of the
+  per-candidate search kernels.
 - A removed point stays in the graph: base-layer search still inserts it into `search_pool`, and
   `add` may link to it. Only the result buffer skips it, including when it is the entry point.
 - `load` masks the bit before range-checking the cluster ID.
@@ -971,8 +982,10 @@ the compiler inlines them. `scripts/check-isa-symbols.sh` checks Release builds;
 [ISA symbol check](#isa-symbol-check).
 The AVX FHT intrinsics in `src/simd/fht_kernels.hpp` use the private kernel namespace
 for the same reason. Rotation uses this implementation on GCC, Clang, and MSVC;
-no assembler is required. Keep the FFHT attribution and MIT license in the
-intrinsics header intact.
+no assembler is required. Keep the FFHT attribution comment in the intrinsics
+header intact. The intrinsics reimplement the transform following FFHT's stage
+schedule without copying its code, so the header does not carry FFHT's MIT notice;
+code copied from FFHT must bring that notice with it.
 
 #### Eigen isolation
 
@@ -1073,7 +1086,8 @@ source groups/flags with all three dispatchers and `src/utils/cpu_features.cpp`.
 
 ### Performance and compatibility
 
-- Use fixed-width integer types for serialized values and persisted index data.
+- Use fixed-width integer types for new serialized values and persisted index data;
+  existing `size_t` fields change only with a format version bump.
 - Preserve existing public headers, aliases, and index formats unless a change
   is explicitly documented as breaking.
 - Add backend-independent tests when introducing or changing SIMD kernels.

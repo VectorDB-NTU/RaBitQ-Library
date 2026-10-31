@@ -60,7 +60,7 @@ see [C++ integration](../cpp_integration.md).
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
 | `max_elements` | Capacity; build accepts 1 through this many rows. Reserve extra capacity or call `resize` before adding beyond it. |
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit; Python defaults to 8. Raw-vector storage is not supported. |
-| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. |
+| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. |
 | `metric`, `random_seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. |
 | `k`, `ef` | Positive result count and search window. Python requires `k <= max_elements`; omitted/zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
@@ -185,9 +185,9 @@ retrying, or rebuild to restore full reachability.
 See the shared [index count contract](usage.md#index-counts). Removed
 records still occupy capacity.
 
-`add` never grows the index: it throws once `num_stored_points()` reaches
-`max_elements()`, and `resize` is the only way to raise that. Reserving capacity
-avoids reallocating and copying the whole base-layer record storage during `add`.
+`add` never grows the index: it rejects a whole batch whose size exceeds
+`max_elements() - num_stored_points()`, and `resize` is the only way to raise
+that. Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.
 
@@ -233,10 +233,12 @@ exclusive access as other updates.
 
 Removed points still take slots in the `ef_search` candidate set, so a search with
 `ef_search` close to `k` finds fewer live points as removals accumulate. C++ search
-uses `max(ef_search, k)`. Python uses `max(k, 10)` when `ef` is omitted or zero;
-an explicit positive `ef` is also raised to at least `k`.
+uses `max(ef_search, k)`, clamped to `num_stored_points()`. Python uses `max(k, 10)`
+when `ef` is omitted or zero; an explicit positive `ef` is also raised to at least `k`,
+and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
-the effective window by the share of live points:
+the effective window by the share of live points (search clamps the result to
+`num_stored_points()`):
 
 ```text
 max(ef_search, k) * num_stored_points() / (num_stored_points() - removed points)
@@ -253,6 +255,14 @@ limit the number of clusters to 2^31, so no real cluster ID has that bit, and
 every reader of the cluster ID masks it off. The mark lives in the base layer, so
 it survives `save`, `load`, and `resize`, and a file without removals is
 unchanged.
+
+In C++, `cluster_id_of(internal_id)` returns a stored record's cluster with the
+mark masked off; removed points keep their cluster. It takes an internal ID from 0
+through `num_stored_points() - 1`, which matches the label only for points added
+in order. It throws `std::logic_error` on a default-constructed index that has
+not been loaded, and `std::invalid_argument` for an ID not below
+`num_stored_points()`, including any ID before `construct`. Python does not
+expose it.
 
 A file that has removals cannot be read by earlier releases. Releases 0.3.7
 through 0.5.1 check every cluster ID on `load` and reject the file as invalid
@@ -280,7 +290,7 @@ Each indexed element is stored in the following layout:
 ```
 [number of edges]
 [edges]
-[cluster ID]       (its high bit marks a removed point, see Removing points)
+[cluster ID]       (its high bit marks a removed point, see How removal is stored)
 [external label]
 [BinData (1-bit * padded_dim + factors)]
 [ExData (ex-bits * padded_dim + factors)]
@@ -306,7 +316,8 @@ In the upper layers of HNSW-RaBitQ, we compute the 1-bit estimated distance (usi
 In the base layer, we apply an adaptive re-ranking strategy:
 
 - **search_pool**: A distance-sorted exploration window with capacity
-  `max(ef_search, k)`, containing both expanded and unexpanded candidates.
+  `min(max(ef_search, k), num_stored_points())`, containing both expanded and
+  unexpanded candidates.
 - **nearest_candidates**: Current best k candidates.
 
 Repeat while the exploration window has an unexpanded candidate:

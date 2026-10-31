@@ -869,6 +869,7 @@ done
         self.assertEqual(needs(build), ["changes"])
         self.assertIn("needs.changes.outputs.docs == 'true'", build["if"])
         self.assertIn("needs.changes.result != 'success'", build["if"])
+        self.assertIn("github.event_name == 'push'", build["if"])
         self.assertEqual(classify(["docs/docs/quick_start.md"]), {"docs"})
 
 

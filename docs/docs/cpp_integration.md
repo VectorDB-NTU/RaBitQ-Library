@@ -211,7 +211,7 @@ No ANN index is constructed.
 cmake -S sample/cpp/core -B build-core-example \
   -DCMAKE_PREFIX_PATH="$HOME/.local/rabitqlib-core"
 cmake --build build-core-example
-ctest --test-dir build-core-example --output-on-failure
+ctest --no-tests=error --test-dir build-core-example --output-on-failure
 ```
 
 With project samples enabled, the same program is built as `core_example` under
@@ -249,7 +249,7 @@ MODULE, not a C++ link library, and is not exported as a C++ `find_package` comp
 ```bash
 cmake -S . -B build -DRABITQ_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+ctest --no-tests=error --test-dir build --output-on-failure
 ```
 
 GoogleTest is downloaded during test configuration.
