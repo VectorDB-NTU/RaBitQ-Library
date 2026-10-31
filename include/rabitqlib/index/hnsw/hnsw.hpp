@@ -2,6 +2,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -228,6 +229,8 @@ class HierarchicalNSW {
     // `remove` sets the high bit of a point's stored cluster ID. construct and load
     // keep num_clusters_ at or below 2^31, so a real cluster ID never has it.
     static constexpr PID kRemovedMask = 0x80000000U;
+    // Used when a search passes ef_search == 0.
+    static constexpr size_t kDefaultEfSearch = 10;
     size_t max_elements_{0};
     mutable std::atomic<size_t> num_stored_points_{0};
     size_t num_removed_{0};  // Recovered from stored cluster-ID markers when loading.
@@ -237,7 +240,6 @@ class HierarchicalNSW {
     size_t upper_layer_max_degree_{0};
     size_t base_layer_max_degree_{0};
     size_t ef_construction_{0};
-    size_t default_ef_search_{0};
     MetricType metric_type_{METRIC_L2};
 
     double mult_{0.0};
@@ -314,12 +316,6 @@ class HierarchicalNSW {
         );
     }
 
-    PID* get_external_label_pt(PID internal_id) {
-        return reinterpret_cast<PID*>(
-            data_level0_memory_.get() + (internal_id * level0_record_bytes_) + label_offset_
-        );
-    }
-
     char* get_bindata_by_internalid(PID internal_id) {
         return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
                bin_data_offset_;
@@ -356,11 +352,30 @@ class HierarchicalNSW {
         return (get_raw_clusterid(internal_id) & kRemovedMask) != 0;
     }
 
-    char* get_clusterid_pt(PID internal_id) {
-        return reinterpret_cast<char*>(
+    // Store a cluster ID, including any removal mark.
+    void set_raw_clusterid(PID internal_id, PID cluster_id) {
+        memcpy(
             data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
-            level0_links_bytes_
+                level0_links_bytes_,
+            &cluster_id,
+            sizeof(PID)
         );
+    }
+
+    // Derive record sizes and offsets from padded_dim_, ex_bits_ and the layer degrees.
+    void set_record_layout();
+
+    // The fields set_record_layout derives, in a fixed order for comparison.
+    [[nodiscard]] std::array<size_t, 8> record_layout() const {
+        return {
+            bin_data_bytes_,
+            ex_data_bytes_,
+            level0_links_bytes_,
+            label_offset_,
+            bin_data_offset_,
+            ex_data_offset_,
+            level0_record_bytes_,
+            upper_layer_links_bytes_};
     }
 
     int get_random_level(double reverse_size);

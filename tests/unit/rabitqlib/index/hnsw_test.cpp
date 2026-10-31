@@ -69,9 +69,7 @@ struct HnswPruningTestAccess {
     }
 
     static void set_raw_cluster_id(HierarchicalNSW& index, PID label, PID value) {
-        std::memcpy(
-            index.get_clusterid_pt(index.label_lookup_.at(label)), &value, sizeof(PID)
-        );
+        index.set_raw_clusterid(index.label_lookup_.at(label), value);
     }
 
     // Give internal slot i the label count - 1 - i, as parallel construction can

@@ -175,90 +175,92 @@ static inline void prefetch_l2(const void* addr) {
 #endif
 }
 
-inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
+// Prefetch num_lines 64-byte lines (at most 20) starting at ptr.
+template <void (*Prefetch)(const void*)>
+inline void mem_prefetch_lines(const char* ptr, size_t num_lines) {
     // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
     // NOLINTBEGIN(bugprone-branch-clone)
     switch (num_lines) {
         default:
             [[fallthrough]];
         case 20:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 19:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 18:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 17:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 16:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 15:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 14:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 13:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 12:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 11:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 10:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 9:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 8:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 7:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 6:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 5:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 4:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 3:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 2:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             ptr += 64;
             [[fallthrough]];
         case 1:
-            prefetch_l1(ptr);
+            Prefetch(ptr);
             [[fallthrough]];
         case 0:
             break;
@@ -266,94 +268,11 @@ inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
     // NOLINTEND(bugprone-branch-clone)
 }
 
+inline void mem_prefetch_l1(const char* ptr, size_t num_lines) {
+    mem_prefetch_lines<prefetch_l1>(ptr, num_lines);
+}
+
 inline void mem_prefetch_l2(const char* ptr, size_t num_lines) {
-    // The repeated fallthrough branches intentionally unroll up to 20 prefetches.
-    // NOLINTBEGIN(bugprone-branch-clone)
-    switch (num_lines) {
-        default:
-            [[fallthrough]];
-        case 20:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 19:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 18:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 17:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 16:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 15:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 14:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 13:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 12:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 11:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 10:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 9:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 8:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 7:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 6:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 5:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 4:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 3:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 2:
-            prefetch_l2(ptr);
-            ptr += 64;
-            [[fallthrough]];
-        case 1:
-            prefetch_l2(ptr);
-            [[fallthrough]];
-        case 0:
-            break;
-    }
-    // NOLINTEND(bugprone-branch-clone)
+    mem_prefetch_lines<prefetch_l2>(ptr, num_lines);
 }
 }  // namespace rabitqlib::memory

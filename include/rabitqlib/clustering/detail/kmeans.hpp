@@ -55,6 +55,25 @@ namespace detail {
     return change <= early_stop_threshold;
 }
 
+// Float vectors accumulated in double, in index order.
+[[nodiscard]] inline double squared_norm_f64(const float* vector, size_t d) {
+    double result = 0.0;
+    for (size_t dim = 0; dim < d; ++dim) {
+        const double value = vector[dim];
+        result += value * value;
+    }
+    return result;
+}
+
+[[nodiscard]] inline double squared_l2_f64(const float* a, const float* b, size_t d) {
+    double result = 0.0;
+    for (size_t dim = 0; dim < d; ++dim) {
+        const double difference = static_cast<double>(a[dim]) - b[dim];
+        result += difference * difference;
+    }
+    return result;
+}
+
 // Inputs have already passed clustering validation. GEMM only screens candidates;
 // final distances and tie breaking retain the scalar double-precision arithmetic.
 // Optional previous assignments contain n valid centroid IDs and may alias the
@@ -96,10 +115,7 @@ inline void exact_assign(
             }
             distance += 1.0;
         } else {
-            for (size_t dim = 0; dim < d; ++dim) {
-                const double difference = static_cast<double>(vector[dim]) - centroid[dim];
-                distance += difference * difference;
-            }
+            distance = squared_l2_f64(vector, centroid, d);
         }
         return distance;
     };
@@ -126,12 +142,8 @@ inline void exact_assign(
 #pragma omp for schedule(static)
         for (std::ptrdiff_t cluster = 0; cluster < static_cast<std::ptrdiff_t>(k);
              ++cluster) {
-            double norm = 0.0;
-            for (size_t dim = 0; dim < d; ++dim) {
-                const double value = centroids[static_cast<size_t>(cluster) * d + dim];
-                norm += value * value;
-            }
-            centroid_norms[static_cast<size_t>(cluster)] = norm;
+            centroid_norms[static_cast<size_t>(cluster)] =
+                squared_norm_f64(centroids + static_cast<size_t>(cluster) * d, d);
         }
 #pragma omp for schedule(static)
         for (std::ptrdiff_t block = 0; block < static_cast<std::ptrdiff_t>(blocks);
@@ -144,12 +156,7 @@ inline void exact_assign(
                 const size_t rows = std::min(point_block, n - first_point);
                 for (size_t row = 0; row < rows; ++row) {
                     const float* vector = x + (first_point + row) * d;
-                    double norm = 0.0;
-                    for (size_t dim = 0; dim < d; ++dim) {
-                        const double value = vector[dim];
-                        norm += value * value;
-                    }
-                    point_norms[row] = norm;
+                    point_norms[row] = squared_norm_f64(vector, d);
                     best_distances[row] = std::numeric_limits<double>::infinity();
                     if (previous_assignments != nullptr) {
                         const size_t point = first_point + row;
@@ -484,14 +491,9 @@ class LloydKMeans : public Parameters {
         // Means, normalization, and displacement share one worker team. Preserve
         // the per-centroid arithmetic; empty rows are measured after refilling.
         const auto cluster_shift = [&](size_t cluster) {
-            double result = 0;
-            for (size_t dim = 0; dim < d; ++dim) {
-                const size_t i = cluster * d + dim;
-                const double difference =
-                    static_cast<double>(centroids[i]) - previous_centroids[i];
-                result += difference * difference;
-            }
-            return result;
+            return squared_l2_f64(
+                centroids.data() + cluster * d, previous_centroids.data() + cluster * d, d
+            );
         };
         double shift = 0;
 #pragma omp parallel for num_threads(num_workers) reduction(+ : shift)
@@ -604,10 +606,7 @@ class LloydKMeans : public Parameters {
     }
 
     void normalize_centroid(float* centroid) const {
-        double squared_norm = 0;
-        for (size_t dim = 0; dim < d; ++dim) {
-            squared_norm += static_cast<double>(centroid[dim]) * centroid[dim];
-        }
+        const double squared_norm = squared_norm_f64(centroid, d);
         if (squared_norm == 0) {
             return;
         }
