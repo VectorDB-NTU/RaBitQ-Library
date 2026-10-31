@@ -608,13 +608,13 @@ inline T ex_bits_code_with_norm(
         }
     }
 
-    // Revert codes for negative or zero dims
+    // Revert codes for negative or zero dims. A select instead of a branch avoids a
+    // misprediction per random-sign coordinate and lets baseline builds vectorize.
     int32_t mask = (1 << ex_bits) - 1;
     for (size_t j = 0; j < dim; ++j) {
-        if (residual_arr.data()[j] <= 0) {
-            TP tmp = ex_code[j];
-            ex_code[j] = (~tmp) & mask;
-        }
+        const TP code = ex_code[j];
+        const auto reverted = static_cast<TP>((~code) & mask);
+        ex_code[j] = residual_arr.data()[j] <= 0 ? reverted : code;
     }
 
     return ipnorm_inv;
