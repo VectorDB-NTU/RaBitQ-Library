@@ -645,6 +645,73 @@ TEST(FhtDispatchTest, AvxBackendsMatchBitwiseForCompactTails) {
 }
 #endif
 
+namespace {
+std::vector<char> rotator_state(const Rotator<float>& rotator) {
+    std::vector<char> state(rotator.dump_bytes());
+    rotator.save(state.data());
+    return state;
+}
+}  // namespace
+
+// Frozen sign flips: the top byte of each mt19937 output. These values were captured
+// from the libstdc++ std::uniform_int_distribution path this mapping replaced, so
+// existing Linux rotations are unchanged and every standard library now agrees.
+TEST(FhtRotatorTest, SeededSignFlipsAreFrozen) {
+    struct Golden {
+        size_t dim;
+        size_t padded_dim;
+        uint32_t seed;
+        size_t bytes;
+        uint64_t fnv1a;
+        std::array<uint8_t, 8> prefix;
+    };
+    const std::array<Golden, 4> goldens{{
+        {64, 64, 0U, 32, 0x23ac77c7fcd78e18ULL, {140, 151, 183, 216, 154, 219, 139, 216}},
+        {65, 96, 42U, 48, 0xa8609a52aeb403fbULL, {95, 203, 243, 46, 187, 199, 153, 152}},
+        {768, 768, 7U, 384, 0x7d509e6cda1a50efULL, {19, 58, 199, 81, 112, 250, 185, 116}},
+        {100,
+         128,
+         123456789U,
+         64,
+         0x0f87eeb109e9f55eULL,
+         {136, 253, 136, 3, 130, 185, 182, 34}},
+    }};
+    for (const Golden& golden : goldens) {
+        SCOPED_TRACE(golden.dim);
+        std::unique_ptr<Rotator<float>> rotator(
+            choose_rotator<float>(
+                golden.dim, RotatorType::FhtKacRotator, golden.padded_dim, golden.seed
+            )
+        );
+        const std::vector<char> state = rotator_state(*rotator);
+        ASSERT_EQ(state.size(), golden.bytes);
+        uint64_t hash = 1469598103934665603ULL;
+        for (char byte : state) {
+            hash ^= static_cast<uint8_t>(byte);
+            hash *= 1099511628211ULL;
+        }
+        EXPECT_EQ(hash, golden.fnv1a);
+        for (size_t i = 0; i < golden.prefix.size(); ++i) {
+            EXPECT_EQ(static_cast<uint8_t>(state[i]), golden.prefix[i]) << "byte " << i;
+        }
+    }
+}
+
+TEST(MatrixRotatorFactoryTest, SeedReproducesTheMatrix) {
+    const size_t dim = 48;
+    auto make = [&](uint32_t seed) {
+        return std::unique_ptr<Rotator<float>>(
+            choose_rotator<float>(dim, RotatorType::MatrixRotator, 0, seed)
+        );
+    };
+    const std::vector<char> first = rotator_state(*make(42));
+    EXPECT_EQ(rotator_state(*make(42)), first);
+    EXPECT_NE(rotator_state(*make(43)), first);
+
+    rotator_impl::MatrixRotator<float> direct(dim, dim, 42);
+    EXPECT_EQ(rotator_state(direct), first);
+}
+
 TEST(MatrixRotatorFactoryTest, DoublePreservesNormAndRejectsFloatOnlyRotation) {
     const size_t dim = 64;
     std::unique_ptr<Rotator<double>> rotator(

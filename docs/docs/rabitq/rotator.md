@@ -56,8 +56,11 @@ padded dimension explicitly if subsequent packed-code operations require a multi
 of 32. Stored space and per-vector work are proportional to `dim * padded_dim`
 (quadratic when both dimensions are equal).
 Constructing the random matrix also performs QR factorization. The `seed` argument
-of `choose_rotator` controls FHT/Kac signs only; MatrixRotator samples its own matrix.
-Save and restore the actual rotator state rather than relying on that seed to
+of `choose_rotator` seeds both rotators. FHT/Kac signs come from a fixed mapping of
+`std::mt19937` output, so a seed gives the same rotation on every platform and
+standard library. A seeded MatrixRotator is reproducible only with the same standard
+library and build, because `std::normal_distribution` and QR rounding differ between
+them. Save and restore the actual rotator state rather than relying on a seed to
 recreate a matrix rotation.
 
 ## FFHT + Kac’s walk
