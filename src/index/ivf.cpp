@@ -44,6 +44,11 @@
 
 namespace rabitqlib::ivf {
 
+namespace {
+// remove() marks a point by this f_add; save and load keep the marker.
+constexpr float kRemovedFAdd = std::numeric_limits<float>::infinity();
+}  // namespace
+
 IVF::IVF() noexcept = default;
 IVF::~IVF() = default;
 
@@ -670,7 +675,6 @@ size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
 
     // A point whose f_add is +inf has +inf estimated and lower-bound distances in every
     // scan path, so it never enters the result buffer or triggers reranking.
-    constexpr float kRemoved = std::numeric_limits<float>::infinity();
     const size_t batch_bytes = BatchDataMap<float>::data_bytes(padded_dim_);
     size_t removed = 0;
     for (const auto& cluster : clusters_) {
@@ -684,8 +688,8 @@ size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
                 padded_dim_
             );
             const size_t lane = pos % fastscan::kBatchSize;
-            if (static_cast<float>(cur_batch.f_add()[lane]) != kRemoved) {
-                cur_batch.f_add()[lane] = kRemoved;
+            if (static_cast<float>(cur_batch.f_add()[lane]) != kRemovedFAdd) {
+                cur_batch.f_add()[lane] = kRemovedFAdd;
                 ++removed;
             }
         }
@@ -960,8 +964,7 @@ void IVF::load(const char* filename) {
             );
             const size_t count = std::min(fastscan::kBatchSize, cluster.num() - first);
             for (size_t lane = 0; lane < count; ++lane) {
-                loaded.num_removed_ +=
-                    batch.f_add()[lane] == std::numeric_limits<float>::infinity();
+                loaded.num_removed_ += batch.f_add()[lane] == kRemovedFAdd;
             }
         }
     }

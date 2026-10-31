@@ -112,20 +112,8 @@ HierarchicalNSW::HierarchicalNSW(
     upper_layer_max_degree_ = M_;
     base_layer_max_degree_ = M_ * 2;
     ef_construction_ = std::max(ef_construction, M_);
-    default_ef_search_ = 10;
 
-    bin_data_bytes_ = BinDataMap<float>::data_bytes(padded_dim_);
-    ex_data_bytes_ = ExDataMap<float>::data_bytes(padded_dim_, ex_bits_);
-    level0_links_bytes_ = base_layer_max_degree_ * sizeof(PID) + sizeof(PID);
-    label_offset_ =
-        level0_links_bytes_ + sizeof(PID);  // (# of edges + edges) + (cluster_id)
-    bin_data_offset_ =
-        label_offset_ +
-        sizeof(PID);  // (# of edges + edges) + (cluster_id) + (external label)
-    ex_data_offset_ =
-        bin_data_offset_ + bin_data_bytes_;  // (# of edges + edges) + (cluster_id)
-                                             // + (external label) + (BinData)
-    level0_record_bytes_ = ex_data_offset_ + ex_data_bytes_;
+    set_record_layout();
     data_level0_memory_.reset(
         memory::huge_page_allocate<char>(max_elements_ * level0_record_bytes_)
     );
@@ -144,11 +132,22 @@ HierarchicalNSW::HierarchicalNSW(
     max_level_ = -1;
 
     link_lists_.reserve(max_elements_);
-    upper_layer_links_bytes_ = upper_layer_max_degree_ * sizeof(PID) + sizeof(PID);
     mult_ = 1 / log(1.0 * static_cast<double>(M_));
 
     this->query_config_ =
         quant::faster_config(padded_dim_, SplitSingleQuery<float>::kNumBits);
+}
+
+void HierarchicalNSW::set_record_layout() {
+    bin_data_bytes_ = BinDataMap<float>::data_bytes(padded_dim_);
+    ex_data_bytes_ = ExDataMap<float>::data_bytes(padded_dim_, ex_bits_);
+    // Level 0: link count and links, cluster ID, external label, then the codes.
+    level0_links_bytes_ = (base_layer_max_degree_ + 1) * sizeof(PID);
+    label_offset_ = level0_links_bytes_ + sizeof(PID);
+    bin_data_offset_ = label_offset_ + sizeof(PID);
+    ex_data_offset_ = bin_data_offset_ + bin_data_bytes_;
+    level0_record_bytes_ = ex_data_offset_ + ex_data_bytes_;
+    upper_layer_links_bytes_ = (upper_layer_max_degree_ + 1) * sizeof(PID);
 }
 
 void HierarchicalNSW::save(const char* filename) const {
@@ -296,23 +295,11 @@ void HierarchicalNSW::load(const char* filename) {
         invalid_file();
     }
 
-    const size_t expected_level0 = (loaded.base_layer_max_degree_ + 1) * sizeof(PID);
-    const size_t expected_bin = BinDataMap<float>::data_bytes(loaded.padded_dim_);
-    const size_t expected_ex =
-        ExDataMap<float>::data_bytes(loaded.padded_dim_, loaded.ex_bits_);
-    const size_t expected_label = expected_level0 + sizeof(PID);
-    const size_t expected_bin_offset = expected_label + sizeof(PID);
-    const size_t expected_ex_offset = expected_bin_offset + expected_bin;
-    const size_t expected_level0_record_bytes = expected_ex_offset + expected_ex;
-    if (loaded.bin_data_bytes_ != expected_bin || loaded.ex_data_bytes_ != expected_ex ||
-        loaded.level0_links_bytes_ != expected_level0 ||
-        loaded.label_offset_ != expected_label ||
-        loaded.bin_data_offset_ != expected_bin_offset ||
-        loaded.ex_data_offset_ != expected_ex_offset ||
-        loaded.level0_record_bytes_ != expected_level0_record_bytes ||
-        loaded.upper_layer_links_bytes_ !=
-            (loaded.upper_layer_max_degree_ + 1) * sizeof(PID) ||
-        !std::isfinite(loaded.mult_) || loaded.mult_ <= 0.0) {
+    // The stored layout must be the one the validated parameters derive.
+    const auto stored_layout = loaded.record_layout();
+    loaded.set_record_layout();
+    if (loaded.record_layout() != stored_layout || !std::isfinite(loaded.mult_) ||
+        loaded.mult_ <= 0.0) {
         invalid_file();
     }
 
@@ -477,7 +464,6 @@ void HierarchicalNSW::load(const char* filename) {
     loaded.raw_dist_func_ =
         (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
     loaded.ip_func_ = select_excode_ipfunc(loaded.ex_bits_);
-    loaded.default_ef_search_ = 10;
     loaded.query_config_ =
         quant::faster_config(loaded.padded_dim_, SplitSingleQuery<float>::kNumBits);
 
@@ -495,7 +481,6 @@ void HierarchicalNSW::load(const char* filename) {
     swap(upper_layer_max_degree_, loaded.upper_layer_max_degree_);
     swap(base_layer_max_degree_, loaded.base_layer_max_degree_);
     swap(ef_construction_, loaded.ef_construction_);
-    swap(default_ef_search_, loaded.default_ef_search_);
     swap(metric_type_, loaded.metric_type_);
     swap(mult_, loaded.mult_);
     swap(max_level_, loaded.max_level_);
@@ -726,8 +711,8 @@ void HierarchicalNSW::add_point(
     );
 
     // Initialisation of label and cluster id
-    memcpy(get_external_label_pt(new_node_id), &label, sizeof(PID));
-    memcpy(get_clusterid_pt(new_node_id), &cluster_id, sizeof(PID));
+    set_external_label(new_node_id, label);
+    set_raw_clusterid(new_node_id, cluster_id);
 
     // Quantize raw data and initialize quantized data
     std::vector<float> rotated_data(padded_dim_);
@@ -1005,7 +990,7 @@ size_t HierarchicalNSW::remove(const PID* labels, size_t num_points) {
     for (const PID id : internal_ids) {
         if (!is_removed(id)) {
             const PID marked = get_raw_clusterid(id) | kRemovedMask;
-            std::memcpy(get_clusterid_pt(id), &marked, sizeof(PID));
+            set_raw_clusterid(id, marked);
             ++removed;
         }
     }
@@ -1337,8 +1322,8 @@ std::vector<PID> HierarchicalNSW::add(
                     0,
                     level0_record_bytes_
                 );
-                std::memcpy(get_external_label_pt(id), &id, sizeof(PID));
-                std::memcpy(get_clusterid_pt(id), &assigned[i], sizeof(PID));
+                set_external_label(id, id);
+                set_raw_clusterid(id, assigned[i]);
                 std::vector<float> rotated_data(padded_dim_);
                 rotator_->rotate(data + (i * dim_), rotated_data.data());
                 quant::quantize_split_single(

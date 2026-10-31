@@ -99,6 +99,9 @@ inline std::vector<std::pair<float, PID>> HierarchicalNSW::search_knn_sorted_dir
     if (num_stored_points_ == 0) {
         return result;
     }
+    if (ef_search == 0) {
+        ef_search = kDefaultEfSearch;
+    }
 
     SplitSingleQuery<float> query_wrapper(
         rotated_query, padded_dim_, ex_bits_, query_config_, metric_type_
