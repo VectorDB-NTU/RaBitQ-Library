@@ -1803,7 +1803,7 @@ factors. For API usage, see <a href="../core_api/">Stable core API</a> or the ad
 </tr>
 <tr>
 <td><span class="arithmatex"><span class="MathJax_Preview">\Delta_x</span><script type="math/tex">\Delta_x</script></span></td>
-<td>Residual-norm scale defined below; distinct from the estimator factor <code>F_rescale</code>.</td>
+<td>Residual-norm scale defined below; distinct from the estimator factor <code>f_rescale</code>.</td>
 </tr>
 <tr>
 <td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_u</span><script type="math/tex">\mathbf{x}_u</script></span></td>
@@ -1902,7 +1902,8 @@ carried into refinement.</p>
 \end{align}
 </script>
 </div>
-<p>Store the following factors (<code>F_</code> for data and <code>G_</code> for the query).</p>
+<p>Store the following factors. Data factors use the <code>f_</code> accessors of the code layouts;
+query factors use the <code>g_</code> accessors of the prepared query objects.</p>
 <table>
 <thead>
 <tr>
@@ -1912,27 +1913,27 @@ carried into refinement.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>F_add (float)</code></td>
+<td><code>f_add (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}</script></span></td>
 </tr>
 <tr>
-<td><code>F_rescale (float)</code></td>
+<td><code>f_rescale (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">-2\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">-2\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}</script></span></td>
 </tr>
 <tr>
-<td><code>F_error (float)</code></td>
+<td><code>f_error (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</span><script type="math/tex">\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</script></span></td>
 </tr>
 <tr>
-<td><code>G_add (float)</code></td>
+<td><code>g_add (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">\|\mathbf{q}_r-\mathbf{c}\|^2</span><script type="math/tex">\|\mathbf{q}_r-\mathbf{c}\|^2</script></span></td>
 </tr>
 <tr>
-<td><code>G_kBxSumq (float)</code></td>
+<td><code>g_kbxsumq (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">c_BS_q</span><script type="math/tex">c_BS_q</script></span></td>
 </tr>
 <tr>
-<td><code>G_error (float)</code></td>
+<td><code>g_error (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">\| \mathbf{q}_r-\mathbf{c}\|</span><script type="math/tex">\| \mathbf{q}_r-\mathbf{c}\|</script></span></td>
 </tr>
 </tbody>
@@ -1973,7 +1974,8 @@ higher-inner-product vectors first. The constant 1 does not affect ordering.</p>
 \end{align}
 </script>
 </div>
-<p>Store the following factors (<code>F_</code> for data and <code>G_</code> for the query).</p>
+<p>Store the following factors. Data factors use the <code>f_</code> accessors of the code layouts;
+query factors use the <code>g_</code> accessors of the prepared query objects.</p>
 <table>
 <thead>
 <tr>
@@ -1983,31 +1985,31 @@ higher-inner-product vectors first. The constant 1 does not affect ordering.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>F_add (float)</code></td>
+<td><code>f_add (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">1-\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt;+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">1-\left< \mathbf{o}_r-\mathbf{c},\mathbf{c}\right>+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left< \mathbf{\bar o}, \mathbf{c}\right>}{\left<\mathbf{\bar o},\mathbf{o} \right>}</script></span></td>
 </tr>
 <tr>
-<td><code>F_rescale (float)</code></td>
+<td><code>f_rescale (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">-\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">-\frac{\Delta_x}{\left<\mathbf{\bar o},\mathbf{o} \right>}</script></span></td>
 </tr>
 <tr>
-<td><code>F_error (float)</code></td>
+<td><code>f_error (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</span><script type="math/tex">\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left< \mathbf{\bar o},\mathbf{o}\right>^2}{\left< \mathbf{\bar o},\mathbf{o}\right>^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</script></span></td>
 </tr>
 <tr>
-<td><code>G_add (float)</code></td>
+<td><code>g_add (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">-\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt;</span><script type="math/tex">-\left< \mathbf{q}_r,\mathbf{c}\right></script></span></td>
 </tr>
 <tr>
-<td><code>G_kBxSumq (float)</code></td>
+<td><code>g_kbxsumq (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">c_BS_q</span><script type="math/tex">c_BS_q</script></span></td>
 </tr>
 <tr>
-<td><code>G_k1xSumq (float)</code></td>
+<td><code>g_k1xsumq (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">c_1S_q</span><script type="math/tex">c_1S_q</script></span></td>
 </tr>
 <tr>
-<td><code>G_error (float)</code></td>
+<td><code>g_error (float)</code></td>
 <td><span class="arithmatex"><span class="MathJax_Preview">\| \mathbf{q}_r-\mathbf{c}\|</span><script type="math/tex">\| \mathbf{q}_r-\mathbf{c}\|</script></span></td>
 </tr>
 </tbody>
@@ -2019,31 +2021,31 @@ Here <code>ip</code> is the inner product between the logical
 unsigned <span class="arithmatex"><span class="MathJax_Preview">B</span><script type="math/tex">B</script></span>-bit code and the rotated query vector; it is a binary code only
 when <span class="arithmatex"><span class="MathJax_Preview">B=1</span><script type="math/tex">B=1</script></span>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// Compute the estimated distance</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// Note that G_add is dependent on the centroid.</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kt">float</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">F_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">G_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">F_rescale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ip</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">G_kBxSumq</span><span class="p">);</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// Note that g_add is dependent on the centroid.</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kt">float</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">f_rescale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ip</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_kbxsumq</span><span class="p">);</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// Compute the error bound </span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1">// Note that G_error is dependent on the centroid.</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kt">float</span><span class="w"> </span><span class="n">error_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">F_error</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">G_error</span><span class="p">;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1">// Compute the error bound</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1">// Note that g_error is dependent on the centroid.</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="kt">float</span><span class="w"> </span><span class="n">error_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f_error</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">g_error</span><span class="p">;</span>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1">// Compute the lower and upper bounds of the estimated distance</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="kt">float</span><span class="w"> </span><span class="n">lb_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="kt">float</span><span class="w"> </span><span class="n">ub_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="kt">float</span><span class="w"> </span><span class="n">lower_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="kt">float</span><span class="w"> </span><span class="n">upper_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
 </code></pre></div>
 <h3 id="incremental-distance-estimation">Incremental distance estimation<a class="headerlink" href="#incremental-distance-estimation" title="Permanent link">&para;</a></h3>
 <p>Split codes separate the sign bit from the remaining <span class="arithmatex"><span class="MathJax_Preview">B-1</span><script type="math/tex">B-1</script></span> extra bits.
 Score the sign code first, then refine selected candidates with the extra bits.
-Each part has its own factors. The binary layout stores <code>F_add</code>,
-<code>F_rescale</code>, and <code>F_error</code>; the extended layout stores <code>F_add_ex</code> and
-<code>F_rescale_ex</code>. For <span class="arithmatex"><span class="MathJax_Preview">B&gt;1</span><script type="math/tex">B>1</script></span>, the logical codes satisfy
+Each part has its own factors. The binary layout stores <code>f_add</code>,
+<code>f_rescale</code>, and <code>f_error</code>; the extended layout stores <code>f_add_ex</code> and
+<code>f_rescale_ex</code>. For <span class="arithmatex"><span class="MathJax_Preview">B&gt;1</span><script type="math/tex">B>1</script></span>, the logical codes satisfy
 <span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_u=2^{B-1}\mathbf{x}_{\mathrm{bin}}+\mathbf{x}_{\mathrm{ex}}</span><script type="math/tex">\mathbf{x}_u=2^{B-1}\mathbf{x}_{\mathrm{bin}}+\mathbf{x}_{\mathrm{ex}}</script></span>,
 which gives the refined distance formula below.</p>
 <p>The split-code implementation uses the binary error factor divided by
 <span class="arithmatex"><span class="MathJax_Preview">2^{B-1}</span><script type="math/tex">2^{B-1}</script></span> as its refined pruning margin. This is an approximation, not an
 identity for the full-code error factor in the tables above: that factor depends
 on the full-code direction's own <span class="arithmatex"><span class="MathJax_Preview">\langle\mathbf{\bar o},\mathbf{o}\rangle</span><script type="math/tex">\langle\mathbf{\bar o},\mathbf{o}\rangle</script></span>.
-The split layout does not store a separate <code>F_error_ex</code>.
-The query factors are <code>G_add</code>, <code>G_error</code>, <code>G_kBxSumq</code> and <code>G_k1xSumq</code>.
+The split layout does not store a separate <code>f_error_ex</code>.
+The query factors are <code>g_add</code>, <code>g_error</code>, <code>g_kbxsumq</code> and <code>g_k1xsumq</code>.
 Here <code>ip_bin</code> and <code>ip_ex</code> are the inner products of the sign and extra-bit
 codes, respectively, with the rotated query.
 These equations use exact code/query inner products. Binary filtering may instead
@@ -2051,19 +2053,19 @@ approximate <code>ip_bin</code> through four-bit query codes or FastScan lookup 
 see <a href="../../kernel_ip/">inner-product kernels</a>. The margins do not separately bound
 that additional error.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">// 1-bit dist</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kt">float</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">F_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">G_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">F_rescale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ip_bin</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">G_k1xSumq</span><span class="p">);</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kt">float</span><span class="w"> </span><span class="n">bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">F_error</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">G_error</span><span class="p">;</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kt">float</span><span class="w"> </span><span class="n">ub_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">bound</span><span class="p">;</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="kt">float</span><span class="w"> </span><span class="n">lb_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">bound</span><span class="p">;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kt">float</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">f_rescale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ip_bin</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_k1xsumq</span><span class="p">);</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kt">float</span><span class="w"> </span><span class="n">error_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f_error</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">g_error</span><span class="p">;</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kt">float</span><span class="w"> </span><span class="n">upper_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="kt">float</span><span class="w"> </span><span class="n">lower_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1">// boost to full-bit dist</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="kt">float</span><span class="w"> </span><span class="n">ex_scale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="p">(</span><span class="n">bits</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">));</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="kt">float</span><span class="w"> </span><span class="n">ex_est_dist</span><span class="w"> </span><span class="o">=</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="n">F_add_ex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">G_add</span><span class="w"> </span><span class="o">+</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="n">F_rescale_ex</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ex_scale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">ip_bin</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ip_ex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">G_kBxSumq</span><span class="p">);</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="kt">float</span><span class="w"> </span><span class="n">ex_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">F_error</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">G_error</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">ex_scale</span><span class="p">;</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="kt">float</span><span class="w"> </span><span class="n">ex_ub_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ex_est_dist</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ex_bound</span><span class="p">;</span>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="kt">float</span><span class="w"> </span><span class="n">ex_lb_dist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ex_est_dist</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ex_bound</span><span class="p">;</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="kt">float</span><span class="w"> </span><span class="n">estimated_distance_ex</span><span class="w"> </span><span class="o">=</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="n">f_add_ex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_add</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="n">f_rescale_ex</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ex_scale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">ip_bin</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ip_ex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_kbxsumq</span><span class="p">);</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="kt">float</span><span class="w"> </span><span class="n">error_bound_ex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f_error</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">g_error</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">ex_scale</span><span class="p">;</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="kt">float</span><span class="w"> </span><span class="n">upper_bound_ex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance_ex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">error_bound_ex</span><span class="p">;</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="kt">float</span><span class="w"> </span><span class="n">lower_bound_ex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance_ex</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">error_bound_ex</span><span class="p">;</span>
 </code></pre></div>
 
 
