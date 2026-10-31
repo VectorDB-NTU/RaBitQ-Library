@@ -48,3 +48,12 @@ Function resolve_optional_kernel(Function preferred, Function fallback, bool sup
 #else
 #define RABITQ_RESOLVE(avx512, avx2, fallback, ...) fallback
 #endif
+
+// NEON when available on ARM64, otherwise RABITQ_RESOLVE over the AVX kernels and an
+// optional AVX-512 predicate. Each target references only its own ISA's symbols.
+#if defined(__aarch64__) || defined(_M_ARM64)
+#define RABITQ_RESOLVE_NEON(neon, avx512, avx2, fallback, ...) \
+    rabitqlib::simd::resolve_optional_kernel(neon, fallback, rabitqlib::cpu::has_neon())
+#else
+#define RABITQ_RESOLVE_NEON(neon, ...) RABITQ_RESOLVE(__VA_ARGS__)
+#endif
