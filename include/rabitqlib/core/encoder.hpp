@@ -295,10 +295,10 @@ inline void reconstruct_full_vec(
 namespace detail {
 template <typename T>
 inline T full_est_dist_from_ip(
-    T ip, size_t bits, T f_add, T f_rescale, T g_add, T k1xsumq
+    T ip, size_t bits, T f_add, T f_rescale, T g_add, T g_k1xsumq
 ) {
     return f_add + g_add +
-           (f_rescale * (ip + k1xsumq * static_cast<float>((1 << bits) - 1)));
+           (f_rescale * (ip + g_k1xsumq * static_cast<float>((1 << bits) - 1)));
 }
 }  // namespace detail
 
@@ -312,10 +312,10 @@ inline T full_est_dist(
     T f_add,
     T f_rescale,
     T g_add,
-    T k1xsumq
+    T g_k1xsumq
 ) {
     return detail::full_est_dist_from_ip(
-        ip_func(query, quantized_vec, dim), bits, f_add, f_rescale, g_add, k1xsumq
+        ip_func(query, quantized_vec, dim), bits, f_add, f_rescale, g_add, g_k1xsumq
     );
 }
 }  // namespace rabitqlib::quant

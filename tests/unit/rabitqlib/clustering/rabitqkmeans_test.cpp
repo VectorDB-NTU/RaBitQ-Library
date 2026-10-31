@@ -105,7 +105,7 @@ std::vector<PID> scalar_rabitq_assignments(
                 accumulator += prepared.lut()[group * 16 + code];
             }
             const float ip = prepared.delta() * static_cast<float>(accumulator) +
-                             prepared.sum_vl_lut() + prepared.k1xsumq();
+                             prepared.sum_vl_lut() + prepared.g_k1xsumq();
             const float estimate =
                 batch.f_add()[index] + prepared.g_add() + batch.f_rescale()[index] * ip;
             if (estimate < best[point]) {

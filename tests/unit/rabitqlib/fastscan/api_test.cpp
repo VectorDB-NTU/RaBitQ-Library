@@ -187,8 +187,8 @@ TEST(FastScanApiTest, SplitQueryResetMatchesFreshPreparationAndScoring) {
         EXPECT_EQ(reused.g_error(), 0);
         EXPECT_EQ(reused.delta(), fresh.delta());
         EXPECT_EQ(reused.sum_vl_lut(), fresh.sum_vl_lut());
-        EXPECT_EQ(reused.k1xsumq(), fresh.k1xsumq());
-        EXPECT_EQ(reused.kbxsumq(), fresh.kbxsumq());
+        EXPECT_EQ(reused.g_k1xsumq(), fresh.g_k1xsumq());
+        EXPECT_EQ(reused.g_kbxsumq(), fresh.g_kbxsumq());
         const size_t bytes = dim * 4 * (hacc ? 2 : 1);
         EXPECT_TRUE(std::equal(fresh.lut(), fresh.lut() + bytes, reused.lut()));
         scratch.fill(123);
@@ -306,7 +306,7 @@ TEST(FastScanApiTest, SplitQueryInitializationValidatesParametersConsistently) {
                     metric,
                     hacc
                 );
-                EXPECT_EQ(query.kbxsumq(), fresh.kbxsumq());
+                EXPECT_EQ(query.g_kbxsumq(), fresh.g_kbxsumq());
                 EXPECT_EQ(query.use_hacc(), fresh.use_hacc());
             }
         }
@@ -380,8 +380,8 @@ TEST(FastScanApiTest, RejectedSplitQueryResetPreservesPreparedState) {
     EXPECT_EQ(query.use_hacc(), original.use_hacc());
     EXPECT_EQ(query.delta(), original.delta());
     EXPECT_EQ(query.sum_vl_lut(), original.sum_vl_lut());
-    EXPECT_EQ(query.k1xsumq(), original.k1xsumq());
-    EXPECT_EQ(query.kbxsumq(), original.kbxsumq());
+    EXPECT_EQ(query.g_k1xsumq(), original.g_k1xsumq());
+    EXPECT_EQ(query.g_kbxsumq(), original.g_kbxsumq());
     EXPECT_EQ(query.g_add(), original.g_add());
     EXPECT_EQ(query.g_error(), original.g_error());
     EXPECT_TRUE(std::equal(bytes.begin(), bytes.end(), query.lut()));
@@ -513,7 +513,7 @@ TEST(FastScanApiTest, DoubleEncodingQueryAndScoringWithNonzeroCentroid) {
                     values.data(), dim, 3, scratch.data(), hacc_scratch.data(), metric, hacc
                 );
                 EXPECT_EQ(reset_split.delta(), split.delta());
-                EXPECT_EQ(reset_split.kbxsumq(), split.kbxsumq());
+                EXPECT_EQ(reset_split.g_kbxsumq(), split.g_kbxsumq());
                 EXPECT_TRUE(
                     std::equal(split.lut(), split.lut() + bytes, reset_split.lut())
                 );

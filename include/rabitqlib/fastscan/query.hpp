@@ -56,7 +56,7 @@ class BatchQuery {
 
     [[nodiscard]] T sum_vl_lut() const { return lookup_table_.sum_vl(); }
 
-    [[nodiscard]] T k1xsumq() const { return G_k1xSumq_; }
+    [[nodiscard]] T g_k1xsumq() const { return G_k1xSumq_; }
 
     [[nodiscard]] T g_add() const { return G_add_; }
 
@@ -78,7 +78,7 @@ class BatchQuery {
         size_t padded_dim,
         T* lut_scratch,
         MetricType metric_type = METRIC_L2,
-        const T* k1xsumq = nullptr
+        const T* g_k1xsumq = nullptr
     ) {
         validate_metric_type(metric_type);
         // Reject invalid input before changing the correction metadata.
@@ -86,7 +86,7 @@ class BatchQuery {
         metric_type_ = metric_type;
 
         G_k1xSumq_ =
-            k1xsumq != nullptr ? *k1xsumq : query_correction(rotated_query, padded_dim);
+            g_k1xsumq != nullptr ? *g_k1xsumq : query_correction(rotated_query, padded_dim);
         G_add_ = 0;
     }
 
@@ -201,9 +201,9 @@ class SplitBatchQuery {
 
     [[nodiscard]] T sum_vl_lut() const { return lookup_table_.sum_vl(); }
 
-    [[nodiscard]] T k1xsumq() const { return G_k1xSumq_; }
+    [[nodiscard]] T g_k1xsumq() const { return G_k1xSumq_; }
 
-    [[nodiscard]] T kbxsumq() const { return G_kbxSumq_; }
+    [[nodiscard]] T g_kbxsumq() const { return G_kbxSumq_; }
 
     [[nodiscard]] T g_add() const { return G_add_; }
 
