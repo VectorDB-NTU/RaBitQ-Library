@@ -171,6 +171,12 @@ int main() {
 }
 ```
 
+The advanced encoders validate their preconditions and throw
+`std::invalid_argument` otherwise: `dim` must be at least 2 (the error factor
+divides by `dim - 1`), the code element type must hold `bits` (nine bits need
+`uint16_t`), inputs must be finite, and `SplitSingleQuery` needs a padded
+dimension that is a positive multiple of 32.
+
 #### Querying
 
 Score a query using the encoded vector and its factors.

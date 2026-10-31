@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -50,6 +51,11 @@ inline CodeFactorTerms<T> code_factor_terms(
     MetricType metric_type,
     const char* invalid_metric_message
 ) {
+    // The error factor divides by dim - 1; the stable API and the indexes already
+    // enforce this, the advanced encoders reach here directly.
+    if (dim < 2) {
+        throw std::invalid_argument("RaBitQ factors require dim >= 2");
+    }
     // A zero residual needs no centered code or inner-product divisions.
     if (l2_sqr == 0) {
         if (metric_type == METRIC_L2) {
@@ -863,6 +869,13 @@ static inline void rabitq_full_impl_with_scratch(
     double t_const,
     Scratch<T>* scratch
 ) {
+    // One sign bit plus at most eight magnitude bits (xy_bits::kMaxCombinedBits).
+    if (total_bits < 1 || total_bits > 9 ||
+        total_bits > static_cast<size_t>(std::numeric_limits<TP>::digits)) {
+        throw std::invalid_argument(
+            "total_bits must be in [1, 9] and fit the code element type"
+        );
+    }
     const size_t ex_bits = total_bits - 1;
     if (ex_bits > 0) {
         RowMajorArray<T> owned_residual;

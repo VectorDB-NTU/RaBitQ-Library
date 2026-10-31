@@ -19,7 +19,7 @@
 
 namespace rabitqlib {
 
-inline uint64_t load_unaligned_u64(const void* data) {
+static inline uint64_t load_unaligned_u64(const void* data) {
     uint64_t value = 0;
     std::memcpy(&value, data, sizeof(value));
     return value;
@@ -302,11 +302,13 @@ void new_transpose_bin_512(
 float mask_ip_x0_q(const float* query, const uint8_t* data, size_t padded_dim);
 float mask_ip_x0_q(const float* query, const uint64_t* data, size_t padded_dim);
 
-inline float mask_ip_x0_q_old(const float* query, const uint64_t* data, size_t padded_dim) {
+static inline float mask_ip_x0_q_old(
+    const float* query, const uint64_t* data, size_t padded_dim
+) {
     return mask_ip_x0_q(query, data, padded_dim);
 }
 
-inline float ip_x0_q(
+static inline float ip_x0_q(
     const uint64_t* data,
     const uint64_t* query,
     float delta,
@@ -337,7 +339,7 @@ static inline uint32_t ip_bin_bin(const uint64_t* q, const uint64_t* d, size_t p
     return ret;
 }
 
-inline uint32_t ip_byte_bin(
+static inline uint32_t ip_byte_bin(
     const uint64_t* q, const uint64_t* d, size_t padded_dim, size_t b_query
 ) {
     uint32_t ret = 0;
@@ -349,7 +351,7 @@ inline uint32_t ip_byte_bin(
     return ret;
 }
 
-inline size_t popcount(const uint64_t* __restrict__ d, size_t length) {
+static inline size_t popcount(const uint64_t* __restrict__ d, size_t length) {
     size_t ret = 0;
     const size_t words = length / 64;
     const auto* data = reinterpret_cast<const uint8_t*>(d);

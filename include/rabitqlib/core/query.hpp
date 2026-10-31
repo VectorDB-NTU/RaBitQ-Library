@@ -66,6 +66,12 @@ class SplitSingleQuery {
                 "and base_bits + ex_bits <= 9"
             );
         }
+        // The query-bit transposition kernels load whole 32-coordinate blocks.
+        if (padded_dim == 0 || padded_dim % 32 != 0) {
+            throw std::invalid_argument(
+                "SplitSingleQuery requires padded_dim to be a positive multiple of 32"
+            );
+        }
 
         validate_metric_type(metric_type);
 
