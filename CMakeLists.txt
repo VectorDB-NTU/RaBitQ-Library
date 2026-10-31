@@ -283,6 +283,7 @@ install(DIRECTORY include/rabitqlib/core DESTINATION "${rabitq_include_dir}")
 install(FILES
     include/rabitqlib/utils/bitops.hpp
     include/rabitqlib/utils/cpu_features.hpp
+    include/rabitqlib/utils/input_checks.hpp
     include/rabitqlib/utils/memory.hpp
     include/rabitqlib/utils/openmp.hpp
     include/rabitqlib/utils/packed.hpp
