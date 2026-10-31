@@ -754,7 +754,8 @@ void IVF::write_file(const char* filename) const {
     /* Save rotator */
     this->rotator_->save(output);
 
-    /* Save data: all batch data, then all ex data, then all IDs, each in cluster order */
+    /* Save data: initializer payload, then all batch data, all ex data and all IDs,
+       each in cluster order */
     this->initializer_->save(output, filename);
     for (size_t i = 0; i < num_clusters_; ++i) {
         output.write(
@@ -920,7 +921,8 @@ void IVF::load(const char* filename) {
     /* Load rotator */
     loaded.rotator_->load(input);
 
-    /* Load data: all batch data, then all ex data, then all IDs, each in cluster order */
+    /* Load data: initializer payload, then all batch data, all ex data and all IDs,
+       each in cluster order */
     loaded.allocate_memory(cluster_sizes);
     loaded.initializer_->load(input, filename);
     for (size_t i = 0; i < loaded.num_clusters_; ++i) {

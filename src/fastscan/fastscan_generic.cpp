@@ -60,7 +60,7 @@ void pack_lut_range_generic(
 
 namespace rabitqlib::fastscan::simd {
 void transfer_lut_hacc_generic(const uint16_t* lut, size_t dim, uint8_t* hc_lut) {
-    // Match the AVX2 layout: two low-byte tables, then two high-byte tables.
+    // HaccLutLayout::Pair32: two low-byte tables, then two high-byte tables.
     for (size_t group = 0; group < dim / 4; ++group) {
         const size_t offset = group / 2 * 64 + group % 2 * 16;
         for (size_t i = 0; i < 16; ++i) {

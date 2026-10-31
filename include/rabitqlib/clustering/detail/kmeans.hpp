@@ -244,7 +244,7 @@ class LloydKMeans : public Parameters {
         }
         if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d) {
             throw std::invalid_argument(
-                std::string(Assignment::kName) + " input dimensions overflow size_t"
+                std::string(Assignment::kName) + " input dimensions overflow ptrdiff_t"
             );
         }
         const uint32_t num_workers = effective_num_threads();

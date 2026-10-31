@@ -38,7 +38,7 @@ void flip_sign_avx512(const uint8_t* flip, float* data, size_t dim) {
 
     static_assert(
         kFloatsPerChunk % 16 == 0,
-        "floats_per_chunk must be divisible by AVX512 register width"
+        "kFloatsPerChunk must be divisible by AVX512 register width"
     );
 
     size_t i = 0;

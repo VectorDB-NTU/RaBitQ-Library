@@ -602,7 +602,7 @@ preprocessing objects, `visited` for visited state.
 
 **Search windows**
 
-`ef_search` for a per-call graph window, `default_ef_search_` for a stored default, and
+`ef_search` for a per-call graph window, `kDefaultEfSearch` for HNSW's fixed fallback, and
 `ef_construction` for graph-building search breadth. IVF's `nprobe` counts clusters and
 remains distinct.
 
@@ -809,7 +809,7 @@ This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when to
 
 - Read cluster IDs only through `get_clusterid_by_internalid`, which masks the bit. Estimators,
   routing, and the `add` reconstruction index centroids with it.
-- A removed point stays in the graph: base-layer search still inserts it into `candidate_set`, and
+- A removed point stays in the graph: base-layer search still inserts it into `search_pool`, and
   `add` may link to it. Only the result buffer skips it, including when it is the entry point.
 - `load` masks the bit before range-checking the cluster ID.
 - `HnswRemoveTest.SearchReachesLivePointsThroughRemovedOnes`,
