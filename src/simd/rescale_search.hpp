@@ -104,6 +104,9 @@ static inline double next_double_down(double value) {
     return value;
 }
 
+// Its default member initializers give it a constructor, so keep the type
+// TU-local as well.
+namespace {
 struct BoundedRescaleState {
     RescaleSearchState state{};
     // Enclose the true dot product despite SIMD summation rounding. S is exact
@@ -113,6 +116,7 @@ struct BoundedRescaleState {
     double score_lower = 0;
     double score_upper = 0;
 };
+}  // namespace
 
 // Upper bound on squared cosine similarity for every code between two evaluated
 // states. Here a_i = input[i] is a rotated, normalized residual magnitude, and

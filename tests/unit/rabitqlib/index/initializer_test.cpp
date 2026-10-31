@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -147,6 +148,40 @@ TEST(HNSWInitializerTest, RoutesByInnerProductWithoutTakingSquareRoot) {
     initializer.centroids_distances(query.data(), 1, candidates);
     EXPECT_EQ(candidates[0].id, 1U);
     EXPECT_FLOAT_EQ(candidates[0].distance, -99.0F);
+}
+
+TEST(IvfInitializerTest, CentroidSearchSizesOutputAndClampsProbeCount) {
+    constexpr size_t kDim = 17;
+    constexpr size_t kCount = 32;
+    std::vector<float> centroids(kCount * kDim, 0.0F);
+    for (size_t i = 0; i < kCount; ++i) {
+        centroids[i * kDim] = static_cast<float>(i) * 2.0F;
+    }
+    FlatInitializer flat(kDim, kCount);
+    HNSWInitializer hnsw(kDim, kCount);
+    flat.add_vectors(centroids.data(), 1);
+    hnsw.add_vectors(centroids.data(), 1);
+    std::array<float, kDim> query{};
+    query[0] = 20.25F;
+    for (const Initializer* initializer :
+         {static_cast<const Initializer*>(&flat), static_cast<const Initializer*>(&hnsw)}) {
+        for (size_t nprobe : {0U, 1U, 7U, 99U}) {
+            SCOPED_TRACE(nprobe);
+            // An empty output must be resized, never written past its end.
+            std::vector<AnnCandidate<float>> candidates;
+            initializer->centroids_distances(query.data(), nprobe, candidates);
+            ASSERT_EQ(candidates.size(), std::min(nprobe, kCount));
+            std::vector<bool> seen(kCount);
+            for (const auto& candidate : candidates) {
+                ASSERT_LT(candidate.id, kCount);
+                EXPECT_FALSE(seen[candidate.id]);
+                seen[candidate.id] = true;
+            }
+            if (nprobe == 1) {
+                EXPECT_EQ(candidates[0].id, 10U);
+            }
+        }
+    }
 }
 
 TEST(HNSWInitializerTest, ParallelInsertionPreservesRandomLevelDraws) {

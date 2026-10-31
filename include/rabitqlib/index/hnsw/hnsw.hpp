@@ -169,12 +169,12 @@ class HierarchicalNSW {
     // Borrows construct() input only while its workers run; cleared on success or failure.
     const float* construction_data_{nullptr};
 
-    // Bounded priority queue implemented as a sorted vector.
     struct Candidate {
         float est_dist;
         PID id;
     };
 
+    // Bounded priority queue implemented as a sorted vector.
     class BoundedKNN {
        public:
         explicit BoundedKNN(size_t capacity) : capacity_(capacity) {}
@@ -268,7 +268,8 @@ class HierarchicalNSW {
 
     // Layout: (# of edges + edges) + (cluster_id) + (External_id) + (BinData) + (ExData)
     AlignedStorage data_level0_memory_;
-    // Reserve capacity without initializing unused slots; size tracks live nodes.
+    // Reserve capacity without initializing unused slots; size tracks stored nodes,
+    // including removed ones.
     std::vector<LinkStorage> link_lists_;
     std::vector<int> element_levels_;
 
@@ -447,8 +448,7 @@ class HierarchicalNSW {
         BoundedKNN& nearest_candidates
     ) const;
 
-    // Construction
-    // Currently only support index construction with non-quantized vectors
+    // Raw-vector distance used by construct; add scores links with get_quant_dist.
     float get_data_dist(PID obj1, PID obj2) const {
         PID label1 = get_external_label(obj1);
         PID label2 = get_external_label(obj2);

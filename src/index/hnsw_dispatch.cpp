@@ -13,12 +13,12 @@ namespace rabitqlib::hnsw::detail {
 namespace {
 using SearchKnnFn =
     std::vector<std::pair<float, PID>> (*)(HierarchicalNSW&, const float*, size_t, size_t);
-// The core variant uses AVX2 warmup; the popcount variant has its own stricter tier.
 }  // namespace
 std::vector<std::pair<float, PID>> search_knn_sorted(
     HierarchicalNSW& index, const float* query, size_t k, size_t ef_search
 ) {
 #if defined(__x86_64__) || defined(_M_X64)
+    // The core variant uses AVX2 warmup; the popcount variant has its own stricter tier.
     static const SearchKnnFn kSearchKnnFn =
         cpu::has_avx512_popcnt() ? search_knn_sorted_avx512_popcnt
                                  : RABITQ_RESOLVE(

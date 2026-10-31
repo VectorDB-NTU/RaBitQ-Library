@@ -79,6 +79,9 @@ HierarchicalNSW::HierarchicalNSW(
     if (M < 2) {
         throw std::invalid_argument("HNSW M must be at least 2");
     }
+    if (max_elements == 0) {
+        throw std::invalid_argument("HNSW max_elements must be greater than zero");
+    }
     max_elements_ = max_elements;
     dim_ = dim;
     rotator_.reset(
@@ -117,9 +120,6 @@ HierarchicalNSW::HierarchicalNSW(
     data_level0_memory_.reset(
         memory::huge_page_allocate<char>(max_elements_ * level0_record_bytes_)
     );
-    if (data_level0_memory_ == nullptr) {
-        throw std::runtime_error("Not enough memory");
-    }
 
     level_generator_.seed(random_seed);
 
@@ -346,15 +346,9 @@ void HierarchicalNSW::load(const char* filename) {
 
     if (centroids_bytes != 0) {
         loaded.centroids_memory_.reset(memory::huge_page_allocate<char>(centroids_bytes));
-        if (loaded.centroids_memory_ == nullptr) {
-            throw std::bad_alloc();
-        }
         read_payload(loaded.centroids_memory_.get(), centroids_bytes);
     }
     loaded.data_level0_memory_.reset(memory::huge_page_allocate<char>(data_capacity_bytes));
-    if (loaded.data_level0_memory_ == nullptr) {
-        throw std::bad_alloc();
-    }
     read_payload(loaded.data_level0_memory_.get(), data_bytes);
 
     loaded.element_levels_ = std::vector<int>(loaded.max_elements_);
@@ -543,11 +537,6 @@ void HierarchicalNSW::construct(
         num_clusters_ = num_clusters;
         const size_t centroids_bytes = num_clusters_ * padded_dim_ * sizeof(float);
         centroids_memory_.reset(memory::huge_page_allocate<char>(centroids_bytes));
-        if (centroids_memory_ == nullptr) {
-            throw std::runtime_error(
-                "Not enough memory: HNSW failed to allocate centroids"
-            );
-        }
 
         for (size_t i = 0; i < num_clusters; ++i) {
             this->rotator_->rotate(
@@ -734,9 +723,7 @@ void HierarchicalNSW::add_point(
             static_cast<char*>(std::malloc((upper_layer_links_bytes_ * node_level) + 1))
         );
         if (link_lists_[new_node_id] == nullptr) {
-            throw std::runtime_error(
-                "Not enough memory: add_point failed to allocate linklist"
-            );
+            throw std::bad_alloc();
         }
         memset(
             link_lists_[new_node_id].get(), 0, (upper_layer_links_bytes_ * node_level) + 1
@@ -767,7 +754,7 @@ void HierarchicalNSW::add_point(
         }
     }
 
-    // Releasing lock for the maximum level
+    // A taller node becomes the entry point; entry_point_lock is still held then.
     if (node_level > previous_max_level) {
         entry_point_id_ = new_node_id;
         max_level_ = node_level;
@@ -1170,6 +1157,9 @@ void HierarchicalNSW::resize(size_t new_max_elements) {
     if (level0_record_bytes_ == 0) {
         throw std::logic_error("HNSW index must be initialized before resize");
     }
+    if (new_max_elements == 0) {
+        throw std::invalid_argument("HNSW resize capacity must be greater than zero");
+    }
     if (new_max_elements < num_stored_points_) {
         throw std::invalid_argument("HNSW resize: capacity below the element count");
     }
@@ -1188,9 +1178,6 @@ void HierarchicalNSW::resize(size_t new_max_elements) {
     // comes from aligned_alloc, which realloc does not keep aligned.
     const size_t level0_bytes = new_max_elements * level0_record_bytes_;
     AlignedStorage level0(memory::huge_page_allocate<char>(level0_bytes));
-    if (level0 == nullptr) {
-        throw std::bad_alloc();
-    }
     std::memset(level0.get(), 0, level0_bytes);
     std::memcpy(
         level0.get(), data_level0_memory_.get(), num_stored_points_ * level0_record_bytes_
@@ -1294,9 +1281,7 @@ std::vector<PID> HierarchicalNSW::add(
                 std::calloc(1, (upper_layer_links_bytes_ * levels[i]) + 1)
             );
             if (raw == nullptr) {
-                throw std::runtime_error(
-                    "Not enough memory: HNSW add failed to allocate a link list"
-                );
+                throw std::bad_alloc();
             }
         }
         link_lists.emplace_back(raw);

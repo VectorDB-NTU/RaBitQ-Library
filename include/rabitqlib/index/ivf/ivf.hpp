@@ -83,7 +83,7 @@ class IVF {
     size_t num_clusters_ = 0;
     bool raw_reranking_ = false;  // raw vectors replace extra-bit codes
     bool ready_ = false;          // construction or loading completed
-    size_t ex_bits_ = 0;          // total bits = ex_bits_ + 1
+    size_t ex_bits_ = 0;          // total bits = ex_bits_ + 1; 0 with raw reranking
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     std::unique_ptr<Rotator<float>> rotator_;
     std::vector<Cluster> clusters_;

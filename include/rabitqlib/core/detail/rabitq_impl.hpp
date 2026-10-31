@@ -102,7 +102,8 @@ inline T direct_rescale(T l2_sqr, T residual_code_ip, MetricType metric_type) {
 
 /**
  * Inverse of pack_binary_to_bytes<uint64_t>: write each coordinate's sign bit (0 or
- * 1) to signs. Full 64-coordinate words come first, followed by a final 32-bit word.
+ * 1) to signs. Full 64-coordinate words come first, followed by a final partial word
+ * of any multiple of 8 coordinates.
  */
 inline void unpack_sign_bits(const uint8_t* packed, size_t dim, uint16_t* signs) {
     for (size_t start = 0; start < dim; start += 64) {

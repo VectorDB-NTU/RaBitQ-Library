@@ -242,6 +242,9 @@ struct QGConstructionTestAccess {
         return builder.new_neighbors_;
     }
     static const auto& degrees(const QGBuilder& builder) { return builder.degrees_; }
+    static void set_degrees(QGBuilder& builder, uint32_t degree) {
+        std::fill(builder.degrees_.begin(), builder.degrees_.end(), degree);
+    }
     static void retain_seed_scores(QGBuilder& builder) {
         auto& graph = builder.qg_;
         for (PID i = 0; i < builder.num_points_; ++i) {
@@ -1081,6 +1084,15 @@ TEST(QGConstructionTest, DefaultsToPipnnInitialization) {
             EXPECT_FALSE(builder.check_dup());
         }
     }
+}
+
+TEST(QGConstructionTest, AverageDegreeDoesNotWrapAboveUint32Range) {
+    std::vector<float> data(65 * 65, 0.5F);
+    QuantizedGraph<float> graph(65, 65, 32);
+    QGBuilder builder(graph, 64, data.data(), 1, QGInitialization::Random);
+    // 65 degrees of 2^31 sum past 2^32; a 32-bit accumulator would wrap.
+    QGConstructionTestAccess::set_degrees(builder, uint32_t{1} << 31U);
+    EXPECT_FLOAT_EQ(builder.avg_degree(), 2147483648.0F);
 }
 
 TEST(QGConstructionTest, SupportsExplicitRandomInitialization) {

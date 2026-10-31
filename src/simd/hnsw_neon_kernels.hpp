@@ -11,6 +11,8 @@
 #include "rabitqlib/core/detail/simd/space_dispatch.hpp"
 
 namespace rabitqlib::simd::detail {
+// Internal linkage: backends compiled with different ISA flags keep their own bodies.
+namespace {
 
 inline float mask_ip_neon(const float* query, const uint8_t* data, size_t dim) {
     float32x4_t sum0 = vdupq_n_f32(0), sum1 = sum0, sum2 = sum0, sum3 = sum0;
@@ -96,4 +98,5 @@ inline float warmup_ip_neon(
     }
     return delta * static_cast<float>(ip) + vl * static_cast<float>(count);
 }
+}  // namespace
 }  // namespace rabitqlib::simd::detail

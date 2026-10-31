@@ -203,7 +203,7 @@ inline void HierarchicalNSW::search_base_layer_direct(
 ) const {
     auto visited = visited_list_pool_->get_free_vislist();
 
-    // Use our bounded priority queue instead of the maxheap.
+    // Keep the ef_search best estimates in a bounded sorted buffer.
     buffer::SearchBuffer<float> search_pool(ef_search);
 
     float dist_k = 1e10;

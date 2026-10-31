@@ -26,7 +26,7 @@ constexpr static std::array<int, 16> kPos = {
     3 /*1101*/,
     2 /*1110*/,
     3 /*1111*/,
-};  // all possible combination for a 4 bit string
+};  // kPos[j]: query coordinate of j's lowest set bit (bit 3 is q0, bit 0 is q3)
 
 // Accumulate one batch into int32_t results. Throws if a result exceeds int32_t.
 // dim must be a positive multiple of 16.

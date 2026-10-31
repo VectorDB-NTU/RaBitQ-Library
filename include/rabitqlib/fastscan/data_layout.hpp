@@ -28,8 +28,8 @@ template <typename T>
 struct BatchDataMap {
    public:
     explicit BatchDataMap(char* data, size_t padded_dim)
-        : batch_bin_code_(reinterpret_cast<uint8_t*>(data))
-        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))  // 1 bit code
+        : batch_bin_code_(reinterpret_cast<uint8_t*>(data))  // 1-bit codes
+        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))
         , f_rescale_(data + detail::BatchCodeOffsets<T>::rescale(padded_dim))
         , f_error_(data + detail::BatchCodeOffsets<T>::error(padded_dim)) {}
 
@@ -54,8 +54,8 @@ template <typename T>
 struct ConstBatchDataMap {
    public:
     explicit ConstBatchDataMap(const char* data, size_t padded_dim)
-        : batch_bin_code_(reinterpret_cast<const uint8_t*>(data))
-        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))  // 1 bit code
+        : batch_bin_code_(reinterpret_cast<const uint8_t*>(data))  // 1-bit codes
+        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))
         , f_rescale_(data + detail::BatchCodeOffsets<T>::rescale(padded_dim))
         , f_error_(data + detail::BatchCodeOffsets<T>::error(padded_dim)) {}
 
@@ -76,8 +76,8 @@ template <typename T>
 struct QGBatchDataMap {
    public:
     explicit QGBatchDataMap(char* data, size_t padded_dim)
-        : batch_bin_code_(reinterpret_cast<uint8_t*>(data))
-        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))  // 1 bit code
+        : batch_bin_code_(reinterpret_cast<uint8_t*>(data))  // 1-bit codes
+        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))
         , f_rescale_(data + detail::BatchCodeOffsets<T>::rescale(padded_dim)) {}
 
     [[nodiscard]] uint8_t* bin_code() { return batch_bin_code_; }
@@ -107,8 +107,8 @@ template <typename T>
 struct ConstQGBatchDataMap {
    public:
     explicit ConstQGBatchDataMap(const char* data, size_t padded_dim)
-        : batch_bin_code_(reinterpret_cast<const uint8_t*>(data))
-        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))  // 1 bit code
+        : batch_bin_code_(reinterpret_cast<const uint8_t*>(data))  // 1-bit codes
+        , f_add_(data + detail::BatchCodeOffsets<T>::add(padded_dim))
         , f_rescale_(data + detail::BatchCodeOffsets<T>::rescale(padded_dim)) {}
 
     [[nodiscard]] const uint8_t* bin_code() const { return batch_bin_code_; }

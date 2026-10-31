@@ -8,6 +8,8 @@
 #include <cstring>
 
 namespace rabitqlib::simd::detail {
+// Internal linkage: backends compiled with different ISA flags keep their own bodies.
+namespace {
 // Read exactly 2 * Bits bytes for 16 codes. Staging short stores through a
 // 16-byte stack buffer blocks store forwarding on the following vector load.
 template <size_t Bits>
@@ -84,15 +86,13 @@ inline void accumulate_excode_tail_avx2(
 }
 
 // Sum the eight lanes as a tree rather than serially.
-static inline float reduce_add_avx2(__m256 v) {
+inline float reduce_add_avx2(__m256 v) {
     __m128 lanes = _mm_add_ps(_mm256_castps256_ps128(v), _mm256_extractf128_ps(v, 1));
     lanes = _mm_add_ps(lanes, _mm_movehl_ps(lanes, lanes));
     return _mm_cvtss_f32(_mm_add_ss(lanes, _mm_movehdup_ps(lanes)));
 }
 
-static inline float mask_ip_avx2(
-    const float* query, const uint8_t* data, size_t padded_dim
-) {
+inline float mask_ip_avx2(const float* query, const uint8_t* data, size_t padded_dim) {
     const size_t num_blk = padded_dim / 64;
     const auto* it_data = data;
     const float* it_query = query;
@@ -150,4 +150,5 @@ static inline float mask_ip_avx2(
         _mm256_add_ps(_mm256_add_ps(sum0, sum1), _mm256_add_ps(sum2, sum3))
     );
 }
+}  // namespace
 }  // namespace rabitqlib::simd::detail

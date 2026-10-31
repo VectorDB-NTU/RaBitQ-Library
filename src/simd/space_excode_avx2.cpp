@@ -22,7 +22,6 @@ namespace {
     std::memcpy(&signed_low, &low, sizeof(signed_low));
     return _mm_set_epi64x(signed_high, signed_low);
 }
-}  // namespace
 
 // Accumulate the two halves independently to shorten the FMA dependency chain.
 inline void contribute_ip(
@@ -35,7 +34,7 @@ inline void contribute_ip(
     q = _mm256_loadu_ps(query + 8);
     cf = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_srli_si128(vec, 8)));
     sum_hi = _mm256_fmadd_ps(q, cf, sum_hi);
-};
+}
 
 inline void contribute_ip_signed(
     __m128i vec, const float* __restrict__ query, __m256& sum, __m256& sum_hi
@@ -47,7 +46,8 @@ inline void contribute_ip_signed(
     q = _mm256_loadu_ps(query + 8);
     cf = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(_mm_srli_si128(vec, 8)));
     sum_hi = _mm256_fmadd_ps(cf, q, sum_hi);
-};
+}
+}  // namespace
 
 // ip16_fxu1 consumes groups of 16 float query values and packed 1-bit codes.
 // This translation unit uses AVX2/FMA; callers should use runtime dispatch.
