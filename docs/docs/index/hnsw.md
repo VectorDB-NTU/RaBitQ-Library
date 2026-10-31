@@ -94,7 +94,7 @@ void HierarchicalNSW::construct(
     size_t num_points,
     const float* data,
     PID* cluster_ids,
-    size_t num_threads = 0,
+    size_t num_threads = std::numeric_limits<size_t>::max(),
     bool fast_quantization = false
 );
 ```
@@ -103,7 +103,7 @@ void HierarchicalNSW::construct(
 - **num_points**: The number of data vectors.
 - **centroids**: Centroids computed by [RaBitQKMeans](../clustering.md#rabitqkmeans); the examples use `num_clusters = 16`.
 - **cluster_ids**: Array of length `num_points`; every entry must be in the range `[0, num_clusters)`.
-- **num_threads**: Number of threads to use (default: 0, which auto-selects).
+- **num_threads**: Number of threads to use (default: every available thread; `0` also auto-selects).
 - **fast_quantization**: Use calibrated scaling instead of per-vector scale search; see [encoding paths](../rabitq/quantizer.md#implementations).
 
 ## Querying
@@ -153,7 +153,7 @@ void HierarchicalNSW::resize(size_t new_max_elements);
   is `nullptr`, each vector goes to its nearest centroid, chosen the same way a
   query is routed.
 - **fast_quantization**, **num_threads**: Same meaning as in `construct`, but `add` defaults
-  to one thread; pass `0` to auto-select. A point keeps the label
+  to one thread, which keeps the resulting links deterministic; pass `0` to auto-select. A point keeps the label
   `num_stored_points() + i` whatever order the threads finish in, because the slots are
   reserved as one block before the inserts start.
 - **new_max_elements**: The new capacity. It must be at least `num_stored_points()`.
