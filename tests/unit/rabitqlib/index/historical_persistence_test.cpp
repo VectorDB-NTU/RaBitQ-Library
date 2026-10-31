@@ -18,6 +18,7 @@
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "temp_file.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -65,8 +66,9 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         expected >> reference_ids[i] >> reference_distances[i];
     }
     ASSERT_TRUE(expected.good());
-    const auto output = std::filesystem::temp_directory_path() /
-                        ("rabitq_historical_" + GetParam().directory + "_" + name);
+    const auto output =
+        std::filesystem::temp_directory_path() /
+        rabitq_test::process_unique("historical_" + GetParam().directory + "_" + name);
     const auto compare = [&] {
         EXPECT_EQ(ids, reference_ids);
         for (size_t i = 0; i < ids.size(); ++i) {

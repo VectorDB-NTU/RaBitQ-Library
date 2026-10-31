@@ -374,6 +374,16 @@ jobs:
           simd_filter+=':HnswSaveTest.SuccessfulSavePreservesSearchAfterLoading'
           simd_filter+=':HnswPaddingTest.TailDimensionsMatchEveryAvailableSearchBackend'
           simd_filter+=':IvfLifecycleTest.BatchTailSurvivesAddRemoveAndReload:HnswRemoveTest.*'
+          # A renamed suite would silently drop out of the filter: GoogleTest exits 0
+          # with zero matches, so require every pattern to select at least one test.
+          IFS=: read -ra patterns <<< "$simd_filter"
+          for pattern in "${patterns[@]}"; do
+            if ! build-install/tests/rabitq_tests --gtest_list_tests \
+                --gtest_filter="$pattern" | grep -q '^  '; then
+              echo "error: no test matches the filter pattern $pattern" >&2
+              exit 1
+            fi
+          done
           for cpu_model in hsw icl; do
             RABITQ_TEST_CPU="$cpu_model" "$RUNNER_TEMP/sde/sde64" "-$cpu_model" -- \
               build-install/tests/rabitq_tests --gtest_filter="$simd_filter"

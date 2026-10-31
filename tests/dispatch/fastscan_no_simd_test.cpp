@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "fastscan_backend.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/fastscan/fastscan.hpp"
 #include "rabitqlib/fastscan/highacc_fastscan.hpp"
@@ -81,6 +82,8 @@ TEST(FastScanDispatchTest, HighAccuracyUsesScalarFallbackWithoutSimd) {
     transfer_lut_hacc(lut.data(), kDim, high_accuracy_lut.data());
     std::array<int32_t, kBatchSize> result{};
     accumulate_hacc(codes.data(), high_accuracy_lut.data(), result.data(), kDim);
+    // The AVX2 kernel produces the same sums for this layout; prove the fallback ran.
+    EXPECT_STREQ(detail::selected_backend().name, "generic");
     for (const auto value : result) {
         EXPECT_EQ(value, 4000);
     }
