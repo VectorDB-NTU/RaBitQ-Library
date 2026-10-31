@@ -6,5 +6,10 @@
 #include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::ivf::detail {
-void insert_candidates(buffer::SearchBuffer<float>&, const PID*, const float*, size_t);
+void insert_candidates(
+    buffer::SearchBuffer<float>& result_pool,
+    const PID* ids,
+    const float* distances,
+    size_t count
+);
 }  // namespace rabitqlib::ivf::detail

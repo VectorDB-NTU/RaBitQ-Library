@@ -14,7 +14,7 @@ namespace {
 uint32_t candidate_mask_impl(const float* distances, float threshold) {
     const __m256 limit = _mm256_set1_ps(threshold);
     uint32_t mask = 0;
-    for (size_t lane = 0; lane < 32; lane += 8) {
+    for (size_t lane = 0; lane < fastscan::kBatchSize; lane += 8) {
         const __m256 values = _mm256_loadu_ps(distances + lane);
         const __m256 candidates = _mm256_cmp_ps(values, limit, _CMP_NGT_UQ);
         mask |= static_cast<uint32_t>(_mm256_movemask_ps(candidates)) << lane;

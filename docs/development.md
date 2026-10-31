@@ -602,7 +602,8 @@ preprocessing objects, `visited` for visited state.
 
 **Search windows**
 
-`ef_search` for a per-call graph window, `kDefaultEfSearch` for HNSW's fixed fallback, and
+`ef_search` for a per-call graph window, `default_ef_search_` for QG's stored default,
+`kDefaultEfSearch` for HNSW's fixed fallback, and
 `ef_construction` for graph-building search breadth. IVF's `nprobe` counts clusters and
 remains distinct.
 
@@ -640,7 +641,8 @@ of 32. These settings are not interchangeable.
 Public names and Python keywords are compatibility contracts. For example,
 `Cluster::num()`, the protected `Initializer::num_cluster_`, QG's
 `degree_bound()`/`set_ef()`, Python's `ef`, and `QGKMeansParameters::ef_build`
-retain their existing spellings. C++ parameter names may be clarified without
+retain their existing spellings, as do the Python vocabulary `random_seed`/`seed`,
+`train`/`build`, `obj`, `nsplit`, `final_obj` and `niter`. C++ parameter names may be clarified without
 changing types, order or defaults. Keep declarations, definitions and comments
 in agreement; do not rename methods or literals by textual substitution.
 
@@ -666,6 +668,8 @@ public and protected names, Python keywords, field order and numerical operation
 - Clustering's private state uses `dim_`, `num_points_`, `num_clusters_`,
   `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and graph parameter
   names compatible. Retain the existing private `niter_` graph iteration name.
+  Per-point centroid IDs are `assignments` (arrays) and `cluster_id` (scalars);
+  `label` stays reserved for HNSW's caller-visible labels.
 - FHT backend arguments use `rotated_data`, `padded_dim`, `trunc_dim` and
   `scale_factor` consistently across declarations, dispatch and implementations.
   A lower-level kernel's `dim` still denotes that kernel's own input shape.
@@ -673,6 +677,37 @@ public and protected names, Python keywords, field order and numerical operation
 Keep short mathematical symbols, loop indices and SIMD register names when their
 meaning is local and clear. Naming cleanup must not alter formulas, arithmetic
 order, packed layouts, ISA selection or runtime behavior.
+
+### Library-wide code conventions
+
+These rules apply to new and changed code; the listed exceptions predate them.
+
+- **Identifiers.** `.clang-tidy` checks the case of every identifier kind and lists
+  the public spellings kept for compatibility; extend those lists only for retained
+  public API. Naming findings fail the clang-tidy check like any other. Template
+  parameters are PascalCase; `T` is the floating-point element type and `TP` the
+  code or ID element type.
+- **Linkage.** Follow [Implementation linkage](#implementation-linkage) for code
+  compiled under several ISA flags, including public headers that ISA-flagged sources
+  include. Other header functions are plain `inline`, and helpers used by one `.cpp`
+  file go in an anonymous namespace.
+- **Namespaces.** Internal code uses `<module>::detail` or an anonymous namespace.
+  Existing public `*_impl` namespaces are compatibility names, not a pattern.
+- **Errors.** New messages read `"<Component> <text>"` with the component `HNSW`,
+  `IVF`, `QuantizedGraph`, `PiPNN`, `FastScan` or `FastScan high-accuracy`, no colon
+  after it and no trailing period. Core keeps identifier-first messages. Python binding
+  argument errors start with the lowercase parameter name and state errors with the
+  wrapper class name. Some older index-file messages (for example `Invalid padded
+  dimension in IVF index file`) are asserted by tests and keep their wording; changing
+  a Python-visible message is a behavior change. Allocation failure throws
+  `std::bad_alloc`.
+- **Comments.** Use `//`; keep `/** */` for public API documentation blocks and state
+  preconditions as sentences (`// Requires ...`).
+- **Tests.** Name new suites `<Module><Area>Test` (`Hnsw`, `Ivf`, `Qg`, `FastScan`, ...)
+  with PascalCase test names and no underscores. Older suites such as `ThreadCount`
+  keep their names because CI filters select them. Test constants use `kDim`, `kCount`,
+  `kNumQueries` and `kTopK`. Renaming a suite requires updating the GoogleTest filters
+  in `.github/workflows/test.yaml` and `tests/CMakeLists.txt`.
 
 ## Technical contracts
 
@@ -807,7 +842,7 @@ nothing in an old file is reinterpreted. A file that has removals is rejected by
 through 0.5.1, whose `load` range-checks every cluster ID; that rejection is the compatibility path.
 This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW-RaBitQ code:
 
-- Read cluster IDs only through `get_clusterid_by_internalid`, which masks the bit. Estimators,
+- Read cluster IDs only through `cluster_id_of`, which masks the bit. Estimators,
   routing, and the `add` reconstruction index centroids with it.
 - A removed point stays in the graph: base-layer search still inserts it into `search_pool`, and
   `add` may link to it. Only the result buffer skips it, including when it is the entry point.
@@ -887,6 +922,8 @@ a short-vector improvement does not justify applying it to wider vectors.
 
 Put calculations and scratch-storage helpers outside the dispatcher. Shared implementation
 headers use internal linkage so independently compiled backends retain their own bodies.
+This includes public headers reached from ISA-flagged sources, such as the per-ISA HNSW
+search files: keep their non-template helpers `static inline` rather than plain `inline`.
 The AVX FHT intrinsics in `src/simd/fht_kernels.hpp` use the private kernel namespace
 for the same reason. Rotation uses this implementation on GCC, Clang, and MSVC;
 no assembler is required. Keep the FFHT attribution and MIT license in the

@@ -27,7 +27,7 @@ struct DistanceEstimate {
  * same vector and query, as returned by the matching base-distance estimator.
  * Returns the refined squared-L2 or 1 - dot estimate, without an error margin.
  */
-template <class Query>
+template <typename Query>
 inline float split_distance_boosting(
     const char* ex_data,
     float (*ip_func)(const float*, const uint8_t*, size_t),
@@ -47,7 +47,7 @@ inline float split_distance_boosting(
     return ex_dist;
 }
 
-template <class Kernel, class Query>
+template <class Kernel, typename Query>
 inline void split_single_fulldist_direct(
     const char* bin_data,
     const char* ex_data,
@@ -137,7 +137,7 @@ inline void split_single_estdist(
                          (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.k1xsumq()));
 
     lower_bound = estimated_distance - (cur_bin.f_error() * g_error);
-};
+}
 
 template <class Kernel>
 inline void split_single_estdist_direct(
@@ -166,7 +166,7 @@ inline void split_single_estdist_direct(
                          (cur_bin.f_rescale() * (ip_x0_qr + query_wrapper.k1xsumq()));
 
     lower_bound = estimated_distance - (cur_bin.f_error() * g_error);
-};
+}
 
 inline void xy_single_base_dist(
     const char* base_data,
@@ -230,7 +230,7 @@ inline void xy_single_full_dist(
 
 // Named-result functions keep the numerical implementation and legacy output-reference
 // interfaces intact. Internal callers do not need to remember output argument order.
-template <class Kernel, class Query>
+template <class Kernel, typename Query>
 inline detail::DistanceEstimate estimate_split_single_full_direct(
     const char* bin_data,
     const char* ex_data,

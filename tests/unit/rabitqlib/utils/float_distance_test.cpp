@@ -76,7 +76,7 @@ std::vector<Backend> backends() {
 
 }  // namespace
 
-TEST(FloatDistance, EmptyAndAliasedInputsPreserveDistanceConventions) {
+TEST(FloatDistanceTest, EmptyAndAliasedInputsPreserveDistanceConventions) {
     const std::array<float, 5> a{1, -2, 3, -4, 5};
     for (const auto& backend : backends()) {
         SCOPED_TRACE(backend.name);
@@ -91,7 +91,7 @@ TEST(FloatDistance, EmptyAndAliasedInputsPreserveDistanceConventions) {
     }
 }
 
-TEST(FloatDistance, SubtractionUsesFloatPrecisionInVectorBlocksAndTails) {
+TEST(FloatDistanceTest, SubtractionUsesFloatPrecisionInVectorBlocksAndTails) {
     // In float, 1 - 2^-25 rounds to 1 before squaring. Widening the subtraction
     // to double would instead return the float immediately below 1.
     for (size_t dim : {1U, 4U, 16U, 17U, 33U}) {
@@ -109,14 +109,15 @@ TEST(FloatDistance, SubtractionUsesFloatPrecisionInVectorBlocksAndTails) {
     }
 }
 
-TEST(FloatDistance, AccumulationRetainsFloatPrecision) {
+TEST(FloatDistanceTest, AccumulationRetainsFloatPrecision) {
     // Each small square is below half an ulp at 1. Place them in the same
     // accumulation lane for all backends. Double accumulation would preserve
     // their combined 2^-23 contribution and return the float above 1.
     std::array<float, 513> a{}, zero{};
     a[0] = 1.0F;
-    for (size_t i = 64; i < a.size(); i += 64)
+    for (size_t i = 64; i < a.size(); i += 64) {
         a[i] = std::ldexp(1.0F, -13);
+    }
     for (const auto& backend : backends()) {
         SCOPED_TRACE(backend.name);
         EXPECT_EQ(backend.l2(a.data(), zero.data(), a.size()), 1.0F);
@@ -126,7 +127,7 @@ TEST(FloatDistance, AccumulationRetainsFloatPrecision) {
     }
 }
 
-TEST(FloatDistance, DoubleTemplatesRetainDoublePrecision) {
+TEST(FloatDistanceTest, DoubleTemplatesRetainDoublePrecision) {
     const std::array<double, 3> a{1.0000000001, 2.0000000001, 3.0000000001};
     const std::array<double, 3> b{1, 2, 3};
     EXPECT_NEAR(rabitqlib::euclidean_sqr(a.data(), b.data(), a.size()), 3e-20, 1e-26);
@@ -138,7 +139,7 @@ TEST(FloatDistance, DoubleTemplatesRetainDoublePrecision) {
 }
 
 #if defined(__linux__)
-TEST(FloatDistance, TailsDoNotReadPastGuardPage) {
+TEST(FloatDistanceTest, TailsDoNotReadPastGuardPage) {
     const size_t page = static_cast<size_t>(sysconf(_SC_PAGESIZE));
     void* memory =
         mmap(nullptr, page * 2, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

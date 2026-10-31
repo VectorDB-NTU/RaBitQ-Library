@@ -10,15 +10,16 @@
 
 namespace rabitqlib::fastscan {
 
-constexpr static size_t kBatchSize = 32;  // number of vectors in each batch
+inline constexpr size_t kBatchSize = 32;  // number of vectors in each batch
 
-// Interleave lanes 0..7 and 8..15 for the 16-bit SIMD accumulators.
-constexpr static std::array<int, 16> kPerm0 = {
+// Interleave lanes 0..7 and 8..15 for the 16-bit SIMD accumulators. Internal linkage
+// lets hot kernels address the table directly instead of through the GOT.
+static constexpr std::array<int, 16> kPerm0 = {
     0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15};
 
-template <typename T, class TA>
+template <typename TP, typename Column>
 static inline void get_column(
-    const T* src, size_t rows, size_t cols, size_t row, size_t col, TA& dest
+    const TP* src, size_t rows, size_t cols, size_t row, size_t col, Column& dest
 ) {
     size_t k = 0;
     size_t max_k = std::min(rows - row, dest.size());
@@ -37,21 +38,19 @@ static inline void get_column(
  * their low nibbles; the first vector always occupies the output's low nibble.
  *
  * @param padded_dim dimension of quantized data (i.e., quantization code)
- * @param quantization_code num rows of padded_dim / 8 compact sign-code bytes
- * @param num number of logical vectors
- * @param blocks output, ceil(num / 32) * 32 * padded_dim / 8 bytes
+ * @param quantization_code num_points rows of padded_dim / 8 compact sign-code bytes
+ * @param num_points number of logical vectors
+ * @param blocks output, ceil(num_points / 32) * 32 * padded_dim / 8 bytes
  */
 inline void pack_codes(
-    size_t padded_dim, const uint8_t* quantization_code, size_t num, uint8_t* blocks
+    size_t padded_dim, const uint8_t* quantization_code, size_t num_points, uint8_t* blocks
 ) {
-    // consider codes is a matrix
-    // rows = number of vectors
-    // cols = number of uint8_t of one vector's code
+    // Treat the codes as a matrix: one row per vector, one column per code byte.
     size_t cols = padded_dim / 8;
 
     // Full batches can gather directly in output order, without a temporary column.
     size_t row = 0;
-    for (; num - row >= kBatchSize; row += kBatchSize) {
+    for (; num_points - row >= kBatchSize; row += kBatchSize) {
         for (size_t i = 0; i < cols; ++i) {
             for (size_t j = 0; j < 16; ++j) {
                 const size_t first = row + kPerm0[j];
@@ -65,10 +64,10 @@ inline void pack_codes(
     }
 
     // Only the final partial batch needs a zero-padded column.
-    if (row < num) {
-        std::array<uint8_t, 32> col;
+    if (row < num_points) {
+        std::array<uint8_t, kBatchSize> col;
         for (size_t i = 0; i < cols; ++i) {
-            get_column(quantization_code, num, cols, row, i, col);
+            get_column(quantization_code, num_points, cols, row, i, col);
             for (size_t j = 0; j < 16; ++j) {
                 // the lower 4 bits represent vector 0 to 15
                 // the upper 4 bits represent vector 16 to 31
@@ -83,20 +82,21 @@ inline void pack_codes(
 }
 
 /**
- * @brief Inverse of pack_codes: recover the compact quantization codes of the first `num`
- * vectors from their packed blocks. Padding lanes of a partial final batch are ignored.
+ * @brief Inverse of pack_codes: recover the compact quantization codes of the first
+ * `num_points` vectors from their packed blocks. Padding lanes of a partial final batch
+ * are ignored.
  *
  * @param padded_dim dimension of quantized data (i.e., quantization code)
  * @param blocks packed quantization code, as produced by pack_codes
- * @param num   number of quantization code to recover
- * @param quantization_code recovered codes, num * padded_dim / 8 bytes
+ * @param num_points number of quantization codes to recover
+ * @param quantization_code recovered codes, num_points * padded_dim / 8 bytes
  */
 inline void unpack_codes(
-    size_t padded_dim, const uint8_t* blocks, size_t num, uint8_t* quantization_code
+    size_t padded_dim, const uint8_t* blocks, size_t num_points, uint8_t* quantization_code
 ) {
     const size_t cols = padded_dim / 8;
 
-    for (size_t row = 0; row < num; row += kBatchSize) {
+    for (size_t row = 0; row < num_points; row += kBatchSize) {
         for (size_t i = 0; i < cols; ++i) {
             for (size_t j = 0; j < 16; ++j) {
                 // blocks[j] holds both input vectors' high nibbles; blocks[j + 16]
@@ -107,10 +107,10 @@ inline void unpack_codes(
                 );
                 const auto b =
                     static_cast<uint8_t>((blocks[j] & 0xF0) | (blocks[j + 16] >> 4));
-                if (first < num) {
+                if (first < num_points) {
                     quantization_code[first * cols + i] = a;
                 }
-                if (first + 16 < num) {
+                if (first + 16 < num_points) {
                     quantization_code[(first + 16) * cols + i] = b;
                 }
             }

@@ -15,11 +15,13 @@ float warmup_ip_x0_q_512_avx2(
     size_t padded_dim,
     size_t b_query
 ) {
-    if (b_query > 8) {
-        throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
-    }
     size_t ip_scalar = 0;
     size_t ppc_scalar = 0;
+
+    constexpr size_t kMaxQueryBits = 8;
+    if (b_query > kMaxQueryBits) {
+        throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
+    }
     if (padded_dim < 512) {
         detail::accumulate_warmup_tail(
             data, query, padded_dim, b_query, ip_scalar, ppc_scalar
@@ -28,7 +30,9 @@ float warmup_ip_x0_q_512_avx2(
                (vl * static_cast<float>(ppc_scalar));
     }
 
-    return detail::warmup_blocks_avx2<8>(data, query, delta, vl, padded_dim, b_query);
+    return detail::warmup_blocks_avx2<kMaxQueryBits>(
+        data, query, delta, vl, padded_dim, b_query
+    );
 }
 
 float warmup_ip_x0_q_512_avx2(

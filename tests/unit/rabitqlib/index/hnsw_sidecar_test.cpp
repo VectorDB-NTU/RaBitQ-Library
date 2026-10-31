@@ -48,7 +48,7 @@ struct Fixture {
     std::vector<float> data = std::vector<float>(kCount * kDim);
     std::vector<char> original;
     std::vector<size_t> upper_offsets, levels;
-    size_t stride = 0, upper_stride = 0, max_m = 0, max_m0 = 0;
+    size_t level0_record_bytes = 0, upper_layer_links_bytes = 0, max_m = 0, max_m0 = 0;
     size_t upper_node = 0, base_node = 0;
 
     explicit Fixture(MetricType metric) {
@@ -77,15 +77,16 @@ struct Fixture {
         index.save(path.c_str());
         std::ifstream file(path + ".hnsw", std::ios::binary);
         original.assign(std::istreambuf_iterator<char>(file), {});
-        stride = read_at<size_t>(original, 3 * sizeof(size_t));
+        level0_record_bytes = read_at<size_t>(original, 3 * sizeof(size_t));
         max_m = read_at<size_t>(original, kMaxMOffset);
         max_m0 = read_at<size_t>(original, kMaxMOffset + sizeof(size_t));
-        upper_stride = sizeof(hnswlib::linklistsizeint) + max_m * sizeof(hnswlib::tableint);
-        size_t pos = kHeaderBytes + kCount * stride;
+        upper_layer_links_bytes =
+            sizeof(hnswlib::linklistsizeint) + max_m * sizeof(hnswlib::tableint);
+        size_t pos = kHeaderBytes + kCount * level0_record_bytes;
         for (size_t i = 0; i < kCount; ++i) {
             upper_offsets.push_back(pos);
             const auto bytes = read_at<unsigned int>(original, pos);
-            levels.push_back(bytes / upper_stride);
+            levels.push_back(bytes / upper_layer_links_bytes);
             pos += sizeof(unsigned int) + bytes;
         }
         if (pos != original.size()) {
@@ -111,7 +112,7 @@ struct Fixture {
     }
 };
 
-TEST(HnswSidecarGraph, PublicLoadRejectsCorruptStructureAndCanRetry) {
+TEST(IvfHnswSidecarGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         Fixture fixture(metric);
         const auto reject = [&](const char* name, auto corrupt, const char* message) {
@@ -164,7 +165,9 @@ TEST(HnswSidecarGraph, PublicLoadRejectsCorruptStructureAndCanRetry) {
         );
         reject(
             "truncated base records",
-            [&](auto& b) { b.resize(kHeaderBytes + kCount * fixture.stride - 1); },
+            [&](auto& b) {
+                b.resize(kHeaderBytes + kCount * fixture.level0_record_bytes - 1);
+            },
             "Truncated HNSW centroid base records"
         );
         reject(
@@ -294,17 +297,17 @@ TEST(HnswSidecarGraph, PublicLoadRejectsCorruptStructureAndCanRetry) {
     }
 }
 
-TEST(HnswSidecarGraph, DisconnectedGraphCannotReadEmptyResults) {
+TEST(IvfHnswSidecarGraphTest, DisconnectedGraphCannotReadEmptyResults) {
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         Fixture fixture(metric);
         auto bytes = fixture.original;
         for (size_t i = 0; i < kCount; ++i) {
-            write_at<uint16_t>(bytes, kHeaderBytes + i * fixture.stride, 0);
+            write_at<uint16_t>(bytes, kHeaderBytes + i * fixture.level0_record_bytes, 0);
             for (size_t level = 0; level < fixture.levels[i]; ++level) {
                 write_at<uint16_t>(
                     bytes,
                     fixture.upper_offsets[i] + sizeof(unsigned int) +
-                        level * fixture.upper_stride,
+                        level * fixture.upper_layer_links_bytes,
                     0
                 );
             }

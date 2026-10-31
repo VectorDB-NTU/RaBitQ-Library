@@ -33,17 +33,17 @@ static_assert(
     "HashBasedBooleanSet must remain available as a compatibility alias"
 );
 
-TEST(VisitedListPoolTest, TransfersOwnershipAndClearsReusedStorage) {
-    rabitqlib::VisitedListPool pool(1, 64);
-    auto visited = pool.get_free_vislist();
+TEST(VisitedSetPoolTest, TransfersOwnershipAndClearsReusedStorage) {
+    rabitqlib::VisitedSetPool pool(1, 64);
+    auto visited = pool.acquire();
     auto* storage = visited.get();
     visited->set(7);
-    pool.release_vis_list(std::move(visited));
+    pool.release(std::move(visited));
     EXPECT_EQ(visited, nullptr);
-    auto reused = pool.get_free_vislist();
+    auto reused = pool.acquire();
     EXPECT_EQ(reused.get(), storage);
     EXPECT_FALSE(reused->get(7));
-    auto another = pool.get_free_vislist();
+    auto another = pool.acquire();
     EXPECT_NE(another.get(), reused.get());
 }
 
@@ -75,15 +75,15 @@ void expect_basic_visited_set_behavior() {
     EXPECT_TRUE(visited.get(23));
 }
 
-TEST(VisitedSet, HashBackendSatisfiesContract) {
+TEST(VisitedSetTest, HashBackendSatisfiesContract) {
     expect_basic_visited_set_behavior<HashBasedVisitedSet>();
 }
 
-TEST(VisitedSet, EpochBackendSatisfiesContract) {
+TEST(VisitedSetTest, EpochBackendSatisfiesContract) {
     expect_basic_visited_set_behavior<EpochBasedVisitedSet>();
 }
 
-TEST(VisitedSet, BackendsRemainBehaviorallyEquivalent) {
+TEST(VisitedSetTest, BackendsRemainBehaviorallyEquivalent) {
     constexpr size_t kNumElements = 4096;
     constexpr size_t kNumOperations = 20000;
 
@@ -117,7 +117,7 @@ TEST(VisitedSet, BackendsRemainBehaviorallyEquivalent) {
     }
 }
 
-TEST(HashBasedVisitedSet, HandlesCollidingIds) {
+TEST(HashBasedVisitedSetTest, HandlesCollidingIds) {
     HashBasedVisitedSet visited(1024, 1);
     const std::vector<PID> colliding_ids{0, 32, 64, 96, 128, 1023};
 
@@ -134,7 +134,7 @@ TEST(HashBasedVisitedSet, HandlesCollidingIds) {
     }
 }
 
-TEST(EpochBasedVisitedSet, ClearsStaleValuesWhenEpochWraps) {
+TEST(EpochBasedVisitedSetTest, ClearsStaleValuesWhenEpochWraps) {
     EpochBasedVisitedSet visited(4);
     visited.set(0);
 

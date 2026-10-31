@@ -36,12 +36,14 @@ struct RescaleSearchState {
 
 // Keep executable helpers local to each translation unit. This header is
 // compiled with different ISA flags; merging external inline/template symbols
-// could make the AVX2 backend call an AVX512-compiled helper.
+// could make the AVX2 backend call an AVX512-compiled helper. BoundedRescaleState
+// is TU-local as well: its default member initializers give it a constructor.
+namespace {
 
 // Recover exact event scales at the boundary coordinates a vector evaluator selected
 // (size_t max for none): it compares reciprocal products, while the heap sweep
 // divides. Then score coordinates [tail, dim) with the scalar definitions.
-static inline RescaleSearchState finish_scale_state(
+inline RescaleSearchState finish_scale_state(
     RescaleSearchState s,
     const double* magnitudes,
     size_t first_index,
@@ -52,39 +54,44 @@ static inline RescaleSearchState finish_scale_state(
     double scale
 ) {
     constexpr size_t kNone = std::numeric_limits<size_t>::max();
-    if (first_index != kNone)
+    if (first_index != kNone) {
         s.first = std::max(
             s.first,
             static_cast<double>(
                 quantized_level_at_scale(magnitudes[first_index], scale, max_code)
             ) / magnitudes[first_index]
         );
-    if (next_index != kNone)
+    }
+    if (next_index != kNone) {
         s.next = std::min(
             s.next,
             (quantized_level_at_scale(magnitudes[next_index], scale, max_code) + 1.0) /
                 magnitudes[next_index]
         );
+    }
     for (size_t i = tail; i < dim; ++i) {
         int c = quantized_level_at_scale(magnitudes[i], scale, max_code);
-        double q = c + .5;
+        double q = c + 0.5;
         s.numerator += magnitudes[i] * q;
         s.squared_norm += q * q;
-        if (c > 0)
+        if (c > 0) {
             s.first = std::max(s.first, static_cast<double>(c) / magnitudes[i]);
-        if (c < max_code && magnitudes[i] > 0)
+        }
+        if (c < max_code && magnitudes[i] > 0) {
             s.next = std::min(s.next, (c + 1.0) / magnitudes[i]);
+        }
     }
     return s;
 }
 
 // Finite IEEE-754 binary64 neighbors for outward-rounded bounds.
 // Adjusting the representation leaves the floating-point rounding mode unchanged.
-static inline double next_double_up(double value) {
+inline double next_double_up(double value) {
     static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8);
     // Both signed zeros step to the smallest positive subnormal.
-    if (value == 0)
+    if (value == 0) {
         return std::numeric_limits<double>::denorm_min();
+    }
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
     // Negative values have reversed bit ordering.
@@ -93,10 +100,11 @@ static inline double next_double_up(double value) {
     return value;
 }
 
-static inline double next_double_down(double value) {
+inline double next_double_down(double value) {
     // Both signed zeros step to the smallest-magnitude negative subnormal.
-    if (value == 0)
+    if (value == 0) {
         return -std::numeric_limits<double>::denorm_min();
+    }
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
     bits += value > 0 ? static_cast<uint64_t>(-1) : uint64_t{1};
@@ -104,9 +112,6 @@ static inline double next_double_down(double value) {
     return value;
 }
 
-// Its default member initializers give it a constructor, so keep the type
-// TU-local as well.
-namespace {
 struct BoundedRescaleState {
     RescaleSearchState state{};
     // Enclose the true dot product despite SIMD summation rounding. S is exact
@@ -116,7 +121,6 @@ struct BoundedRescaleState {
     double score_lower = 0;
     double score_upper = 0;
 };
-}  // namespace
 
 // Upper bound on squared cosine similarity for every code between two evaluated
 // states. Here a_i = input[i] is a rotated, normalized residual magnitude, and
@@ -125,7 +129,7 @@ struct BoundedRescaleState {
 // so maximizing squared cosine also maximizes cosine, the heap sweep's objective.
 // This bounds the whole interval; comparing endpoint scores alone cannot
 // exclude a better interior code because the score need not be monotonic.
-static inline double interval_squared_cosine_upper_bound(
+inline double interval_squared_cosine_upper_bound(
     const BoundedRescaleState& left, const BoundedRescaleState& right
 ) {
     const double endpoints = std::max(left.score_upper, right.score_upper);
@@ -133,8 +137,9 @@ static inline double interval_squared_cosine_upper_bound(
     // bounds are reversed, every interior numerator is already <= the left
     // upper bound, while its squared norm is >= the left norm; endpoints suffice.
     if (left.state.next == right.state.first ||
-        left.numerator_upper >= right.numerator_upper)
+        left.numerator_upper >= right.numerator_upper) {
         return endpoints;
+    }
 
     // Derive a bound without enumerating the events inside this interval:
     //
@@ -228,7 +233,7 @@ static inline double interval_squared_cosine_upper_bound(
 // Return false on ambiguous scores or work limits: the caller discards the
 // tentative result and runs the exact heap sweep, preserving its tie order.
 template <typename Evaluator>
-static bool try_find_best_scale_by_interval_search(
+bool try_find_best_scale_by_interval_search(
     const float* input,
     size_t dim,
     int max_code,
@@ -245,8 +250,9 @@ static bool try_find_best_scale_by_interval_search(
     }
     // S is a sum of quarter integers. This guard makes every addition exact.
     const uint64_t largest_odd = static_cast<uint64_t>(2 * max_code + 1);
-    if (dim > (uint64_t{1} << 53) / (largest_odd * largest_odd))
+    if (dim > (uint64_t{1} << 53) / (largest_odd * largest_odd)) {
         return false;
+    }
 
     // Promote float inputs exactly once and cache 1/a_i for repeated candidate
     // evaluations. The thread-local buffers are reused across vectors; each
@@ -279,13 +285,15 @@ static bool try_find_best_scale_by_interval_search(
 
     const auto try_evaluate_scale_with_score_bounds = [&](double t,
                                                           BoundedRescaleState& result) {
-        if (evaluations == kEvaluationBudget)
+        if (evaluations == kEvaluationBudget) {
             return false;
+        }
         ++evaluations;
         result.state = evaluator(magnitudes, reciprocals, dim, max_code, t_start, t_end, t);
         // Reject evaluator states whose plateau does not contain t.
-        if (result.state.first > t || result.state.next <= t)
+        if (result.state.first > t || result.state.next <= t) {
             return false;
+        }
         // If the computed numerator is N_hat and its relative error is at most
         // delta, then N_hat/(1+delta) <= N <= N_hat/(1-delta). Round outward
         // again when squaring/dividing so pruning never relies on a rounded-up
@@ -322,8 +330,9 @@ static bool try_find_best_scale_by_interval_search(
     // t_end is excluded by the heap search too. Evaluate the preceding double
     // so an event exactly at t_end is not accidentally admitted here.
     if (!try_evaluate_scale_with_score_bounds(t_start, first) ||
-        !try_evaluate_scale_with_score_bounds(next_double_down(t_end), last))
+        !try_evaluate_scale_with_score_bounds(next_double_down(t_end), last)) {
         return false;
+    }
 
     const auto try_search_interval = [&](auto&& self,
                                          const BoundedRescaleState& left,
@@ -334,10 +343,12 @@ static bool try_find_best_scale_by_interval_search(
         // mean equal codes. Adjacent plateaus have no intermediate states;
         // otherwise prune only when the entire interval is provably worse.
         if (left.state.squared_norm == right.state.squared_norm ||
-            left.state.next == right.state.first || upper_bound < best_lower)
+            left.state.next == right.state.first || upper_bound < best_lower) {
             return true;
-        if (left.state.next > right.state.first || depth == kMaxDepth)
+        }
+        if (left.state.next > right.state.first || depth == kMaxDepth) {
             return false;
+        }
 
         // Split only [left.next, right.first); stay below the right plateau
         // despite rounding.
@@ -345,13 +356,15 @@ static bool try_find_best_scale_by_interval_search(
         midpoint = std::max(
             left.state.next, std::min(midpoint, next_double_down(right.state.first))
         );
-        if (midpoint >= right.state.first)
+        if (midpoint >= right.state.first) {
             return false;
+        }
         BoundedRescaleState middle;
         if (!try_evaluate_scale_with_score_bounds(midpoint, middle) ||
             middle.state.squared_norm <= left.state.squared_norm ||
-            middle.state.squared_norm >= right.state.squared_norm)
+            middle.state.squared_norm >= right.state.squared_norm) {
             return false;
+        }
 
         // Exclude the middle plateau from both recursive gaps.
         const double left_upper = interval_squared_cosine_upper_bound(left, middle);
@@ -370,8 +383,9 @@ static bool try_find_best_scale_by_interval_search(
             last,
             interval_squared_cosine_upper_bound(first, last),
             0
-        ))
+        )) {
         return false;
+    }
     // Return the first scale of the winning plateau, not the sampled midpoint,
     // to preserve the event sweep's canonical scale convention.
     best_t = best.state.first;
@@ -380,7 +394,7 @@ static bool try_find_best_scale_by_interval_search(
 
 // The searched scale, or -1 to ask the caller to rerun the exact heap search.
 template <typename Evaluator>
-static double best_scale_or_fallback(
+double best_scale_or_fallback(
     const float* input,
     size_t dim,
     int max_code,
@@ -406,4 +420,5 @@ static double best_scale_or_fallback(
                : -1;
 }
 
+}  // namespace
 }  // namespace rabitqlib::simd::detail

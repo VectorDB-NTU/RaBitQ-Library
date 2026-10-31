@@ -9,7 +9,7 @@
 
 namespace rabitqlib::quant::rabitq_impl::ex_bits {
 inline void packing_1bit_excode(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
-    // ! require dim % 16 == 0
+    // Requires dim % 16 == 0.
     for (size_t j = 0; j < dim; j += 16) {
         uint16_t code = 0;
         for (size_t i = 0; i < 16; ++i) {

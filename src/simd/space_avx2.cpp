@@ -49,7 +49,7 @@ namespace {
 // rounds half away from zero. Signed inputs keep round_away_from_zero. Do not replace
 // either with adding 0.5f.
 template <typename Code, bool NonNegative = false>
-void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta) {
+void quantize(Code* result, const float* data, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
         std::fill_n(result, dim, Code{0});
         return;
@@ -61,7 +61,7 @@ void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta
     __m256 od256 = _mm256_set1_ps(one_over_delta);
 
     for (; i < mul8; i += 8) {
-        __m256 cur = _mm256_loadu_ps(&vec0[i]);
+        __m256 cur = _mm256_loadu_ps(&data[i]);
         cur = _mm256_mul_ps(_mm256_sub_ps(cur, lo256), od256);
         __m256i i32;
         if constexpr (NonNegative) {
@@ -87,41 +87,41 @@ void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta
         }
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<Code>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] = static_cast<Code>(std::round((data[i] - lo) * one_over_delta));
     }
 }
 }  // namespace
 
 void scalar_quantize_uint8_avx2(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint8_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    quantize(result, vec0, dim, lo, delta);
+    quantize(result, data, dim, lo, delta);
 }
 
 void scalar_quantize_nonnegative_uint8_avx2(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint8_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    quantize<uint8_t, true>(result, vec0, dim, lo, delta);
+    quantize<uint8_t, true>(result, data, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_avx2(
-    uint16_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint16_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    quantize(result, vec0, dim, lo, delta);
+    quantize(result, data, dim, lo, delta);
 }
 
 void new_transpose_bin_avx2(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+    const uint16_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
     // Reverse coordinates once; movemask then produces the stored bit order.
     const __m256i order = _mm256_broadcastsi128_si256(
         _mm_setr_epi8(14, 15, 12, 13, 10, 11, 8, 9, 6, 7, 4, 5, 2, 3, 0, 1)
     );
     for (size_t i = 0; i < padded_dim - padded_dim % 64; i += 64) {
-        const __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q));
-        const __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 16));
-        const __m256i c = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 32));
-        const __m256i d = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 48));
+        const __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query));
+        const __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 16));
+        const __m256i c = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 32));
+        const __m256i d = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 48));
         // Arrange eight-coordinate groups so packs produces the final bit order.
         __m256i hi_odd = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x20), order);
         __m256i hi_even = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x31), order);
@@ -145,28 +145,29 @@ void new_transpose_bin_avx2(
 
             const uint64_t v = uint64_t{m0} | (uint64_t{m1} << 32);
 
-            tq[b_query - j - 1] = v;
+            transposed_query[b_query - j - 1] = v;
 
             hi_odd = _mm256_slli_epi16(hi_odd, 1);
             hi_even = _mm256_slli_epi16(hi_even, 1);
             lo_odd = _mm256_slli_epi16(lo_odd, 1);
             lo_even = _mm256_slli_epi16(lo_even, 1);
         }
-        tq += b_query;
-        q += 64;
+        transposed_query += b_query;
+        query += 64;
     }
     const size_t tail_dim = padded_dim % 64;
     // The partial word contains exactly 32 coordinates.
     if (tail_dim != 0) {
-        const __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q));
-        const __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(q + 16));
+        const __m256i a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query));
+        const __m256i b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(query + 16));
         __m256i odd = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x20), order);
         __m256i even = _mm256_shuffle_epi8(_mm256_permute2x128_si256(b, a, 0x31), order);
         odd = _mm256_slli_epi16(odd, static_cast<int>(16 - b_query));
         even = _mm256_slli_epi16(even, static_cast<int>(16 - b_query));
         for (size_t bit = 0; bit < b_query; ++bit) {
             const __m256i bytes = _mm256_packs_epi16(even, odd);
-            tq[b_query - bit - 1] = static_cast<uint32_t>(_mm256_movemask_epi8(bytes));
+            transposed_query[b_query - bit - 1] =
+                static_cast<uint32_t>(_mm256_movemask_epi8(bytes));
             odd = _mm256_slli_epi16(odd, 1);
             even = _mm256_slli_epi16(even, 1);
         }
@@ -174,7 +175,7 @@ void new_transpose_bin_avx2(
 }
 
 void new_transpose_bin_512_avx2(
-    const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+    const uint8_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
     const __m128i reverse_bytes =
         _mm_setr_epi8(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
@@ -198,8 +199,8 @@ void new_transpose_bin_512_avx2(
 
         for (size_t k = 0; k < full_chunks; ++k) {
             // Load 64 bytes using two sequential 32-byte AVX2 registers
-            const uint8_t* current_q_lo = q + i + k * 64;
-            const uint8_t* current_q_hi = q + i + k * 64 + 32;
+            const uint8_t* current_q_lo = query + i + k * 64;
+            const uint8_t* current_q_hi = query + i + k * 64 + 32;
 
             __m256i vec_lo = _mm256_slli_epi16(
                 load_reversed(current_q_lo), static_cast<int>(8 - b_query)
@@ -216,7 +217,7 @@ void new_transpose_bin_512_avx2(
                 uint64_t m = (static_cast<uint64_t>(m_lo) << 32) | m_hi;
 
                 // Write into the 64-bit structured macro-layout
-                tq[(b_query - j - 1) * num_chunks + k] = m;
+                transposed_query[(b_query - j - 1) * num_chunks + k] = m;
                 vec_lo = _mm256_slli_epi16(vec_lo, 1);
                 vec_hi = _mm256_slli_epi16(vec_hi, 1);
             }
@@ -224,17 +225,17 @@ void new_transpose_bin_512_avx2(
 
         if (tail_dim != 0) {
             __m256i values = _mm256_slli_epi16(
-                load_reversed(q + i + full_chunks * 64), static_cast<int>(8 - b_query)
+                load_reversed(query + i + full_chunks * 64), static_cast<int>(8 - b_query)
             );
             for (size_t bit = 0; bit < b_query; ++bit) {
-                tq[(b_query - bit - 1) * num_chunks + full_chunks] =
+                transposed_query[(b_query - bit - 1) * num_chunks + full_chunks] =
                     static_cast<uint32_t>(_mm256_movemask_epi8(values));
                 values = _mm256_slli_epi16(values, 1);
             }
         }
 
         i += block_size;
-        tq += num_chunks * b_query;
+        transposed_query += num_chunks * b_query;
     }
 }
 

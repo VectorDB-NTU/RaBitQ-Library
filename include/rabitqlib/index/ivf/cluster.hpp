@@ -11,10 +11,10 @@ class Cluster {
    private:
     friend class IVF;
 
-    size_t num_stored_points_;    // Num of vectors in this cluster
+    size_t num_stored_points_;    // Number of points in this cluster
     char* batch_data_ = nullptr;  // RaBitQ code and factors
     char* ex_data_ = nullptr;     // Extra-bit codes/factors or original float32 vectors
-    PID* ids_ = nullptr;          // PID of vectors
+    PID* ids_ = nullptr;          // PID of each point
 
     // The owning index refreshes only views whose storage or count changed.
     void reset(
@@ -27,18 +27,18 @@ class Cluster {
     }
 
    public:
-    explicit Cluster(size_t, char*, char*, PID*);
+    explicit Cluster(size_t num_stored_points, char* batch_data, char* ex_data, PID* ids);
     Cluster(const Cluster&) = default;
     Cluster(Cluster&&) noexcept = default;
     Cluster& operator=(const Cluster&) = delete;
     Cluster& operator=(Cluster&&) = delete;
     ~Cluster() = default;
 
-    [[nodiscard]] char* batch_data() const { return this->batch_data_; }
+    [[nodiscard]] char* batch_data() const { return batch_data_; }
 
     [[nodiscard]] char* ex_data() const { return ex_data_; }
 
-    [[nodiscard]] PID* ids() const { return this->ids_; }
+    [[nodiscard]] PID* ids() const { return ids_; }
 
     [[nodiscard]] size_t num() const { return num_stored_points_; }
 };

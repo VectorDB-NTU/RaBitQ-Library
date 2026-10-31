@@ -26,14 +26,18 @@ namespace rabitqlib::python_bindings {
 
 namespace {
 ivf::InitializerType initializer_from_string(const std::string& value) {
-    if (value == "auto")
+    if (value == "auto") {
         return ivf::InitializerType::Auto;
-    if (value == "flat")
+    }
+    if (value == "flat") {
         return ivf::InitializerType::Flat;
-    if (value == "flat_rabitq")
+    }
+    if (value == "flat_rabitq") {
         return ivf::InitializerType::FlatRaBitQ;
-    if (value == "hnsw")
+    }
+    if (value == "hnsw") {
         return ivf::InitializerType::HNSW;
+    }
     throw std::invalid_argument(
         "initializer must be 'auto', 'flat', 'flat_rabitq', or 'hnsw'"
     );
@@ -65,13 +69,13 @@ class IvfIndex {
         const std::string& initializer
     ) {
         const auto metric_type = metric_from_string(metric);
-        index_ = std::make_unique<rabitqlib::ivf::IVF>(
+        index_ = std::make_unique<ivf::IVF>(
             max_elements,
             dim,
             num_clusters,
             nbits,
             metric_type,
-            rabitqlib::RotatorType::FhtKacRotator,
+            RotatorType::FhtKacRotator,
             initializer_from_string(initializer)
         );
     }
@@ -122,7 +126,7 @@ class IvfIndex {
         );
     }
 
-    py::array_t<rabitqlib::PID> add(
+    py::array_t<PID> add(
         py::handle data,
         const py::object& cluster_ids,
         size_t num_threads,
@@ -138,17 +142,17 @@ class IvfIndex {
         );
         const auto rows = static_cast<size_t>(data_array.shape(0));
 
-        std::vector<rabitqlib::PID> assigned;
+        std::vector<PID> assigned;
         if (!cluster_ids.is_none()) {
             assigned = checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
         }
 
         const size_t first = index_->num_stored_points();
         // Allocate the returned IDs before committing any changes to the index.
-        auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
+        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
         auto* ids_data = ids.mutable_data();
         for (size_t i = 0; i < rows; ++i) {
-            ids_data[i] = static_cast<rabitqlib::PID>(first + i);
+            ids_data[i] = static_cast<PID>(first + i);
         }
 
         const auto* data_ptr = data_array.data();
@@ -177,9 +181,7 @@ class IvfIndex {
             throw std::invalid_argument("num_points must be non-negative");
         }
         py::gil_scoped_release release;
-        index_->reserve(
-            static_cast<rabitqlib::PID>(cluster_id), static_cast<size_t>(num_points)
-        );
+        index_->reserve(static_cast<PID>(cluster_id), static_cast<size_t>(num_points));
     }
 
     size_t remove(py::handle ids) {
@@ -251,7 +253,7 @@ class IvfIndex {
     static IvfIndex load(py::handle path) {
         const auto filename = path_string(path);
         IvfIndex wrapper;
-        wrapper.index_ = std::make_unique<rabitqlib::ivf::IVF>();
+        wrapper.index_ = std::make_unique<ivf::IVF>();
         {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
@@ -317,7 +319,7 @@ class IvfIndex {
     [[nodiscard]] bool built() const { return index_->num_stored_points() != 0; }
 
     mutable IndexAccess access_;
-    std::unique_ptr<rabitqlib::ivf::IVF> index_;
+    std::unique_ptr<ivf::IVF> index_;
 };
 
 }  // namespace rabitqlib::python_bindings

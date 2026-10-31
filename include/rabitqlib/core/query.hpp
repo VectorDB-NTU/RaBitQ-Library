@@ -69,9 +69,9 @@ class SplitSingleQuery {
 
         validate_metric_type(metric_type);
 
-        float c_1 = -static_cast<float>((1 << 1) - 1) / 2.F;
-        float c_base = -static_cast<float>((1U << base_bits) - 1) / 2.F;
-        float c_b = -static_cast<float>((1U << (base_bits + ex_bits)) - 1) / 2.F;
+        float c_1 = -static_cast<float>((1 << 1) - 1) / 2.0F;
+        float c_base = -static_cast<float>((1U << base_bits) - 1) / 2.0F;
+        float c_b = -static_cast<float>((1U << (base_bits + ex_bits)) - 1) / 2.0F;
         T sumq =
             std::accumulate(rotated_query, rotated_query + padded_dim, static_cast<T>(0));
 
@@ -85,9 +85,7 @@ class SplitSingleQuery {
         quant::quantize_scalar<float, uint8_t>(
             rotated_query, padded_dim, kNumBits, quant_query.data(), delta_, vl_, config
         );
-        rabitqlib::new_transpose_bin_512(
-            quant_query.data(), query_bin_.data(), padded_dim, kNumBits
-        );
+        new_transpose_bin_512(quant_query.data(), query_bin_.data(), padded_dim, kNumBits);
     }
 
     [[nodiscard]] size_t num_bits() const { return kNumBits; }

@@ -5,15 +5,15 @@
 
 namespace rabitqlib {
 class StopW {
-    using clock = std::chrono::steady_clock;
-    clock::time_point time_begin_;
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point time_begin_;
 
-    [[nodiscard]] clock::duration elapsed() const { return clock::now() - time_begin_; }
+    [[nodiscard]] Clock::duration elapsed() const { return Clock::now() - time_begin_; }
 
    public:
-    StopW() : time_begin_(clock::now()) {}
+    StopW() : time_begin_(Clock::now()) {}
 
-    void reset() { time_begin_ = clock::now(); }
+    void reset() { time_begin_ = Clock::now(); }
 
     [[nodiscard]] float get_elapsed_sec() const {
         return std::chrono::duration<float>(elapsed()).count();

@@ -77,12 +77,12 @@ struct SavedEnvironment {
     ~SavedEnvironment() { std::fesetenv(&environment); }
 };
 
-template <class T>
+template <typename T>
 void expect_bits_equal(T a, T b) {
     EXPECT_EQ(std::memcmp(&a, &b, sizeof(T)), 0);
 }
 
-TEST(LutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
+TEST(FastScanLutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
     const float tiny = std::numeric_limits<float>::denorm_min();
     const std::array<std::array<float, 4>, 6> patterns{
         {{1, 2, 4, 8},
@@ -97,8 +97,9 @@ TEST(LutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
             SCOPED_TRACE(dim);
             for (const auto& pattern : patterns) {
                 std::vector<float> query(dim + 1);
-                for (size_t i = 0; i < dim; ++i)
+                for (size_t i = 0; i < dim; ++i) {
                     query[i + 1] = pattern[i % 4];
+                }
                 const auto original = query;
                 std::vector<float> expected(dim * 4 + 2, 123), actual = expected;
                 backend.pack(dim, query.data() + 1, expected.data() + 1);
@@ -125,7 +126,7 @@ TEST(LutPreparationTest, FusedBackendsPreserveOrderedTablesAndFiniteExtrema) {
     }
 }
 
-TEST(LutPreparationTest, WrapperPreservesExceptionalAndSignedZeroBounds) {
+TEST(FastScanLutPreparationTest, WrapperPreservesExceptionalAndSignedZeroBounds) {
     const SavedEnvironment saved;
     for (int rounding : {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO}) {
         ASSERT_EQ(std::fesetround(rounding), 0);
@@ -158,7 +159,7 @@ TEST(LutPreparationTest, WrapperPreservesExceptionalAndSignedZeroBounds) {
     }
 }
 
-TEST(LutPreparationTest, Uint8PathPreservesHalfBoundariesFlagsAndZeroRange) {
+TEST(FastScanLutPreparationTest, Uint8PathPreservesHalfBoundariesFlagsAndZeroRange) {
     const SavedEnvironment saved;
     std::vector<float> boundaries{0, -0.0F, 255};
     for (int value = 0; value < 255; ++value) {
@@ -173,8 +174,9 @@ TEST(LutPreparationTest, Uint8PathPreservesHalfBoundariesFlagsAndZeroRange) {
             ASSERT_EQ(std::fesetround(rounding), 0);
             for (size_t count : {0U, 1U, 7U, 8U, 15U, 16U, 17U, 768U}) {
                 std::vector<float> values(count + 1);
-                for (size_t i = 0; i < count; ++i)
+                for (size_t i = 0; i < count; ++i) {
                     values[i + 1] = boundaries[i % boundaries.size()];
+                }
                 std::vector<uint8_t> expected(count + 2, 71), actual = expected;
                 std::feclearexcept(FE_ALL_EXCEPT);
                 backend.reference_quantize(
@@ -238,11 +240,13 @@ void check_prepared_lut() {
                     const T value =
                         delta == 0 ? T{0} : std::round((table[i] - lo) * reciprocal);
                     codes[i] = static_cast<uint16_t>(value);
-                    if (!hacc)
+                    if (!hacc) {
                         expected[i] = static_cast<uint8_t>(value);
+                    }
                 }
-                if (hacc)
+                if (hacc) {
                     transfer_lut_hacc(codes.data(), dim, expected.data());
+                }
                 Lut<T> actual(query.data(), dim, hacc);
                 expect_bits_equal(actual.delta(), delta);
                 expect_bits_equal(actual.sum_vl(), lo * static_cast<T>(dim / 4));
@@ -252,10 +256,10 @@ void check_prepared_lut() {
     }
 }
 
-TEST(LutPreparationTest, FloatLutPreservesStandardAndHaccCodes) {
+TEST(FastScanLutPreparationTest, FloatLutPreservesStandardAndHaccCodes) {
     check_prepared_lut<float>();
 }
-TEST(LutPreparationTest, DoubleLutRetainsOriginalPreparation) {
+TEST(FastScanLutPreparationTest, DoubleLutRetainsOriginalPreparation) {
     check_prepared_lut<double>();
 }
 }  // namespace

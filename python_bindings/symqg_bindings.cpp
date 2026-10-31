@@ -35,7 +35,7 @@ class SymqgIndex {
         , max_degree_(max_degree)
         , metric_type_(metric_from_string(metric))
         , quantization_bits_(quantization_bits) {
-        if (max_degree == 0 || max_degree % rabitqlib::fastscan::kBatchSize != 0) {
+        if (max_degree == 0 || max_degree % fastscan::kBatchSize != 0) {
             throw std::invalid_argument("max_degree must be a positive multiple of 32");
         }
         if (quantization_bits != 0 && quantization_bits != 4 && quantization_bits != 8) {
@@ -58,12 +58,12 @@ class SymqgIndex {
         ensure_dimension(data_array, dim_, "data dimension does not match index dim");
 
         const size_t num_points = static_cast<size_t>(data_array.shape(0));
-        auto index = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>(
+        auto index = std::make_unique<symqg::QuantizedGraph<float>>(
             num_points,
             dim_,
             max_degree_,
             metric_type_,
-            rabitqlib::RotatorType::FhtKacRotator,
+            RotatorType::FhtKacRotator,
             quantization_bits_
         );
 
@@ -87,7 +87,7 @@ class SymqgIndex {
     py::tuple search(py::handle queries, size_t k, size_t ef, size_t num_threads) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
-        if (index_ == nullptr) {
+        if (!built()) {
             throw std::runtime_error("SymqgIndex must be built or loaded before search");
         }
         if (k == 0 || k > index_->num_points()) {
@@ -104,7 +104,7 @@ class SymqgIndex {
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         const auto shape = std::vector<py::ssize_t>{
             static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
-        auto result_ids = py::array_t<rabitqlib::PID>(shape);
+        auto result_ids = py::array_t<PID>(shape);
         auto distances = py::array_t<float>(shape);
         auto* ids_data = result_ids.mutable_data();
         auto* distances_data = distances.mutable_data();
@@ -128,8 +128,8 @@ class SymqgIndex {
     void save(py::handle path) const {
         const auto filename = path_string(path);
         const auto operation = access_.read();
-        if (index_ == nullptr) {
-            throw std::runtime_error("SymqgIndex must be built before save");
+        if (!built()) {
+            throw std::runtime_error("SymqgIndex must be built or loaded before save");
         }
         py::gil_scoped_release release;
         index_->save(filename.c_str());
@@ -138,7 +138,7 @@ class SymqgIndex {
     static SymqgIndex load(py::handle path) {
         const auto filename = path_string(path);
         SymqgIndex wrapper;
-        wrapper.index_ = std::make_unique<rabitqlib::symqg::QuantizedGraph<float>>();
+        wrapper.index_ = std::make_unique<symqg::QuantizedGraph<float>>();
         {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
@@ -155,9 +155,9 @@ class SymqgIndex {
         return "SymqgIndex(dim=" + std::to_string(dim_) + ", metric='" +
                metric_to_string(metric_type_) +
                "', quantization_bits=" + std::to_string(quantization_bits_) +
-               ", num_points=" + std::to_string(index_ ? index_->num_points() : 0) +
+               ", num_points=" + std::to_string(built() ? index_->num_points() : 0) +
                ", max_degree=" + std::to_string(max_degree_) +
-               ", is_built=" + (index_ != nullptr ? "True" : "False") + ")";
+               ", is_built=" + (built() ? "True" : "False") + ")";
     }
 
     [[nodiscard]] size_t dim() const {
@@ -170,19 +170,19 @@ class SymqgIndex {
     }
     [[nodiscard]] size_t num_points() const {
         const auto operation = access_.read();
-        return index_ ? index_->num_points() : 0;
+        return built() ? index_->num_points() : 0;
     }
     [[nodiscard]] size_t num_stored_points() const {
         const auto operation = access_.read();
-        return index_ ? index_->num_stored_points() : 0;
+        return built() ? index_->num_stored_points() : 0;
     }
     [[nodiscard]] size_t max_elements() const {
         const auto operation = access_.read();
-        return index_ ? index_->max_elements() : 0;
+        return built() ? index_->max_elements() : 0;
     }
     [[nodiscard]] bool is_built() const {
         const auto operation = access_.read();
-        return index_ != nullptr;
+        return built();
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
@@ -196,12 +196,15 @@ class SymqgIndex {
    private:
     SymqgIndex() = default;
 
+    // A failed build keeps the previous index; a failed load discards its wrapper.
+    [[nodiscard]] bool built() const { return index_ != nullptr; }
+
     size_t dim_ = 0;
     size_t max_degree_ = 0;
-    rabitqlib::MetricType metric_type_ = rabitqlib::METRIC_L2;
+    MetricType metric_type_ = METRIC_L2;
     size_t quantization_bits_ = 0;
     mutable IndexAccess access_;
-    std::unique_ptr<rabitqlib::symqg::QuantizedGraph<float>> index_;
+    std::unique_ptr<symqg::QuantizedGraph<float>> index_;
 };
 
 }  // namespace rabitqlib::python_bindings

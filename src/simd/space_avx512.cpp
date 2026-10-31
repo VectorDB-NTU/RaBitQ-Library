@@ -49,7 +49,7 @@ namespace {
 // rounds half away from zero. Signed inputs keep round_away_from_zero. Do not replace
 // either with adding 0.5f.
 template <typename Code, bool NonNegative = false>
-void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta) {
+void quantize(Code* result, const float* data, size_t dim, float lo, float delta) {
     if (delta == 0.0F) {
         std::fill_n(result, dim, Code{0});
         return;
@@ -60,7 +60,7 @@ void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta
     __m512 lo512 = _mm512_set1_ps(lo);
     __m512 od512 = _mm512_set1_ps(one_over_delta);
     for (; i < mul16; i += 16) {
-        __m512 cur = _mm512_loadu_ps(&vec0[i]);
+        __m512 cur = _mm512_loadu_ps(&data[i]);
         cur = _mm512_mul_ps(_mm512_sub_ps(cur, lo512), od512);
         __m512i i32;
         if constexpr (NonNegative) {
@@ -85,31 +85,31 @@ void quantize(Code* result, const float* vec0, size_t dim, float lo, float delta
         }
     }
     for (; i < dim; ++i) {
-        result[i] = static_cast<Code>(std::round((vec0[i] - lo) * one_over_delta));
+        result[i] = static_cast<Code>(std::round((data[i] - lo) * one_over_delta));
     }
 }
 }  // namespace
 
 void scalar_quantize_uint8_avx512(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint8_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    quantize(result, vec0, dim, lo, delta);
+    quantize(result, data, dim, lo, delta);
 }
 
 void scalar_quantize_nonnegative_uint8_avx512(
-    uint8_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint8_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    quantize<uint8_t, true>(result, vec0, dim, lo, delta);
+    quantize<uint8_t, true>(result, data, dim, lo, delta);
 }
 
 void scalar_quantize_uint16_avx512(
-    uint16_t* result, const float* vec0, size_t dim, float lo, float delta
+    uint16_t* result, const float* data, size_t dim, float lo, float delta
 ) {
-    quantize(result, vec0, dim, lo, delta);
+    quantize(result, data, dim, lo, delta);
 }
 
 void new_transpose_bin_avx512(
-    const uint16_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+    const uint16_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
     // Reverse coordinates once; mask extraction then produces the stored bit order.
     const auto reverse_words = [](__m512i values) {
@@ -121,8 +121,8 @@ void new_transpose_bin_avx512(
     };
     // 512 / 16 = 32
     for (size_t i = 0; i < padded_dim - padded_dim % 64; i += 64) {
-        __m512i vec_00_to_31 = reverse_words(_mm512_loadu_si512(q));
-        __m512i vec_32_to_63 = reverse_words(_mm512_loadu_si512(q + 32));
+        __m512i vec_00_to_31 = reverse_words(_mm512_loadu_si512(query));
+        __m512i vec_32_to_63 = reverse_words(_mm512_loadu_si512(query + 32));
 
         // the first (16 - b_query) bits are empty
         vec_00_to_31 = _mm512_slli_epi32(vec_00_to_31, (16 - b_query));
@@ -133,26 +133,26 @@ void new_transpose_bin_avx512(
             uint32_t v1 = _mm512_movepi16_mask(vec_32_to_63);  // get most significant bit
             const uint64_t v = uint64_t{v1} | (uint64_t{v0} << 32);
 
-            tq[b_query - j - 1] = v;
+            transposed_query[b_query - j - 1] = v;
 
             vec_00_to_31 = _mm512_slli_epi16(vec_00_to_31, 1);
             vec_32_to_63 = _mm512_slli_epi16(vec_32_to_63, 1);
         }
-        tq += b_query;
-        q += 64;
+        transposed_query += b_query;
+        query += 64;
     }
     if (padded_dim % 64 != 0) {
-        __m512i values = reverse_words(_mm512_loadu_si512(q));
+        __m512i values = reverse_words(_mm512_loadu_si512(query));
         values = _mm512_slli_epi16(values, static_cast<int>(16 - b_query));
         for (size_t bit = 0; bit < b_query; ++bit) {
-            tq[b_query - bit - 1] = _mm512_movepi16_mask(values);
+            transposed_query[b_query - bit - 1] = _mm512_movepi16_mask(values);
             values = _mm512_slli_epi16(values, 1);
         }
     }
 }
 
 void new_transpose_bin_512_avx512(
-    const uint8_t* q, uint64_t* tq, size_t padded_dim, size_t b_query
+    const uint8_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
     const auto reverse_bytes = [](__m512i values) {
         const __m512i order = _mm512_broadcast_i32x4(
@@ -173,7 +173,7 @@ void new_transpose_bin_512_avx512(
         const size_t num_chunks = full_chunks + (tail_dim != 0);
 
         for (size_t k = 0; k < full_chunks; ++k) {
-            const uint8_t* current_q = q + i + k * 64;
+            const uint8_t* current_q = query + i + k * 64;
             const __m512i vec = reverse_bytes(_mm512_loadu_si512(current_q));
 
             for (size_t j = 0; j < b_query; ++j) {
@@ -183,23 +183,24 @@ void new_transpose_bin_512_avx512(
                     1U << bit_idx
                 );  // NOLINT(bugprone-narrowing-conversions)
                 __mmask64 m = _mm512_test_epi8_mask(vec, _mm512_set1_epi8(bit_mask));
-                tq[(b_query - j - 1) * num_chunks + k] = static_cast<uint64_t>(m);
+                transposed_query[(b_query - j - 1) * num_chunks + k] =
+                    static_cast<uint64_t>(m);
             }
         }
 
         if (tail_dim != 0) {
             constexpr __mmask64 valid = 0xFFFFFFFFULL;
             const __m512i values =
-                reverse_bytes(_mm512_maskz_loadu_epi8(valid, q + i + full_chunks * 64));
+                reverse_bytes(_mm512_maskz_loadu_epi8(valid, query + i + full_chunks * 64));
             for (size_t bit = 0; bit < b_query; ++bit) {
                 const __m512i mask = _mm512_set1_epi8(static_cast<char>(1U << bit));
                 const uint64_t selected = _mm512_test_epi8_mask(values, mask);
-                tq[bit * num_chunks + full_chunks] = selected >> 32;
+                transposed_query[bit * num_chunks + full_chunks] = selected >> 32;
             }
         }
 
         i += block_size;
-        tq += num_chunks * b_query;
+        transposed_query += num_chunks * b_query;
     }
 }
 

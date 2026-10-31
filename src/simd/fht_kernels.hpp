@@ -14,13 +14,13 @@ namespace {
 // original upper lane, and adding. XOR changes only the sign bit, replacing
 // the duplicated-lane permutations, subtraction from zero, and blends.
 // The masks negate odd lanes, upper lane pairs, then the upper 128-bit half.
-template <int stage>
+template <int Stage>
 inline __m256 fht_lane_stage(__m256 x) {
-    if constexpr (stage == 0) {
+    if constexpr (Stage == 0) {
         const __m256 sign =
             _mm256_setr_ps(0.0F, -0.0F, 0.0F, -0.0F, 0.0F, -0.0F, 0.0F, -0.0F);
         return _mm256_add_ps(_mm256_permute_ps(x, 0xB1), _mm256_xor_ps(x, sign));
-    } else if constexpr (stage == 1) {
+    } else if constexpr (Stage == 1) {
         const __m256 sign =
             _mm256_setr_ps(0.0F, 0.0F, -0.0F, -0.0F, 0.0F, 0.0F, -0.0F, -0.0F);
         return _mm256_add_ps(_mm256_permute_ps(x, 0x4E), _mm256_xor_ps(x, sign));
@@ -39,7 +39,7 @@ inline void fht_butterfly(__m256& a, __m256& b) {
 
 // Fuse three stages so eight registers are loaded and stored only once.
 // Stride is eight for the 64-point leaf, or N/8 for a larger transform.
-template <bool leaf, bool normalize = false>
+template <bool Leaf, bool Normalize = false>
 inline void fht_eight_registers(float* data, size_t stride, float factor = 1.0F) {
     __m256 a = _mm256_loadu_ps(data);
     __m256 b = _mm256_loadu_ps(data + stride);
@@ -49,7 +49,7 @@ inline void fht_eight_registers(float* data, size_t stride, float factor = 1.0F)
     __m256 f = _mm256_loadu_ps(data + 5 * stride);
     __m256 g = _mm256_loadu_ps(data + 6 * stride);
     __m256 h = _mm256_loadu_ps(data + 7 * stride);
-    if constexpr (leaf) {
+    if constexpr (Leaf) {
         // As in FFHT's assembly, finish each stage across all eight registers
         // before starting the next, exposing independent work to the scheduler.
         a = fht_lane_stage<0>(a);
@@ -89,7 +89,7 @@ inline void fht_eight_registers(float* data, size_t stride, float factor = 1.0F)
     fht_butterfly(b, f);
     fht_butterfly(c, g);
     fht_butterfly(d, h);
-    if constexpr (normalize) {
+    if constexpr (Normalize) {
         const __m256 multiplier = _mm256_set1_ps(factor);
         a = _mm256_mul_ps(a, multiplier);
         b = _mm256_mul_ps(b, multiplier);
@@ -111,20 +111,20 @@ inline void fht_eight_registers(float* data, size_t stride, float factor = 1.0F)
 }
 
 // Only the outermost merge applies the rotation scale, after every butterfly.
-template <size_t log_dim, bool normalize = false>
-void fht_intrinsics(float* data, float factor = 1.0F) {
-    static_assert(log_dim >= 6 && log_dim <= 16);
-    constexpr size_t kDim = size_t{1} << log_dim;
-    if constexpr (log_dim == 6) {
-        fht_eight_registers<true, normalize>(data, 8, factor);
-    } else if constexpr (log_dim < 9) {
-        fht_intrinsics<log_dim - 1>(data);
-        fht_intrinsics<log_dim - 1>(data + kDim / 2);
+template <size_t LogDim, bool Normalize = false>
+void fht_impl(float* data, float factor = 1.0F) {
+    static_assert(LogDim >= 6 && LogDim <= 16);
+    constexpr size_t kDim = size_t{1} << LogDim;
+    if constexpr (LogDim == 6) {
+        fht_eight_registers<true, Normalize>(data, 8, factor);
+    } else if constexpr (LogDim < 9) {
+        fht_impl<LogDim - 1>(data);
+        fht_impl<LogDim - 1>(data + kDim / 2);
         for (size_t i = 0; i < kDim / 2; i += 8) {
             __m256 a = _mm256_loadu_ps(data + i);
             __m256 b = _mm256_loadu_ps(data + kDim / 2 + i);
             fht_butterfly(a, b);
-            if constexpr (normalize) {
+            if constexpr (Normalize) {
                 const __m256 multiplier = _mm256_set1_ps(factor);
                 a = _mm256_mul_ps(a, multiplier);
                 b = _mm256_mul_ps(b, multiplier);
@@ -137,10 +137,10 @@ void fht_intrinsics(float* data, float factor = 1.0F) {
         // set cache-local even for the largest supported rotation.
         constexpr size_t kStride = kDim / 8;
         for (size_t block = 0; block < kDim; block += kStride) {
-            fht_intrinsics<log_dim - 3>(data + block);
+            fht_impl<LogDim - 3>(data + block);
         }
         for (size_t i = 0; i < kStride; i += 8) {
-            fht_eight_registers<false, normalize>(data + i, kStride, factor);
+            fht_eight_registers<false, Normalize>(data + i, kStride, factor);
         }
     }
 }

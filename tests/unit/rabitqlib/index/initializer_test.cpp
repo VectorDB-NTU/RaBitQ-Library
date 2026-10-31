@@ -29,7 +29,7 @@
 namespace rabitqlib::ivf {
 namespace {
 
-TEST(HNSWInitializerTest, PersistsUtf8SidecarPaths) {
+TEST(IvfHnswInitializerTest, PersistsUtf8SidecarPaths) {
     const auto directory = std::filesystem::temp_directory_path() /
                            std::filesystem::u8path(u8"rabitq_\u6d4b\u8bd5_\U0001f680");
     std::filesystem::create_directories(directory);
@@ -51,7 +51,7 @@ TEST(HNSWInitializerTest, PersistsUtf8SidecarPaths) {
     std::filesystem::remove(directory);
 }
 
-TEST(HNSWInitializerTest, ReportsSidecarOpenFailureAndCanRetry) {
+TEST(IvfHnswInitializerTest, ReportsSidecarOpenFailureAndCanRetry) {
     const std::string path = ::testing::TempDir() + "rabitq_hnsw_save_failure";
     const std::filesystem::path sidecar(path + ".hnsw");
     std::filesystem::create_directory(sidecar);
@@ -78,7 +78,7 @@ TEST(HNSWInitializerTest, ReportsSidecarOpenFailureAndCanRetry) {
     std::filesystem::remove(sidecar);
 }
 
-TEST(HNSWInitializerTest, ReportsBufferedWriteFailure) {
+TEST(IvfHnswInitializerTest, ReportsBufferedWriteFailure) {
     if (!std::filesystem::exists("/dev/full")) {
         GTEST_SKIP() << "Requires a device that rejects writes";
     }
@@ -94,7 +94,7 @@ TEST(HNSWInitializerTest, ReportsBufferedWriteFailure) {
     EXPECT_FLOAT_EQ(result.top().first, 0.0F);
 }
 
-TEST(CentroidL2SpaceTest, MatchesDispatchedDistanceForUnalignedInputsAndTails) {
+TEST(IvfCentroidL2SpaceTest, MatchesDispatchedDistanceForUnalignedInputsAndTails) {
     for (size_t dim : {1U, 7U, 8U, 15U, 16U, 17U, 63U, 64U, 129U}) {
         CentroidL2Space space(dim);
         std::vector<float> a(dim + 1), b(dim + 1);
@@ -113,7 +113,7 @@ TEST(CentroidL2SpaceTest, MatchesDispatchedDistanceForUnalignedInputsAndTails) {
     }
 }
 
-TEST(HNSWInitializerTest, RoutesToExactCentroidsWithEuclideanDistances) {
+TEST(IvfHnswInitializerTest, RoutesToExactCentroidsWithEuclideanDistances) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 32;
     std::vector<float> centroids(kCount * kDim);
@@ -134,7 +134,7 @@ TEST(HNSWInitializerTest, RoutesToExactCentroidsWithEuclideanDistances) {
     }
 }
 
-TEST(HNSWInitializerTest, RoutesByInnerProductWithoutTakingSquareRoot) {
+TEST(IvfHnswInitializerTest, RoutesByInnerProductWithoutTakingSquareRoot) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 32;
     std::vector<float> centroids(kCount * kDim, 0.0F);
@@ -184,7 +184,7 @@ TEST(IvfInitializerTest, CentroidSearchSizesOutputAndClampsProbeCount) {
     }
 }
 
-TEST(HNSWInitializerTest, ParallelInsertionPreservesRandomLevelDraws) {
+TEST(IvfHnswInitializerTest, ParallelInsertionPreservesRandomLevelDraws) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 2048;
     constexpr size_t kSeed = 100;
@@ -213,7 +213,7 @@ TEST(HNSWInitializerTest, ParallelInsertionPreservesRandomLevelDraws) {
     }
 }
 
-TEST(HNSWInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload) {
+TEST(IvfHnswInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 1024;
     std::vector<float> centroids(kCount * kDim);
@@ -245,7 +245,7 @@ TEST(HNSWInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload) {
     }
 }
 
-TEST(HNSWInitializerTest, ReloadsInnerProductGraphForRouting) {
+TEST(IvfHnswInitializerTest, ReloadsInnerProductGraphForRouting) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 32;
     std::vector<float> centroids(kCount * kDim, 0.0F);
@@ -269,7 +269,7 @@ TEST(HNSWInitializerTest, ReloadsInnerProductGraphForRouting) {
     EXPECT_FLOAT_EQ(candidates[0].distance, -99.0F);
 }
 
-TEST(HNSWInitializerTest, PerCallSearchWindowsPreserveDefaultAndLegacyResults) {
+TEST(IvfHnswInitializerTest, PerCallSearchWindowsPreserveDefaultAndLegacyResults) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 1024;
     std::mt19937 rng(42);
@@ -306,7 +306,7 @@ TEST(HNSWInitializerTest, PerCallSearchWindowsPreserveDefaultAndLegacyResults) {
     }
 }
 
-TEST(HNSWInitializerTest, ConcurrentSearchesMatchSerialWithDifferentWindows) {
+TEST(IvfHnswInitializerTest, ConcurrentSearchesMatchSerialWithDifferentWindows) {
     constexpr size_t kDim = 17;
     constexpr size_t kCount = 1024;
     const std::array<size_t, 4> probes{1, 16, 400, 500};

@@ -25,11 +25,13 @@ std::vector<int> levels_at_threshold(
 ) {
     std::vector<int> levels(magnitudes.size());
     for (size_t i = 0; i < magnitudes.size(); ++i) {
-        if (magnitudes[i] == 0)
+        if (magnitudes[i] == 0) {
             continue;
+        }
         for (int level = 1; level <= max_code; ++level) {
-            if (static_cast<double>(level) / magnitudes[i] <= scale)
+            if (static_cast<double>(level) / magnitudes[i] <= scale) {
                 levels[i] = level;
+            }
         }
     }
     return levels;
@@ -57,12 +59,14 @@ long double exhaustive_best_squared_cosine(
     std::vector<int> levels = levels_at_threshold(magnitudes, start, max_code);
     std::vector<std::pair<double, size_t>> events;
     for (size_t i = 0; i < magnitudes.size(); ++i) {
-        if (magnitudes[i] == 0)
+        if (magnitudes[i] == 0) {
             continue;
+        }
         for (int level = levels[i] + 1; level <= max_code; ++level) {
             const double threshold = static_cast<double>(level) / magnitudes[i];
-            if (threshold < end)
+            if (threshold < end) {
                 events.emplace_back(threshold, i);
+            }
         }
     }
     std::sort(events.begin(), events.end());
@@ -81,21 +85,25 @@ long double exhaustive_best_squared_cosine(
 
 void normalize_magnitudes(std::vector<float>& magnitudes) {
     long double norm_squared = 0;
-    for (float magnitude : magnitudes)
+    for (float magnitude : magnitudes) {
         norm_squared += static_cast<long double>(magnitude) * magnitude;
-    if (norm_squared == 0)
+    }
+    if (norm_squared == 0) {
         return;
+    }
     const long double norm = std::sqrt(norm_squared);
-    for (float& magnitude : magnitudes)
+    for (float& magnitude : magnitudes) {
         magnitude = static_cast<float>(magnitude / norm);
+    }
 }
 
 std::pair<double, double> search_interval(
     const std::vector<float>& magnitudes, size_t bits
 ) {
     const double maximum = *std::max_element(magnitudes.begin(), magnitudes.end());
-    if (maximum == 0)
+    if (maximum == 0) {
         return {0, 1};
+    }
     const double end = static_cast<double>((1 << bits) + 9) / maximum;
     return {end * rabitq_impl::ex_bits::kTightStart[bits], end};
 }
@@ -109,8 +117,9 @@ void expect_optimal_canonical_scale(
     const auto levels = levels_at_threshold(magnitudes, t, max_code);
     double first = start;
     for (size_t i = 0; i < magnitudes.size(); ++i) {
-        if (levels[i] > 0)
+        if (levels[i] > 0) {
             first = std::max(first, static_cast<double>(levels[i]) / magnitudes[i]);
+        }
     }
     EXPECT_EQ(t, first);
     const long double actual = squared_cosine(magnitudes, levels);
@@ -126,8 +135,9 @@ void expect_optimal_canonical_scale(
 class RabitqRescaleBackendTest : public ::testing::TestWithParam<bool> {
    protected:
     void SetUp() override {
-        if (GetParam() ? !cpu::has_avx512_core() : !cpu::has_avx2())
+        if (GetParam() ? !cpu::has_avx512_core() : !cpu::has_avx2()) {
             GTEST_SKIP() << "Requested SIMD backend is unavailable";
+        }
     }
 
     RescaleSearch search() const {
@@ -157,21 +167,22 @@ TEST_P(RabitqRescaleBackendTest, MatchesExhaustiveObjectiveAndCanonicalThreshold
             std::mt19937 random(8143);
             std::normal_distribution<float> gaussian;
             for (size_t i = 0; i < dim; ++i) {
-                if (pattern == 1)
+                if (pattern == 1) {
                     magnitudes[i] = i == dim / 2 ? 1.0F : 0;
-                else if (pattern == 2)
+                } else if (pattern == 2) {
                     magnitudes[i] = static_cast<float>(i % 4);
-                else if (pattern == 3)
+                } else if (pattern == 3) {
                     magnitudes[i] = 1.0F + static_cast<float>(i % 7) *
                                                std::numeric_limits<float>::epsilon();
-                else if (pattern == 4)
+                } else if (pattern == 4) {
                     magnitudes[i] = i % 5 == 0 ? 0 : std::abs(gaussian(random));
-                else if (pattern == 5)
+                } else if (pattern == 5) {
                     magnitudes[i] = i + 1 == dim
                                         ? std::numeric_limits<float>::denorm_min()
                                         : std::ldexp(1.0F, -static_cast<int>(i % 150));
-                else if (pattern == 6)
+                } else if (pattern == 6) {
                     magnitudes[i] = std::abs(gaussian(random));
+                }
             }
             normalize_magnitudes(magnitudes);
             for (size_t bits = 1; bits <= 8; ++bits) {
@@ -201,8 +212,9 @@ TEST_P(RabitqRescaleBackendTest, MatchesExhaustiveObjectiveAndCanonicalThreshold
                 EXPECT_EQ(reciprocals.front(), -123.0);
                 EXPECT_EQ(reciprocals.back(), -123.0);
                 ASSERT_TRUE(std::isfinite(t));
-                if (t >= 0)
+                if (t >= 0) {
                     expect_optimal_canonical_scale(magnitudes, max_code, start, end, t);
+                }
             }
         }
     }
@@ -212,8 +224,9 @@ TEST_P(RabitqRescaleBackendTest, CompletesGaussianSearchWithoutFallback) {
     std::vector<float> magnitudes(128);
     std::mt19937 random(42);
     std::normal_distribution<float> gaussian;
-    for (float& magnitude : magnitudes)
+    for (float& magnitude : magnitudes) {
         magnitude = std::abs(gaussian(random));
+    }
     normalize_magnitudes(magnitudes);
     const auto [start, end] = search_interval(magnitudes, 7);
     const double t = search()(magnitudes.data(), magnitudes.size(), 127, start, end);
@@ -230,8 +243,9 @@ TEST_P(RabitqRescaleBackendTest, ReusesScratchAcrossDimensionsAndThreads) {
     std::normal_distribution<float> gaussian;
     for (size_t dim : {129U, 7U, 257U, 1U, 65U, 513U, 3U, 128U, 0U, 17U}) {
         std::vector<float> magnitudes(dim);
-        for (float& magnitude : magnitudes)
+        for (float& magnitude : magnitudes) {
             magnitude = dim == 17 ? 0 : std::abs(gaussian(random));
+        }
         normalize_magnitudes(magnitudes);
         const auto interval =
             dim == 0 ? std::pair<double, double>{0, 1} : search_interval(magnitudes, 7);
@@ -259,9 +273,10 @@ TEST_P(RabitqRescaleBackendTest, ReusesScratchAcrossDimensionsAndThreads) {
 
 TEST_P(RabitqRescaleBackendTest, FallsBackWhenNearlyCollinearWinnersAreAmbiguous) {
     std::vector<float> magnitudes(129);
-    for (size_t i = 0; i < magnitudes.size(); ++i)
+    for (size_t i = 0; i < magnitudes.size(); ++i) {
         magnitudes[i] =
             1.0F + static_cast<float>(i) * std::numeric_limits<float>::epsilon();
+    }
     normalize_magnitudes(magnitudes);
     const auto [start, end] = search_interval(magnitudes, 8);
     const double t = search()(magnitudes.data(), magnitudes.size(), 255, start, end);

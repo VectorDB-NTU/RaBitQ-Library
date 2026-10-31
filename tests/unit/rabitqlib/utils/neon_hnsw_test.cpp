@@ -19,7 +19,7 @@
 #include "rabitqlib/utils/cpu_features.hpp"
 
 namespace rabitqlib {
-TEST(NeonHnsw, WarmupHandlesUnalignedCodesTailsAndWideCounts) {
+TEST(HnswNeonTest, WarmupHandlesUnalignedCodesTailsAndWideCounts) {
     if (!cpu::has_neon()) {
         GTEST_SKIP();
     }
@@ -78,7 +78,7 @@ TEST(NeonHnsw, WarmupHandlesUnalignedCodesTailsAndWideCounts) {
     );
 }
 
-TEST(NeonHnsw, SearchMatchesGenericOnSameGraphForBothMetricsAndAllWidths) {
+TEST(HnswNeonTest, SearchMatchesGenericOnSameGraphForBothMetricsAndAllWidths) {
     if (!cpu::has_neon()) {
         GTEST_SKIP();
     }

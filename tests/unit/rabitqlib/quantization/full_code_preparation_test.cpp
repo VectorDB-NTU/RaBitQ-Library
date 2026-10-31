@@ -11,7 +11,7 @@
 namespace rabitqlib::quant {
 namespace {
 
-TEST(FullCodePreparation, SquaredNormUnderflowPreservesSigns) {
+TEST(FullCodePreparationTest, SquaredNormUnderflowPreservesSigns) {
     namespace api = rabitqlib::quant::v1;
     for (const size_t dim : {32U, 64U, 96U}) {
         std::vector<float> data(dim), centroid(dim, 0);

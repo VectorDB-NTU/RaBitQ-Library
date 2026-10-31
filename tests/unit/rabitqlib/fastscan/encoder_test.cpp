@@ -78,12 +78,12 @@ void check_one_bit_batches() {
     }
 }
 
-TEST(RabitqOneBitBatchTest, MatchesIndividualEncoding) {
+TEST(FastScanEncoderTest, MatchesIndividualEncoding) {
     check_one_bit_batches<float, false>();
     check_one_bit_batches<double, false>();
 }
 
-TEST(RabitqOneBitBatchTest, ParallelMatchesIndividualEncoding) {
+TEST(FastScanEncoderTest, ParallelMatchesIndividualEncoding) {
 #if RABITQ_USE_OPENMP
     const int previous_threads = omp_get_max_threads();
     omp_set_num_threads(2);

@@ -20,31 +20,31 @@
 
 namespace rabitqlib::symqg::detail {
 namespace {
-TEST(PipnnTest, DenseDistancesMatchReference) {
+TEST(QgPipnnTest, DenseDistancesMatchReference) {
     constexpr size_t kCount = 1024, kDim = 65;
     std::vector<float> data(kCount * kDim);
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = std::sin(static_cast<float>(i) * 0.17F);
     }
-    pipnn_impl::ScratchPool scratch(kCount, kDim, 2);
+    ScratchPool scratch(kCount, kDim, 2);
     // Reuse each worker's slice with changing matrix shapes, including the
     // largest leaf, and check both distance conventions against scalar doubles.
     for (size_t worker : {0U, 1U}) {
         auto work = scratch.worker(worker);
-        for (size_t count : {33U, 1024U, 257U}) {
-            pipnn_impl::Bucket ids(count);
+        for (size_t num_points : {33U, 1024U, 257U}) {
+            Bucket ids(num_points);
             std::iota(ids.begin(), ids.end(), PID{0});
-            pipnn_impl::gather(data.data(), kDim, ids, work);
+            gather(data.data(), kDim, ids, work);
             for (auto metric : {METRIC_L2, METRIC_IP}) {
-                pipnn_impl::pairwise(work, count, kDim, metric);
-                for (size_t i = 0; i < count; ++i) {
+                pairwise(work, num_points, kDim, metric);
+                for (size_t i = 0; i < num_points; ++i) {
                     for (size_t j = 0; j <= i; ++j) {
                         double expected = 0;
                         for (size_t d = 0; d < kDim; ++d) {
                             const double a = data[i * kDim + d], b = data[j * kDim + d];
                             expected += metric == METRIC_L2 ? (a - b) * (a - b) : -a * b;
                         }
-                        EXPECT_NEAR(work.distances[i * count + j], expected, 5e-5);
+                        EXPECT_NEAR(work.distances[i * num_points + j], expected, 5e-5);
                     }
                 }
             }
@@ -52,7 +52,7 @@ TEST(PipnnTest, DenseDistancesMatchReference) {
     }
 }
 
-TEST(PipnnTest, LocalSeedRetainsNearestNeighborsAndValidIds) {
+TEST(QgPipnnTest, LocalSeedRetainsNearestNeighborsAndValidIds) {
     constexpr size_t kCount = 97, kDim = 65;
     std::vector<float> data(kCount * kDim);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -98,31 +98,33 @@ TEST(PipnnTest, LocalSeedRetainsNearestNeighborsAndValidIds) {
     }
 }
 
-TEST(PipnnTest, LocalNeighborsMatchExactReferenceAndGlobalIdTies) {
+TEST(QgPipnnTest, LocalNeighborsMatchExactReferenceAndGlobalIdTies) {
     constexpr size_t kDim = 65;
     std::mt19937 generator(719);
     std::uniform_int_distribution<int> coordinate(-8, 8);
-    for (size_t count : {2U, 3U, 17U, 65U, 1024U}) {
-        std::vector<float> data(count * kDim);
-        pipnn_impl::Bucket ids(count);
+    for (size_t num_points : {2U, 3U, 17U, 65U, 1024U}) {
+        std::vector<float> data(num_points * kDim);
+        Bucket ids(num_points);
         std::iota(ids.begin(), ids.end(), PID{0});
         std::shuffle(ids.begin(), ids.end(), generator);
-        pipnn_impl::ScratchPool scratch(count, kDim, 1);
+        ScratchPool scratch(num_points, kDim, 1);
         auto work = scratch.worker(0);
         for (bool ties : {false, true}) {
             std::generate(data.begin(), data.end(), [&] {
                 return ties ? 1.0F : static_cast<float>(coordinate(generator));
             });
             for (auto metric : {METRIC_L2, METRIC_IP}) {
-                SCOPED_TRACE(::testing::Message() << count << "/" << ties << "/" << metric);
-                pipnn_impl::gather(data.data(), kDim, ids, work);
-                pipnn_impl::pairwise(work, count, kDim, metric);
-                pipnn_impl::select_local_neighbors(ids, work);
-                ASSERT_EQ(work.candidates.size(), 2 * count);
-                for (size_t i = 0; i < count; ++i) {
+                SCOPED_TRACE(
+                    ::testing::Message() << num_points << "/" << ties << "/" << metric
+                );
+                gather(data.data(), kDim, ids, work);
+                pairwise(work, num_points, kDim, metric);
+                select_local_neighbors(ids, work);
+                ASSERT_EQ(work.candidates.size(), 2 * num_points);
+                for (size_t i = 0; i < num_points; ++i) {
                     std::vector<std::pair<float, PID>> reference;
-                    reference.reserve(count - 1);
-                    for (PID target = 0; target < count; ++target) {
+                    reference.reserve(num_points - 1);
+                    for (PID target = 0; target < num_points; ++target) {
                         if (target == ids[i]) {
                             continue;
                         }
@@ -138,7 +140,7 @@ TEST(PipnnTest, LocalNeighborsMatchExactReferenceAndGlobalIdTies) {
                     for (size_t j = 0; j < std::min(size_t{2}, reference.size()); ++j) {
                         EXPECT_EQ(work.candidates[2 * i + j], reference[j]);
                     }
-                    if (count == 2) {
+                    if (num_points == 2) {
                         EXPECT_EQ(work.candidates[2 * i + 1].second, kPidMax);
                     }
                 }
@@ -147,14 +149,14 @@ TEST(PipnnTest, LocalNeighborsMatchExactReferenceAndGlobalIdTies) {
     }
 }
 
-TEST(PipnnTest, OverlappingPartitionsTerminateForDuplicateVectors) {
+TEST(QgPipnnTest, OverlappingPartitionsTerminateForDuplicateVectors) {
     constexpr size_t kCount = 1100, kDim = 7;
     std::vector<float> data(kCount * kDim, 0.5F);
-    pipnn_impl::ScratchPool scratch(kCount, kDim, 2);
-    auto leaves = pipnn_impl::cluster(data.data(), kCount, kDim, METRIC_L2, 2, scratch);
+    ScratchPool scratch(kCount, kDim, 2);
+    auto leaves = cluster(data.data(), kCount, kDim, METRIC_L2, 2, scratch);
     std::vector<size_t> memberships(kCount, 0);
     for (auto& leaf : leaves) {
-        EXPECT_LE(leaf.size(), pipnn_impl::kLeafSize);
+        EXPECT_LE(leaf.size(), kLeafSize);
         std::sort(leaf.begin(), leaf.end());
         EXPECT_EQ(std::unique(leaf.begin(), leaf.end()), leaf.end());
         for (PID id : leaf) {
@@ -168,7 +170,7 @@ TEST(PipnnTest, OverlappingPartitionsTerminateForDuplicateVectors) {
     }
 }
 
-TEST(PipnnTest, PreservesCallerThreadCount) {
+TEST(QgPipnnTest, PreservesCallerThreadCount) {
     const int previous = omp_get_max_threads();
     std::vector<float> data(65 * 65, 0.5F);
     const size_t requested = previous == 1 ? 2 : 1;
@@ -176,7 +178,7 @@ TEST(PipnnTest, PreservesCallerThreadCount) {
     EXPECT_EQ(omp_get_max_threads(), previous);
 }
 
-TEST(PipnnTest, RejectsInvalidConfiguration) {
+TEST(QgPipnnTest, RejectsInvalidConfiguration) {
     std::vector<float> data(33 * 7, 0);
     EXPECT_THROW(build_initial_graph(nullptr, 33, 7, 32), std::invalid_argument);
     EXPECT_THROW(build_initial_graph(data.data(), 33, 0, 32), std::invalid_argument);
@@ -184,16 +186,15 @@ TEST(PipnnTest, RejectsInvalidConfiguration) {
     EXPECT_THROW(build_initial_graph(data.data(), 32, 7, 32), std::invalid_argument);
 }
 
-TEST(PipnnTest, RootTileTailAndRecursiveBucketsCoverDuplicateInputs) {
+TEST(QgPipnnTest, RootTileTailAndRecursiveBucketsCoverDuplicateInputs) {
     constexpr size_t kCount = 4097, kDim = 7;
     std::vector<float> data(kCount * kDim, 0.5F);
     for (size_t threads : {1U, 2U}) {
-        pipnn_impl::ScratchPool scratch(kCount, kDim, threads);
-        auto leaves =
-            pipnn_impl::cluster(data.data(), kCount, kDim, METRIC_L2, threads, scratch);
+        ScratchPool scratch(kCount, kDim, threads);
+        auto leaves = cluster(data.data(), kCount, kDim, METRIC_L2, threads, scratch);
         std::vector<size_t> memberships(kCount, 0);
         for (auto& leaf : leaves) {
-            EXPECT_LE(leaf.size(), pipnn_impl::kLeafSize);
+            EXPECT_LE(leaf.size(), kLeafSize);
             std::sort(leaf.begin(), leaf.end());
             EXPECT_EQ(std::unique(leaf.begin(), leaf.end()), leaf.end());
             for (PID id : leaf) {
@@ -208,28 +209,28 @@ TEST(PipnnTest, RootTileTailAndRecursiveBucketsCoverDuplicateInputs) {
     }
 }
 
-TEST(PipnnTest, AdaptiveRootTilesPreservePartitionsAcrossThreadCounts) {
+TEST(QgPipnnTest, AdaptiveRootTilesPreservePartitionsAcrossThreadCounts) {
     constexpr size_t kDim = 65;
     std::mt19937 generator(817);
     // Integer coordinates keep these dot products exact on every SIMD backend.
     std::uniform_int_distribution<int> uniform(-8, 8);
     // Exercise partial tiles on either side of the original 2048-row boundary.
-    for (size_t count : {1025U, 2049U, 4097U}) {
-        std::vector<float> data(count * kDim);
+    for (size_t num_points : {1025U, 2049U, 4097U}) {
+        std::vector<float> data(num_points * kDim);
         std::generate(data.begin(), data.end(), [&] {
             return static_cast<float>(uniform(generator));
         });
         for (auto metric : {METRIC_L2, METRIC_IP}) {
-            pipnn_impl::ScratchPool serial_scratch(count, kDim, 1);
+            ScratchPool serial_scratch(num_points, kDim, 1);
             const auto expected =
-                pipnn_impl::cluster(data.data(), count, kDim, metric, 1, serial_scratch);
+                cluster(data.data(), num_points, kDim, metric, 1, serial_scratch);
             for (size_t threads : {2U, 4U}) {
                 SCOPED_TRACE(
-                    ::testing::Message() << count << "/" << metric << "/" << threads
+                    ::testing::Message() << num_points << "/" << metric << "/" << threads
                 );
-                pipnn_impl::ScratchPool scratch(count, kDim, threads);
+                ScratchPool scratch(num_points, kDim, threads);
                 const auto actual =
-                    pipnn_impl::cluster(data.data(), count, kDim, metric, threads, scratch);
+                    cluster(data.data(), num_points, kDim, metric, threads, scratch);
                 EXPECT_EQ(actual, expected);
             }
         }

@@ -158,11 +158,11 @@ void fht(float* data, size_t dim) {
 }
 }  // namespace
 
-#define RABITQ_PACK(Bits)                                \
-    void packing_##Bits##bit_excode_generic(             \
-        const uint8_t* raw, uint8_t* compact, size_t dim \
-    ) {                                                  \
-        pack<Bits>(raw, compact, dim);                   \
+#define RABITQ_PACK(Bits)                                    \
+    void packing_##Bits##bit_excode_generic(                 \
+        const uint8_t* o_raw, uint8_t* o_compact, size_t dim \
+    ) {                                                      \
+        pack<Bits>(o_raw, o_compact, dim);                   \
     }
 RABITQ_PACK(2)
 RABITQ_PACK(3)
@@ -173,32 +173,32 @@ RABITQ_PACK(7)
 #undef RABITQ_PACK
 
 void unpacking_excode_generic(
-    const uint8_t* compact, uint8_t* raw, size_t dim, size_t bits
+    const uint8_t* o_compact, uint8_t* o_raw, size_t dim, size_t bits
 ) {
     switch (bits) {
         case 1:
-            unpack<1>(compact, raw, dim);
+            unpack<1>(o_compact, o_raw, dim);
             break;
         case 2:
-            unpack<2>(compact, raw, dim);
+            unpack<2>(o_compact, o_raw, dim);
             break;
         case 3:
-            unpack<3>(compact, raw, dim);
+            unpack<3>(o_compact, o_raw, dim);
             break;
         case 4:
-            unpack<4>(compact, raw, dim);
+            unpack<4>(o_compact, o_raw, dim);
             break;
         case 5:
-            unpack<5>(compact, raw, dim);
+            unpack<5>(o_compact, o_raw, dim);
             break;
         case 6:
-            unpack<6>(compact, raw, dim);
+            unpack<6>(o_compact, o_raw, dim);
             break;
         case 7:
-            unpack<7>(compact, raw, dim);
+            unpack<7>(o_compact, o_raw, dim);
             break;
         case 8:
-            unpack<8>(compact, raw, dim);
+            unpack<8>(o_compact, o_raw, dim);
             break;
         default:
             throw std::invalid_argument("ex_bits must be in [1, 8]");
@@ -206,11 +206,11 @@ void unpacking_excode_generic(
 }
 
 namespace excode_ipimpl {
-#define RABITQ_IP(Block, Bits)                              \
-    float ip##Block##_fxu##Bits##_generic(                  \
-        const float* query, const uint8_t* code, size_t dim \
-    ) {                                                     \
-        return excode_ip<Bits>(query, code, dim);           \
+#define RABITQ_IP(Block, Bits)                                      \
+    float ip##Block##_fxu##Bits##_generic(                          \
+        const float* query, const uint8_t* compact_code, size_t dim \
+    ) {                                                             \
+        return excode_ip<Bits>(query, compact_code, dim);           \
     }
 RABITQ_IP(16, 1)
 RABITQ_IP(64, 2)
@@ -235,53 +235,54 @@ void scalar_quantize_uint16_generic(
 }
 
 void new_transpose_bin_generic(
-    const uint16_t* query, uint64_t* transposed, size_t dim, size_t bits
+    const uint16_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
-    for (size_t block = 0; block < dim; block += 64) {
-        const size_t width = std::min(size_t{64}, dim - block);
-        for (size_t b = 0; b < bits; ++b) {
+    for (size_t block = 0; block < padded_dim; block += 64) {
+        const size_t width = std::min(size_t{64}, padded_dim - block);
+        for (size_t b = 0; b < b_query; ++b) {
             uint64_t word = 0;
             for (size_t i = 0; i < width; ++i) {
                 word |= uint64_t{(query[block + i] >> b) & 1U} << (width - 1 - i);
             }
-            *transposed++ = word;
+            *transposed_query++ = word;
         }
     }
 }
 
 void new_transpose_bin_512_generic(
-    const uint8_t* query, uint64_t* transposed, size_t dim, size_t bits
+    const uint8_t* query, uint64_t* transposed_query, size_t padded_dim, size_t b_query
 ) {
-    for (size_t block = 0; block < dim; block += 512) {
-        const size_t chunks = (std::min(size_t{512}, dim - block) + 63) / 64;
-        for (size_t b = 0; b < bits; ++b) {
+    for (size_t block = 0; block < padded_dim; block += 512) {
+        const size_t chunks = (std::min(size_t{512}, padded_dim - block) + 63) / 64;
+        for (size_t b = 0; b < b_query; ++b) {
             for (size_t chunk = 0; chunk < chunks; ++chunk) {
-                const size_t width = std::min(size_t{64}, dim - block - chunk * 64);
+                const size_t width = std::min(size_t{64}, padded_dim - block - chunk * 64);
                 uint64_t word = 0;
                 for (size_t i = 0; i < width; ++i) {
                     word |= uint64_t{(query[block + chunk * 64 + i] >> b) & 1U}
                             << (width - 1 - i);
                 }
-                *transposed++ = word;
+                *transposed_query++ = word;
             }
         }
     }
 }
 
-float mask_ip_x0_q_generic(const float* query, const uint8_t* data, size_t dim) {
+float mask_ip_x0_q_generic(const float* query, const uint8_t* data, size_t padded_dim) {
     double sum = 0;
-    for (size_t block = 0; block < dim; block += 64) {
-        const size_t width = std::min(size_t{64}, dim - block);
+    for (size_t block = 0; block < padded_dim; block += 64) {
+        const size_t width = std::min(size_t{64}, padded_dim - block);
         const uint64_t word = bitops::load_word(data + block / 8, width / 8);
         for (size_t i = 0; i < width; ++i) {
-            if ((word >> (width - 1 - i)) & 1U)
+            if ((word >> (width - 1 - i)) & 1U) {
                 sum += query[block + i];
+            }
         }
     }
     return static_cast<float>(sum);
 }
-float mask_ip_x0_q_generic(const float* query, const uint64_t* data, size_t dim) {
-    return mask_ip_x0_q_generic(query, reinterpret_cast<const uint8_t*>(data), dim);
+float mask_ip_x0_q_generic(const float* query, const uint64_t* data, size_t padded_dim) {
+    return mask_ip_x0_q_generic(query, reinterpret_cast<const uint8_t*>(data), padded_dim);
 }
 
 float warmup_ip_x0_q_512_generic(
@@ -289,24 +290,25 @@ float warmup_ip_x0_q_512_generic(
     const uint64_t* query,
     float delta,
     float vl,
-    size_t dim,
-    size_t bits
+    size_t padded_dim,
+    size_t b_query
 ) {
-    if (bits > 8)
+    if (b_query > 8) {
         throw std::invalid_argument("warmup_ip_x0_q_512 requires at most 8 query bits");
+    }
     uint64_t ip = 0, count = 0;
-    for (size_t block = 0; block < dim; block += 512) {
-        const size_t chunks = (std::min(size_t{512}, dim - block) + 63) / 64;
+    for (size_t block = 0; block < padded_dim; block += 512) {
+        const size_t chunks = (std::min(size_t{512}, padded_dim - block) + 63) / 64;
         for (size_t chunk = 0; chunk < chunks; ++chunk) {
-            const size_t width = std::min(size_t{64}, dim - block - chunk * 64);
+            const size_t width = std::min(size_t{64}, padded_dim - block - chunk * 64);
             const uint64_t word =
                 bitops::load_word(data + block / 8 + chunk * 8, width / 8);
             count += bitops::popcount64(word);
-            for (size_t b = 0; b < bits; ++b) {
+            for (size_t b = 0; b < b_query; ++b) {
                 ip += uint64_t{bitops::popcount64(word & query[b * chunks + chunk])} << b;
             }
         }
-        query += chunks * bits;
+        query += chunks * b_query;
     }
     return delta * static_cast<float>(ip) + vl * static_cast<float>(count);
 }
@@ -315,18 +317,19 @@ float warmup_ip_x0_q_512_generic(
     const uint64_t* query,
     float delta,
     float vl,
-    size_t dim,
-    size_t bits
+    size_t padded_dim,
+    size_t b_query
 ) {
     return warmup_ip_x0_q_512_generic(
-        reinterpret_cast<const uint8_t*>(data), query, delta, vl, dim, bits
+        reinterpret_cast<const uint8_t*>(data), query, delta, vl, padded_dim, b_query
     );
 }
 
 void flip_sign_generic(const uint8_t* flip, float* data, size_t dim) {
     for (size_t i = 0; i < dim; ++i) {
-        if ((flip[i / 8] >> (i % 8)) & 1U)
+        if ((flip[i / 8] >> (i % 8)) & 1U) {
             data[i] = -data[i];
+        }
     }
 }
 void kacs_walk_generic(float* data, size_t len) {
@@ -354,14 +357,17 @@ void fht_rotate_generic(
         flip_sign_generic(flip + pass * padded_dim / 8, rotated_data, padded_dim);
         const size_t start = pass % 2 == 0 ? 0 : padded_dim - trunc_dim;
         fht(rotated_data + start, trunc_dim);
-        for (size_t i = start; i < start + trunc_dim; ++i)
+        for (size_t i = start; i < start + trunc_dim; ++i) {
             rotated_data[i] *= scale_factor;
-        if (padded_dim != trunc_dim)
+        }
+        if (padded_dim != trunc_dim) {
             kacs_walk_generic(rotated_data, padded_dim);
+        }
     }
     if (padded_dim != trunc_dim) {
-        for (size_t i = 0; i < padded_dim; ++i)
+        for (size_t i = 0; i < padded_dim; ++i) {
             rotated_data[i] *= 0.25F;
+        }
     }
 }
 }  // namespace rabitqlib::simd

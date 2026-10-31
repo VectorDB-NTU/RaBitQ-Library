@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "rabitqlib/fastscan/detail/simd.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
 
 namespace rabitqlib::fastscan::simd {
 
@@ -22,11 +23,11 @@ void pack_lut_impl(
     size_t dim, const float* query, float* lut, float& minimum, float& maximum
 ) {
     auto min_values = _mm256_set1_ps(kInfinity), max_values = _mm256_set1_ps(-kInfinity);
-    unsigned nan_mask = 0;
+    uint32_t nan_mask = 0;
     const auto update_range = [&](__m256 values) {
         min_values = _mm256_min_ps(min_values, values);
         max_values = _mm256_max_ps(max_values, values);
-        nan_mask |= static_cast<unsigned>(
+        nan_mask |= static_cast<uint32_t>(
             _mm256_movemask_ps(_mm256_cmp_ps(values, values, _CMP_UNORD_Q))
         );
     };
@@ -66,8 +67,9 @@ void pack_lut_impl(
             minimum = min_lanes[lane] < minimum ? min_lanes[lane] : minimum;
             maximum = max_lanes[lane] > maximum ? max_lanes[lane] : maximum;
         }
-        if (nan_mask)
+        if (nan_mask) {
             minimum = kQuietNaN;
+        }
     }
 }
 }  // namespace
@@ -90,12 +92,11 @@ namespace {
 // After removing packed high-byte terms, each byte-plane sum is at most
 // 255 * (1024 / 4) = 65280, below the 16-bit reduction limit.
 constexpr size_t kChunkDim = 1024;
-constexpr size_t kBatchSize = 32;
 
 void accumulate_chunk_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 ) {
     size_t code_length = dim << 2;
@@ -108,8 +109,8 @@ void accumulate_chunk_avx2(
     __m256i accu3 = _mm256_setzero_si256();
 
     for (size_t i = 0; i < code_length; i += 64) {
-        c = _mm256_loadu_si256((__m256i*)&codes[i]);
-        lut = _mm256_loadu_si256((__m256i*)&lookup_table[i]);
+        c = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&codes[i]));
+        lut = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&lookup_table[i]));
         lo = _mm256_and_si256(c, low_mask);
         hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
@@ -121,8 +122,8 @@ void accumulate_chunk_avx2(
         accu2 = _mm256_add_epi16(accu2, res_hi);
         accu3 = _mm256_add_epi16(accu3, _mm256_srli_epi16(res_hi, 8));
 
-        c = _mm256_loadu_si256((__m256i*)&codes[i + 32]);
-        lut = _mm256_loadu_si256((__m256i*)&lookup_table[i + 32]);
+        c = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&codes[i + 32]));
+        lut = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(&lookup_table[i + 32]));
         lo = _mm256_and_si256(c, low_mask);
         hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
@@ -141,10 +142,12 @@ void accumulate_chunk_avx2(
         _mm256_blend_epi32(accu0, accu1, 0xF0)
     );
     _mm256_storeu_si256(
-        (__m256i*)result, _mm256_cvtepu16_epi32(_mm256_castsi256_si128(dis0))
+        reinterpret_cast<__m256i*>(accumulated_values),
+        _mm256_cvtepu16_epi32(_mm256_castsi256_si128(dis0))
     );
     _mm256_storeu_si256(
-        (__m256i*)(result + 8), _mm256_cvtepu16_epi32(_mm256_extracti128_si256(dis0, 1))
+        reinterpret_cast<__m256i*>(accumulated_values + 8),
+        _mm256_cvtepu16_epi32(_mm256_extracti128_si256(dis0, 1))
     );
 
     accu2 = _mm256_sub_epi16(accu2, _mm256_slli_epi16(accu3, 8));
@@ -153,10 +156,12 @@ void accumulate_chunk_avx2(
         _mm256_blend_epi32(accu2, accu3, 0xF0)
     );
     _mm256_storeu_si256(
-        (__m256i*)(result + 16), _mm256_cvtepu16_epi32(_mm256_castsi256_si128(dis1))
+        reinterpret_cast<__m256i*>(accumulated_values + 16),
+        _mm256_cvtepu16_epi32(_mm256_castsi256_si128(dis1))
     );
     _mm256_storeu_si256(
-        (__m256i*)(result + 24), _mm256_cvtepu16_epi32(_mm256_extracti128_si256(dis1, 1))
+        reinterpret_cast<__m256i*>(accumulated_values + 24),
+        _mm256_cvtepu16_epi32(_mm256_extracti128_si256(dis1, 1))
     );
 }
 
@@ -165,11 +170,11 @@ void accumulate_chunk_avx2(
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_chunk_avx2(codes, lookup_table, result, dim);
+        accumulate_chunk_avx2(codes, lookup_table, accumulated_values, dim);
         return;
     }
 
@@ -191,7 +196,7 @@ void accumulate_avx2(
         }
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {
-        result[lane] = static_cast<int32_t>(totals[lane]);
+        accumulated_values[lane] = static_cast<int32_t>(totals[lane]);
     }
 }
 
@@ -199,7 +204,7 @@ namespace {
 
 void accumulate_hacc_chunk_avx2(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* accumulated_values,
     size_t dim
 ) {
@@ -212,18 +217,19 @@ void accumulate_hacc_chunk_avx2(
         }
     }
 
-    size_t num_codebook = dim >> 2;
+    size_t num_groups = dim >> 2;
 
-    for (size_t m = 0; m < num_codebook; m += 2) {
-        __m256i c = _mm256_loadu_si256((__m256i*)codes);
+    for (size_t group = 0; group < num_groups; group += 2) {
+        __m256i c = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(codes));
         codes += 32;
 
         __m256i lo = _mm256_and_si256(c, low_mask);
         __m256i hi = _mm256_and_si256(_mm256_srli_epi16(c, 4), low_mask);
 
         for (int q = 0; q < 2; ++q) {
-            __m256i lut = _mm256_loadu_si256((__m256i*)hc_lut);
-            hc_lut += 32;
+            __m256i lut =
+                _mm256_loadu_si256(reinterpret_cast<const __m256i*>(lookup_table));
+            lookup_table += 32;
 
             __m256i res_lo = _mm256_shuffle_epi8(lut, lo);
             __m256i res_hi = _mm256_shuffle_epi8(lut, hi);
@@ -239,14 +245,14 @@ void accumulate_hacc_chunk_avx2(
     __m256i dis0[2];
     __m256i dis1[2];
 
-    // lamda function to horizontal sum and combine low/high bytes
+    // Sum the 128-bit halves of a into the low half and those of b into the high half.
     auto combine2x2 = [&](__m256i a, __m256i b) -> __m256i {
         __m256i a1b0 = _mm256_permute2f128_si256(a, b, 0x21);
         __m256i a0b1 = _mm256_blend_epi32(a, b, 0xF0);
         return _mm256_add_epi16(a1b0, a0b1);
     };
 
-    for (size_t i = 0; i < 2; i++) {
+    for (size_t i = 0; i < 2; ++i) {
         accu[i][0] = _mm256_sub_epi16(accu[i][0], _mm256_slli_epi16(accu[i][1], 8));
         dis0[i] = combine2x2(accu[i][0], accu[i][1]);
 
@@ -267,22 +273,22 @@ void accumulate_hacc_chunk_avx2(
     add_shiftl8(dis0[0], dis0[1], res[0], res[1]);  // res for vec 0 to 15
     add_shiftl8(dis1[0], dis1[1], res[2], res[3]);  // res for vec 16 to 31
 
-    _mm256_storeu_si256((__m256i*)(accumulated_values), res[0]);
-    _mm256_storeu_si256((__m256i*)(accumulated_values + 8), res[1]);
-    _mm256_storeu_si256((__m256i*)(accumulated_values + 16), res[2]);
-    _mm256_storeu_si256((__m256i*)(accumulated_values + 24), res[3]);
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(accumulated_values), res[0]);
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(accumulated_values + 8), res[1]);
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(accumulated_values + 16), res[2]);
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(accumulated_values + 24), res[3]);
 }
 
 }  // namespace
 
 void accumulate_hacc_avx2(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* accumulated_values,
     size_t dim
 ) {
     if (dim <= kChunkDim) {
-        accumulate_hacc_chunk_avx2(codes, hc_lut, accumulated_values, dim);
+        accumulate_hacc_chunk_avx2(codes, lookup_table, accumulated_values, dim);
         return;
     }
 
@@ -291,7 +297,7 @@ void accumulate_hacc_avx2(
     for (size_t offset = 0; offset < dim;) {
         const size_t chunk_dim = std::min(kChunkDim, dim - offset);
         accumulate_hacc_chunk_avx2(
-            codes + offset * 4, hc_lut + offset * 8, chunk_result.data(), chunk_dim
+            codes + offset * 4, lookup_table + offset * 8, chunk_result.data(), chunk_dim
         );
         for (size_t lane = 0; lane < kBatchSize; ++lane) {
             totals[lane] += chunk_result[lane];
@@ -300,7 +306,7 @@ void accumulate_hacc_avx2(
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {
         if (totals[lane] > std::numeric_limits<int32_t>::max()) {
-            throw std::overflow_error("high-accuracy FastScan result exceeds int32_t");
+            throw std::overflow_error("FastScan high-accuracy result exceeds int32_t");
         }
     }
     for (size_t lane = 0; lane < kBatchSize; ++lane) {

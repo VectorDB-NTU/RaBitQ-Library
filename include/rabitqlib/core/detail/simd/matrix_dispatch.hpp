@@ -125,41 +125,41 @@ void pairwise_distances_lower_avx512(
 // Accumulate input rows in point_ids order into double cluster sums and counts.
 // Inputs and outputs must not overlap. Concurrent calls require disjoint clusters.
 void accumulate_cluster_sums(
-    const float* x,
+    const float* data,
     const size_t* point_ids,
     size_t count,
     size_t dim,
-    const uint32_t* labels,
+    const uint32_t* assignments,
     double* sums,
     size_t* counts
 );
 
 void accumulate_cluster_sums_generic(
-    const float* x,
+    const float* data,
     const size_t* point_ids,
     size_t count,
     size_t dim,
-    const uint32_t* labels,
+    const uint32_t* assignments,
     double* sums,
     size_t* counts
 );
 
 void accumulate_cluster_sums_avx2(
-    const float* x,
+    const float* data,
     const size_t* point_ids,
     size_t count,
     size_t dim,
-    const uint32_t* labels,
+    const uint32_t* assignments,
     double* sums,
     size_t* counts
 );
 
 void accumulate_cluster_sums_avx512(
-    const float* x,
+    const float* data,
     const size_t* point_ids,
     size_t count,
     size_t dim,
-    const uint32_t* labels,
+    const uint32_t* assignments,
     double* sums,
     size_t* counts
 );

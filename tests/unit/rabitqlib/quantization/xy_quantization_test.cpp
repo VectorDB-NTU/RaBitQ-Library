@@ -20,7 +20,7 @@ using namespace rabitqlib;
 
 namespace {
 
-std::vector<float> RandomVec(size_t dim, std::mt19937& gen) {
+std::vector<float> random_vec(size_t dim, std::mt19937& gen) {
     std::normal_distribution<float> dist(0.0F, 1.0F);
     std::vector<float> v(dim);
     for (auto& x : v) {
@@ -32,7 +32,7 @@ std::vector<float> RandomVec(size_t dim, std::mt19937& gen) {
 // A one-hot query makes the ex-code inner product return exactly code[j].
 // This checks how scoring interprets the packed codes independently of the
 // library's unpacker, rather than only round-tripping through paired code paths.
-std::vector<uint8_t> UnpackViaIpKernel(const uint8_t* packed, size_t dim, size_t bits) {
+std::vector<uint8_t> unpack_via_ip_kernel(const uint8_t* packed, size_t dim, size_t bits) {
     std::vector<uint8_t> out(dim, 0);
     if (bits == 0) {
         return out;
@@ -58,12 +58,12 @@ struct XySplitResult {
     float f_rescale_full = 0;
 };
 
-XySplitResult SplitCode(
+XySplitResult split_code(
     const std::vector<float>& data,
     const std::vector<float>& centroid,
     size_t dim,
     size_t base_bits,
-    size_t extra_bits,
+    size_t ex_bits,
     MetricType metric = METRIC_L2
 ) {
     XySplitResult res;
@@ -72,7 +72,7 @@ XySplitResult SplitCode(
 
     std::vector<char> base_block(BaseDataMap<float>::data_bytes(dim, base_bits), 0);
     std::vector<char> extra_block(
-        extra_bits > 0 ? ExDataMap<float>::data_bytes(dim, extra_bits) : 1, 0
+        ex_bits > 0 ? ExDataMap<float>::data_bytes(dim, ex_bits) : 1, 0
     );
 
     // The public entry point in core/encoder.hpp maps the raw buffers onto
@@ -82,9 +82,9 @@ XySplitResult SplitCode(
         centroid.data(),
         dim,
         base_bits,
-        extra_bits,
+        ex_bits,
         base_block.data(),
-        extra_bits > 0 ? extra_block.data() : nullptr,
+        ex_bits > 0 ? extra_block.data() : nullptr,
         metric
     );
 
@@ -92,13 +92,13 @@ XySplitResult SplitCode(
     res.f_add_base = base_map.f_add();
     res.f_rescale_base = base_map.f_rescale();
     res.f_error_base = base_map.f_error();
-    res.base_code = UnpackViaIpKernel(base_map.base_code(), dim, base_bits);
+    res.base_code = unpack_via_ip_kernel(base_map.base_code(), dim, base_bits);
 
-    if (extra_bits > 0) {
-        ExDataMap<float> extra_map(extra_block.data(), dim, extra_bits);
+    if (ex_bits > 0) {
+        ExDataMap<float> extra_map(extra_block.data(), dim, ex_bits);
         res.f_add_full = extra_map.f_add_ex();
         res.f_rescale_full = extra_map.f_rescale_ex();
-        res.extra_code = UnpackViaIpKernel(extra_map.ex_code(), dim, extra_bits);
+        res.extra_code = unpack_via_ip_kernel(extra_map.ex_code(), dim, ex_bits);
     } else {
         res.f_add_full = res.f_add_base;
         res.f_rescale_full = res.f_rescale_base;
@@ -112,12 +112,12 @@ XySplitResult SplitCode(
 // match today's one_bit_code_with_factor + ex_bits_code_with_factor -- codes
 // *and* both factor triplets. The base layer's factors are what BinDataMap
 // holds in the 1+y path, the full layer's are what ExDataMap holds.
-TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
+TEST(XyQuantizationTest, BaseBitsOneMatchesExistingOneBitPlusExBits) {
     constexpr size_t kDim = 64;
-    constexpr size_t kExtraBits = 3;
+    constexpr size_t kExBits = 3;
 
     std::mt19937 gen(42);
-    std::vector<float> data = RandomVec(kDim, gen);
+    std::vector<float> data = random_vec(kDim, gen);
     std::vector<float> centroid(kDim, 0.0F);
 
     // Reference: today's separate one_bit_code_with_factor (sign bit + the
@@ -145,7 +145,7 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
         data.data(),
         centroid.data(),
         kDim,
-        kExtraBits,
+        kExBits,
         ref_ex_code.data(),
         ref_f_add,
         ref_f_rescale,
@@ -153,8 +153,8 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
         METRIC_L2
     );
 
-    // New path: base_bits=1, extra_bits=kExtraBits.
-    XySplitResult res = SplitCode(data, centroid, kDim, /*base_bits=*/1, kExtraBits);
+    // New path: base_bits=1, ex_bits=kExBits.
+    XySplitResult res = split_code(data, centroid, kDim, /*base_bits=*/1, kExBits);
 
     for (size_t i = 0; i < kDim; ++i) {
         EXPECT_EQ(res.base_code[i], static_cast<uint8_t>(ref_binary_code[i]))
@@ -172,7 +172,7 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
     // asserted here; ref_f_error stays as documentation of the reference value.
 }
 
-// ip(base)*2^extra_bits + ip(extra) must equal ip(total_code) -- the
+// ip(base)*2^ex_bits + ip(extra) must equal ip(total_code) -- the
 // linearity the boosting step relies on.
 // The sign bit must be assigned the same way here as in the 1-bit path,
 // including for an exactly-zero residual component. one_bit_code_with_factor() uses
@@ -182,9 +182,9 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingOneBitPlusExBits) {
 // Random gaussian data never produces an exact zero, so the other tests here
 // cannot catch a divergence -- this one constructs the case directly, by
 // putting the centroid exactly on the data value in half the dimensions.
-TEST(XyQuantization, SignBitMatchesOneBitPathOnZeroResiduals) {
+TEST(XyQuantizationTest, SignBitMatchesOneBitPathOnZeroResiduals) {
     constexpr size_t kDim = 64;
-    constexpr size_t kExtraBits = 3;
+    constexpr size_t kExBits = 3;
 
     std::vector<float> centroid(kDim, 1.0F);
     std::vector<float> data(kDim);
@@ -214,20 +214,20 @@ TEST(XyQuantization, SignBitMatchesOneBitPathOnZeroResiduals) {
 
     std::vector<int> total_code(kDim, -1);
     quant::rabitq_impl::total_bits::combined_code<float, int>(
-        residual.data(), kDim, 1 + kExtraBits, total_code.data()
+        residual.data(), kDim, 1 + kExBits, total_code.data()
     );
 
     for (size_t j = 0; j < kDim; ++j) {
-        EXPECT_EQ(total_code[j] >> kExtraBits, ref_bin[j]) << "dim " << j;
+        EXPECT_EQ(total_code[j] >> kExBits, ref_bin[j]) << "dim " << j;
     }
 }
 
 // A residual whose squared norm is zero takes the zero-residual path of the other
 // encoders; the split code must reassemble to the same full code. The second case
 // has nonzero components whose float squares underflow to zero.
-TEST(XyQuantization, ZeroNormResidualMatchesFullCode) {
+TEST(XyQuantizationTest, ZeroNormResidualMatchesFullCode) {
     constexpr size_t kDim = 64;
-    constexpr size_t kExtraBits = 3;
+    constexpr size_t kExBits = 3;
 
     std::vector<float> data(kDim, 1.0F);
     std::vector<float> tiny(kDim, 0.0F);
@@ -244,7 +244,7 @@ TEST(XyQuantization, ZeroNormResidualMatchesFullCode) {
                 SCOPED_TRACE(base_bits);
                 SCOPED_TRACE(metric);
                 XySplitResult res =
-                    SplitCode(input, centroid, kDim, base_bits, kExtraBits, metric);
+                    split_code(input, centroid, kDim, base_bits, kExBits, metric);
 
                 std::vector<uint16_t> full_code(kDim);
                 float full_add = 0, full_rescale = 0, full_error = 0;
@@ -252,7 +252,7 @@ TEST(XyQuantization, ZeroNormResidualMatchesFullCode) {
                     input.data(),
                     centroid.data(),
                     kDim,
-                    base_bits + kExtraBits,
+                    base_bits + kExBits,
                     full_code.data(),
                     full_add,
                     full_rescale,
@@ -261,7 +261,7 @@ TEST(XyQuantization, ZeroNormResidualMatchesFullCode) {
                 );
                 for (size_t j = 0; j < kDim; ++j) {
                     const uint32_t total =
-                        (static_cast<uint32_t>(res.base_code[j]) << kExtraBits) |
+                        (static_cast<uint32_t>(res.base_code[j]) << kExBits) |
                         static_cast<uint32_t>(res.extra_code[j]);
                     EXPECT_EQ(total, full_code[j]) << "dim " << j;
                 }
@@ -271,9 +271,9 @@ TEST(XyQuantization, ZeroNormResidualMatchesFullCode) {
     }
 }
 
-TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) {
+TEST(XyQuantizationTest, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) {
     constexpr size_t kDim = 64;
-    constexpr size_t kExtraBits = 3;
+    constexpr size_t kExBits = 3;
 
     std::vector<float> centroid(kDim, 1.0F);
     std::vector<float> data(kDim);
@@ -308,7 +308,7 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) 
             data.data(),
             centroid.data(),
             kDim,
-            kExtraBits,
+            kExBits,
             reference_extra_code.data(),
             reference_full_add,
             reference_full_rescale,
@@ -317,7 +317,7 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) 
         );
 
         XySplitResult result =
-            SplitCode(data, centroid, kDim, /*base_bits=*/1, kExtraBits, metric);
+            split_code(data, centroid, kDim, /*base_bits=*/1, kExBits, metric);
 
         for (size_t dim = 0; dim < kDim; ++dim) {
             EXPECT_EQ(result.base_code[dim], reference_base_code[dim]);
@@ -340,7 +340,7 @@ TEST(XyQuantization, BaseBitsOneMatchesExistingFactorsOnZeroResidualComponents) 
 // Goes through quantize_xy_single rather than code_factors directly: the
 // combined_code-level test above cannot reach this, which is how it was
 // missed.
-TEST(XyQuantization, ZeroResidualGivesFiniteFactors) {
+TEST(XyQuantizationTest, ZeroResidualGivesFiniteFactors) {
     constexpr size_t kDim = 64;
     std::vector<float> centroid(kDim, 0.7F);
     std::vector<float> data = centroid;  // residual is exactly zero
@@ -384,7 +384,7 @@ TEST(XyQuantization, ZeroResidualGivesFiniteFactors) {
     }
 }
 
-TEST(XyQuantization, CollinearResidualGivesFiniteErrorFactor) {
+TEST(XyQuantizationTest, CollinearResidualGivesFiniteErrorFactor) {
     constexpr size_t kDim = 64;
     constexpr size_t kBaseBits = 2;
 
@@ -419,18 +419,18 @@ TEST(XyQuantization, CollinearResidualGivesFiniteErrorFactor) {
 }
 
 // The base code must be stored exactly once: total storage is
-// (base_bits + extra_bits) bits per dimension plus 5 floats (3 base factors +
-// 2 full factors), never (2*base_bits + extra_bits) as an independently
+// (base_bits + ex_bits) bits per dimension plus 5 floats (3 base factors +
+// 2 full factors), never (2*base_bits + ex_bits) as an independently
 // quantized second layer would cost.
-TEST(XyQuantization, StorageCostsBasePlusExtraBitsOnly) {
+TEST(XyQuantizationTest, StorageCostsBasePlusExtraBitsOnly) {
     constexpr size_t kDim = 128;
     constexpr size_t kBaseBits = 3;
-    constexpr size_t kExtraBits = 4;
+    constexpr size_t kExBits = 4;
 
     size_t base_bytes = BaseDataMap<float>::data_bytes(kDim, kBaseBits);
-    size_t extra_bytes = ExDataMap<float>::data_bytes(kDim, kExtraBits);
+    size_t extra_bytes = ExDataMap<float>::data_bytes(kDim, kExBits);
 
-    EXPECT_EQ(base_bytes + extra_bytes, (kDim * (kBaseBits + kExtraBits) / 8) + (5 * 4));
+    EXPECT_EQ(base_bytes + extra_bytes, (kDim * (kBaseBits + kExBits) / 8) + (5 * 4));
     EXPECT_EQ(ExDataMap<float>::data_bytes(kDim, 0), 0U);
 }
 
@@ -440,14 +440,14 @@ TEST(XyQuantization, StorageCostsBasePlusExtraBitsOnly) {
 // plain reference dot product in place of the popcount kernel for ip_x0_qr.
 // xy_single_full_dist must land on the same estimate and, like
 // split_single_fulldist_direct, bound it with f_error_base / 2^ex_bits.
-TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
+TEST(XyQuantizationTest, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
     constexpr size_t kDim = 128;
-    constexpr size_t kExtraBits = 5;
+    constexpr size_t kExBits = 5;
 
     std::mt19937 gen(123);
-    std::vector<float> data = RandomVec(kDim, gen);
-    std::vector<float> centroid = RandomVec(kDim, gen);
-    std::vector<float> query = RandomVec(kDim, gen);
+    std::vector<float> data = random_vec(kDim, gen);
+    std::vector<float> centroid = random_vec(kDim, gen);
+    std::vector<float> query = random_vec(kDim, gen);
 
     constexpr float kGAdd = 3.5F;
     constexpr float kGError = 0.75F;
@@ -477,7 +477,7 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
         data.data(),
         centroid.data(),
         kDim,
-        kExtraBits,
+        kExBits,
         ref_ex_code.data(),
         ref_f_add_ex,
         ref_f_rescale_ex,
@@ -493,7 +493,7 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
         ex_ip += static_cast<double>(query[i]) * static_cast<double>(ref_ex_code[i]);
         sumq += query[i];
     }
-    double ref_c_b = -(static_cast<double>(1 << (kExtraBits + 1)) - 1) / 2.0;
+    double ref_c_b = -(static_cast<double>(1 << (kExBits + 1)) - 1) / 2.0;
     double ref_kbxsumq = sumq * ref_c_b;
 
     // 1-bit stage, as split_single_estdist_direct computes it.
@@ -505,28 +505,28 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
     float ref_full_est = static_cast<float>(
         ref_f_add_ex + kGAdd +
         (ref_f_rescale_ex *
-         (static_cast<double>(1 << kExtraBits) * ip_x0_qr + ex_ip + ref_kbxsumq))
+         (static_cast<double>(1 << kExBits) * ip_x0_qr + ex_ip + ref_kbxsumq))
     );
 
     // --- New path ---
     std::vector<char> base_data(BaseDataMap<float>::data_bytes(kDim, 1));
-    std::vector<char> extra_data(ExDataMap<float>::data_bytes(kDim, kExtraBits));
+    std::vector<char> extra_data(ExDataMap<float>::data_bytes(kDim, kExBits));
     quant::quantize_xy_single(
         data.data(),
         centroid.data(),
         kDim,
         /*base_bits=*/1,
-        kExtraBits,
+        kExBits,
         base_data.data(),
         extra_data.data()
     );
 
     SplitSingleQuery<float> q_obj(
-        query.data(), kDim, kExtraBits, quant::RabitqConfig(), METRIC_L2, /*base_bits=*/1
+        query.data(), kDim, kExBits, quant::RabitqConfig(), METRIC_L2, /*base_bits=*/1
     );
 
     auto base_ip_func = select_excode_ipfunc(1);
-    auto extra_ip_func = select_excode_ipfunc(kExtraBits);
+    auto extra_ip_func = select_excode_ipfunc(kExBits);
 
     float ip_base = 0;
     float base_est = 0;
@@ -552,7 +552,7 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
     // it as a parameter; there is no x+y-specific boosting function.
     q_obj.set_g_add(std::sqrt(kGAdd));
     float boosted_est = split_distance_boosting(
-        extra_data.data(), extra_ip_func, q_obj, kDim, kExtraBits, ip_base
+        extra_data.data(), extra_ip_func, q_obj, kDim, kExBits, ip_base
     );
 
     EXPECT_NEAR(boosted_est, ref_full_est, 1e-2F);
@@ -570,7 +570,7 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
         q_obj,
         kDim,
         /*base_bits=*/1,
-        kExtraBits,
+        kExBits,
         full_est,
         full_low,
         full_ip_base,
@@ -582,25 +582,25 @@ TEST(XyQuantization, EndToEndMatchesExistingFormulaAtBaseBitsOne) {
     EXPECT_FLOAT_EQ(full_est, boosted_est);
     EXPECT_NEAR(
         full_low,
-        full_est - (ref_f_error_bin * kGError / static_cast<float>(1 << kExtraBits)),
+        full_est - (ref_f_error_bin * kGError / static_cast<float>(1 << kExBits)),
         1e-4F
     );
 }
 
 // The boosted estimate must equal the estimate you would get by reading the
-// whole (base_bits+extra_bits)-bit code directly -- i.e. reusing the filter
+// whole (base_bits+ex_bits)-bit code directly -- i.e. reusing the filter
 // stage's base inner product loses nothing. This is the property the old
 // two-layer implementation could not have, since its two layers held
 // different codes.
-TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
+TEST(XyQuantizationTest, BoostedEstimateMatchesUnsplitCombinedCode) {
     constexpr size_t kDim = 128;
     constexpr size_t kBaseBits = 3;
-    constexpr size_t kExtraBits = 4;
+    constexpr size_t kExBits = 4;
 
     std::mt19937 gen(2024);
-    std::vector<float> data = RandomVec(kDim, gen);
-    std::vector<float> centroid = RandomVec(kDim, gen);
-    std::vector<float> query = RandomVec(kDim, gen);
+    std::vector<float> data = random_vec(kDim, gen);
+    std::vector<float> centroid = random_vec(kDim, gen);
+    std::vector<float> query = random_vec(kDim, gen);
 
     // g_add / g_error as the L2 search path actually supplies them
     // (||q - centroid||^2 and ||q - centroid||), so the filter's lower bound
@@ -610,10 +610,10 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
         float d = query[i] - centroid[i];
         q_to_cent_sqr += d * d;
     }
-    const float kGError = std::sqrt(q_to_cent_sqr);
-    const float kGAdd = q_to_cent_sqr;
+    const float g_error = std::sqrt(q_to_cent_sqr);
+    const float g_add = q_to_cent_sqr;
 
-    XySplitResult res = SplitCode(data, centroid, kDim, kBaseBits, kExtraBits);
+    XySplitResult res = split_code(data, centroid, kDim, kBaseBits, kExBits);
 
     // Encode the unsplit reference independently of XY splitting and packed reads.
     std::vector<uint16_t> full_code(kDim);
@@ -622,7 +622,7 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
         data.data(),
         centroid.data(),
         kDim,
-        kBaseBits + kExtraBits,
+        kBaseBits + kExBits,
         full_code.data(),
         full_add,
         full_rescale,
@@ -632,30 +632,30 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
     double total_ip = 0;
     double sumq = 0;
     for (size_t i = 0; i < kDim; ++i) {
-        uint32_t total = (static_cast<uint32_t>(res.base_code[i]) << kExtraBits) |
+        uint32_t total = (static_cast<uint32_t>(res.base_code[i]) << kExBits) |
                          static_cast<uint32_t>(res.extra_code[i]);
         EXPECT_EQ(total, full_code[i]) << "dim " << i;
         total_ip += static_cast<double>(query[i]) * full_code[i];
         sumq += query[i];
     }
-    double c_b = -(static_cast<double>(1 << (kBaseBits + kExtraBits)) - 1) / 2.0;
+    double c_b = -(static_cast<double>(1 << (kBaseBits + kExBits)) - 1) / 2.0;
     float ref_est =
-        static_cast<float>(full_add + kGAdd + (full_rescale * (total_ip + (sumq * c_b))));
+        static_cast<float>(full_add + g_add + (full_rescale * (total_ip + (sumq * c_b))));
 
     std::vector<char> base_data(BaseDataMap<float>::data_bytes(kDim, kBaseBits));
-    std::vector<char> extra_data(ExDataMap<float>::data_bytes(kDim, kExtraBits));
+    std::vector<char> extra_data(ExDataMap<float>::data_bytes(kDim, kExBits));
     quant::quantize_xy_single(
         data.data(),
         centroid.data(),
         kDim,
         kBaseBits,
-        kExtraBits,
+        kExBits,
         base_data.data(),
         extra_data.data()
     );
 
     SplitSingleQuery<float> q_obj(
-        query.data(), kDim, kExtraBits, quant::RabitqConfig(), METRIC_L2, kBaseBits
+        query.data(), kDim, kExBits, quant::RabitqConfig(), METRIC_L2, kBaseBits
     );
 
     float ip_base = 0;
@@ -670,18 +670,13 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
         ip_base,
         base_est,
         base_low,
-        kGAdd,
-        kGError
+        g_add,
+        g_error
     );
 
-    q_obj.set_g_add(std::sqrt(kGAdd));
+    q_obj.set_g_add(std::sqrt(g_add));
     float full_est = split_distance_boosting(
-        extra_data.data(),
-        select_excode_ipfunc(kExtraBits),
-        q_obj,
-        kDim,
-        kExtraBits,
-        ip_base
+        extra_data.data(), select_excode_ipfunc(kExBits), q_obj, kDim, kExBits, ip_base
     );
 
     EXPECT_NEAR(full_est, ref_est, 1e-2F);
@@ -691,19 +686,19 @@ TEST(XyQuantization, BoostedEstimateMatchesUnsplitCombinedCode) {
     EXPECT_LE(base_low, full_est);
 }
 
-TEST(XyQuantization, CombinedBitsBeyondCapThrows) {
+TEST(XyQuantizationTest, CombinedBitsBeyondCapThrows) {
     constexpr size_t kDim = 64;
     std::mt19937 gen(1);
-    std::vector<float> data = RandomVec(kDim, gen);
+    std::vector<float> data = random_vec(kDim, gen);
     std::vector<float> centroid(kDim, 0.0F);
 
     auto call_with_bad_bits = [&]() {
-        SplitCode(data, centroid, kDim, /*base_bits=*/8, /*extra_bits=*/8);
+        split_code(data, centroid, kDim, /*base_bits=*/8, /*ex_bits=*/8);
     };
     EXPECT_THROW(call_with_bad_bits(), std::invalid_argument);
 }
 
-TEST(XyQuantization, SplitSingleQueryRejectsInvalidBitWidths) {
+TEST(XyQuantizationTest, SplitSingleQueryRejectsInvalidBitWidths) {
     constexpr size_t kDim = 64;
     std::vector<float> query(kDim, 1.0F);
 

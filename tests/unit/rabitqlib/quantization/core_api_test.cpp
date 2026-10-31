@@ -42,7 +42,7 @@ api::CodeView view(api::CodeOutput output) {
         {output.extra.data, output.extra.bytes}};
 }
 
-TEST(CoreApi, RejectsNonFiniteValuesAtEveryInputPosition) {
+TEST(CoreApiTest, RejectsNonFiniteValuesAtEveryInputPosition) {
     for (size_t dim : {2U, 3U, 15U, 16U, 17U, 31U, 32U, 33U, 65U}) {
         const api::Parameters parameters{dim, 1};
         const auto sizes = api::requirements(parameters, api::CodeLayout::UnpackedU16);
@@ -92,7 +92,7 @@ TEST(CoreApi, RejectsNonFiniteValuesAtEveryInputPosition) {
     }
 }
 
-TEST(CoreApi, ExactWorkspaceSizeProtectsBoundaryBytes) {
+TEST(CoreApiTest, ExactWorkspaceSizeProtectsBoundaryBytes) {
     for (size_t dim : {2U, 3U, 31U, 33U, 65U, 96U}) {
         for (size_t bits : {1U, 4U, 9U}) {
             SCOPED_TRACE(dim);
@@ -138,7 +138,7 @@ TEST(CoreApi, ExactWorkspaceSizeProtectsBoundaryBytes) {
     }
 }
 
-TEST(CoreApi, CodesFactorsAndBothLayoutsMatchExistingEncoder) {
+TEST(CoreApiTest, CodesFactorsAndBothLayoutsMatchExistingEncoder) {
     std::mt19937 generator(123);
     std::uniform_real_distribution<float> distribution(-1, 1);
     for (size_t dim : {32U, 64U, 96U, 128U, 160U, 256U}) {
@@ -213,8 +213,9 @@ TEST(CoreApi, CodesFactorsAndBothLayoutsMatchExistingEncoder) {
                             ? rabitqlib::euclidean_sqr(query.data(), centroid.data(), dim)
                             : -rabitqlib::dot_product(query.data(), centroid.data(), dim);
                     float sum = 0;
-                    for (float x : query)
+                    for (float x : query) {
                         sum += x;
+                    }
                     const float expected = rabitqlib::quant::full_est_dist(
                         reference.data(),
                         query.data(),
@@ -302,7 +303,7 @@ TEST(CoreApi, CodesFactorsAndBothLayoutsMatchExistingEncoder) {
     }
 }
 
-TEST(CoreApi, UnpackedCodesDoNotRequireLibraryPadding) {
+TEST(CoreApiTest, UnpackedCodesDoNotRequireLibraryPadding) {
     for (size_t dim : {2U, 3U, 15U, 33U, 65U}) {
         std::vector<float> data(dim, 1.0F), query(dim, 0.5F);
         api::Parameters p{dim, 4};
@@ -321,13 +322,13 @@ TEST(CoreApi, UnpackedCodesDoNotRequireLibraryPadding) {
     }
 }
 
-TEST(CoreApi, NullCentroidZeroResidualAndCallerFactorColumns) {
-    constexpr size_t dim = 96;
-    std::array<float, dim> data{}, query{};
+TEST(CoreApiTest, NullCentroidZeroResidualAndCallerFactorColumns) {
+    constexpr size_t kDim = 96;
+    std::array<float, kDim> data{}, query{};
     query.fill(0.25F);
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         for (size_t bits : {1U, 4U, 9U}) {
-            api::Parameters p{dim, bits, metric};
+            api::Parameters p{kDim, bits, metric};
             const auto sizes = api::requirements(p, api::CodeLayout::SplitPacked);
             Workspace workspace(sizes.workspace_bytes);
             std::vector<uint8_t> signs(sizes.code_bytes), extra(sizes.extra_bytes);
@@ -339,7 +340,7 @@ TEST(CoreApi, NullCentroidZeroResidualAndCallerFactorColumns) {
             // Store factors as separate columns, not adjacent to either code buffer.
             std::array<float, 1> add{f.add}, scale{f.rescale}, error{f.error};
             auto q = api::prepare_query(p, query.data(), nullptr);
-            EXPECT_EQ(q.dimension(), dim);
+            EXPECT_EQ(q.dimension(), kDim);
             EXPECT_EQ(q.total_bits(), bits);
             EXPECT_EQ(q.metric_type(), metric);
             EXPECT_FLOAT_EQ(
@@ -355,7 +356,7 @@ TEST(CoreApi, NullCentroidZeroResidualAndCallerFactorColumns) {
     }
 }
 
-TEST(CoreApi, RejectsBadParametersAndBuffersBeforeWritingCodes) {
+TEST(CoreApiTest, RejectsBadParametersAndBuffersBeforeWritingCodes) {
     api::Parameters p{64, 4};
     auto r = api::requirements(p, api::CodeLayout::UnpackedU16);
     Workspace workspace(r.workspace_bytes);
@@ -445,7 +446,7 @@ TEST(CoreApi, RejectsBadParametersAndBuffersBeforeWritingCodes) {
     );
 }
 
-TEST(CoreApi, ReusedQueryAndWorkspaceStillValidateEachRecord) {
+TEST(CoreApiTest, ReusedQueryAndWorkspaceStillValidateEachRecord) {
     constexpr size_t kDim = 32;
     const api::Parameters parameters{kDim, 4, METRIC_L2};
     const auto raw = api::requirements(parameters, api::CodeLayout::UnpackedU16);
@@ -498,24 +499,24 @@ TEST(CoreApi, ReusedQueryAndWorkspaceStillValidateEachRecord) {
     EXPECT_EQ(extra, expected_extra);
 }
 
-TEST(CoreApi, ScoringRetainsBufferAndNumericalChecks) {
-    constexpr size_t dim = 64;
-    std::array<float, dim> values{};
-    std::array<uint8_t, dim * 2> codes{}, extra{};
+TEST(CoreApiTest, ScoringRetainsBufferAndNumericalChecks) {
+    constexpr size_t kDim = 64;
+    std::array<float, kDim> values{};
+    std::array<uint8_t, kDim * 2> codes{}, extra{};
     float (*volatile compute_pointer)(
         const api::QueryState&, api::CodeView, const api::Factors&
     ) = &api::compute;
-    alignas(float) std::array<uint8_t, sizeof(float) * dim + 1> misaligned{};
+    alignas(float) std::array<uint8_t, sizeof(float) * kDim + 1> misaligned{};
     const auto* bad_alignment = reinterpret_cast<const float*>(misaligned.data() + 1);
     EXPECT_THROW(
-        api::prepare_query({dim, 4}, bad_alignment, nullptr), std::invalid_argument
+        api::prepare_query({kDim, 4}, bad_alignment, nullptr), std::invalid_argument
     );
     EXPECT_THROW(
-        api::prepare_query({dim, 4}, values.data(), bad_alignment), std::invalid_argument
+        api::prepare_query({kDim, 4}, values.data(), bad_alignment), std::invalid_argument
     );
     for (size_t bits : {1U, 4U, 9U}) {
         for (auto metric : {METRIC_L2, METRIC_IP}) {
-            const api::Parameters parameters{dim, bits, metric};
+            const api::Parameters parameters{kDim, bits, metric};
             const auto query = api::prepare_query(parameters, values.data(), nullptr);
             for (auto layout :
                  {api::CodeLayout::SplitPacked, api::CodeLayout::UnpackedU16}) {
@@ -574,11 +575,11 @@ TEST(CoreApi, ScoringRetainsBufferAndNumericalChecks) {
         }
     }
     values.fill(1e18F);
-    const auto large_query = api::prepare_query({dim, 1}, values.data(), nullptr);
+    const auto large_query = api::prepare_query({kDim, 1}, values.data(), nullptr);
     EXPECT_THROW(
         api::compute(
             large_query,
-            {api::CodeLayout::SplitPacked, {codes.data(), dim / 8}, {}},
+            {api::CodeLayout::SplitPacked, {codes.data(), kDim / 8}, {}},
             {std::numeric_limits<float>::max(), 0, 0}
         ),
         std::overflow_error
@@ -591,7 +592,7 @@ TEST(CoreApi, ScoringRetainsBufferAndNumericalChecks) {
     );
 }
 
-TEST(CoreApi, ConcurrentCallsUseOnlyTheirOwnWorkspace) {
+TEST(CoreApiTest, ConcurrentCallsUseOnlyTheirOwnWorkspace) {
     struct Case {
         api::Parameters parameters;
         std::vector<float> data, query;
@@ -664,27 +665,32 @@ TEST(CoreApi, ConcurrentCallsUseOnlyTheirOwnWorkspace) {
                     api::prepare_query(c.parameters, c.query.data(), nullptr);
                 if (signs != c.signs || extra != c.extra || f.add != c.factors.add ||
                     f.rescale != c.factors.rescale || f.error != c.factors.error ||
-                    api::compute(query, view(out), f) != c.score)
+                    api::compute(query, view(out), f) != c.score) {
                     return false;
+                }
                 api::CodeOutput raw{
                     api::CodeLayout::UnpackedU16, {unpacked.data(), unpacked.size()}, {}};
                 api::convert_codes(c.parameters, view(out), raw, scratch.view());
-                if (unpacked != c.unpacked)
+                if (unpacked != c.unpacked) {
                     return false;
+                }
                 std::fill(signs.begin(), signs.end(), 0xA5);
                 std::fill(extra.begin(), extra.end(), 0xA5);
                 api::convert_codes(c.parameters, view(raw), out, scratch.view());
                 if (signs != c.signs || extra != c.extra ||
-                    api::compute(query, view(out), f) != c.score)
+                    api::compute(query, view(out), f) != c.score) {
                     return false;
+                }
             }
             return true;
         }));
     }
-    while (ready.load() != cases.size())
+    while (ready.load() != cases.size()) {
         std::this_thread::yield();
+    }
     start.set_value();
-    for (auto& worker : workers)
+    for (auto& worker : workers) {
         EXPECT_TRUE(worker.get());
+    }
 }
 }  // namespace

@@ -12,7 +12,7 @@
 #include "rabitqlib/index/types.hpp"
 
 namespace rabitqlib::symqg {
-constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
+inline constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
 using CandidateList = std::vector<AnnCandidate<float>>;
 enum class QGInitialization { PiPNN, Random };
 
@@ -45,8 +45,8 @@ class QGBuilder {
         BuildQuery(const BuildQuery&) = delete;
         BuildQuery& operator=(const BuildQuery&) = delete;
 
-        void reset(PID);
-        [[nodiscard]] float distance_to(PID) const;
+        void reset(PID internal_id);
+        [[nodiscard]] float distance_to(PID target) const;
         // Raw scoring needs no rotation. Prepare it lazily for FastScan only.
         [[nodiscard]] const float* rotated_query();
     };
@@ -57,9 +57,11 @@ class QGBuilder {
     size_t num_points_;
     size_t dim_;
     size_t max_degree_;  // degree bound for qg, multiple of 32
-    bool seeded_ = true;
+    QGInitialization initialization_ = QGInitialization::PiPNN;
     static constexpr size_t kMaxCandidatePoolSize = 750;
     static constexpr size_t kMaxPrunedSize = 300;
+    // Striped locks bound reverse-edge collection memory independently of the point count.
+    static constexpr size_t kLockStripes = 4096;
     std::vector<CandidateList> new_neighbors_;  // new neighbors for current iteration
     std::vector<uint32_t> degrees_;
     uint32_t seed_;  // base seed for graph initialization
@@ -79,19 +81,26 @@ class QGBuilder {
     std::vector<BuildWorker> workers_;
 
     const BuildCache* build_cache() const;
-    void find_candidates(PID, CandidateList&, VisitedSet&) const;
+    void find_candidates(
+        PID internal_id, CandidateList& results, VisitedSet& visited
+    ) const;
     void random_init();
     void search_new_neighbors();
-    void heuristic_prune(CandidateList&, CandidateList&, CandidateList* recorded);
+    void heuristic_prune(
+        CandidateList& pool, CandidateList& selected, CandidateList* recorded
+    );
     void add_reverse_edges(bool final_pass);
     void add_pruned_edges(
-        const CandidateList&, const CandidateList&, CandidateList&, float
+        const CandidateList& result,
+        const CandidateList& pruned_list,
+        CandidateList& new_result,
+        float threshold
     );
-    void complete_degree(PID, BuildWorker&);
+    void complete_degree(PID internal_id, BuildWorker& worker);
     void run_pass(bool final_pass);
-    void run_passes(size_t);
-    void write_row(PID, BuildWorker&);
-    void write_row(PID, const CandidateList&, BuildWorker&);
+    void run_passes(size_t num_iter);
+    void write_row(PID internal_id, BuildWorker& worker);
+    void write_row(PID internal_id, const CandidateList& neighbors, BuildWorker& worker);
 
     void initialize_storage(const float* data);
 

@@ -18,7 +18,7 @@
 namespace rabitqlib::fastscan {
 namespace {
 
-TEST(FastScanBackendContract, SelectedHaccLayoutMatchesProducerAndConsumer) {
+TEST(FastScanBackendContractTest, SelectedHaccLayoutMatchesProducerAndConsumer) {
     const auto& backend = detail::selected_backend();
     const size_t tables_per_plane =
         backend.hacc_layout == detail::HaccLutLayout::Quad64 ? 4 : 2;
@@ -60,7 +60,7 @@ TEST(FastScanBackendContract, SelectedHaccLayoutMatchesProducerAndConsumer) {
     }
 }
 
-TEST(FastScanBackendContract, StandardLutIsSharedAcrossSupportedConsumers) {
+TEST(FastScanBackendContractTest, StandardLutIsSharedAcrossSupportedConsumers) {
     constexpr size_t kDim = 64;
     const auto& backend = detail::selected_backend();
     std::array<float, kDim> query{};
@@ -100,23 +100,27 @@ TEST(FastScanBackendContract, StandardLutIsSharedAcrossSupportedConsumers) {
 #endif
 }
 
-TEST(FastScanBackendContract, ExplicitCorrectionBackendsConsumeHostLut) {
+TEST(FastScanBackendContractTest, ExplicitCorrectionBackendsConsumeHostLut) {
     const auto& selected = detail::selected_backend();
     using Estimator = decltype(selected.split);
     std::vector<Estimator> backends{selected.split};
 #if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx2())
+    if (cpu::has_avx2()) {
         backends.push_back(rabitqlib::simd::split_batch_estdist_avx2);
-    if (cpu::has_avx512_core())
+    }
+    if (cpu::has_avx512_core()) {
         backends.push_back(rabitqlib::simd::split_batch_estdist_avx512);
+    }
 #endif
     for (size_t dim : {32U, 96U, 1040U}) {
         std::vector<float> values(dim);
-        for (size_t i = 0; i < dim; ++i)
+        for (size_t i = 0; i < dim; ++i) {
             values[i] = static_cast<float>(i % 23) / 7 - 1;
+        }
         for (bool hacc : {false, true}) {
-            if (!hacc && !cpu::has_avx2() && !cpu::has_neon())
+            if (!hacc && !cpu::has_avx2() && !cpu::has_neon()) {
                 continue;
+            }
             for (auto metric : {METRIC_L2, METRIC_IP}) {
                 SCOPED_TRACE(
                     ::testing::Message()
@@ -126,8 +130,9 @@ TEST(FastScanBackendContract, ExplicitCorrectionBackendsConsumeHostLut) {
                 query.set_g_add(3, 2);
                 std::vector<char> storage(BatchDataMap<float>::data_bytes(dim));
                 BatchDataMap<float> batch(storage.data(), dim);
-                for (size_t i = 0; i < dim * 4; ++i)
+                for (size_t i = 0; i < dim * 4; ++i) {
                     batch.bin_code()[i] = static_cast<uint8_t>(i * 73 + i / 7);
+                }
                 for (size_t lane = 0; lane < 32; ++lane) {
                     batch.f_add()[lane] = static_cast<float>(lane) + 10;
                     batch.f_rescale()[lane] = lane % 2 == 0 ? 0.125F : -0.25F;

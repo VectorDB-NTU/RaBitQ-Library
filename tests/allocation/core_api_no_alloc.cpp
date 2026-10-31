@@ -38,38 +38,45 @@ void* __real_realloc(void*, size_t);
 void* __real_aligned_alloc(size_t, size_t);
 int __real_posix_memalign(void**, size_t, size_t);
 void* __wrap_malloc(size_t n) {
-    if (watching)
+    if (watching) {
         ++c_calls;
+    }
     return __real_malloc(n);
 }
 void* __wrap_calloc(size_t n, size_t width) {
-    if (watching)
+    if (watching) {
         ++c_calls;
+    }
     return __real_calloc(n, width);
 }
 void* __wrap_realloc(void* p, size_t n) {
-    if (watching)
+    if (watching) {
         ++c_calls;
+    }
     return __real_realloc(p, n);
 }
 void* __wrap_aligned_alloc(size_t alignment, size_t n) {
-    if (watching)
+    if (watching) {
         ++c_calls;
+    }
     return __real_aligned_alloc(alignment, n);
 }
 int __wrap_posix_memalign(void** p, size_t alignment, size_t n) {
-    if (watching)
+    if (watching) {
         ++c_calls;
+    }
     return __real_posix_memalign(p, alignment, n);
 }
 }
 #endif
 
 TEST_NOINLINE void* operator new(size_t n) {
-    if (watching)
+    if (watching) {
         ++new_calls;
-    if (void* p = std::malloc(n == 0 ? 1 : n))
+    }
+    if (void* p = std::malloc(n == 0 ? 1 : n)) {
         return p;
+    }
     throw std::bad_alloc();
 }
 TEST_NOINLINE void* operator new[](size_t n) { return ::operator new(n); }
@@ -78,15 +85,18 @@ TEST_NOINLINE void operator delete[](void* p) noexcept { ::operator delete(p); }
 TEST_NOINLINE void operator delete(void* p, size_t) noexcept { ::operator delete(p); }
 TEST_NOINLINE void operator delete[](void* p, size_t) noexcept { ::operator delete(p); }
 TEST_NOINLINE void* operator new(size_t n, std::align_val_t alignment) {
-    if (watching)
+    if (watching) {
         ++new_calls;
+    }
     const auto a = static_cast<size_t>(alignment);
 #ifdef _MSC_VER
-    if (void* p = _aligned_malloc(n == 0 ? 1 : n, a))
+    if (void* p = _aligned_malloc(n == 0 ? 1 : n, a)) {
         return p;
+    }
 #else
-    if (void* p = std::aligned_alloc(a, ((n == 0 ? 1 : n) + a - 1) / a * a))
+    if (void* p = std::aligned_alloc(a, ((n == 0 ? 1 : n) + a - 1) / a * a)) {
         return p;
+    }
 #endif
     throw std::bad_alloc();
 }
@@ -123,13 +133,13 @@ bool has_neon() { return false; }
 
 int main() {
     namespace api = rabitqlib::quant::v1;
-    constexpr size_t max_dim = 4096;
-    alignas(std::max_align_t) std::array<std::byte, max_dim * 64 + 1024> memory{};
-    std::array<float, max_dim> data{}, centroid{}, query{}, rotated{};
-    std::array<uint8_t, max_dim * 2> raw{}, restored{};
-    std::array<uint8_t, max_dim / 8> signs{};
-    std::array<uint8_t, max_dim> extra{};
-    for (size_t i = 0; i < max_dim; ++i) {
+    constexpr size_t kMaxDim = 4096;
+    alignas(std::max_align_t) std::array<std::byte, kMaxDim * 64 + 1024> memory{};
+    std::array<float, kMaxDim> data{}, centroid{}, query{}, rotated{};
+    std::array<uint8_t, kMaxDim * 2> raw{}, restored{};
+    std::array<uint8_t, kMaxDim / 8> signs{};
+    std::array<uint8_t, kMaxDim> extra{};
+    for (size_t i = 0; i < kMaxDim; ++i) {
         data[i] = static_cast<float>(static_cast<int>(i % 19) - 9) / 11;
         centroid[i] = static_cast<float>(static_cast<int>(i % 7) - 3) / 13;
         query[i] = static_cast<float>(static_cast<int>(i % 23) - 11) / 17;
@@ -145,8 +155,9 @@ int main() {
                             Watch guard;
                             r = api::requirements(p, api::CodeLayout::SplitPacked);
                         }
-                        if (r.workspace_bytes > memory.size())
+                        if (r.workspace_bytes > memory.size()) {
                             return 1;
+                        }
                         api::Buffer workspace{memory.data(), r.workspace_bytes};
                         api::CodeOutput a{
                             api::CodeLayout::UnpackedU16, {raw.data(), raw.size()}, {}};
@@ -195,8 +206,9 @@ int main() {
                                 q, {a.layout, {raw.data(), raw.size()}, {}}, f
                             );
                         }
-                        if (!std::isfinite(sink))
+                        if (!std::isfinite(sink)) {
                             return 2;
+                        }
                     }
                 }
             }

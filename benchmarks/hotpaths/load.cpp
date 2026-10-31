@@ -28,8 +28,9 @@ void run(int argc, char** argv) {
     if (mode != "prepare" && mode != "load") {
         throw std::invalid_argument("Mode must be prepare or load");
     }
-    if (count < 8)
+    if (count < 8) {
         throw std::invalid_argument("At least eight centroids are required");
+    }
     const auto data = bench::values(bench::product(count, dim));
     if (mode == "prepare") {
         // Repeated smoke tests reuse their fixture; never replace an existing file.
@@ -65,11 +66,12 @@ void run(int argc, char** argv) {
             h = bench::hash(&candidate.id, sizeof(candidate.id), h);
             h = bench::hash(&candidate.distance, sizeof(candidate.distance), h);
         }
-        if (rep == 0)
+        if (rep == 0) {
             expected = h;
-        else {
-            if (h != expected)
+        } else {
+            if (h != expected) {
                 throw std::runtime_error("Loaded search results changed");
+            }
             bench::row("sidecar_load", rep - 1, 1, seconds, h);
         }
     }

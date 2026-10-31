@@ -28,15 +28,15 @@ using clustering::FinalAssignmentMode;
 using RaBitQKMeansIterationStats = clustering::KMeansIterationStats;
 
 struct RaBitQKMeansParameters {
-    /// Number of clustering iterations.
+    // Number of clustering iterations.
     size_t niter = 25;
     bool verbose = false;
-    /// Normalize centroids after each update.
+    // Normalize centroids after each update.
     bool spherical = false;
     uint32_t seed = 42;
-    /// Warn below this number of training vectors per centroid.
+    // Warn below this number of training vectors per centroid.
     size_t min_points_per_centroid = 39;
-    /// Stop when the absolute relative objective (WCSS) change is at most this value.
+    // Stop when the absolute relative objective (WCSS) change is at most this value.
     double early_stop_threshold = 0.0;
     FinalAssignmentMode final_assignment = FinalAssignmentMode::Approximate;
     uint32_t num_threads = 0;
@@ -46,7 +46,7 @@ namespace detail {
 
 // Encode immutable training points once; each moving centroid supplies one LUT.
 // RaBitQKMeans validates inputs and keeps the borrowed x buffer alive through training.
-class RaBitQAssigner {
+class RaBitQAssignment {
     size_t dim_;
     size_t num_clusters_;
     const float* data_;
@@ -73,12 +73,12 @@ class RaBitQAssigner {
         }
     }
 
-    RaBitQAssigner(
+    RaBitQAssignment(
         size_t d,
         size_t k,
         const float* x,
         size_t n,
-        uint32_t num_threads,
+        uint32_t num_workers,
         const RaBitQKMeansParameters& cp
     )
         : dim_(d)
@@ -86,7 +86,7 @@ class RaBitQAssigner {
         , data_(x)
         , num_points_(n)
         , num_batches_(1 + (n - 1) / fastscan::kBatchSize)
-        , num_workers_(static_cast<uint32_t>(std::min<size_t>(num_threads, num_batches_)))
+        , num_workers_(static_cast<uint32_t>(std::min<size_t>(num_workers, num_batches_)))
         , metric_type_(cp.spherical ? METRIC_IP : METRIC_L2)
         , padded_dim_(rotator_impl::padding_requirement(d, RotatorType::FhtKacRotator))
         , rotator_(d, padded_dim_, cp.seed)
@@ -128,15 +128,15 @@ class RaBitQAssigner {
         );
         index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(static)
-        for (std::ptrdiff_t batch = 0; batch < static_cast<std::ptrdiff_t>(num_batches_);
-             ++batch) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_batches_);
+             ++index) {
             const auto thread = static_cast<size_t>(omp_get_thread_num());
             if (failure.failed()) {
                 continue;
             }
             try {
-                const auto block = static_cast<size_t>(batch);
-                const size_t first = block * fastscan::kBatchSize;
+                const auto batch = static_cast<size_t>(index);
+                const size_t first = batch * fastscan::kBatchSize;
                 const size_t count = std::min(fastscan::kBatchSize, num_points_ - first);
                 auto& rotated = rotated_blocks[thread];
                 for (size_t point = 0; point < count; ++point) {
@@ -150,7 +150,7 @@ class RaBitQAssigner {
                     count,
                     padded_dim_,
                     batch_data_.data() +
-                        block * QGBatchDataMap<float>::data_bytes(padded_dim_),
+                        batch * QGBatchDataMap<float>::data_bytes(padded_dim_),
                     metric_type_
                 );
             } catch (...) { failure.capture(); }
@@ -158,7 +158,7 @@ class RaBitQAssigner {
         failure.rethrow();
     }
 
-    void assign(const float* centroids, PID* labels, float* distances, bool = false) {
+    void assign(const float* centroids, PID* assignments, float* distances, bool = false) {
         const auto distance_func =
             metric_type_ == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
         for (size_t cluster = 0; cluster < num_clusters_; ++cluster) {
@@ -173,21 +173,21 @@ class RaBitQAssigner {
 
         index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(static)
-        for (std::ptrdiff_t batch = 0; batch < static_cast<std::ptrdiff_t>(num_batches_);
-             ++batch) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_batches_);
+             ++index) {
             if (failure.failed()) {
                 continue;
             }
             try {
-                const auto block = static_cast<size_t>(batch);
-                const size_t first = block * fastscan::kBatchSize;
+                const auto batch = static_cast<size_t>(index);
+                const size_t first = batch * fastscan::kBatchSize;
                 const size_t count = std::min(fastscan::kBatchSize, num_points_ - first);
                 const char* codes = batch_data_.data() +
-                                    block * QGBatchDataMap<float>::data_bytes(padded_dim_);
+                                    batch * QGBatchDataMap<float>::data_bytes(padded_dim_);
                 std::array<float, fastscan::kBatchSize> estimated_distances{};
                 std::array<float, fastscan::kBatchSize> best_distances;
                 best_distances.fill(std::numeric_limits<float>::infinity());
-                std::array<PID, fastscan::kBatchSize> best_labels{};
+                std::array<PID, fastscan::kBatchSize> best_cluster_ids{};
                 for (size_t cluster = 0; cluster < num_clusters_; ++cluster) {
                     qg_batch_estdist(
                         codes,
@@ -200,17 +200,17 @@ class RaBitQAssigner {
                         // ties.
                         if (estimated_distances[point] < best_distances[point]) {
                             best_distances[point] = estimated_distances[point];
-                            best_labels[point] = static_cast<PID>(cluster);
+                            best_cluster_ids[point] = static_cast<PID>(cluster);
                         }
                     }
                 }
                 for (size_t point = 0; point < count; ++point) {
                     const size_t id = first + point;
-                    labels[id] = best_labels[point];
+                    assignments[id] = best_cluster_ids[point];
                     // Scores choose the centroid; objectives retain original-space
                     // distances.
                     distances[id] = distance_func(
-                        data_ + id * dim_, centroids + best_labels[point] * dim_, dim_
+                        data_ + id * dim_, centroids + best_cluster_ids[point] * dim_, dim_
                     );
                 }
             } catch (...) { failure.capture(); }
@@ -223,9 +223,9 @@ class RaBitQAssigner {
 
 /** K-means with a graph-free RaBitQ scan, recommended for small cluster counts. */
 class RaBitQKMeans : public clustering::detail::
-                         LloydKMeans<RaBitQKMeansParameters, detail::RaBitQAssigner> {
+                         LloydKMeans<RaBitQKMeansParameters, detail::RaBitQAssignment> {
     using Base =
-        clustering::detail::LloydKMeans<RaBitQKMeansParameters, detail::RaBitQAssigner>;
+        clustering::detail::LloydKMeans<RaBitQKMeansParameters, detail::RaBitQAssignment>;
 
    public:
     RaBitQKMeans(size_t d, size_t k) : RaBitQKMeans(d, k, RaBitQKMeansParameters{}) {}

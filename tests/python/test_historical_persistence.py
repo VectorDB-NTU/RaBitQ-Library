@@ -88,7 +88,7 @@ def test_unknown_historical_version_is_rejected(name, tmp_path):
     message = (
         "Unsupported raw IVF index version"
         if cls is IvfIndex
-        else "Unsupported QuantizedGraph file version"
+        else "QuantizedGraph file version is unsupported"
     )
     with pytest.raises(RuntimeError, match=f"^{message}$"):
         cls.load(str(destination))

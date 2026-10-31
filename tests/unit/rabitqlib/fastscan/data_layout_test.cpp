@@ -23,7 +23,7 @@ float load_float(const char* data) {
     return value;
 }
 
-TEST(DataLayoutTest, QgBatchSizeRejectsOverflow) {
+TEST(FastScanDataLayoutTest, QgBatchSizeRejectsOverflow) {
     const size_t max_dim = std::numeric_limits<size_t>::max() / fastscan::kBatchSize;
     EXPECT_THROW(QGBatchDataMap<float>::data_bytes(max_dim + 1), std::length_error);
     EXPECT_THROW(ConstQGBatchDataMap<float>::data_bytes(max_dim + 1), std::length_error);
@@ -33,7 +33,7 @@ TEST(DataLayoutTest, QgBatchSizeRejectsOverflow) {
     );
 }
 
-TEST(DataLayoutTest, BatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
+TEST(FastScanDataLayoutTest, BatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
     constexpr size_t kDim = 64;
     constexpr size_t kCodeBytes = kDim * fastscan::kBatchSize / 8;
     constexpr size_t kDataBytes = kCodeBytes + (3 * fastscan::kBatchSize * sizeof(float));
@@ -67,7 +67,7 @@ TEST(DataLayoutTest, BatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
     EXPECT_EQ(storage.back(), char{0x5a});
 }
 
-TEST(DataLayoutTest, QgBatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
+TEST(FastScanDataLayoutTest, QgBatchFactorsKeepPackedOffsetsOnUnalignedStorage) {
     constexpr size_t kDim = 64;
     constexpr size_t kCodeBytes = kDim * fastscan::kBatchSize / 8;
     constexpr size_t kDataBytes = kCodeBytes + (2 * fastscan::kBatchSize * sizeof(float));
@@ -153,7 +153,7 @@ void check_qg_encoding() {
     }
 }
 
-TEST(QgBatchEncoding, PreservesCodesAndFactorsWithExplicitAndZeroCentroids) {
+TEST(FastScanQgBatchEncodingTest, PreservesCodesAndFactorsWithExplicitAndZeroCentroids) {
     check_qg_encoding<float>();
     check_qg_encoding<double>();
 }

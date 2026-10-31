@@ -384,10 +384,12 @@ TEST(FlipSignTest, BackendsPreserveBitsAndUnalignedBuffers) {
     }
 #endif
 #if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx2())
+    if (cpu::has_avx2()) {
         backends.push_back(simd::flip_sign_avx2);
-    if (cpu::has_avx512_core())
+    }
+    if (cpu::has_avx512_core()) {
         backends.push_back(simd::flip_sign_avx512);
+    }
 #endif
     // Signed zeros, infinities, quiet NaN payloads, subnormals and finite values.
     const std::array<uint32_t, 8> values{
@@ -429,14 +431,17 @@ TEST(FlipSignTest, BackendsPreserveBitsAndUnalignedBuffers) {
 TEST(KacsWalkTest, BackendsMatchScalarAndRespectBufferBounds) {
     std::vector<decltype(&simd::kacs_walk)> backends{simd::kacs_walk};
 #if defined(__aarch64__) || defined(_M_ARM64)
-    if (cpu::has_neon())
+    if (cpu::has_neon()) {
         backends.push_back(simd::kacs_walk_neon);
+    }
 #endif
 #if defined(__x86_64__) || defined(_M_X64)
-    if (cpu::has_avx2())
+    if (cpu::has_avx2()) {
         backends.push_back(simd::kacs_walk_avx2);
-    if (cpu::has_avx512_core())
+    }
+    if (cpu::has_avx512_core()) {
         backends.push_back(simd::kacs_walk_avx512);
+    }
 #endif
     for (size_t dim :
          {64U,
@@ -463,8 +468,9 @@ TEST(KacsWalkTest, BackendsMatchScalarAndRespectBufferBounds) {
             std::vector<float, memory::AlignedAllocator<float, 64>> input(
                 dim + offset + 1, 12345
             );
-            for (size_t i = 0; i < dim; ++i)
+            for (size_t i = 0; i < dim; ++i) {
                 input[i + offset] = std::sin(static_cast<float>(i));
+            }
             auto expected = input;
             simd::kacs_walk_generic(expected.data() + offset, dim);
             for (auto backend : backends) {
@@ -478,24 +484,29 @@ TEST(KacsWalkTest, BackendsMatchScalarAndRespectBufferBounds) {
 
 #if defined(__aarch64__) || defined(_M_ARM64)
 TEST(FhtNeonTest, MatchesSavedScalarRotationInPlaceAndWithExtraPadding) {
-    if (!cpu::has_neon())
+    if (!cpu::has_neon()) {
         GTEST_SKIP();
+    }
     for (size_t dim : {64U, 65U, 127U, 128U, 193U, 960U, 1025U, 4097U, 65536U}) {
         for (size_t extra : {0U, 32U, 64U}) {
             const size_t padded = (dim + 31) / 32 * 32 + extra;
-            if (padded > 65536)
+            if (padded > 65536) {
                 continue;
+            }
             SCOPED_TRACE(dim);
             SCOPED_TRACE(padded);
             size_t trunc = 64;
-            while (trunc * 2 <= dim)
+            while (trunc * 2 <= dim) {
                 trunc *= 2;
+            }
             std::vector<uint8_t> flip(padded / 2);
-            for (size_t i = 0; i < flip.size(); ++i)
+            for (size_t i = 0; i < flip.size(); ++i) {
                 flip[i] = static_cast<uint8_t>(i * 73 + i / 7);
+            }
             std::vector<float> input(dim), expected(padded);
-            for (size_t i = 0; i < dim; ++i)
+            for (size_t i = 0; i < dim; ++i) {
                 input[i] = std::sin(static_cast<float>(i) * 0.13F);
+            }
             simd::fht_rotate_generic(
                 input.data(),
                 expected.data(),
@@ -537,13 +548,15 @@ TEST(FhtNeonTest, MatchesSavedScalarRotationInPlaceAndWithExtraPadding) {
 }
 
 TEST(NeonRotationTest, StandaloneKernelsHandleShortTails) {
-    if (!cpu::has_neon())
+    if (!cpu::has_neon()) {
         GTEST_SKIP();
+    }
     for (size_t dim = 0; dim <= 33; ++dim) {
         std::vector<uint8_t> flip((dim + 7) / 8, 0xA5);
         std::vector<float> input(dim + 2, 12345);
-        for (size_t i = 0; i < dim; ++i)
+        for (size_t i = 0; i < dim; ++i) {
             input[i + 1] = static_cast<float>(i) - 16.5F;
+        }
         auto actual = input, expected = input;
         simd::flip_sign_generic(flip.data(), expected.data() + 1, dim);
         simd::flip_sign_neon(flip.data(), actual.data() + 1, dim);
@@ -632,7 +645,7 @@ TEST(FhtDispatchTest, AvxBackendsMatchBitwiseForCompactTails) {
 }
 #endif
 
-TEST(MatrixRotatorFactory, DoublePreservesNormAndRejectsFloatOnlyRotation) {
+TEST(MatrixRotatorFactoryTest, DoublePreservesNormAndRejectsFloatOnlyRotation) {
     const size_t dim = 64;
     std::unique_ptr<Rotator<double>> rotator(
         choose_rotator<double>(dim, RotatorType::MatrixRotator)

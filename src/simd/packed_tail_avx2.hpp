@@ -40,8 +40,9 @@ inline void accumulate_excode_tail_avx2(
     const float* query, const uint8_t* compact, size_t dim, __m256& sum, __m256& sum_hi
 ) {
     assert(dim == 0 || dim == 32);
-    if (dim == 0)
+    if (dim == 0) {
         return;
+    }
     // The fixed 32-coordinate tail contains two 16-code groups.
     // Select the two bytes spanning each code, then shift/mask eight codes at once.
     alignas(16) uint8_t positions[32];
@@ -83,6 +84,15 @@ inline void accumulate_excode_tail_avx2(
         sum_hi = _mm256_fmadd_ps(decode(words_hi), _mm256_loadu_ps(query + i + 8), sum_hi);
         compact += 2 * Bits;
     }
+}
+
+// Build a vector from two 64-bit words without a signed narrowing conversion.
+[[nodiscard]] inline __m128i set_u64x(uint64_t high, uint64_t low) noexcept {
+    int64_t signed_high = 0;
+    int64_t signed_low = 0;
+    std::memcpy(&signed_high, &high, sizeof(signed_high));
+    std::memcpy(&signed_low, &low, sizeof(signed_low));
+    return _mm_set_epi64x(signed_high, signed_low);
 }
 
 // Sum the eight lanes as a tree rather than serially.

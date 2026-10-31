@@ -70,14 +70,14 @@ template <>
 class QuantizedGraph<float> {
     friend class QGBuilder;
     friend void detail::search_with_workspace(
-        QuantizedGraph<float>&,
-        const float*,
-        uint32_t,
-        uint32_t*,
-        float*,
-        detail::SearchScratchView,
-        PID,
-        const float*
+        QuantizedGraph<float>& graph,
+        const float* query,
+        uint32_t k,
+        uint32_t* result_ids,
+        float* distances,
+        detail::SearchScratchView scratch,
+        PID hint,
+        const float* k1xsumq
     );
     friend struct QGConstructionTestAccess;
 
@@ -88,7 +88,7 @@ class QuantizedGraph<float> {
     size_t padded_dim_ = 0;
     float (*raw_dist_func_)(const float*, const float*, size_t) = nullptr;
     PID entry_point_id_ = 0;
-    MetricType metric_type_ = MetricType::METRIC_L2;
+    MetricType metric_type_ = METRIC_L2;
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
     std::vector<float> centroid_;   // rotated global centroid for qg-quant
@@ -130,96 +130,114 @@ class QuantizedGraph<float> {
     // Write the graph file at exactly this path.
     void write_file(const char* filename) const;
 
-    void copy_vectors(const float*, size_t);
+    void copy_vectors(const float* data, size_t num_workers);
 
     void set_quantization_centroid(const float* centroid);
 
-    [[nodiscard]] char* get_row_data(PID data_id) {
-        return reinterpret_cast<char*>(get_vector(data_id));
+    [[nodiscard]] char* get_row_data(PID internal_id) {
+        return reinterpret_cast<char*>(get_vector(internal_id));
     }
 
-    [[nodiscard]] const char* get_row_data(PID data_id) const {
-        return reinterpret_cast<const char*>(get_vector(data_id));
+    [[nodiscard]] const char* get_row_data(PID internal_id) const {
+        return reinterpret_cast<const char*>(get_vector(internal_id));
     }
 
-    [[nodiscard]] float* get_vector(PID data_id) {
-        return data_.data() + ((record_bytes_ / sizeof(float)) * data_id);
+    [[nodiscard]] float* get_vector(PID internal_id) {
+        return data_.data() + ((record_bytes_ / sizeof(float)) * internal_id);
     }
 
-    [[nodiscard]] const float* get_vector(PID data_id) const {
-        return data_.data() + ((record_bytes_ / sizeof(float)) * data_id);
+    [[nodiscard]] const float* get_vector(PID internal_id) const {
+        return data_.data() + ((record_bytes_ / sizeof(float)) * internal_id);
     }
 
-    [[nodiscard]] char* get_quantized_vector(PID data_id) { return get_row_data(data_id); }
+    [[nodiscard]] char* get_quantized_vector(PID internal_id) {
+        return get_row_data(internal_id);
+    }
 
-    [[nodiscard]] const char* get_quantized_vector(PID data_id) const {
-        return get_row_data(data_id);
+    [[nodiscard]] const char* get_quantized_vector(PID internal_id) const {
+        return get_row_data(internal_id);
     }
 
     void validate_search(
-        const float*, uint32_t, const uint32_t*, const float*, size_t
+        const float* query,
+        uint32_t k,
+        const uint32_t* result_ids,
+        const float* distances,
+        size_t ef_search
     ) const;
 
-    void search_impl(const float*, uint32_t, uint32_t*, float*, size_t);
-
-    void search_with_scratch_impl(
-        const float*,
-        uint32_t,
-        uint32_t*,
-        float*,
-        detail::SearchScratchView,
-        PID,
-        const float*
+    void search_impl(
+        const float* query,
+        uint32_t k,
+        uint32_t* result_ids,
+        float* distances,
+        size_t ef_search
     );
 
-    float point_distance(const float*, const QuantizedQuery*, PID) const;
+    void search_with_scratch_impl(
+        const float* query,
+        uint32_t k,
+        uint32_t* result_ids,
+        float* distances,
+        detail::SearchScratchView scratch,
+        PID hint,
+        const float* k1xsumq
+    );
 
-    float quantized_distance(const QuantizedQuery&, PID) const;
+    float point_distance(
+        const float* raw_query, const QuantizedQuery* quantized_query, PID internal_id
+    ) const;
 
-    void reconstruct_quantized_vector(PID, float*) const;
+    float quantized_distance(const QuantizedQuery& query, PID internal_id) const;
 
-    [[nodiscard]] char* get_batch_data(PID data_id) {
-        return get_row_data(data_id) + batch_data_offset_;
+    void reconstruct_quantized_vector(PID internal_id, float* reconstructed) const;
+
+    [[nodiscard]] char* get_batch_data(PID internal_id) {
+        return get_row_data(internal_id) + batch_data_offset_;
     }
 
-    [[nodiscard]] const char* get_batch_data(PID data_id) const {
-        return get_row_data(data_id) + batch_data_offset_;
+    [[nodiscard]] const char* get_batch_data(PID internal_id) const {
+        return get_row_data(internal_id) + batch_data_offset_;
     }
 
-    [[nodiscard]] rabitqlib::detail::PackedArrayView<PID> get_neighbors(PID data_id) {
+    [[nodiscard]] rabitqlib::detail::PackedArrayView<PID> get_neighbors(PID internal_id) {
         return rabitqlib::detail::PackedArrayView<PID>(
-            get_row_data(data_id) + neighbor_offset_
+            get_row_data(internal_id) + neighbor_offset_
         );
     }
 
     [[nodiscard]] rabitqlib::detail::ConstPackedArrayView<PID> get_neighbors(
-        PID data_id
+        PID internal_id
     ) const {
         return rabitqlib::detail::ConstPackedArrayView<PID>(
-            get_row_data(data_id) + neighbor_offset_
+            get_row_data(internal_id) + neighbor_offset_
         );
     }
 
-    // Inputs are in this graph's rotated, padded domain. The centroid is the
-    // source vertex; data contains one vector per neighbor, in ID order.
+    // Inputs are in this graph's rotated, padded domain. rotated_source is the
+    // source vertex, used as the quantization centroid; rotated_data contains one
+    // vector per neighbor, in ID order.
     void encode_neighbors(
-        PID,
-        const std::vector<PID>&,
+        PID internal_id,
+        const std::vector<PID>& new_neighbors,
         const float* rotated_data,
-        const float* rotated_centroid
+        const float* rotated_source
     );
 
     void update_results(
-        buffer::SearchBuffer<float>&, VisitedSet&, const float*, const QuantizedQuery*
+        buffer::SearchBuffer<float>& result_pool,
+        VisitedSet& visited,
+        const float* query,
+        const QuantizedQuery* quantized_query
     );
 
     void scan_neighbors(
-        const BatchQuery<float>&,
-        PID,
-        float*,
-        buffer::SearchBuffer<float>&,
-        VisitedSet&,
-        size_t
+        const BatchQuery<float>& query_wrapper,
+        PID internal_id,
+        float* estimated_distances,
+        buffer::SearchBuffer<float>& search_pool,
+        VisitedSet& visited,
+        size_t num_neighbors
     ) const;
 
    public:
@@ -265,11 +283,11 @@ class QuantizedGraph<float> {
 
     void set_ep(PID entry);
 
-    void save(const char*) const;
+    void save(const char* filename) const;
 
-    void load(const char*);
+    void load(const char* filename);
 
-    void set_ef(size_t);
+    void set_ef(size_t ef_search);
 
     void search(
         const float* __restrict__ query,
@@ -314,11 +332,11 @@ class QuantizedGraph<float> {
      * Reuses scratch and can use a previous result as a warm-start hint.
      * BatchQuery may allocate LUT storage on its first use or when its shape changes;
      * this is not the stable core v1 zero-allocation interface. Search and result
-     * buffers must be sized for ef_search and k respectively. rotated_query_scratch and
-     * lut_float_scratch need D and 4 * D floats, where D is the graph's stored padded
+     * buffers must be sized for ef_search and k respectively. rotated_query and
+     * lookup_table need D and 4 * D floats, where D is the graph's stored padded
      * dimension; this advanced caller must already know D. dimension() is the original
-     * input dimension. est_dist_scratch needs degree_bound() floats. The visited set must
-     * be initialized before the first search; an uninitialized set raises
+     * input dimension. estimated_distances needs degree_bound() floats. The visited set
+     * must be initialized before the first search; an uninitialized set raises
      * std::invalid_argument. Concurrent searches require separate scratch
      * buffers, including visited sets.
      *
@@ -330,9 +348,9 @@ class QuantizedGraph<float> {
         uint32_t k,
         uint32_t* __restrict__ result_ids,
         float* __restrict__ distances,
-        float* __restrict__ rotated_query_scratch,
-        float* __restrict__ est_dist_scratch,
-        float* __restrict__ lut_float_scratch,
+        float* __restrict__ rotated_query,
+        float* __restrict__ estimated_distances,
+        float* __restrict__ lookup_table,
         BatchQuery<float>& batch_query,
         buffer::SearchBuffer<float>& search_pool,
         buffer::SearchBuffer<float>& result_pool,
@@ -341,7 +359,7 @@ class QuantizedGraph<float> {
         const float* k1xsumq = nullptr
     );
 
-    [[nodiscard]] size_t padded_dim() const { return this->padded_dim_; }
+    [[nodiscard]] size_t padded_dim() const { return padded_dim_; }
 };
 
 // Preserve C++17 deduction for callers that omit the float template argument.

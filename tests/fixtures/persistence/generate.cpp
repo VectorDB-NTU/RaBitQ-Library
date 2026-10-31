@@ -31,13 +31,16 @@ int main(int argc, char** argv) {
         return static_cast<float>(static_cast<int>((state >> 8) % 2001) - 1000) / 256.0F;
     };
     std::vector<float> data(kCount * kDim), queries(kQueries * kDim), centroid(kDim);
-    for (auto& value : data)
+    for (auto& value : data) {
         value = next();
-    for (auto& value : queries)
+    }
+    for (auto& value : queries) {
         value = next();
+    }
     for (size_t i = 0; i < kCount; ++i) {
-        for (size_t d = 0; d < kDim; ++d)
+        for (size_t d = 0; d < kDim; ++d) {
             centroid[d] += data[i * kDim + d] / kCount;
+        }
     }
     std::vector<PID> clusters(kCount, 0);
     for (auto metric : {METRIC_L2, METRIC_IP}) {
@@ -89,10 +92,12 @@ int main(int argc, char** argv) {
             expected.exceptions(std::ios::failbit | std::ios::badbit);
             expected << std::setprecision(std::numeric_limits<float>::max_digits10);
             expected << kCount << ' ' << kDim << ' ' << kQueries << ' ' << kTopK << '\n';
-            for (size_t i = 0; i < queries.size(); ++i)
+            for (size_t i = 0; i < queries.size(); ++i) {
                 expected << queries[i] << (i + 1 == queries.size() ? '\n' : ' ');
-            for (size_t i = 0; i < ids.size(); ++i)
+            }
+            for (size_t i = 0; i < ids.size(); ++i) {
                 expected << ids[i] << ' ' << distances[i] << '\n';
+            }
             expected.close();
         }
     }

@@ -116,8 +116,9 @@ void run(int argc, char** argv) {
         bench::product(rows, iterations),
         reps,
         [&] {
-            for (size_t i = 0; i < iterations; ++i)
+            for (size_t i = 0; i < iterations; ++i) {
                 encode(threads > 1);
+            }
         },
         checksum
     );

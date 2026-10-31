@@ -48,5 +48,5 @@ def test_constructor_contract(cls, args, kwargs, expected):
     ],
 )
 def test_invalid_metric_raises(cls, args):
-    with pytest.raises(ValueError, match=r"^Unsupported metric\. Use 'l2' or 'ip'\.$"):
+    with pytest.raises(ValueError, match=r"^metric must be 'l2' or 'ip'$"):
         cls(*args, metric="cosine")

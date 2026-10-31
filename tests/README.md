@@ -269,7 +269,7 @@ variants compile and execute the installed standalone core benchmark smoke tests
 CI covers both choices on its existing platform matrix; local results do not imply
 that remote jobs have already passed.
 
-The normal suite includes `CoreApi.*`, the frozen `CoreApiV1Consumer`, and separate
+The normal suite includes `CoreApiTest.*`, the frozen `CoreApiV1Consumer`, and separate
 `core_api_no_alloc_dispatch` / `core_api_no_alloc_scalar` processes. The latter force
 and count cold-call encoding, layout conversion, query preparation and estimation;
 Linux additionally wraps malloc/calloc/realloc/aligned allocation. The scalar process

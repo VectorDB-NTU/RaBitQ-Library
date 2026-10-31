@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace rabitqlib {
-enum ScalarQuantizerType : std::uint8_t { RECONSTRUCTION, UNBIASED_ESTIMATION, PLAIN };
+enum ScalarQuantizerType : uint8_t { RECONSTRUCTION, UNBIASED_ESTIMATION, PLAIN };
 enum class RotatorType : uint8_t { MatrixRotator, FhtKacRotator };
 
 namespace quant {

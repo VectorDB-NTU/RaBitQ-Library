@@ -22,7 +22,7 @@ rabitqlib::cpu::Features all_hardware_features() {
     };
 }
 
-TEST(CpuFeatures, ReturnsStableResult) {
+TEST(CpuFeaturesTest, ReturnsStableResult) {
     const auto& first = rabitqlib::cpu::features();
     const auto& second = rabitqlib::cpu::features();
 
@@ -34,7 +34,7 @@ TEST(CpuFeatures, ReturnsStableResult) {
 }
 
 // The emulated CI runs must fail instead of silently skipping optional backends.
-TEST(CpuFeatures, MatchesRequiredEmulatedCpu) {
+TEST(CpuFeaturesTest, MatchesRequiredEmulatedCpu) {
     const bool avx2 = rabitqlib::cpu::has_avx2();
     const bool avx512 = rabitqlib::cpu::has_avx512_core();
     const bool popcnt = rabitqlib::cpu::has_avx512_popcnt();
@@ -55,7 +55,7 @@ TEST(CpuFeatures, MatchesRequiredEmulatedCpu) {
     EXPECT_EQ(popcnt, require_avx512);
 }
 
-TEST(CpuFeatures, RequiresOsManagedAvxState) {
+TEST(CpuFeaturesTest, RequiresOsManagedAvxState) {
     constexpr uint64_t kAvxState = 0x6;
     const auto hardware = all_hardware_features();
 
@@ -77,7 +77,7 @@ TEST(CpuFeatures, RequiresOsManagedAvxState) {
     EXPECT_FALSE(usable.avx512f);
 }
 
-TEST(CpuFeatures, EnablesAvx2WithoutAvx512State) {
+TEST(CpuFeaturesTest, EnablesAvx2WithoutAvx512State) {
     constexpr uint64_t kAvxState = 0x6;
     const auto usable = rabitqlib::cpu::detail::filter_usable_features(
         all_hardware_features(), true, true, kAvxState
@@ -93,7 +93,7 @@ TEST(CpuFeatures, EnablesAvx2WithoutAvx512State) {
     EXPECT_FALSE(usable.avx512cd);
 }
 
-TEST(CpuFeatures, EnablesAvx512OnlyWithCompleteAvx512State) {
+TEST(CpuFeaturesTest, EnablesAvx512OnlyWithCompleteAvx512State) {
     constexpr uint64_t kAvx512State = 0xe6;
     const auto usable = rabitqlib::cpu::detail::filter_usable_features(
         all_hardware_features(), true, true, kAvx512State
@@ -124,7 +124,7 @@ TEST(CpuFeatures, EnablesAvx512OnlyWithCompleteAvx512State) {
     }
 }
 
-TEST(CpuFeatures, Avx512SelectionRequiresEveryCompilerEnabledFeature) {
+TEST(CpuFeaturesTest, Avx512SelectionRequiresEveryCompilerEnabledFeature) {
     using rabitqlib::cpu::Features;
     using rabitqlib::cpu::detail::supports_avx512_core;
     EXPECT_TRUE(supports_avx512_core(all_hardware_features()));
@@ -151,7 +151,7 @@ TEST(CpuFeatures, Avx512SelectionRequiresEveryCompilerEnabledFeature) {
 
 }  // namespace
 
-TEST(CpuFeatures, NativeArm64UsesNeonWithoutX86Features) {
+TEST(CpuFeaturesTest, NativeArm64UsesNeonWithoutX86Features) {
 #if defined(__aarch64__)
     EXPECT_TRUE(rabitqlib::cpu::has_neon());
     EXPECT_FALSE(rabitqlib::cpu::has_avx2());

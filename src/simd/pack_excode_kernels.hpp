@@ -13,11 +13,12 @@ namespace rabitqlib::simd::detail {
 namespace {
 
 template <size_t Bits>
-inline void pack_excode_tail_intrinsics(const uint8_t* raw, uint8_t* compact, size_t dim) {
+inline void pack_excode_tail_impl(const uint8_t* raw, uint8_t* compact, size_t dim) {
     static_assert(Bits == 2 || Bits == 3 || Bits == 5 || Bits == 6 || Bits == 7);
     assert(dim == 0 || dim == 32);
-    if (dim == 0)
+    if (dim == 0) {
         return;
+    }
     // A partial block is always 32 coordinates.
     const __m128i pair_weights =
         _mm_set1_epi16(static_cast<int16_t>(1U | (1U << (Bits + 8))));
@@ -95,10 +96,8 @@ inline uint64_t pack_excode_high_bit(const uint8_t* raw) {
     );
 }
 
-template <auto pack_tail = pack_excode_tail_intrinsics<2>>
-inline void packing_2bit_excode_intrinsics(
-    const uint8_t* o_raw, uint8_t* o_compact, size_t dim
-) {
+template <auto PackTail = pack_excode_tail_impl<2>>
+inline void packing_2bit_excode_impl(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     // Full blocks preserve the existing byte layout.
     for (size_t j = 0; j < dim - dim % 64; j += 64) {
         // pack 64 2-bit codes into 128 bits (16 bytes)
@@ -121,12 +120,10 @@ inline void packing_2bit_excode_intrinsics(
         o_raw += 64;
         o_compact += 16;
     }
-    pack_tail(o_raw, o_compact, dim % 64);
+    PackTail(o_raw, o_compact, dim % 64);
 }
 
-inline void packing_3bit_excode_intrinsics(
-    const uint8_t* o_raw, uint8_t* o_compact, size_t dim
-) {
+inline void packing_3bit_excode_impl(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     // Full blocks preserve the existing byte layout.
     const __m128i mask = _mm_set1_epi8(0b11);
     for (size_t d = 0; d < dim - dim % 64; d += 64) {
@@ -162,7 +159,7 @@ inline void packing_3bit_excode_intrinsics(
         o_raw += 64;
         o_compact += 8;
     }
-    pack_excode_tail_intrinsics<3>(o_raw, o_compact, dim % 64);
+    pack_excode_tail_impl<3>(o_raw, o_compact, dim % 64);
 }
 
 // Each 16-coordinate group stores the first eight codes in the low nibbles
@@ -205,37 +202,33 @@ inline void pack_4bit_block(const uint8_t* raw, uint8_t* compact) {
 }
 
 template <size_t BlockDim>
-inline void packing_4bit_excode_intrinsics(
-    const uint8_t* raw, uint8_t* compact, size_t dim
-) {
+inline void packing_4bit_excode_impl(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     static_assert(BlockDim == 64 || BlockDim == 128);
     for (; dim >= BlockDim; dim -= BlockDim) {
-        pack_4bit_block<BlockDim>(raw, compact);
-        raw += BlockDim;
-        compact += BlockDim / 2;
+        pack_4bit_block<BlockDim>(o_raw, o_compact);
+        o_raw += BlockDim;
+        o_compact += BlockDim / 2;
     }
     if constexpr (BlockDim == 128) {
         if (dim >= 64) {
-            pack_4bit_block<64>(raw, compact);
-            raw += 64;
-            compact += 32;
+            pack_4bit_block<64>(o_raw, o_compact);
+            o_raw += 64;
+            o_compact += 32;
             dim -= 64;
         }
     }
     if (dim >= 32) {
-        pack_4bit_block<32>(raw, compact);
-        raw += 32;
-        compact += 16;
+        pack_4bit_block<32>(o_raw, o_compact);
+        o_raw += 32;
+        o_compact += 16;
         dim -= 32;
     }
     if (dim != 0) {
-        pack_4bit_block<16>(raw, compact);
+        pack_4bit_block<16>(o_raw, o_compact);
     }
 }
 
-inline void packing_5bit_excode_intrinsics(
-    const uint8_t* o_raw, uint8_t* o_compact, size_t dim
-) {
+inline void packing_5bit_excode_impl(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     // Full blocks preserve the existing byte layout.
     const __m128i mask = _mm_set1_epi8(0b1111);
     for (size_t j = 0; j < dim - dim % 64; j += 64) {
@@ -268,13 +261,11 @@ inline void packing_5bit_excode_intrinsics(
         o_raw += 64;
         o_compact += 8;
     }
-    pack_excode_tail_intrinsics<5>(o_raw, o_compact, dim % 64);
+    pack_excode_tail_impl<5>(o_raw, o_compact, dim % 64);
 }
 
-template <auto pack_tail = pack_excode_tail_intrinsics<6>>
-inline void packing_6bit_excode_intrinsics(
-    const uint8_t* o_raw, uint8_t* o_compact, size_t dim
-) {
+template <auto PackTail = pack_excode_tail_impl<6>>
+inline void packing_6bit_excode_impl(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     // for vec00 to vec47, split code into 6
     // for vec48 to vec63, split code into 2 + 2 + 2
     // Complementary masks let AVX512 fuse each bit selection into one instruction.
@@ -308,12 +299,10 @@ inline void packing_6bit_excode_intrinsics(
         o_compact += 48;
         o_raw += 64;
     }
-    pack_tail(o_raw, o_compact, dim % 64);
+    PackTail(o_raw, o_compact, dim % 64);
 }
 
-inline void packing_7bit_excode_intrinsics(
-    const uint8_t* o_raw, uint8_t* o_compact, size_t dim
-) {
+inline void packing_7bit_excode_impl(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
     // for vec00 to vec47, split code into 6 + 1
     // for vec48 to vec63, split code into 2 + 2 + 2 + 1
     const __m128i mask2 = _mm_set1_epi8(static_cast<char>(0b11000000));
@@ -352,7 +341,7 @@ inline void packing_7bit_excode_intrinsics(
         o_compact += 8;
         o_raw += 64;
     }
-    pack_excode_tail_intrinsics<7>(o_raw, o_compact, dim % 64);
+    pack_excode_tail_impl<7>(o_raw, o_compact, dim % 64);
 }
 
 }  // namespace

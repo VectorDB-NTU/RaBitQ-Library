@@ -33,7 +33,7 @@ class HnswIndex {
         size_t random_seed
     )
         : index_(
-              std::make_unique<rabitqlib::hnsw::HierarchicalNSW>(
+              std::make_unique<hnsw::HierarchicalNSW>(
                   max_elements,
                   dim,
                   nbits,
@@ -100,7 +100,7 @@ class HnswIndex {
         built_ = true;
     }
 
-    py::array_t<rabitqlib::PID> add(
+    py::array_t<PID> add(
         py::handle data,
         const py::object& cluster_ids,
         size_t num_threads,
@@ -116,13 +116,13 @@ class HnswIndex {
         );
         const auto rows = static_cast<size_t>(data_array.shape(0));
 
-        std::vector<rabitqlib::PID> assigned;
+        std::vector<PID> assigned;
         if (!cluster_ids.is_none()) {
             assigned = checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
         }
 
         // Allocated before the index is touched.
-        auto ids = py::array_t<rabitqlib::PID>(static_cast<py::ssize_t>(rows));
+        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
         const auto* data_ptr = data_array.data();
         const auto labels = [&] {
             py::gil_scoped_release release;
@@ -191,7 +191,7 @@ class HnswIndex {
 
         const auto* queries_data = query_array.data();
         const auto num_queries = static_cast<size_t>(query_array.shape(0));
-        std::vector<std::vector<std::pair<float, rabitqlib::PID>>> results;
+        std::vector<std::vector<std::pair<float, PID>>> results;
         {
             py::gil_scoped_release release;
             results = index_->search(queries_data, num_queries, k, ef, num_threads);
@@ -224,7 +224,7 @@ class HnswIndex {
     static HnswIndex load(py::handle path) {
         const auto filename = path_string(path);
         HnswIndex wrapper;
-        wrapper.index_ = std::make_unique<rabitqlib::hnsw::HierarchicalNSW>();
+        wrapper.index_ = std::make_unique<hnsw::HierarchicalNSW>();
         {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
@@ -274,9 +274,11 @@ class HnswIndex {
    private:
     HnswIndex() = default;
 
+    // The public constructor creates index_; built_ is set only by a successful
+    // build or load.
     bool built_ = false;
     mutable IndexAccess access_;
-    std::unique_ptr<rabitqlib::hnsw::HierarchicalNSW> index_;
+    std::unique_ptr<hnsw::HierarchicalNSW> index_;
 };
 
 }  // namespace rabitqlib::python_bindings

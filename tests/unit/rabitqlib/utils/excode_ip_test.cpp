@@ -12,7 +12,7 @@
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
 
-TEST(ExcodeIp, BackendsMatchScalarAcrossWidthsAndBlockBoundaries) {
+TEST(ExcodeIpTest, BackendsMatchScalarAcrossWidthsAndBlockBoundaries) {
     using namespace rabitqlib;
 
     const std::array<ex_ipfunc, 7> wrappers{

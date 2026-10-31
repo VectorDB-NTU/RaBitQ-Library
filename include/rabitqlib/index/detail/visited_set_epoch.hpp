@@ -23,11 +23,11 @@ class EpochBasedVisitedSet {
     EpochBasedVisitedSet(EpochBasedVisitedSet&&) noexcept = default;
     EpochBasedVisitedSet& operator=(EpochBasedVisitedSet&&) noexcept = default;
 
-    explicit EpochBasedVisitedSet(size_t num_elements, size_t = 0) {
+    explicit EpochBasedVisitedSet(size_t num_elements, size_t /*size_hint*/ = 0) {
         initialize(num_elements);
     }
 
-    void initialize(size_t num_elements, size_t = 0) {
+    void initialize(size_t num_elements, size_t /*size_hint*/ = 0) {
         stamp_.assign(num_elements, 0);
         cur_ = 0;
         clear();
@@ -40,8 +40,8 @@ class EpochBasedVisitedSet {
         }
     }
 
-    [[nodiscard]] bool get(PID data_id) const { return stamp_[data_id] == cur_; }
+    [[nodiscard]] bool get(PID internal_id) const { return stamp_[internal_id] == cur_; }
 
-    void set(PID data_id) { stamp_[data_id] = cur_; }
+    void set(PID internal_id) { stamp_[internal_id] = cur_; }
 };
 }  // namespace rabitqlib

@@ -39,7 +39,7 @@ void pack_6bit_tail(const uint8_t* raw, uint8_t* compact, size_t dim) {
 }  // namespace
 
 void packing_2bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
-    detail::packing_2bit_excode_intrinsics<pack_2bit_tail>(o_raw, o_compact, dim);
+    detail::packing_2bit_excode_impl<pack_2bit_tail>(o_raw, o_compact, dim);
 }
 
 // Reuse the AVX2 odd-width packers: wider code generation adds overhead here.
@@ -48,7 +48,7 @@ void packing_3bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t
 }
 
 void packing_4bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
-    detail::packing_4bit_excode_intrinsics<128>(o_raw, o_compact, dim);
+    detail::packing_4bit_excode_impl<128>(o_raw, o_compact, dim);
 }
 
 void packing_5bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
@@ -56,7 +56,7 @@ void packing_5bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t
 }
 
 void packing_6bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {
-    detail::packing_6bit_excode_intrinsics<pack_6bit_tail>(o_raw, o_compact, dim);
+    detail::packing_6bit_excode_impl<pack_6bit_tail>(o_raw, o_compact, dim);
 }
 
 void packing_7bit_excode_avx512(const uint8_t* o_raw, uint8_t* o_compact, size_t dim) {

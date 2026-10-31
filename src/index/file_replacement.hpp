@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <initializer_list>
 #include <random>
@@ -37,15 +38,13 @@ inline void copy_permissions(const std::string& existing, const std::string& rep
     );
 }
 
-/**
- * Save through a temporary sibling that replaces `filename` only after `write` succeeds,
- * so a failed save leaves any existing file unchanged and removes what it wrote.
- * A replaced file keeps its permission bits, but not its owner or other hard links.
- *
- * `write(path)` writes the main file at `path` and each sidecar at `path + suffix`.
- * Sidecars are renamed into place before the main file. If any destination exists but
- * is not a regular file, every file is written in place instead, as before.
- */
+// Save through a temporary sibling that replaces `filename` only after `write` succeeds,
+// so a failed save leaves any existing file unchanged and removes what it wrote.
+// A replaced file keeps its permission bits, but not its owner or other hard links.
+//
+// `write(path)` writes the main file at `path` and each sidecar at `path + suffix`.
+// Sidecars are renamed into place before the main file. If any destination exists but
+// is not a regular file, every file is written in place instead, as before.
 template <class Write>
 void save_replacing(
     const std::string& filename,
@@ -63,8 +62,7 @@ void save_replacing(
 
     // A random name keeps concurrent saves to one destination from sharing a temporary.
     std::random_device random;
-    const unsigned long long token =
-        (static_cast<unsigned long long>(random()) << 32U) ^ random();
+    const uint64_t token = (static_cast<uint64_t>(random()) << 32U) ^ random();
     const std::string temporary = filename + ".tmp" + std::to_string(token);
     try {
         write(temporary);

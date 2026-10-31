@@ -11,7 +11,7 @@ namespace rabitqlib::simd {
 namespace {
 uint32_t candidate_mask_impl(const float* distances, float threshold) {
     uint32_t mask = 0;
-    for (size_t lane = 0; lane < 32; ++lane) {
+    for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
         mask |= static_cast<uint32_t>(!(distances[lane] > threshold)) << lane;
     }
     return mask;

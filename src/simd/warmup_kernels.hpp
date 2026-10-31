@@ -9,12 +9,12 @@
 #include "rabitqlib/utils/bitops.hpp"
 
 namespace rabitqlib::simd::detail {
-
-// Keep ISA-specific instantiations local to each backend translation unit.
+// Internal linkage: backends compiled with different ISA flags keep their own bodies.
+namespace {
 
 // A partial 512-coordinate block contains at most eight words per query plane.
 // Scalar POPCNT avoids staging/zeroing two full vectors for each short plane.
-static inline void accumulate_warmup_tail(
+inline void accumulate_warmup_tail(
     const uint8_t* data,
     const uint64_t* query,
     size_t dim,
@@ -43,7 +43,7 @@ static inline void accumulate_warmup_tail(
     }
 }
 
-static inline __m256i popcount_avx2(__m256i v) {
+inline __m256i popcount_avx2(__m256i v) {
     // Lookup table for population count of 0-15
     const __m256i lookup = _mm256_broadcastsi128_si256(
         _mm_setr_epi8(0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4)
@@ -66,7 +66,7 @@ static inline __m256i popcount_avx2(__m256i v) {
 }
 
 template <size_t MaxQueryBits>
-static inline float warmup_blocks_avx2(
+inline float warmup_blocks_avx2(
     const uint8_t* data,
     const uint64_t* query,
     float delta,
@@ -140,7 +140,7 @@ static inline float warmup_blocks_avx2(
 
 #if defined(__AVX512F__) || defined(_MSC_VER)
 template <size_t MaxQueryBits>
-static inline float warmup_blocks_avx512(
+inline float warmup_blocks_avx512(
     const uint8_t* data,
     const uint64_t* query,
     float delta,
@@ -177,7 +177,7 @@ static inline float warmup_blocks_avx512(
     size_t remaining_dim = padded_dim - i;
     if (remaining_dim > 0) {
         const size_t num_chunks = (remaining_dim + 63) / 64;
-        const auto valid_mask = static_cast<__mmask8>((1u << num_chunks) - 1u);
+        const auto valid_mask = static_cast<__mmask8>((1U << num_chunks) - 1U);
         // Byte masking zero-extends the partial last word without staging short
         // stores through a stack buffer. The query planes already use whole words.
         const __m512i data_vec =
@@ -205,4 +205,5 @@ static inline float warmup_blocks_avx512(
 }
 #endif
 
+}  // namespace
 }  // namespace rabitqlib::simd::detail

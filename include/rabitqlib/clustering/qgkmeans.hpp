@@ -32,22 +32,20 @@ using QGKMeansIterationStats = clustering::KMeansIterationStats;
 
 namespace detail {
 
-using clustering::detail::exact_assign;
-using clustering::detail::should_terminate_by_objective;
 class QGAssignment;
 
 }  // namespace detail
 
 struct QGKMeansParameters {
-    /// Number of clustering iterations.
+    // Number of clustering iterations.
     size_t niter = 25;
     bool verbose = false;
-    /// Normalize centroids after each update.
+    // Normalize centroids after each update.
     bool spherical = false;
     uint32_t seed = 42;
-    /// Warn below this number of training vectors per centroid.
+    // Warn below this number of training vectors per centroid.
     size_t min_points_per_centroid = 39;
-    /// Stop when the absolute relative objective (WCSS) change is at most this value.
+    // Stop when the absolute relative objective (WCSS) change is at most this value.
     double early_stop_threshold = 0.0;
     FinalAssignmentMode final_assignment = FinalAssignmentMode::Approximate;
 
@@ -55,10 +53,10 @@ struct QGKMeansParameters {
     uint32_t graph_degree = 32;
     uint32_t ef_build = 240;
     uint32_t ef_search = 16;
-    /// Graph-building passes after PiPNN initialization; the last refines the graph.
+    // Graph-building passes after PiPNN initialization; the last refines the graph.
     uint32_t graph_build_iterations = 1;
     uint32_t num_threads = 0;
-    /// Centroid storage in QG: 0 for raw float32, or 4/8-bit RaBitQ.
+    // Centroid storage in QG: 0 for raw float32, or 4/8-bit RaBitQ.
     uint32_t quantization_bits = 0;
 };
 
@@ -132,10 +130,10 @@ class QGAssigner {
     QGAssigner(
         size_t d,
         size_t k,
-        uint32_t M,
-        uint32_t ef_construction,
+        uint32_t graph_degree,
+        uint32_t ef_build,
         uint32_t ef_search,
-        uint32_t niter,
+        uint32_t graph_build_iterations,
         uint32_t num_threads = 0,
         uint32_t seed = 42,
         MetricType metric_type = METRIC_L2,
@@ -143,19 +141,18 @@ class QGAssigner {
     )
         : dim_(d)
         , num_clusters_(k)
-        , max_degree_(M)
-        , ef_construction_(ef_construction)
+        , graph_degree_(graph_degree)
+        , ef_build_(ef_build)
         , ef_search_(ef_search)
-        , niter_(niter)
-        , num_workers_(num_threads)
+        , graph_build_iterations_(graph_build_iterations)
         , seed_(seed) {
-        validate_configuration();
-        num_workers_ = static_cast<uint32_t>(resolve_num_threads(num_workers_));
+        validate_configuration(num_threads);
+        num_workers_ = static_cast<uint32_t>(resolve_num_threads(num_threads));
 
         graph_ = std::make_unique<symqg::QuantizedGraph<float>>(
             num_clusters_,
             dim_,
-            max_degree_,
+            graph_degree_,
             metric_type,
             RotatorType::FhtKacRotator,
             quantization_bits,
@@ -167,7 +164,7 @@ class QGAssigner {
         for (uint32_t thread = 0; thread < num_workers_; ++thread) {
             scratch_.emplace_back(
                 std::make_unique<symqg::detail::SearchScratch>(
-                    graph_->padded_dim(), max_degree_, ef_search_, 1
+                    graph_->padded_dim(), graph_degree_, ef_search_, 1
                 )
             );
         }
@@ -179,16 +176,16 @@ class QGAssigner {
         const float* centroids,
         const float* x,
         size_t n,
-        PID* labels,
+        PID* assignments,
         float* distances,
         float* query_sums = nullptr,
         bool sums_ready = false
     ) {
         detail::QuerySumCache cache(query_sums, sums_ready);
-        assign_with_cache(centroids, x, n, labels, distances, cache);
+        assign_with_cache(centroids, x, n, assignments, distances, cache);
     }
 
-    void clear_hints() { previous_labels_.clear(); }
+    void clear_hints() { previous_assignments_.clear(); }
 
    private:
     void rebuild_centroid_graph(const float* centroids) {
@@ -204,7 +201,7 @@ class QGAssigner {
             );
             builder_ = std::make_unique<symqg::QGBuilder>(
                 *graph_,
-                ef_construction_,
+                ef_build_,
                 centroids,
                 build_threads,
                 symqg::QGInitialization::PiPNN,
@@ -212,10 +209,10 @@ class QGAssigner {
                 true
             );
         }
-        if (niter_ == 1) {
+        if (graph_build_iterations_ == 1) {
             builder_->build();
         } else {
-            builder_->build(niter_);
+            builder_->build(graph_build_iterations_);
         }
     }
 
@@ -223,11 +220,11 @@ class QGAssigner {
         const float* centroids,
         const float* x,
         size_t n,
-        PID* labels,
+        PID* assignments,
         float* distances,
         detail::QuerySumCache& query_sums
     ) {
-        if (centroids == nullptr || x == nullptr || labels == nullptr ||
+        if (centroids == nullptr || x == nullptr || assignments == nullptr ||
             distances == nullptr) {
             throw std::invalid_argument(
                 "QGAssigner input and output pointers must not be null"
@@ -245,25 +242,24 @@ class QGAssigner {
 
         // Stable grouping changes only the order of independent full searches.
         std::vector<uint32_t> query_order;
-        if (previous_labels_.size() == n && n <= std::numeric_limits<uint32_t>::max()) {
+        if (previous_assignments_.size() == n &&
+            n <= std::numeric_limits<uint32_t>::max()) {
             query_order.resize(n);
             std::vector<size_t> offsets(num_clusters_ + 1, 0);
-            for (PID label : previous_labels_) {
-                ++offsets[label + 1];
+            for (PID cluster_id : previous_assignments_) {
+                ++offsets[cluster_id + 1];
             }
             std::partial_sum(offsets.begin(), offsets.end(), offsets.begin());
             for (size_t point = 0; point < n; ++point) {
-                query_order[offsets[previous_labels_[point]]++] =
+                query_order[offsets[previous_assignments_[point]]++] =
                     static_cast<uint32_t>(point);
             }
         }
         index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(dynamic, 64)
-        for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n);
-             ++loop_index) {
-            const size_t i = query_order.empty()
-                                 ? static_cast<size_t>(loop_index)
-                                 : query_order[static_cast<size_t>(loop_index)];
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n); ++index) {
+            const size_t i = query_order.empty() ? static_cast<size_t>(index)
+                                                 : query_order[static_cast<size_t>(index)];
             const int thread_id = omp_get_thread_num();
             if (failure.failed()) {
                 continue;
@@ -283,12 +279,12 @@ class QGAssigner {
                     visited_capacity = capacity;
                 }
                 const PID hint =
-                    previous_labels_.size() == n ? previous_labels_[i] : kPidMax;
+                    previous_assignments_.size() == n ? previous_assignments_[i] : kPidMax;
                 symqg::detail::search_with_workspace(
                     *graph_,
                     x + i * dim_,
                     1,
-                    labels + i,
+                    assignments + i,
                     distances + i,
                     scratch.view(visited),
                     hint,
@@ -298,20 +294,21 @@ class QGAssigner {
                 if (graph_->is_quantized()) {
                     // Keep objectives and returned distances relative to the original
                     // centroids; graph search scores are quantized estimates.
-                    distances[i] =
-                        distance_func(x + i * dim_, centroids + labels[i] * dim_, dim_);
+                    distances[i] = distance_func(
+                        x + i * dim_, centroids + assignments[i] * dim_, dim_
+                    );
                 }
             } catch (...) { failure.capture(); }
         }
 
         failure.rethrow();
 
-        previous_labels_.assign(labels, labels + n);
+        previous_assignments_.assign(assignments, assignments + n);
         query_sums.complete();
     }
 
-    void validate_configuration() const {
-        if (num_workers_ > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+    void validate_configuration(uint32_t num_threads) const {
+        if (num_threads > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
             throw std::invalid_argument("QGAssigner num_threads must fit in an OpenMP int");
         }
         if (dim_ < 64 || dim_ > rotator_impl::FhtKacRotator::kMaxDim) {
@@ -319,36 +316,36 @@ class QGAssigner {
                 "QGKMeans currently requires dimensions in the range [64, 65536]"
             );
         }
-        if (max_degree_ == 0 || max_degree_ % fastscan::kBatchSize != 0) {
+        if (graph_degree_ == 0 || graph_degree_ % fastscan::kBatchSize != 0) {
             throw std::invalid_argument(
                 "QGKMeans graph degree must be a positive multiple of 32"
             );
         }
-        if (num_clusters_ <= max_degree_) {
+        if (num_clusters_ <= graph_degree_) {
             throw std::invalid_argument(
                 "QGKMeans requires more centroids than the graph degree"
             );
         }
-        if (ef_construction_ == 0 || ef_search_ == 0) {
+        if (ef_build_ == 0 || ef_search_ == 0) {
             throw std::invalid_argument("QGKMeans ef_build and ef_search must be positive");
         }
-        if (niter_ == 0) {
+        if (graph_build_iterations_ == 0) {
             throw std::invalid_argument("QGKMeans graph_build_iterations must be positive");
         }
     }
 
     size_t dim_;
     size_t num_clusters_;
-    uint32_t max_degree_;
-    uint32_t ef_construction_;
+    uint32_t graph_degree_;
+    uint32_t ef_build_;
     uint32_t ef_search_;
-    uint32_t niter_;
-    uint32_t num_workers_;
+    uint32_t graph_build_iterations_;
+    uint32_t num_workers_ = 0;
     uint32_t seed_;
     std::unique_ptr<symqg::QuantizedGraph<float>> graph_;
     std::unique_ptr<symqg::QGBuilder> builder_;
     std::vector<std::unique_ptr<symqg::detail::SearchScratch>> scratch_;
-    std::vector<PID> previous_labels_;
+    std::vector<PID> previous_assignments_;
 };
 
 namespace detail {
@@ -379,13 +376,13 @@ class QGAssignment {
         size_t k,
         const float* x,
         size_t n,
-        uint32_t num_threads,
+        uint32_t num_workers,
         const QGKMeansParameters& cp
     )
         : dim_(d)
         , data_(x)
         , num_points_(n)
-        , num_workers_(num_threads)
+        , num_workers_(num_workers)
         , metric_type_(cp.spherical ? METRIC_IP : METRIC_L2)
         , quantized_(cp.quantization_bits != 0)
         , assigner_(
@@ -402,16 +399,18 @@ class QGAssignment {
           )
         , query_sums_(assigner_.graph_->padded_dim(), cp) {}
 
-    void assign(const float* centroids, PID* labels, float* distances, bool final = false) {
+    void assign(
+        const float* centroids, PID* assignments, float* distances, bool final = false
+    ) {
         query_sums_.prepare(num_points_);
-        std::vector<PID> previous_labels;
+        std::vector<PID> previous_assignments;
         if (final && quantized_) {
-            previous_labels.assign(labels, labels + num_points_);
+            previous_assignments.assign(assignments, assignments + num_points_);
         }
         assigner_.assign_with_cache(
-            centroids, data_, num_points_, labels, distances, query_sums_
+            centroids, data_, num_points_, assignments, distances, query_sums_
         );
-        if (previous_labels.empty()) {
+        if (previous_assignments.empty()) {
             return;
         }
 
@@ -420,18 +419,17 @@ class QGAssignment {
         const auto distance_func =
             metric_type_ == METRIC_IP ? dot_product_dis<float> : euclidean_sqr<float>;
 #pragma omp parallel for num_threads(num_workers_) schedule(static)
-        for (std::ptrdiff_t loop_index = 0;
-             loop_index < static_cast<std::ptrdiff_t>(num_points_);
-             ++loop_index) {
-            const size_t point = static_cast<size_t>(loop_index);
-            const PID previous = previous_labels[point];
-            if (previous == labels[point]) {
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_points_);
+             ++index) {
+            const size_t point = static_cast<size_t>(index);
+            const PID previous = previous_assignments[point];
+            if (previous == assignments[point]) {
                 continue;
             }
             const float distance =
                 distance_func(data_ + point * dim_, centroids + previous * dim_, dim_);
             if (distance < distances[point]) {
-                labels[point] = previous;
+                assignments[point] = previous;
                 distances[point] = distance;
             }
         }

@@ -69,7 +69,7 @@ constexpr T round_up_to_multiple_of(size_t x, size_t multiple_of) {
 inline size_t floor_log2(size_t x) {
     size_t ret = 0;
     while (x > 1) {
-        ret++;
+        ++ret;
         x >>= 1;
     }
     return ret;

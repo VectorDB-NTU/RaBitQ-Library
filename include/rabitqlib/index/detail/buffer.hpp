@@ -15,16 +15,18 @@ inline constexpr PID kSearchBufferCheckedMask = PID{1}
                                                 << (std::numeric_limits<PID>::digits - 1);
 inline constexpr size_t kSearchBufferMaxPointCount =
     static_cast<size_t>(kSearchBufferCheckedMask);
-/**
- * @brief sorted linear buffer, used as beam set for graph-based ANN search. In symphonyqg,
- * the search buffer may contain duplicate id with different distances
- *
- */
+
+// Sorted linear buffer, used as the beam set for graph-based ANN search. In SymphonyQG,
+// the search buffer may contain duplicate IDs with different distances.
 template <typename T = float>
 class SearchBuffer {
    private:
-    std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>> data_;
-    size_t size_ = 0, cur_ = 0, capacity_ = 0;
+    using Storage = std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>;
+
+    Storage data_;
+    size_t size_ = 0;
+    size_t cur_ = 0;
+    size_t capacity_ = 0;
 
     [[nodiscard]] static size_t storage_size(size_t capacity) {
         if (capacity == std::numeric_limits<size_t>::max()) {
@@ -33,23 +35,22 @@ class SearchBuffer {
         return capacity + 1;
     }
 
-    [[nodiscard]] auto binary_search(T dist) const {
+    [[nodiscard]] size_t binary_search(T dist) const {
         size_t lo = 0;
         size_t len = size_;
-        size_t half;
         while (len > 1) {
-            half = len >> 1;
+            const size_t half = len >> 1;
             len -= half;
             lo += static_cast<size_t>(data_[lo + half - 1].distance < dist) * half;
         }
         return (lo < size_ && data_[lo].distance < dist) ? lo + 1 : lo;
     }
 
-    // set top bit to 1 as checked
-    static void set_checked(PID& data_id) { data_id |= kSearchBufferCheckedMask; }
+    // Mark a candidate as checked by setting the ID's top bit.
+    static void set_checked(PID& internal_id) { internal_id |= kSearchBufferCheckedMask; }
 
-    [[nodiscard]] static auto is_checked(PID data_id) -> bool {
-        return (data_id & kSearchBufferCheckedMask) != 0;
+    [[nodiscard]] static bool is_checked(PID internal_id) {
+        return (internal_id & kSearchBufferCheckedMask) != 0;
     }
 
    public:
@@ -58,28 +59,28 @@ class SearchBuffer {
     explicit SearchBuffer(size_t capacity)
         : data_(storage_size(capacity)), capacity_(capacity) {}
 
-    // insert a data point into buffer
-    void insert(PID data_id, T dist) {
+    // Insert a data point into the buffer.
+    void insert(PID internal_id, T dist) {
         if (is_full(dist)) {
             return;
         }
 
         size_t lo = binary_search(dist);
         std::memmove(&data_[lo + 1], &data_[lo], (size_ - lo) * sizeof(AnnCandidate<T>));
-        data_[lo] = AnnCandidate<T>(data_id, dist);
+        data_[lo] = AnnCandidate<T>(internal_id, dist);
         size_ += static_cast<size_t>(size_ < capacity_);
         cur_ = lo < cur_ ? lo : cur_;
     }
 
-    // get unchecked candidate with minimum distance
+    // Get the unchecked candidate with the minimum distance.
     PID pop() {
-        PID cur_id = data_[cur_].id;
+        const PID internal_id = data_[cur_].id;
         set_checked(data_[cur_].id);
         ++cur_;
         while (cur_ < size_ && is_checked(data_[cur_].id)) {
             ++cur_;
         }
-        return cur_id;
+        return internal_id;
     }
 
     void clear() {
@@ -87,15 +88,13 @@ class SearchBuffer {
         cur_ = 0;
     }
 
-    // return candidate id for next pop()
-    [[nodiscard]] auto next_id() const { return data_[cur_].id; }
+    // Return the candidate ID for the next pop().
+    [[nodiscard]] PID next_id() const { return data_[cur_].id; }
 
-    [[nodiscard]] auto has_next() const -> bool { return cur_ < size_; }
+    [[nodiscard]] bool has_next() const { return cur_ < size_; }
 
     void resize(size_t new_size) {
-        data_ = std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>(
-            storage_size(new_size)
-        );
+        data_ = Storage(storage_size(new_size));
         capacity_ = new_size;
         clear();
     }
@@ -115,22 +114,18 @@ class SearchBuffer {
         }
     }
 
-    T top_dist() const {
+    [[nodiscard]] T top_dist() const {
         if (capacity_ == 0) {
             return std::numeric_limits<T>::lowest();
         }
         return is_full() ? data_[size_ - 1].distance : std::numeric_limits<T>::max();
     }
 
-    [[nodiscard]] auto is_full() const -> bool { return size_ == capacity_; }
+    [[nodiscard]] bool is_full() const { return size_ == capacity_; }
 
-    // judge if dist can be inserted into buffer
-    [[nodiscard]] auto is_full(T dist) const -> bool {
-        return capacity_ == 0 || dist > top_dist();
-    }
+    // Return whether dist cannot be inserted into the buffer.
+    [[nodiscard]] bool is_full(T dist) const { return capacity_ == 0 || dist > top_dist(); }
 
-    const std::vector<AnnCandidate<T>, memory::AlignedAllocator<AnnCandidate<T>>>& data() {
-        return data_;
-    }
+    [[nodiscard]] const Storage& data() const { return data_; }
 };
 }  // namespace rabitqlib::buffer

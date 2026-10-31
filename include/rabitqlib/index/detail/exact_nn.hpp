@@ -38,22 +38,22 @@ inline PID exact_nn(
 #else
         constexpr int tid = 0;
 #endif
-        AnnCandidate<T, PID>& cur_entry = best_entries[tid];
-        const T* cur_data = data + (dim * i);
+        AnnCandidate<T, PID>& best_entry = best_entries[tid];
+        const T* point = data + (dim * i);
 
-        T distance = dist_func(cur_data, query, dim);
-        if (distance < cur_entry.distance) {
-            cur_entry.id = static_cast<PID>(i);
-            cur_entry.distance = distance;
+        T distance = dist_func(point, query, dim);
+        if (distance < best_entry.distance) {
+            best_entry.id = static_cast<PID>(i);
+            best_entry.distance = distance;
         }
     }
 
     PID nearest_neighbor = 0;
     T min_dist = std::numeric_limits<T>::max();
-    for (auto& candi : best_entries) {
-        if (candi.distance < min_dist) {
-            nearest_neighbor = candi.id;
-            min_dist = candi.distance;
+    for (const auto& entry : best_entries) {
+        if (entry.distance < min_dist) {
+            nearest_neighbor = entry.id;
+            min_dist = entry.distance;
         }
     }
     return nearest_neighbor;

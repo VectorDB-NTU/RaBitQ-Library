@@ -68,13 +68,13 @@ int run(int argc, char** argv) {
     const size_t count = argc == 1 ? 4096 : number(argv[3]);
     const size_t queries = argc == 1 ? 64 : number(argv[4]);
     const size_t repeats = argc == 1 ? 5 : number(argv[5]);
-    constexpr size_t k = 10;
+    constexpr size_t kTopK = 10;
     if (dim < 64 || dim % 32 != 0) {
         throw std::invalid_argument(
             "This FHT/Kac benchmark requires dim >= 64 and divisible by 32"
         );
     }
-    if (count < k) {
+    if (count < kTopK) {
         throw std::invalid_argument("At least ten vectors are needed for recall@10");
     }
     const api::Parameters parameters{dim, bits, rabitqlib::METRIC_L2};
@@ -147,10 +147,10 @@ int run(int argc, char** argv) {
             squared_error += error * error;
             max_error = std::max(max_error, std::abs(error));
         }
-        std::partial_sort(exact.begin(), exact.begin() + k, exact.end());
-        std::partial_sort(estimated.begin(), estimated.begin() + k, estimated.end());
-        for (size_t i = 0; i < k; ++i) {
-            for (size_t j = 0; j < k; ++j) {
+        std::partial_sort(exact.begin(), exact.begin() + kTopK, exact.end());
+        std::partial_sort(estimated.begin(), estimated.begin() + kTopK, estimated.end());
+        for (size_t i = 0; i < kTopK; ++i) {
+            for (size_t j = 0; j < kTopK; ++j) {
                 hits += estimated[i].second == exact[j].second ? 1 : 0;
             }
         }
@@ -167,7 +167,7 @@ int run(int argc, char** argv) {
         << '\n'
         << "# rmse=" << std::sqrt(squared_error / static_cast<double>(comparisons))
         << " max_abs_error=" << max_error << " flat_recall_at_10="
-        << static_cast<double>(hits) / static_cast<double>(product(queries, k)) << '\n'
+        << static_cast<double>(hits) / static_cast<double>(product(queries, kTopK)) << '\n'
         << "operation,repeat,operations,seconds,ops_per_second,ns_per_operation,checksum\n";
     measure("encode_packed", count, repeats, [&] {
         double checksum = 0;

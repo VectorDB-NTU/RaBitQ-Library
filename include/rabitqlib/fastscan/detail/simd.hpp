@@ -8,14 +8,14 @@ namespace rabitqlib::fastscan::simd {
 // NEON uses the portable/AVX2 high-accuracy LUT byte order.
 void accumulate_neon(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* __restrict__ result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 );
 void accumulate_hacc_neon(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* accumulated_values,
     size_t dim
 );
 
@@ -41,32 +41,32 @@ void pack_lut_range_neon(
 // Scalar reference for backend correctness tests; never selected by runtime dispatch.
 void accumulate_generic(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* __restrict__ result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 );
 void accumulate_unsupported(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* __restrict__ result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 );
 void accumulate_avx2(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 );
 void transfer_lut_hacc_generic(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 void accumulate_hacc_generic(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* accumulated_values,
     size_t dim
 );
 void accumulate_hacc_avx2(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* accumulated_values,
     size_t dim
 );
@@ -74,13 +74,13 @@ void accumulate_hacc_avx2(
 void accumulate_avx512(
     const uint8_t* __restrict__ codes,
     const uint8_t* __restrict__ lookup_table,
-    int32_t* __restrict__ result,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 );
 void transfer_lut_hacc_avx512(const uint16_t* lut, size_t dim, uint8_t* hc_lut);
 void accumulate_hacc_avx512(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ hc_lut,
+    const uint8_t* __restrict__ lookup_table,
     int32_t* accumulated_values,
     size_t dim
 );

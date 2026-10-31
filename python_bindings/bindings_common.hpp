@@ -125,18 +125,18 @@ inline void ensure_dimension(const py::array& array, size_t expected, const char
     }
 }
 
-inline rabitqlib::MetricType metric_from_string(const std::string& metric) {
+inline MetricType metric_from_string(const std::string& metric) {
     if (metric == "l2") {
-        return rabitqlib::METRIC_L2;
+        return METRIC_L2;
     }
     if (metric == "ip" || metric == "innerproduct") {
-        return rabitqlib::METRIC_IP;
+        return METRIC_IP;
     }
-    throw std::invalid_argument("Unsupported metric. Use 'l2' or 'ip'.");
+    throw std::invalid_argument("metric must be 'l2' or 'ip'");
 }
 
-inline std::string metric_to_string(rabitqlib::MetricType metric) {
-    return metric == rabitqlib::METRIC_IP ? "ip" : "l2";
+inline std::string metric_to_string(MetricType metric) {
+    return metric == METRIC_IP ? "ip" : "l2";
 }
 
 template <typename T>
@@ -239,7 +239,7 @@ inline std::vector<PID> checked_removal_ids(
 ) {
     std::vector<PID> result;
     result.reserve(static_cast<size_t>(ids.shape(0)));
-    const rabitqlib::detail::ConstPackedArrayView<int64_t> values(
+    const detail::ConstPackedArrayView<int64_t> values(
         reinterpret_cast<const char*>(ids.data())
     );
     for (py::ssize_t i = 0; i < ids.shape(0); ++i) {
@@ -269,7 +269,7 @@ inline std::vector<PID> checked_cluster_ids(
         std::vector<PID> result(rows);
         using Value = typename std::decay_t<decltype(ids)>::value_type;
         // C-contiguous NumPy arrays can still have an unaligned data pointer.
-        const rabitqlib::detail::ConstPackedArrayView<Value> values(
+        const detail::ConstPackedArrayView<Value> values(
             reinterpret_cast<const char*>(ids.data())
         );
         for (size_t i = 0; i < rows; ++i) {

@@ -27,7 +27,7 @@ template <typename T>
 class Rotator;
 template <typename T>
 class SplitSingleQuery;
-class VisitedListPool;
+class VisitedSetPool;
 namespace detail {
 struct DistanceEstimate;
 }
@@ -74,7 +74,7 @@ class HierarchicalNSW {
     }
     [[nodiscard]] size_t num_stored_points() const { return num_stored_points_; }
     [[nodiscard]] PID cluster_id_of(PID internal_id) const {
-        return get_clusterid_by_internalid(internal_id);
+        return raw_cluster_id(internal_id) & ~kRemovedMask;
     }
 
     void save(const char* filename) const;
@@ -169,47 +169,37 @@ class HierarchicalNSW {
     // Borrows construct() input only while its workers run; cleared on success or failure.
     const float* construction_data_{nullptr};
 
-    struct Candidate {
-        float est_dist;
-        PID id;
-    };
-
     // Bounded priority queue implemented as a sorted vector.
     class BoundedKNN {
        public:
         explicit BoundedKNN(size_t capacity) : capacity_(capacity) {}
 
-        // Insert a candidate in sorted order (ascending by est_dist).
-        void insert(const Candidate& cand) {
-            auto it = std::upper_bound(
-                queue_.begin(),
-                queue_.end(),
-                cand,
-                [](const Candidate& a, const Candidate& b) {
-                    return a.est_dist < b.est_dist;
-                }
-            );
-            queue_.insert(it, cand);
-            // If we exceed capacity, drop the worst candidate (largest est_dist).
+        // Insert a candidate in sorted order (ascending by distance).
+        void insert(const AnnCandidate<float>& candidate) {
+            auto it = std::upper_bound(queue_.begin(), queue_.end(), candidate);
+            queue_.insert(it, candidate);
+            // If we exceed capacity, drop the worst candidate (largest distance).
             if (queue_.size() > capacity_) {
                 queue_.pop_back();
             }
         }
 
-        // Returns the worst (largest est_dist) candidate.
-        [[nodiscard]] const Candidate& worst() const { return queue_.back(); }
+        // Returns the worst (largest distance) candidate.
+        [[nodiscard]] const AnnCandidate<float>& worst() const { return queue_.back(); }
 
         [[nodiscard]] size_t size() const { return queue_.size(); }
 
-        [[nodiscard]] const std::vector<Candidate>& candidates() const { return queue_; }
+        [[nodiscard]] const std::vector<AnnCandidate<float>>& candidates() const {
+            return queue_;
+        }
 
        private:
         size_t capacity_;
-        // Sorted in ascending order by est_dist so that the worst is at the back.
-        std::vector<Candidate> queue_;
+        // Sorted in ascending order by distance so that the worst is at the back.
+        std::vector<AnnCandidate<float>> queue_;
     };
 
-    friend struct HnswPruningTestAccess;
+    friend struct HnswTestAccess;
     friend std::vector<std::pair<float, PID>> detail::search_knn_sorted_neon(
         HierarchicalNSW&, const float*, size_t, size_t
     );
@@ -231,8 +221,10 @@ class HierarchicalNSW {
     static constexpr PID kRemovedMask = 0x80000000U;
     // Used when a search passes ef_search == 0.
     static constexpr size_t kDefaultEfSearch = 10;
+    // The constructor clamps M to this value and load rejects files above it.
+    static constexpr size_t kMaxM = 10000;
     size_t max_elements_{0};
-    mutable std::atomic<size_t> num_stored_points_{0};
+    std::atomic<size_t> num_stored_points_{0};
     size_t num_removed_{0};  // Recovered from stored cluster-ID markers when loading.
     size_t level0_record_bytes_{0};      // One complete level-0 record.
     size_t upper_layer_links_bytes_{0};  // One node's adjacency list at one upper level.
@@ -242,16 +234,18 @@ class HierarchicalNSW {
     size_t ef_construction_{0};
     MetricType metric_type_{METRIC_L2};
 
-    double mult_{0.0};
-    int max_level_{0};
+    double level_multiplier_{0.0};
+    // max_level_ == -1 and entry_point_id_ == kPidMax mark an empty graph.
+    int max_level_{-1};
 
-    std::mutex global_;
+    // Serializes entry-point and maximum-level updates during insertion.
+    std::mutex entry_point_mutex_;
     std::vector<std::mutex> link_list_locks_;
 
-    PID entry_point_id_{0};
+    PID entry_point_id_{kPidMax};
 
-    size_t level0_links_bytes_{
-        0};  // One node's level-0 adjacency list, including its header.
+    // One node's level-0 adjacency list, including its header.
+    size_t level0_links_bytes_{0};
 
     size_t bin_data_offset_{0}, ex_data_offset_{0}, label_offset_{0};
     size_t bin_data_bytes_{0}, ex_data_bytes_{0};
@@ -279,12 +273,12 @@ class HierarchicalNSW {
 
     AlignedStorage centroids_memory_;
 
-    mutable std::mutex label_lookup_lock_;
+    std::mutex label_lookup_lock_;
     std::unordered_map<PID, PID> label_lookup_;
 
     std::default_random_engine level_generator_;
 
-    std::unique_ptr<VisitedListPool> visited_list_pool_{nullptr};
+    std::unique_ptr<VisitedSetPool> visited_set_pool_{nullptr};
 
     float (*ip_func_)(const float*, const uint8_t*, size_t){nullptr};
 
@@ -292,24 +286,24 @@ class HierarchicalNSW {
 
     quant::RabitqConfig query_config_;
 
-    using EstimateRecord = rabitqlib::detail::DistanceEstimate;
+    using DistanceEstimate = rabitqlib::detail::DistanceEstimate;
 
     float (*raw_dist_func_)(const float* __restrict__, const float* __restrict__, size_t){
         nullptr};
 
-    PID get_external_label(PID internal_id) const {
-        PID return_label;
-        memcpy(
-            &return_label,
+    [[nodiscard]] PID external_label(PID internal_id) const {
+        PID label;
+        std::memcpy(
+            &label,
             (data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
              label_offset_),
             sizeof(PID)
         );
-        return return_label;
+        return label;
     }
 
     void set_external_label(PID internal_id, PID label) {
-        memcpy(
+        std::memcpy(
             (data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
              label_offset_),
             &label,
@@ -317,45 +311,41 @@ class HierarchicalNSW {
         );
     }
 
-    char* get_bindata_by_internalid(PID internal_id) {
+    [[nodiscard]] char* bin_data(PID internal_id) {
         return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
                bin_data_offset_;
     }
 
-    const char* get_bindata_by_internalid(PID internal_id) const {
+    [[nodiscard]] const char* bin_data(PID internal_id) const {
         return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
                bin_data_offset_;
     }
 
-    char* get_exdata_by_internalid(PID internal_id) {
+    [[nodiscard]] char* ex_data(PID internal_id) {
         return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
                ex_data_offset_;
     }
 
-    const char* get_exdata_by_internalid(PID internal_id) const {
+    [[nodiscard]] const char* ex_data(PID internal_id) const {
         return data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
                ex_data_offset_;
     }
 
     // The stored cluster ID with the removal mark, as save and load see it.
-    PID get_raw_clusterid(PID internal_id) const {
+    [[nodiscard]] PID raw_cluster_id(PID internal_id) const {
         return *(reinterpret_cast<const PID*>(
             data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
             level0_links_bytes_
         ));
     }
 
-    PID get_clusterid_by_internalid(PID internal_id) const {
-        return get_raw_clusterid(internal_id) & ~kRemovedMask;
-    }
-
-    bool is_removed(PID internal_id) const {
-        return (get_raw_clusterid(internal_id) & kRemovedMask) != 0;
+    [[nodiscard]] bool is_removed(PID internal_id) const {
+        return (raw_cluster_id(internal_id) & kRemovedMask) != 0;
     }
 
     // Store a cluster ID, including any removal mark.
-    void set_raw_clusterid(PID internal_id, PID cluster_id) {
-        memcpy(
+    void set_raw_cluster_id(PID internal_id, PID cluster_id) {
+        std::memcpy(
             data_level0_memory_.get() + (internal_id * level0_record_bytes_) +
                 level0_links_bytes_,
             &cluster_id,
@@ -379,63 +369,64 @@ class HierarchicalNSW {
             upper_layer_links_bytes_};
     }
 
-    int get_random_level(double reverse_size);
+    int random_level(double multiplier);
 
     // Write the index file at exactly this path.
     void write_file(const char* filename) const;
 
-    PID* get_linklist(PID internal_id, int level) {
+    // A link list is a count header followed by neighbor IDs.
+    [[nodiscard]] PID* upper_layer_links(PID internal_id, int level) {
         return reinterpret_cast<PID*>(
             link_lists_[internal_id].get() + ((level - 1) * upper_layer_links_bytes_)
         );
     }
 
-    const PID* get_linklist(PID internal_id, int level) const {
+    [[nodiscard]] const PID* upper_layer_links(PID internal_id, int level) const {
         return reinterpret_cast<const PID*>(
             link_lists_[internal_id].get() + ((level - 1) * upper_layer_links_bytes_)
         );
     }
 
-    PID* get_linklist0(PID internal_id) {
+    [[nodiscard]] PID* level0_links(PID internal_id) {
         return reinterpret_cast<PID*>(
             data_level0_memory_.get() + (internal_id * level0_record_bytes_)
         );
     }
 
-    const PID* get_linklist0(PID internal_id) const {
+    [[nodiscard]] const PID* level0_links(PID internal_id) const {
         return reinterpret_cast<const PID*>(
             data_level0_memory_.get() + (internal_id * level0_record_bytes_)
         );
     }
 
-    static unsigned short int get_list_count(const PID* ptr) {
-        return *(reinterpret_cast<const unsigned short int*>(ptr));
+    [[nodiscard]] static uint16_t link_count(const PID* links) {
+        return *(reinterpret_cast<const uint16_t*>(links));
     }
 
-    static void set_list_count(PID* ptr, unsigned short int size) {
-        *(reinterpret_cast<unsigned short int*>(ptr)) = size;
+    static void set_link_count(PID* links, uint16_t count) {
+        *(reinterpret_cast<uint16_t*>(links)) = count;
     }
 
     // ANN Search
     template <class Kernel>
-    void get_bin_est_direct(
-        const std::vector<float>&,
-        const SplitSingleQuery<float>&,
-        PID,
-        HierarchicalNSW::EstimateRecord&
+    void estimate_bin_direct(
+        const std::vector<float>& q_to_centroids,
+        const SplitSingleQuery<float>& query_wrapper,
+        PID candidate_id,
+        DistanceEstimate& estimate
     ) const;
 
     template <class Kernel>
-    void get_full_est_direct(
-        const std::vector<float>&,
-        const SplitSingleQuery<float>&,
-        PID,
-        HierarchicalNSW::EstimateRecord&
+    void estimate_full_direct(
+        const std::vector<float>& q_to_centroids,
+        const SplitSingleQuery<float>& query_wrapper,
+        PID candidate_id,
+        DistanceEstimate& estimate
     ) const;
 
     template <class Kernel>
     std::vector<std::pair<float, PID>> search_knn_sorted_direct(
-        const float*, size_t, size_t
+        const float* rotated_query, size_t k, size_t ef_search
     ) const;
 
     template <class Kernel>
@@ -448,37 +439,52 @@ class HierarchicalNSW {
         BoundedKNN& nearest_candidates
     ) const;
 
-    // Raw-vector distance used by construct; add scores links with get_quant_dist.
-    float get_data_dist(PID obj1, PID obj2) const {
-        PID label1 = get_external_label(obj1);
-        PID label2 = get_external_label(obj2);
+    // Raw-vector distance used by construct; add scores links with quantized_distance.
+    [[nodiscard]] float raw_distance(PID target, PID query) const {
+        PID target_label = external_label(target);
+        PID query_label = external_label(query);
         return raw_dist_func_(
-            construction_data_ + (label1 * dim_), construction_data_ + (label2 * dim_), dim_
+            construction_data_ + (target_label * dim_),
+            construction_data_ + (query_label * dim_),
+            dim_
         );
     }
 
-    void add_point(PID, PID, const quant::RabitqConfig&);
+    void add_point(PID label, PID cluster_id, const quant::RabitqConfig& config);
 
     // Insertion steps shared by raw and quantized scoring. distance(id) scores an
     // existing node against the node being inserted; prefetch(id) may warm its data.
     template <class Distance>
-    PID greedy_descend(PID, int from_level, int to_level, Distance);
+    PID greedy_descend(PID current_id, int from_level, int to_level, Distance distance);
     template <class Distance, class Prefetch>
-    maxheap<std::pair<float, PID>> search_layer(PID, int, Distance, Prefetch);
+    maxheap<std::pair<float, PID>> search_layer(
+        PID entry_point_id, int level, Distance distance, Prefetch prefetch
+    );
 
-    PID mutually_connect_new_element(PID, maxheap<std::pair<float, PID>>&, int);
+    PID mutually_connect_new_element(
+        PID new_node_id, maxheap<std::pair<float, PID>>& top_candidates, int level
+    );
 
     template <class Distance, class ReverseEdgeDistance>
     PID mutually_connect(
-        PID, maxheap<std::pair<float, PID>>&, int, Distance, ReverseEdgeDistance
+        PID new_node_id,
+        maxheap<std::pair<float, PID>>& top_candidates,
+        int level,
+        Distance distance,
+        ReverseEdgeDistance reverse_edge_distance
     );
 
     // The same steps once the original data is gone, implemented in hnsw.cpp.
-    void reconstruct_rotated(PID, float*) const;
-    float get_quant_dist(PID target, PID query, detail::QuantQuery&) const;
-    void add_point_quant(PID, int, LinkStorage&, detail::QuantQuery&);
+    void reconstruct_rotated(PID internal_id, float* rotated) const;
+    float quantized_distance(PID target, PID query, detail::QuantQuery& cached) const;
+    void add_point_quant(
+        PID new_node_id, int node_level, LinkStorage& link_list, detail::QuantQuery& query
+    );
     PID mutually_connect_quant(
-        PID, maxheap<std::pair<float, PID>>&, int, detail::QuantQuery&
+        PID new_node_id,
+        maxheap<std::pair<float, PID>>& top_candidates,
+        int level,
+        detail::QuantQuery& query
     );
 };
 

@@ -18,7 +18,7 @@ void split_batch_estdist_avx512(
 ) {
     if (padded_dim == 0 || padded_dim % 16 != 0) {
         throw std::invalid_argument(
-            use_hacc ? "high-accuracy FastScan dimension must be a positive multiple of 16"
+            use_hacc ? "FastScan high-accuracy dimension must be a positive multiple of 16"
                      : "FastScan dimension must be a positive multiple of 16"
         );
     }

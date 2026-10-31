@@ -104,8 +104,9 @@ void run(int argc, char** argv) {
         bench::product(batches, kRows),
         reps,
         [&] {
-            for (size_t batch = 0; batch < batches; ++batch)
+            for (size_t batch = 0; batch < batches; ++batch) {
                 score();
+            }
         },
         [&] {
             uint64_t h = bench::hash(distance.data(), sizeof(distance));

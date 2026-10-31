@@ -56,7 +56,7 @@ namespace detail {
 }
 
 // Float vectors accumulated in double, in index order.
-[[nodiscard]] inline double squared_norm_f64(const float* vector, size_t d) {
+[[nodiscard]] inline double l2norm_sqr_f64(const float* vector, size_t d) {
     double result = 0.0;
     for (size_t dim = 0; dim < d; ++dim) {
         const double value = vector[dim];
@@ -65,7 +65,7 @@ namespace detail {
     return result;
 }
 
-[[nodiscard]] inline double squared_l2_f64(const float* a, const float* b, size_t d) {
+[[nodiscard]] inline double euclidean_sqr_f64(const float* a, const float* b, size_t d) {
     double result = 0.0;
     for (size_t dim = 0; dim < d; ++dim) {
         const double difference = static_cast<double>(a[dim]) - b[dim];
@@ -85,7 +85,7 @@ inline void exact_assign(
     size_t d,
     size_t k,
     bool spherical,
-    uint32_t num_threads,
+    uint32_t num_workers,
     PID* assignments,
     float* distances,
     const PID* previous_assignments = nullptr
@@ -95,15 +95,15 @@ inline void exact_assign(
     // smaller blocks on other backends and require at least two blocks per
     // worker to avoid doubling the work of a worker handling a small tail.
     const size_t point_block =
-        cpu::has_avx512_core() && k >= 256 && n / num_threads >= 2 * kMaxPointBlock
+        cpu::has_avx512_core() && k >= 256 && n / num_workers >= 2 * kMaxPointBlock
             ? kMaxPointBlock
             : 64;
     constexpr size_t kCentroidBlock = 256;
     const size_t blocks = 1 + (n - 1) / point_block;
-    const auto num_workers = static_cast<uint32_t>(std::min<size_t>(num_threads, blocks));
+    const auto team_size = static_cast<uint32_t>(std::min<size_t>(num_workers, blocks));
     std::vector<double> centroid_norms(k);
     std::vector<std::vector<float>> products(
-        num_workers, std::vector<float>(point_block * std::min(k, kCentroidBlock))
+        team_size, std::vector<float>(point_block * std::min(k, kCentroidBlock))
     );
     index_detail::ParallelException failure;
 
@@ -115,7 +115,7 @@ inline void exact_assign(
             }
             distance += 1.0;
         } else {
-            distance = squared_l2_f64(vector, centroid, d);
+            distance = euclidean_sqr_f64(vector, centroid, d);
         }
         return distance;
     };
@@ -128,7 +128,7 @@ inline void exact_assign(
     const double error_floor =
         8.0 * static_cast<double>(d) * std::numeric_limits<float>::min() +
         8.0 * std::numeric_limits<double>::epsilon();
-#pragma omp parallel num_threads(num_workers)
+#pragma omp parallel num_threads(team_size)
     {
         // Set only this OpenMP task's ICV, not Eigen's process-global thread limit.
         // This also prevents nested GEMM teams when the outer team has one worker.
@@ -143,7 +143,7 @@ inline void exact_assign(
         for (std::ptrdiff_t cluster = 0; cluster < static_cast<std::ptrdiff_t>(k);
              ++cluster) {
             centroid_norms[static_cast<size_t>(cluster)] =
-                squared_norm_f64(centroids + static_cast<size_t>(cluster) * d, d);
+                l2norm_sqr_f64(centroids + static_cast<size_t>(cluster) * d, d);
         }
 #pragma omp for schedule(static)
         for (std::ptrdiff_t block = 0; block < static_cast<std::ptrdiff_t>(blocks);
@@ -156,7 +156,7 @@ inline void exact_assign(
                 const size_t rows = std::min(point_block, n - first_point);
                 for (size_t row = 0; row < rows; ++row) {
                     const float* vector = x + (first_point + row) * d;
-                    point_norms[row] = squared_norm_f64(vector, d);
+                    point_norms[row] = l2norm_sqr_f64(vector, d);
                     best_distances[row] = std::numeric_limits<double>::infinity();
                     if (previous_assignments != nullptr) {
                         const size_t point = first_point + row;
@@ -247,7 +247,7 @@ class LloydKMeans : public Parameters {
                 std::string(Assignment::kName) + " input dimensions overflow ptrdiff_t"
             );
         }
-        const uint32_t num_workers = effective_num_threads();
+        const uint32_t num_workers = resolved_num_workers();
         // Leave headroom for products of squared distances in graph pruning,
         // as well as quantized reconstruction and rotated residuals.
         const double max_coordinate = std::sqrt(
@@ -258,9 +258,9 @@ class LloydKMeans : public Parameters {
         bool finite = true;
 #pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
     schedule(static)
-        for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n * d);
-             ++loop_index) {
-            const size_t i = static_cast<size_t>(loop_index);
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n * d);
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
             finite = finite && std::isfinite(x[i]);
             in_range = in_range && std::abs(static_cast<double>(x[i])) <= max_coordinate;
         }
@@ -379,7 +379,7 @@ class LloydKMeans : public Parameters {
     std::vector<PID> assignments;
     std::vector<float> distances;
     std::vector<KMeansIterationStats> iteration_stats;
-    /// Objective of the final returned assignments against the final centroids.
+    // Objective of the final returned assignments against the final centroids.
     double final_obj = 0.0;
 
    private:
@@ -449,13 +449,13 @@ class LloydKMeans : public Parameters {
         for (size_t point = 0; point < n; ++point) {
             partitions[worker_for_cluster[assignments[point]]].points.push_back(point);
         }
-        const uint32_t num_workers = effective_num_threads();
+        const uint32_t num_workers = resolved_num_workers();
         static_cast<void>(num_workers);
 #pragma omp parallel for num_threads(num_workers) schedule(static)
-        for (std::ptrdiff_t loop_worker = 0;
-             loop_worker < static_cast<std::ptrdiff_t>(partitions.size());
-             ++loop_worker) {
-            const auto& partition = partitions[static_cast<size_t>(loop_worker)];
+        for (std::ptrdiff_t index = 0;
+             index < static_cast<std::ptrdiff_t>(partitions.size());
+             ++index) {
+            const auto& partition = partitions[static_cast<size_t>(index)];
             // The same interval defines point ownership and accumulator clearing,
             // including empty clusters, independently of the physical thread team.
             const size_t first_cluster = partition.first_cluster;
@@ -487,19 +487,18 @@ class LloydKMeans : public Parameters {
         std::vector<size_t>& cluster_sizes,
         const std::vector<float>& previous_centroids
     ) {
-        const uint32_t num_workers = effective_num_threads();
+        const uint32_t num_workers = resolved_num_workers();
         // Means, normalization, and displacement share one worker team. Preserve
         // the per-centroid arithmetic; empty rows are measured after refilling.
         const auto cluster_shift = [&](size_t cluster) {
-            return squared_l2_f64(
+            return euclidean_sqr_f64(
                 centroids.data() + cluster * d, previous_centroids.data() + cluster * d, d
             );
         };
         double shift = 0;
 #pragma omp parallel for num_threads(num_workers) reduction(+ : shift)
-        for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(k);
-             ++loop_index) {
-            const size_t cluster = static_cast<size_t>(loop_index);
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k); ++index) {
+            const size_t cluster = static_cast<size_t>(index);
             const double scale = cluster_sizes[cluster] == 0
                                      ? 0.0
                                      : 1.0 / static_cast<double>(cluster_sizes[cluster]);
@@ -549,10 +548,9 @@ class LloydKMeans : public Parameters {
             {
                 size_t best = n;
 #pragma omp for schedule(static)
-                for (std::ptrdiff_t loop_index = 0;
-                     loop_index < static_cast<std::ptrdiff_t>(n);
-                     ++loop_index) {
-                    const size_t point = static_cast<size_t>(loop_index);
+                for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n);
+                     ++index) {
+                    const size_t point = static_cast<size_t>(index);
                     if (cluster_sizes[assignments[point]] <= 1) {
                         continue;
                     }
@@ -581,9 +579,8 @@ class LloydKMeans : public Parameters {
         }
 
 #pragma omp parallel for num_threads(num_workers) schedule(static)
-        for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(n);
-             ++loop_index) {
-            const size_t point = static_cast<size_t>(loop_index);
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n); ++index) {
+            const size_t point = static_cast<size_t>(index);
             distances[point] =
                 distance_func(x + point * d, centroids.data() + assignments[point] * d, d);
         }
@@ -606,28 +603,27 @@ class LloydKMeans : public Parameters {
     }
 
     void normalize_centroid(float* centroid) const {
-        const double squared_norm = squared_norm_f64(centroid, d);
-        if (squared_norm == 0) {
+        const double norm_sqr = l2norm_sqr_f64(centroid, d);
+        if (norm_sqr == 0) {
             return;
         }
-        const double scale = 1.0 / std::sqrt(squared_norm);
+        const double scale = 1.0 / std::sqrt(norm_sqr);
         for (size_t dim = 0; dim < d; ++dim) {
             centroid[dim] = static_cast<float>(centroid[dim] * scale);
         }
     }
 
     void normalize_centroids() {
-        const uint32_t num_workers = effective_num_threads();
+        const uint32_t num_workers = resolved_num_workers();
         static_cast<void>(num_workers);
 #pragma omp parallel for num_threads(num_workers)
-        for (std::ptrdiff_t loop_index = 0; loop_index < static_cast<std::ptrdiff_t>(k);
-             ++loop_index) {
-            const size_t cluster = static_cast<size_t>(loop_index);
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k); ++index) {
+            const size_t cluster = static_cast<size_t>(index);
             normalize_centroid(centroids.data() + cluster * d);
         }
     }
 
-    [[nodiscard]] uint32_t effective_num_threads() const {
+    [[nodiscard]] uint32_t resolved_num_workers() const {
         return static_cast<uint32_t>(resolve_num_threads(num_threads));
     }
 };

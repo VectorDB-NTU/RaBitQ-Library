@@ -98,8 +98,9 @@ TEST(FastScanLutTest, EverySupportedBackendMatchesOrderedSubsetSumsExactly) {
 TEST(FastScanLutTest, ResetOwnsBytesAndReusesStorageWithoutRetainingScratch) {
     constexpr size_t kDim = 64;
     std::array<float, kDim> query{};
-    for (size_t i = 0; i < kDim; ++i)
+    for (size_t i = 0; i < kDim; ++i) {
         query[i] = static_cast<float>(i % 17) - 8;
+    }
     for (bool hacc : {false, true}) {
         Lut<float> reused;
         std::vector<uint8_t> expected;
@@ -171,7 +172,7 @@ TEST(FastScanLutTest, RejectedResetPreservesOwnedBytesAndFactors) {
     EXPECT_EQ(lut.sum_vl(), sum);
 }
 
-TEST(BatchEstimatorTest, RejectedQueryResetPreservesMetricAndCorrections) {
+TEST(FastScanBatchEstimatorTest, RejectedQueryResetPreservesMetricAndCorrections) {
     std::array<float, 32> values{};
     values.fill(1);
     for (auto metric : {METRIC_L2, METRIC_IP}) {
@@ -486,16 +487,15 @@ TEST(FastScanHighAccuracyTest, Avx512TransferAcceptsUnalignedOutput) {
     }
 
     std::array<uint8_t, kDim * 8> expected{};
-    constexpr size_t kCodebooksPerRegister = 4;
+    constexpr size_t kGroupsPerRegister = 4;
     constexpr size_t kBytesPerRegisterPair = 128;
-    constexpr size_t kBytesPerCodebook = 16;
+    constexpr size_t kBytesPerGroup = 16;
     constexpr size_t kHighByteOffset = 64;
-    for (size_t codebook = 0; codebook < kDim / 4; ++codebook) {
-        const size_t low_offset =
-            (codebook / kCodebooksPerRegister * kBytesPerRegisterPair) +
-            (codebook % kCodebooksPerRegister * kBytesPerCodebook);
+    for (size_t group = 0; group < kDim / 4; ++group) {
+        const size_t low_offset = (group / kGroupsPerRegister * kBytesPerRegisterPair) +
+                                  (group % kGroupsPerRegister * kBytesPerGroup);
         for (size_t entry = 0; entry < 16; ++entry) {
-            const uint16_t value = lut[codebook * 16 + entry];
+            const uint16_t value = lut[group * 16 + entry];
             expected[low_offset + entry] = static_cast<uint8_t>(value);
             expected[low_offset + kHighByteOffset + entry] =
                 static_cast<uint8_t>(value >> 8);
@@ -510,7 +510,7 @@ TEST(FastScanHighAccuracyTest, Avx512TransferAcceptsUnalignedOutput) {
 
 #endif
 
-TEST(BatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
+TEST(FastScanBatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
     using Estimator = decltype(&rabitqlib::simd::split_batch_estdist);
     std::vector<Estimator> backends{
         rabitqlib::simd::split_batch_estdist, rabitqlib::simd::split_batch_estdist_generic};
@@ -563,7 +563,7 @@ TEST(BatchEstimatorTest, CollinearResidualKeepsFiniteLowerBounds) {
 }
 
 #if defined(__x86_64__) || defined(_M_X64)
-TEST(BatchEstimatorTest, Avx512RejectsInvalidDimensionsBeforeReadingBuffers) {
+TEST(FastScanBatchEstimatorTest, Avx512RejectsInvalidDimensionsBeforeReadingBuffers) {
     if (!cpu::has_avx512_core()) {
         GTEST_SKIP() << "AVX-512 is unavailable";
     }
@@ -587,7 +587,7 @@ TEST(BatchEstimatorTest, Avx512RejectsInvalidDimensionsBeforeReadingBuffers) {
 }
 #endif
 
-TEST(BatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTailBatches) {
+TEST(FastScanBatchEstimatorTest, BackendsMatchScalarCorrectionAcrossChunksAndTailBatches) {
     using Estimator = decltype(&rabitqlib::simd::split_batch_estdist);
     std::vector<Estimator> backends{
         rabitqlib::simd::split_batch_estdist, rabitqlib::simd::split_batch_estdist_generic};

@@ -25,6 +25,8 @@ DerivePointerAlignment: false
 FixNamespaceComments: true
 IncludeBlocks: Regroup
 IndentCaseLabels: true
+# Brace every control statement body; this was the dominant style before it was enforced.
+InsertBraces: true
 KeepEmptyLinesAtTheStartOfBlocks: false
 PointerAlignment: Left
 ReferenceAlignment: Left

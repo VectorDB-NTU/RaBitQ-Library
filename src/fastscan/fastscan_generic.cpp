@@ -72,41 +72,46 @@ void transfer_lut_hacc_generic(const uint16_t* lut, size_t dim, uint8_t* hc_lut)
 namespace {
 template <bool HighAccuracy>
 void accumulate_generic_impl(
-    const uint8_t* codes, const uint8_t* lut, int32_t* result, size_t dim
+    const uint8_t* codes,
+    const uint8_t* lookup_table,
+    int32_t* accumulated_values,
+    size_t dim
 ) {
-    int64_t totals[32]{};
+    int64_t totals[kBatchSize]{};
     for (size_t group = 0; group < dim / 4; ++group) {
         const size_t offset = HighAccuracy ? group / 2 * 64 + group % 2 * 16 : group * 16;
         for (size_t lane = 0; lane < 16; ++lane) {
             const uint8_t code = codes[group * 16 + lane];
             for (size_t half = 0; half < 2; ++half) {
                 const size_t entry = (code >> (half * 4)) & 15;
-                int value = lut[offset + entry];
-                if constexpr (HighAccuracy)
-                    value += int{lut[offset + 32 + entry]} * 256;
+                int value = lookup_table[offset + entry];
+                if constexpr (HighAccuracy) {
+                    value += int{lookup_table[offset + 32 + entry]} * 256;
+                }
                 totals[kPerm0[lane] + half * 16] += value;
             }
         }
     }
-    for (size_t lane = 0; lane < 32; ++lane) {
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
         if (totals[lane] > std::numeric_limits<int32_t>::max()) {
             throw std::overflow_error(
-                HighAccuracy ? "high-accuracy FastScan result exceeds int32_t"
+                HighAccuracy ? "FastScan high-accuracy result exceeds int32_t"
                              : "FastScan result exceeds int32_t"
             );
         }
     }
-    for (size_t lane = 0; lane < 32; ++lane)
-        result[lane] = static_cast<int32_t>(totals[lane]);
+    for (size_t lane = 0; lane < kBatchSize; ++lane) {
+        accumulated_values[lane] = static_cast<int32_t>(totals[lane]);
+    }
 }
 }  // namespace
 void accumulate_generic(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* __restrict__ result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* __restrict__ accumulated_values,
     size_t dim
 ) {
-    accumulate_generic_impl<false>(codes, lut, result, dim);
+    accumulate_generic_impl<false>(codes, lookup_table, accumulated_values, dim);
 }
 void accumulate_unsupported(
     const uint8_t* __restrict__, const uint8_t* __restrict__, int32_t* __restrict__, size_t
@@ -118,10 +123,10 @@ void accumulate_unsupported(
 }
 void accumulate_hacc_generic(
     const uint8_t* __restrict__ codes,
-    const uint8_t* __restrict__ lut,
-    int32_t* result,
+    const uint8_t* __restrict__ lookup_table,
+    int32_t* accumulated_values,
     size_t dim
 ) {
-    accumulate_generic_impl<true>(codes, lut, result, dim);
+    accumulate_generic_impl<true>(codes, lookup_table, accumulated_values, dim);
 }
 }  // namespace rabitqlib::fastscan::simd

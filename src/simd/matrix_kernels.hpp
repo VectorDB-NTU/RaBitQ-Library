@@ -26,19 +26,19 @@ using RowMajorMatrixMap = kernel_eigen::Map<Matrix>;
 using VectorMap = kernel_eigen::Map<kernel_eigen::Matrix<float, kernel_eigen::Dynamic, 1>>;
 
 inline void accumulate_cluster_sums_impl(
-    const float* x,
+    const float* data,
     const size_t* point_ids,
     size_t count,
     size_t dim,
-    const uint32_t* labels,
+    const uint32_t* assignments,
     double* sums,
     size_t* counts
 ) {
     for (size_t index = 0; index < count; ++index) {
         const size_t point = point_ids[index];
-        const uint32_t cluster = labels[point];
+        const uint32_t cluster = assignments[point];
         ++counts[cluster];
-        const float* vector = x + point * dim;
+        const float* vector = data + point * dim;
         double* sum = sums + static_cast<size_t>(cluster) * dim;
         for (size_t coordinate = 0; coordinate < dim; ++coordinate) {
             sum[coordinate] += static_cast<double>(vector[coordinate]);

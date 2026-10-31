@@ -151,7 +151,7 @@ void check_transpose(
 }
 }  // namespace
 
-TEST(QueryPreparation, QuantizationMatchesHalfAwayRoundingAndTails) {
+TEST(QueryPreparationTest, QuantizationMatchesHalfAwayRoundingAndTails) {
     check_quantization(simd::scalar_quantize_uint8_generic);
     check_quantization(simd::scalar_quantize_uint16_generic);
     // Exercise the public templates as well as the kernels they dispatch to.
@@ -175,7 +175,7 @@ TEST(QueryPreparation, QuantizationMatchesHalfAwayRoundingAndTails) {
 #endif
 }
 
-TEST(QueryPreparation, ZeroRangeQuantizationMatchesAcrossBackendsAndTails) {
+TEST(QueryPreparationTest, ZeroRangeQuantizationMatchesAcrossBackendsAndTails) {
     check_zero_range(simd::scalar_quantize_uint8_generic);
     check_zero_range(simd::scalar_quantize_uint16_generic);
     check_zero_range(scalar_quantize<uint8_t, float>);
@@ -201,7 +201,7 @@ TEST(QueryPreparation, ZeroRangeQuantizationMatchesAcrossBackendsAndTails) {
 #endif
 }
 
-TEST(QueryPreparation, TranspositionMatchesCoordinateReferenceAndBounds) {
+TEST(QueryPreparationTest, TranspositionMatchesCoordinateReferenceAndBounds) {
     check_transpose(simd::new_transpose_bin_generic, false);
     check_transpose(simd::new_transpose_bin_512_generic, true);
     check_transpose(new_transpose_bin, false);

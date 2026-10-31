@@ -10,7 +10,7 @@
 namespace rabitqlib::simd {
 
 void flip_sign_avx2(const uint8_t* flip, float* data, size_t dim) {
-    // Process 32 floats (4 AVX2 registers) per iteration
+    // Process 32 floats (4 AVX2 registers) per iteration; requires dim % 32 == 0.
     constexpr size_t kFloatsPerChunk = 32;
 
     const __m256i bit_select =
@@ -40,7 +40,7 @@ void flip_sign_avx2(const uint8_t* flip, float* data, size_t dim) {
 }
 
 void kacs_walk_avx2(float* data, size_t len) {
-    // ! len % 32 == 0;
+    // Requires len % 16 == 0: each half contains whole 8-float registers.
     for (size_t i = 0; i < len / 2; i += 8) {
         __m256 x = _mm256_loadu_ps(&data[i]);
         __m256 y = _mm256_loadu_ps(&data[i + (len / 2)]);

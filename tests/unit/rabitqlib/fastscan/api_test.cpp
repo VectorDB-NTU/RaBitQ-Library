@@ -34,7 +34,7 @@ void expect_invalid(Call call, const char* message) {
     } catch (const std::invalid_argument& error) { EXPECT_STREQ(error.what(), message); }
 }
 
-TEST(FastScanApi, RejectsUnpreparedAndMismatchedQueriesBeforeWriting) {
+TEST(FastScanApiTest, RejectsUnpreparedAndMismatchedQueriesBeforeWriting) {
     constexpr size_t kDim = 64;
     std::array<float, kDim> values{};
     values.fill(1);
@@ -140,7 +140,7 @@ TEST(FastScanApi, RejectsUnpreparedAndMismatchedQueriesBeforeWriting) {
     EXPECT_NO_THROW(qg_batch_estdist(batch.data(), moved_query, kDim, distance.data()));
 }
 
-TEST(FastScanApi, SplitQueryResetMatchesFreshPreparationAndScoring) {
+TEST(FastScanApiTest, SplitQueryResetMatchesFreshPreparationAndScoring) {
     std::array<std::array<float, 128>, 2> queries{};
     std::array<float, 128 * 4> scratch{};
     std::array<uint16_t, 128 * 4> hacc_scratch{};
@@ -262,7 +262,7 @@ TEST(FastScanApi, SplitQueryResetMatchesFreshPreparationAndScoring) {
     }
 }
 
-TEST(FastScanApi, SplitQueryInitializationValidatesParametersConsistently) {
+TEST(FastScanApiTest, SplitQueryInitializationValidatesParametersConsistently) {
     std::array<float, 64> values{};
     values.fill(0.5F);
     std::array<float, 64 * 4> scratch{};
@@ -313,7 +313,7 @@ TEST(FastScanApi, SplitQueryInitializationValidatesParametersConsistently) {
     }
 }
 
-TEST(FastScanApi, RejectedSplitQueryResetPreservesPreparedState) {
+TEST(FastScanApiTest, RejectedSplitQueryResetPreservesPreparedState) {
     std::array<float, 64> values{}, next{};
     values.fill(0.5F);
     next.fill(0.25F);
@@ -393,7 +393,7 @@ TEST(FastScanApi, RejectedSplitQueryResetPreservesPreparedState) {
     EXPECT_EQ(query.g_add(), 0);
 }
 
-TEST(FastScanApi, SingleBatchEncodersRejectOverflowAndPreserveEmptyOutput) {
+TEST(FastScanApiTest, SingleBatchEncodersRejectOverflowAndPreserveEmptyOutput) {
     constexpr size_t kDim = 64;
     std::array<float, 33 * kDim> data{};
     std::array<float, kDim> centroid{};
@@ -442,7 +442,7 @@ TEST(FastScanApi, SingleBatchEncodersRejectOverflowAndPreserveEmptyOutput) {
     }
 }
 
-TEST(FastScanApi, PublicSerialAndParallelEncodingMatchIncludingTails) {
+TEST(FastScanApiTest, PublicSerialAndParallelEncodingMatchIncludingTails) {
     constexpr size_t kDim = 96;
     std::array<float, 32 * kDim> data{};
     std::array<float, kDim> centroid{};
@@ -468,7 +468,7 @@ TEST(FastScanApi, PublicSerialAndParallelEncodingMatchIncludingTails) {
     }
 }
 
-TEST(FastScanApi, DoubleEncodingQueryAndScoringWithNonzeroCentroid) {
+TEST(FastScanApiTest, DoubleEncodingQueryAndScoringWithNonzeroCentroid) {
     for (size_t dim : {16U, 32U, 96U}) {
         const double dimension = static_cast<double>(dim);
         const double value = 0.5 + 1e-10;
@@ -522,7 +522,7 @@ TEST(FastScanApi, DoubleEncodingQueryAndScoringWithNonzeroCentroid) {
     }
 }
 
-TEST(FastScanApi, DoubleLutMatchesIndependentSubsetSumQuantization) {
+TEST(FastScanApiTest, DoubleLutMatchesIndependentSubsetSumQuantization) {
     constexpr size_t kDim = 96;
     std::array<double, kDim> query{};
     for (size_t i = 0; i < kDim; ++i) {
