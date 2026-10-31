@@ -371,7 +371,7 @@ class HnswIndex:
     dim : int
         Original vector dimension, from 64 through 65536.
     max_elements : int
-        Storage capacity, including removed points. Use resize to grow it.
+        Storage capacity, at least 1, including removed points. Use resize to grow it.
     M : int, optional
         Graph connectivity, at least 2. Default is 16.
     ef_construction : int, optional
@@ -407,7 +407,7 @@ class HnswIndex:
         dim : int
             Original vector dimension, from 64 through 65536.
         max_elements : int
-            Storage capacity, including removed points. Use resize to grow it.
+            Storage capacity, at least 1, including removed points. Use resize to grow it.
         M : int, optional
             Graph connectivity, at least 2. Default is 16.
         ef_construction : int, optional

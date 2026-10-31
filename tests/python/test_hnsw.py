@@ -333,6 +333,13 @@ def test_resize_grows_capacity_and_allows_more(base_data, clusters):
     np.testing.assert_array_equal(ids[:, 0], np.arange(10))
 
 
+def test_zero_capacity_raises():
+    with pytest.raises(
+        ValueError, match="^HNSW max_elements must be greater than zero$"
+    ):
+        HnswIndex(max_elements=0, dim=64)
+
+
 def test_resize_below_element_count_raises(partial_hnsw):
     with pytest.raises(ValueError, match="element count"):
         partial_hnsw.resize(10)

@@ -576,6 +576,25 @@ TEST(HnswUninitializedTest, RejectsSearchAndSave) {
     EXPECT_FALSE(std::filesystem::exists(std::filesystem::u8path(path_file.path())));
 }
 
+TEST(HnswResizeTest, RejectsZeroCapacity) {
+    // A zero-byte level-0 allocation yields no storage; neither path may accept it.
+    try {
+        HierarchicalNSW index(0, AddFixture::kDim, 4, 8, 50);
+        FAIL() << "zero-capacity construction succeeded";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "HNSW max_elements must be greater than zero");
+    }
+
+    HierarchicalNSW index(16, AddFixture::kDim, 4, 8, 50);
+    try {
+        index.resize(0);
+        FAIL() << "zero-capacity resize succeeded";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "HNSW resize capacity must be greater than zero");
+    }
+    EXPECT_EQ(index.max_elements(), 16U);
+}
+
 TEST(HnswResizeTest, AllowsResizeBeforeConstruction) {
     constexpr size_t kBuilt = 64;
     constexpr size_t kCapacity = 128;
