@@ -297,7 +297,6 @@ class LloydKMeans : public Parameters {
         assignments.resize(n);
         distances.resize(n);
         iteration_stats.clear();
-        iteration_stats.reserve(niter);
         initialize_centroids(x, n);
         if (spherical) {
             normalize_centroids();
