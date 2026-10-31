@@ -38,6 +38,46 @@ struct RescaleSearchState {
 // compiled with different ISA flags; merging external inline/template symbols
 // could make the AVX2 backend call an AVX512-compiled helper.
 
+// Recover exact event scales at the boundary coordinates a vector evaluator selected
+// (size_t max for none): it compares reciprocal products, while the heap sweep
+// divides. Then score coordinates [tail, dim) with the scalar definitions.
+static inline RescaleSearchState finish_scale_state(
+    RescaleSearchState s,
+    const double* magnitudes,
+    size_t first_index,
+    size_t next_index,
+    size_t tail,
+    size_t dim,
+    int max_code,
+    double scale
+) {
+    constexpr size_t kNone = std::numeric_limits<size_t>::max();
+    if (first_index != kNone)
+        s.first = std::max(
+            s.first,
+            static_cast<double>(
+                quantized_level_at_scale(magnitudes[first_index], scale, max_code)
+            ) / magnitudes[first_index]
+        );
+    if (next_index != kNone)
+        s.next = std::min(
+            s.next,
+            (quantized_level_at_scale(magnitudes[next_index], scale, max_code) + 1.0) /
+                magnitudes[next_index]
+        );
+    for (size_t i = tail; i < dim; ++i) {
+        int c = quantized_level_at_scale(magnitudes[i], scale, max_code);
+        double q = c + .5;
+        s.numerator += magnitudes[i] * q;
+        s.squared_norm += q * q;
+        if (c > 0)
+            s.first = std::max(s.first, static_cast<double>(c) / magnitudes[i]);
+        if (c < max_code && magnitudes[i] > 0)
+            s.next = std::min(s.next, (c + 1.0) / magnitudes[i]);
+    }
+    return s;
+}
+
 // Finite IEEE-754 binary64 neighbors for outward-rounded bounds.
 // Adjusting the representation leaves the floating-point rounding mode unchanged.
 static inline double next_double_up(double value) {
@@ -332,6 +372,34 @@ static bool try_find_best_scale_by_interval_search(
     // to preserve the event sweep's canonical scale convention.
     best_t = best.state.first;
     return true;
+}
+
+// The searched scale, or -1 to ask the caller to rerun the exact heap search.
+template <typename Evaluator>
+static double best_scale_or_fallback(
+    const float* input,
+    size_t dim,
+    int max_code,
+    double t_start,
+    double t_end,
+    Evaluator evaluator,
+    double* magnitudes = nullptr,
+    double* reciprocals = nullptr
+) {
+    double best_t = 0;
+    return try_find_best_scale_by_interval_search(
+               input,
+               dim,
+               max_code,
+               t_start,
+               t_end,
+               evaluator,
+               best_t,
+               magnitudes,
+               reciprocals
+           )
+               ? best_t
+               : -1;
 }
 
 }  // namespace rabitqlib::simd::detail

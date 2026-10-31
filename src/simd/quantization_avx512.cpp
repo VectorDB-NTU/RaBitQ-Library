@@ -109,33 +109,8 @@ static RescaleSearchState evaluate_scale_state_avx512(
         nk = bitops::countr_zero32(
             static_cast<unsigned>(_mm512_cmp_pd_mask(vnext, _mm512_set1_pd(n), _CMP_EQ_OQ))
         );
-    // Reciprocal products selected the coordinates; division now recovers the
-    // exact heap event scales, clipped to the configured search interval.
-    if (fi[fk] != std::numeric_limits<size_t>::max())
-        s.first = std::max(
-            s.first,
-            static_cast<double>(
-                quantized_level_at_scale(magnitudes[fi[fk]], scale, max_code)
-            ) / magnitudes[fi[fk]]
-        );
-    if (ni[nk] != std::numeric_limits<size_t>::max())
-        s.next = std::min(
-            s.next,
-            (quantized_level_at_scale(magnitudes[ni[nk]], scale, max_code) + 1.0) /
-                magnitudes[ni[nk]]
-        );
-    // Handle the remaining zero to seven coordinates with the same definitions.
-    for (; i < dim; ++i) {
-        int c = quantized_level_at_scale(magnitudes[i], scale, max_code);
-        double q = c + .5;
-        s.numerator += magnitudes[i] * q;
-        s.squared_norm += q * q;
-        if (c > 0)
-            s.first = std::max(s.first, static_cast<double>(c) / magnitudes[i]);
-        if (c < max_code && magnitudes[i] > 0)
-            s.next = std::min(s.next, (c + 1.0) / magnitudes[i]);
-    }
-    return s;
+    // Recover exact boundary events and handle the remaining zero to seven coordinates.
+    return finish_scale_state(s, magnitudes, fi[fk], ni[nk], i, dim, max_code, scale);
 }
 
 }  // namespace rabitqlib::simd::detail
@@ -144,19 +119,9 @@ namespace rabitqlib::simd {
 double best_rescale_factor_avx512(
     const float* magnitudes, size_t dim, int max_code, double start, double end
 ) {
-    // A negative result asks the caller to rerun the scalar heap search.
-    double best_t = 0;
-    return detail::try_find_best_scale_by_interval_search(
-               magnitudes,
-               dim,
-               max_code,
-               start,
-               end,
-               detail::evaluate_scale_state_avx512,
-               best_t
-           )
-               ? best_t
-               : -1;
+    return detail::best_scale_or_fallback(
+        magnitudes, dim, max_code, start, end, detail::evaluate_scale_state_avx512
+    );
 }
 double best_rescale_factor_with_workspace_avx512(
     const float* magnitudes,
@@ -167,19 +132,15 @@ double best_rescale_factor_with_workspace_avx512(
     double* promoted,
     double* reciprocals
 ) {
-    double best_t = 0;
-    return detail::try_find_best_scale_by_interval_search(
-               magnitudes,
-               dim,
-               max_code,
-               start,
-               end,
-               detail::evaluate_scale_state_avx512,
-               best_t,
-               promoted,
-               reciprocals
-           )
-               ? best_t
-               : -1;
+    return detail::best_scale_or_fallback(
+        magnitudes,
+        dim,
+        max_code,
+        start,
+        end,
+        detail::evaluate_scale_state_avx512,
+        promoted,
+        reciprocals
+    );
 }
 }  // namespace rabitqlib::simd
