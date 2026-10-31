@@ -252,6 +252,7 @@ if(RABITQ_BUILD_INDEX)
         src/index/pipnn.cpp
         src/index/hnsw_dispatch.cpp
         src/index/hnsw_search_generic.cpp
+        src/index/visited_set_hash.cpp
         ${RABITQ_INDEX_ARCH_SOURCES}
     )
     add_library(rabitqlib::index ALIAS rabitq_index)

@@ -168,9 +168,8 @@ It recompiles the library sources from `compile_commands.json` with that build's
 differ between ISA flag sets. Only the Release (`-O3`) configuration is clean and checked.
 Lower optimization levels emit helpers the compiler otherwise inlines: Debug (`-O0`)
 emits many standard-library and Eigen functions per source, and GCC at `-O1`/`-O2`
-still shares Eigen assignment loops between the FastScan estimator sources and, at `-O1`,
-the visited set's hash-table insertion between HNSW search sources. The script only sees
-`src/`, needs GNU binutils, and does not cover MSVC or ARM-only builds.
+still shares two Eigen assignment loops between the FastScan estimator sources. The
+script only sees `src/`, needs GNU binutils, and does not cover MSVC or ARM-only builds.
 
 ### Static analysis
 
@@ -948,9 +947,10 @@ ISA-flagged source must depend on a type local to that source, as the HNSW kerne
 `src/index/hnsw_search_*.cpp` keep their `Kernel` types in an anonymous namespace and
 only traverse the graph. Query preparation, centroid distances, acquiring the visited set
 and search buffer, and result formatting run in generic code
-(`HierarchicalNSW::search_knn_sorted_with`). Calls inside a `Kernel` template that do
-not depend on `Kernel`, such as visited-set and search-buffer operations, stay safe only
-while the compiler inlines them. `scripts/check-isa-symbols.sh` checks Release builds; see
+(`HierarchicalNSW::search_knn_sorted_with`). The visited set's hash-table spill path is
+compiled once in `src/index/visited_set_hash.cpp`. Other calls inside a `Kernel` template
+that do not depend on `Kernel`, such as search-buffer operations, stay safe only while
+the compiler inlines them. `scripts/check-isa-symbols.sh` checks Release builds; see
 [ISA symbol check](#isa-symbol-check).
 The AVX FHT intrinsics in `src/simd/fht_kernels.hpp` use the private kernel namespace
 for the same reason. Rotation uses this implementation on GCC, Clang, and MSVC;
