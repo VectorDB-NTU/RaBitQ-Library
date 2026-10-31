@@ -77,7 +77,8 @@ class HashBasedVisitedSet {
             bit_size++;
             bit >>= 1;
         }
-        size_t bucket_size = static_cast<size_t>(0x1) << ((bit_size + 4) / 2 + 3);
+        // Limit per-visit spillover allocations while keeping the direct table sublinear.
+        size_t bucket_size = static_cast<size_t>(0x1) << ((bit_size + 4) / 2 + 4);
         initialize_table(bucket_size);
     }
 
