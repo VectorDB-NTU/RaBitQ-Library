@@ -208,7 +208,7 @@ RaBitQ Library is led and maintained by [Yutong Gou](https://github.com/gouyt13)
 and developed with [Jianyang Gao](https://github.com/gaoj0017),
 [Yuexuan Xu](https://github.com/YuexuanXu7), [Jifan Shi](https://github.com/Stardust-SJF),
 [Zhonghao Yang](https://github.com/zhonghao-yang), [Tamim Ehsan](https://github.com/TamimEhsan),
-and Cheng Long. We thank Alexandr Guzhva, Li Liu, Chao Gao, Silu Huang,
+and [Cheng Long](https://github.com/novaxlong). We thank Alexandr Guzhva, Li Liu, Chao Gao, Silu Huang,
 Jiabao Jin, Xiaoyao Zhong, and Jinjing Zhou for their valuable feedback.
 
 ## License
