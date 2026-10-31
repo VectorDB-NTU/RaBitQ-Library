@@ -57,6 +57,9 @@ QGBuilder::QGBuilder(
     , dim_(qg_.dimension())
     , max_degree_(qg_.degree_bound())
     , seed_(seed) {
+    if (ef_construction == 0) {
+        throw std::invalid_argument("QuantizedGraph ef_construction must be positive");
+    }
     if (cache_vectors) {
         cache_.emplace();
     }

@@ -2192,3 +2192,15 @@ TEST(QgInputTest, RejectsNonFiniteAndOversizedCoordinatesBeforeMutation) {
     );
 }
 }  // namespace rabitqlib::symqg
+
+namespace rabitqlib::symqg {
+TEST(QgConstructionTest, RejectsZeroEfConstruction) {
+    constexpr size_t kCount = 33, kDim = 64;
+    const std::vector<float> data(kCount * kDim, 0.25F);
+    for (auto init : {QGInitialization::Random, QGInitialization::PiPNN}) {
+        QuantizedGraph<float> graph(kCount, kDim, 32);
+        EXPECT_THROW((QGBuilder(graph, 0, data.data(), 1, init)), std::invalid_argument);
+        EXPECT_EQ(graph.num_points(), 0U);
+    }
+}
+}  // namespace rabitqlib::symqg
