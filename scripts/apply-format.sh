@@ -18,4 +18,4 @@ if [[ "$($formatter --version)" != *"version 23."* ]]; then
 fi
 
 "$repo_root/scripts/clang-format-files.sh" "$@" \
-    | xargs -0 --no-run-if-empty "$formatter" -i
+    | xargs -0 -r "$formatter" -i
