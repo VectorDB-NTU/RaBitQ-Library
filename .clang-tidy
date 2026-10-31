@@ -31,13 +31,13 @@ Checks: >
 
 # LLVM 23's new wildcard matches must not change enum ABI, replace the project's
 # pragma-once convention, or reject the CPU detector's required inline assembly.
-# Keep the established checks blocking. Naming starts as warnings while existing
-# internal/parameter names are migrated; do not bulk-fix public interfaces.
-WarningsAsErrors: "*,-readability-identifier-naming"
+# Every enabled check is blocking, including naming. Retained public spellings are
+# listed in the IgnoredRegexp options below; do not bulk-fix public interfaces.
+WarningsAsErrors: "*"
 
 CheckOptions:
-  # Check locals, parameters and private fields. Public member/function names,
-  # types, enums and macros retain their current compatibility contracts.
+  # Public names that keep their compatibility contracts are listed in the
+  # IgnoredRegexp options below instead of being renamed.
   readability-identifier-naming.LocalVariableCase: lower_case
   readability-identifier-naming.ParameterCase: lower_case
   # M is the existing HNSW graph-degree parameter, including its public constructor.
@@ -50,4 +50,35 @@ CheckOptions:
   readability-identifier-naming.PrivateMemberSuffix: '_'
   # Preserve these existing graph parameters and formula coefficient names.
   # Keep exceptions explicit rather than exempting all capitalized identifiers.
-  readability-identifier-naming.PrivateMemberIgnoredRegexp: '^(M|maxM|maxM0|G_add|G_error|G_k1xSumq|G_kbaseSumq|G_kbxSumq)_$'
+  readability-identifier-naming.PrivateMemberIgnoredRegexp: '^(M|G_add|G_error|G_k1xSumq|G_kbaseSumq|G_kbxSumq)_$'
+  readability-identifier-naming.ProtectedMemberCase: lower_case
+  readability-identifier-naming.ProtectedMemberSuffix: '_'
+  readability-identifier-naming.PublicMemberCase: lower_case
+  # Functions, types, namespaces, constants and macros follow AGENTS.md. The
+  # ignored names are retained public API or names the standard library requires.
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.MethodCase: lower_case
+  readability-identifier-naming.MethodIgnoredRegexp: '^M$'
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.StructIgnoredRegexp: '^rebind$'
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.EnumConstantCase: CamelCase
+  readability-identifier-naming.EnumConstantIgnoredRegexp: '^(METRIC_L2|METRIC_IP|RECONSTRUCTION|UNBIASED_ESTIMATION|PLAIN)$'
+  readability-identifier-naming.TypeAliasCase: CamelCase
+  readability-identifier-naming.TypeAliasIgnoredRegexp: '^(value_type|pointer|reference|difference_type|iterator_category|is_always_equal|other|maxheap|minheap|ex_ipfunc)$'
+  readability-identifier-naming.TypedefCase: CamelCase
+  readability-identifier-naming.TemplateParameterCase: CamelCase
+  readability-identifier-naming.GlobalConstantCase: CamelCase
+  readability-identifier-naming.GlobalConstantPrefix: k
+  readability-identifier-naming.StaticConstantCase: CamelCase
+  readability-identifier-naming.StaticConstantPrefix: k
+  readability-identifier-naming.ClassConstantCase: CamelCase
+  readability-identifier-naming.ClassConstantPrefix: k
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  # matrix_kernels.hpp temporarily renames the Eigen namespace for each ISA build.
+  readability-identifier-naming.MacroDefinitionIgnoredRegexp: '^Eigen$'
+  # Named parameters must match between declarations and definitions, without the
+  # default prefix/suffix leniency. Unnamed declaration parameters remain allowed.
+  readability-inconsistent-declaration-parameter-name.Strict: true
