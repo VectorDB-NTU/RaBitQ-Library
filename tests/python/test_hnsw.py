@@ -560,3 +560,13 @@ def test_legacy_padding_round_trip_and_add(tmp_path):
     np.testing.assert_array_equal(actual[1], distances)
     loaded.add(np.ones((1, 65), dtype=np.float32))
     assert loaded.num_points == 4
+
+
+def test_huge_ef_is_clamped_to_the_stored_point_count():
+    data = np.random.default_rng(5).normal(size=(80, 64)).astype(np.float32)
+    index = HnswIndex(64, 80, nbits=4)
+    index.build(data, data.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32))
+    exhaustive_ids, exhaustive_distances = index.search(data[:3], k=5, ef=80)
+    ids, distances = index.search(data[:3], k=5, ef=2**40)
+    np.testing.assert_array_equal(ids, exhaustive_ids)
+    np.testing.assert_array_equal(distances, exhaustive_distances)

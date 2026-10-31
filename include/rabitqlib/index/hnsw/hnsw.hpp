@@ -73,8 +73,19 @@ class HierarchicalNSW {
         return num_stored_points_.load() - num_removed_;
     }
     [[nodiscard]] size_t num_stored_points() const { return num_stored_points_; }
+    // Cluster of a stored record by internal ID (0 through num_stored_points() - 1;
+    // these coincide with labels only for points added in order). Removed points
+    // keep their cluster.
     [[nodiscard]] PID cluster_id_of(PID internal_id) const {
-        return raw_cluster_id(internal_id) & ~kRemovedMask;
+        if (data_level0_memory_ == nullptr) {
+            throw std::logic_error(
+                "HNSW index must be constructed or loaded before cluster lookup"
+            );
+        }
+        if (internal_id >= num_stored_points_.load()) {
+            throw std::invalid_argument("HNSW internal ID is out of range");
+        }
+        return stored_cluster_id(internal_id);
     }
 
     void save(const char* filename) const;
@@ -157,6 +168,7 @@ class HierarchicalNSW {
 
     // Queries use the original dimension. Each result is (distance, external label),
     // where distance estimates squared L2 or 1 - dot according to the index metric.
+    // ef_search is raised to k and clamped to the stored point count.
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float* queries,
         size_t num_queries,
@@ -288,6 +300,9 @@ class HierarchicalNSW {
     }
 
     // The stored cluster ID with the removal mark, as save and load see it.
+    [[nodiscard]] PID stored_cluster_id(PID internal_id) const {
+        return raw_cluster_id(internal_id) & ~kRemovedMask;
+    }
     [[nodiscard]] PID raw_cluster_id(PID internal_id) const {
         return *(reinterpret_cast<const PID*>(
             data_level0_memory_.get() + (internal_id * level0_record_bytes_) +

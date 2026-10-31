@@ -1430,6 +1430,47 @@ TEST(HnswInputTest, RejectsNonFiniteAndOversizedCoordinatesBeforeMutation) {
     EXPECT_EQ(index.search(edge_queries.data(), 2, 3, 10, 1).size(), 2U);
 }
 
+TEST(HnswSearchTest, ClampsEfToStoredPointsAndChecksClusterLookups) {
+    constexpr size_t kDim = 64;
+    constexpr size_t kCount = 24;
+    constexpr size_t kClusters = 3;
+    std::mt19937 gen(906);
+    std::normal_distribution<float> normal;
+    std::vector<float> data(kCount * kDim);
+    std::vector<float> centroids(kClusters * kDim);
+    for (auto* values : {&data, &centroids}) {
+        for (auto& value : *values) {
+            value = normal(gen);
+        }
+    }
+    std::vector<PID> cluster_ids(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        cluster_ids[i] = static_cast<PID>(i % kClusters);
+    }
+
+    HierarchicalNSW unbuilt;
+    EXPECT_THROW(unbuilt.cluster_id_of(0), std::logic_error);
+
+    HierarchicalNSW index(kCount, kDim, 4, 8, 32);
+    index.construct(
+        kClusters, centroids.data(), kCount, data.data(), cluster_ids.data(), 1
+    );
+    for (size_t i = 0; i < kCount; ++i) {
+        EXPECT_EQ(index.cluster_id_of(static_cast<PID>(i)), cluster_ids[i]);
+    }
+    EXPECT_THROW(index.cluster_id_of(static_cast<PID>(kCount)), std::invalid_argument);
+    EXPECT_THROW(index.cluster_id_of(kPidMax), std::invalid_argument);
+
+    // A search window beyond the stored point count neither allocates for it nor
+    // changes the results of an exhaustive window.
+    const auto exhaustive = index.search(data.data(), 2, 5, kCount, 1);
+    const auto huge = index.search(data.data(), 2, 5, size_t{1} << 40, 1);
+    ASSERT_EQ(huge.size(), exhaustive.size());
+    for (size_t q = 0; q < huge.size(); ++q) {
+        EXPECT_EQ(huge[q], exhaustive[q]);
+    }
+}
+
 }  // namespace
 }  // namespace rabitqlib::hnsw
 

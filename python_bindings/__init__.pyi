@@ -571,7 +571,8 @@ class HnswIndex:
         k : int
             Number of neighbors requested, between 1 and max_elements.
         ef : int, optional
-            Search breadth. 0 (default) selects max(k, 10).
+            Search breadth. 0 (default) selects max(k, 10); values above the stored
+            point count are clamped.
         num_threads : int, optional
             Worker count. Default is 1; 0 selects the available CPU count.
 
