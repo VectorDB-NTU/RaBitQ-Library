@@ -23,15 +23,22 @@ step. The degree-32 example requires at least 33 data points.
 from rabitqlib import SymqgIndex
 
 # data and queries are float32 arrays with shape (count, dim).
-index = SymqgIndex(dim=data.shape[1], max_degree=32, metric="l2", quantization_bits=0)
-index.build(data, ef_construction=200, num_threads=1, init="pipnn")
+index = SymqgIndex(data.shape[1], max_degree=32, ef_construction=200, init="pipnn")
+index.add(data)  # builds the whole graph
 index.save("qg_example.index")
 
 loaded = SymqgIndex.load("qg_example.index")
-ids, distances = loaded.search_batch(queries, k=10, ef=100, num_threads=1)
+ids, distances = loaded.search(queries, k=10, ef=100)
 ```
 
-`search()` accepts the same arguments and is equivalent to `search_batch()`.
+SymphonyQG follows the same `train` → `add` → `search` workflow as the other
+indexes, but has nothing to train: `train(x)` only checks `x` as `add` would,
+and `is_trained` is always `True`. `add` builds the graph from every vector at once
+and can be called only once, as in Faiss's NSG index; a second call, or `add` on
+a loaded index, raises `RuntimeError`. To index more vectors, create a new index
+and add all of them. Point IDs are the row numbers of the added data. Files do
+not store the construction settings, so a loaded index reports
+`ef_construction`, `init` and `seed` as `None`.
 
 ### C++
 
@@ -64,15 +71,16 @@ qg.save("qg_example.index");
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `max_degree` | Required positive multiple of 32, strictly smaller than the point count. |
-| `quantization_bits` | 0 for owned raw vectors (default), or 4/8 for quantized storage. |
-| `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
-| `ef_construction` | Required positive construction search window. |
-| `init` | Python `"pipnn"` (default) or `"random"`. |
-| `k`, `ef` | Python requires `1 <= k <= num_points` and `ef >= k`. |
-| `num_threads` | Python defaults to 1; 0 selects available logical CPUs. |
+| `nbits` / C++ `quantization_bits` | Python keyword: 32 (default) for owned raw vectors, or 4/8 for quantized storage. C++ uses 0 for raw vectors, as Python's `quantization_bits` did before 0.8. |
+| `max_degree` | Python keyword, default 32: a positive multiple of 32, strictly smaller than the point count. It is a hard degree bound, unlike HNSW-RaBitQ's `M`. |
+| `ef_construction` | Python keyword, default 200: positive construction search window used by `add`. |
+| `init` | Python keyword: `"pipnn"` (default) or `"random"`. |
+| `metric` | Python keyword: `"l2"` (default) or `"ip"`. |
+| `seed` | Python keyword: rotation and graph-construction seed in `[0, 2**32 - 1]`. The default `None` draws one at random; `index.seed` reports it, and passing it back with `num_threads=1` rebuilds the same graph from the same data. |
+| `k`, `ef` | Python requires `1 <= k <= num_points`. Omitted or zero `ef` uses `max(k, 10)`, and smaller values are raised to `k`, as for HNSW-RaBitQ. |
+| `num_threads` | Python `add` defaults to 0 (every available logical CPU) and `search` to 1. |
 
-Both Python search names return `(ids, distances)` arrays. Distances are squared
+Python search returns `(ids, distances)` arrays. Distances are squared
 L2 or `1 - dot`, ordered from smallest to largest; quantized storage returns
 estimates. SymphonyQG has no incremental add/remove API. See shared
 [input, count and concurrency contracts](usage.md).
@@ -117,7 +125,7 @@ as the random-initialization seed.
 ### Input lifetime and rebuilds
 
 The caller can release input vectors after the `QGBuilder` constructor returns.
-Python retains the caller's array during `build`. Complete construction before
+Python retains the caller's array during `add`. Complete construction before
 querying or saving.
 
 `builder.reset(data)` reinitializes vectors of the same shape and reuses workspace.
@@ -135,7 +143,7 @@ The graph seed controls the rotation. An FHT/Kac seed gives the same rotation on
 every platform; a MatrixRotator seed reproduces the matrix only with the same
 standard library and build, so rely on the saved index rather than the seed.
 The builder seed controls random initialization and fallback edges. PiPNN uses
-fixed internal seeds.
+fixed internal seeds. Python's `seed` sets both the graph seed and the builder seed.
 
 ## Querying
 
@@ -172,10 +180,11 @@ do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 `set_ef()` while searches are running.
 
-Python `search_batch(queries, k, ef, num_threads=1)` and `search()` accept
-the same two-dimensional query array. Both return `(ids, distances)` arrays
-of shape `(num_queries, k)`, including empty batches. Both APIs default to one worker; `num_threads=0`
-selects the available logical CPU count, capped by the number of queries.
+Python `search(queries, k, ef=None, num_threads=1)` accepts a two-dimensional
+query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
+including empty batches. It defaults to one worker; `num_threads=0` selects the
+available logical CPU count, capped by the number of queries. The 0.7 name
+`search_batch` still works in 0.8 with a `DeprecationWarning`.
 Queries use the original dimension, including when the internal rotation pads it.
 
 Python searches use per-call `ef` values. For access rules, see the

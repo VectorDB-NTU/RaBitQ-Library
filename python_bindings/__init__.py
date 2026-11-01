@@ -247,12 +247,131 @@ def _patch_build(cls):
     cls.is_built = property(is_built, doc=is_built.__doc__)
 
 
+def _symqg_signature(
+    self,
+    dim,
+    *,
+    nbits=32,
+    max_degree=32,
+    ef_construction=200,
+    init="pipnn",
+    metric="l2",
+    seed=None,
+): ...
+
+
+def _symqg_legacy_signature(
+    self, dim, max_degree, metric="l2", quantization_bits=0
+): ...
+
+
+def _symqg_nbits(quantization_bits):
+    # 0.7 stored raw vectors as 0 bits; 0.8 calls that 32.
+    if isinstance(quantization_bits, bool) or quantization_bits not in (0, 4, 8):
+        raise ValueError("quantization_bits must be 0, 4, or 8")
+    return 32 if quantization_bits == 0 else quantization_bits
+
+
+def _patch_symqg(cls):
+    native_init = cls.__init__
+    signature = inspect.signature(_symqg_signature)
+    legacy_signature = inspect.signature(_symqg_legacy_signature)
+
+    def __init__(self, *args, **kwargs):
+        if len(args) > 1:
+            arguments = _bind(
+                legacy_signature,
+                "SymqgIndex",
+                (self, *args),
+                kwargs,
+                " (read as the 0.7 form SymqgIndex(dim, max_degree, metric, "
+                "quantization_bits); the 0.8 form is SymqgIndex(dim, max_degree=...))",
+            )
+            _deprecated(
+                "SymqgIndex(dim, max_degree, metric, quantization_bits) is deprecated; "
+                "use SymqgIndex(dim, max_degree=..., metric=..., nbits=...)"
+            )
+            nbits = _symqg_nbits(arguments["quantization_bits"])
+            native_init(
+                self,
+                arguments["dim"],
+                nbits=nbits,
+                max_degree=arguments["max_degree"],
+                metric=arguments["metric"],
+            )
+            return
+        quantization_bits = kwargs.pop("quantization_bits", _MISSING)
+        if quantization_bits is not _MISSING:
+            if "nbits" in kwargs:
+                raise TypeError(
+                    "SymqgIndex() got both nbits and its old form quantization_bits"
+                )
+            _deprecated(
+                "SymqgIndex(quantization_bits=...) is deprecated; use nbits=, with 32 "
+                "instead of 0 for raw vectors"
+            )
+            kwargs["nbits"] = _symqg_nbits(quantization_bits)
+        native_init(self, **_bind(signature, "SymqgIndex", (self, *args), kwargs))
+
+    def build(self, data, ef_construction, num_threads=1, init="pipnn"):
+        """Build the graph from input vectors, replacing any existing graph.
+
+        Deprecated since 0.8 and removed in 0.9: pass ef_construction and init to
+        the constructor, then call add() once. The defaults match 0.7, including
+        a single thread.
+
+        Parameters
+        ----------
+        data : array_like of float, shape (n, dim)
+            Vectors in the original, unpadded coordinates, with n > max_degree.
+            Converted to contiguous float32; a copy may be made.
+        ef_construction : int
+            Positive construction search breadth fitting uint32.
+        num_threads : int, optional
+            Worker count. Default is 1; 0 selects the available CPU count.
+        init : {'pipnn', 'random'}, optional
+            Graph initialization method. Default is 'pipnn'.
+        """
+        _deprecated(
+            "SymqgIndex.build() is deprecated; pass ef_construction and init to "
+            "SymqgIndex() and call add()"
+        )
+        self._build(data, ef_construction, num_threads, init)
+
+    def search_batch(self, queries, k, ef, num_threads=1):
+        """Deprecated since 0.8: the same as search(); use search()."""
+        _deprecated("SymqgIndex.search_batch() is deprecated; use search()")
+        return self.search(queries, k, ef, num_threads)
+
+    def quantization_bits(self):
+        """Deprecated since 0.8: storage bits with 0 for raw vectors; use nbits."""
+        _deprecated(
+            "SymqgIndex.quantization_bits is deprecated; use nbits, which is 32 "
+            "instead of 0 for raw vectors"
+        )
+        return self._quantization_bits
+
+    def is_built(self):
+        """Deprecated since 0.8: whether the index holds a graph; use len()."""
+        _deprecated("SymqgIndex.is_built is deprecated; use len()")
+        return self.num_stored_points != 0
+
+    __init__.__doc__ = cls.__doc__
+    __init__.__signature__ = signature
+    cls.__init__ = __init__
+    cls.build = build
+    cls.search_batch = search_batch
+    cls.quantization_bits = property(quantization_bits, doc=quantization_bits.__doc__)
+    cls.is_built = property(is_built, doc=is_built.__doc__)
+
+
 _patch_ivf_init(IvfIndex)
 _patch_hnsw_init(HnswIndex)
 for _cls in (IvfIndex, HnswIndex):
     _patch_add(_cls)
     _patch_build(_cls)
 del _cls
+_patch_symqg(SymqgIndex)
 # --- end of the 0.8 compatibility layer -------------------------------------
 
 

@@ -375,7 +375,11 @@ def test_clustering_default_requires_graph_compatible_cluster_count(monkeypatch)
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-def test_symqg_examples_do_not_import_faiss(tmp_path, example_data, metric):
+def test_symqg_examples_do_not_import_faiss(
+    tmp_path, example_data, metric, monkeypatch
+):
+    # The samples teach the 0.8 API, so they must not hit the compatibility layer.
+    monkeypatch.setenv("PYTHONWARNINGS", "error::DeprecationWarning")
     data_path, data = example_data
     run_example(
         "symqg_indexing.py",

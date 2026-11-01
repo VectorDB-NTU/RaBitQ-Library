@@ -16,8 +16,8 @@ SUMMARIES = {
         "num_clusters={clusters}, is_trained={built})"
     ),
     "symqg": (
-        "SymqgIndex(dim=64, metric='ip', quantization_bits={bits}, "
-        "num_points={live}, max_degree=32, is_built={built})"
+        "SymqgIndex(dim=64, metric='ip', nbits={nbits}, "
+        "num_points={live}, max_degree=32)"
     ),
 }
 
@@ -52,6 +52,7 @@ def test_repr_lifecycle(kind, bits, vectors, tmp_path):
     capacity = 96 if kind == "hnsw" else 80
     before = SUMMARIES[kind].format(
         bits=bits,
+        nbits=32 if bits == 0 else bits,
         live=0,
         stored=0,
         capacity=capacity,
@@ -62,7 +63,13 @@ def test_repr_lifecycle(kind, bits, vectors, tmp_path):
 
     build_index(index, vectors)
     after = SUMMARIES[kind].format(
-        bits=bits, live=80, stored=80, capacity=capacity, clusters=1, built=True
+        bits=bits,
+        nbits=32 if bits == 0 else bits,
+        live=80,
+        stored=80,
+        capacity=capacity,
+        clusters=1,
+        built=True,
     )
     reference = index.search(vectors[:2], 3, 32)
     assert repr(index) == str(index) == after

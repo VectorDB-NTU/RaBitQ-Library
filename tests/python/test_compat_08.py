@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import pytest
 from conftest import DIM, N_VECTORS
-from rabitqlib import HnswIndex, IvfIndex
+from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 
 def single_deprecation(call):
@@ -212,3 +212,106 @@ def test_hnsw_build_on_a_trained_index_replaces_centroids(
     trained.save(tmp_path / "a.index")
     built.save(tmp_path / "b.index")
     assert (tmp_path / "a.index").read_bytes() == (tmp_path / "b.index").read_bytes()
+
+
+@pytest.mark.parametrize(
+    "make,bits",
+    [
+        (lambda: SymqgIndex(DIM, 32), 0),
+        (lambda: SymqgIndex(DIM, 32, "ip", 4), 4),
+        (lambda: SymqgIndex(DIM, 32, quantization_bits=8), 8),
+    ],
+)
+def test_symqg_positional_form(make, bits):
+    index, message = single_deprecation(make)
+    assert message.startswith(
+        "SymqgIndex(dim, max_degree, metric, quantization_bits) is deprecated"
+    )
+    assert index.nbits == (32 if bits == 0 else bits)
+    assert index.max_degree == 32
+    assert (index.ef_construction, index.init) == (200, "pipnn")
+
+
+@pytest.mark.parametrize("bits,nbits", [(0, 32), (4, 4), (8, 8)])
+def test_symqg_quantization_bits_keyword(bits, nbits, base_data, tmp_path):
+    index, message = single_deprecation(
+        lambda: SymqgIndex(dim=DIM, max_degree=32, quantization_bits=bits, seed=4)
+    )
+    assert message.startswith("SymqgIndex(quantization_bits=...) is deprecated")
+    reference = SymqgIndex(DIM, nbits=nbits, seed=4)
+    for graph in (index, reference):
+        graph.add(base_data, num_threads=1)
+    index.save(tmp_path / "a.index")
+    reference.save(tmp_path / "b.index")
+    assert (tmp_path / "a.index").read_bytes() == (tmp_path / "b.index").read_bytes()
+    value, message = single_deprecation(lambda: index.quantization_bits)
+    assert value == bits
+    assert message.startswith("SymqgIndex.quantization_bits is deprecated")
+
+
+@pytest.mark.parametrize(
+    "make,error,message",
+    [
+        (
+            lambda: SymqgIndex(DIM, nbits=4, quantization_bits=4),
+            TypeError,
+            "^SymqgIndex\\(\\) got both nbits and its old form quantization_bits$",
+        ),
+        (
+            lambda: SymqgIndex(DIM, quantization_bits=2),
+            ValueError,
+            "^quantization_bits must be 0, 4, or 8$",
+        ),
+        (
+            lambda: SymqgIndex(DIM, 32, nbits=4),
+            TypeError,
+            "got an unexpected keyword argument 'nbits' \\(read as the 0.7 form",
+        ),
+        (
+            lambda: SymqgIndex(DIM, 32, "l2", 3),
+            ValueError,
+            "^quantization_bits must be 0, 4, or 8$",
+        ),
+    ],
+)
+def test_symqg_mixed_or_invalid_old_forms(make, error, message):
+    with pytest.raises(error, match=message):
+        quietly(make)
+
+
+def test_symqg_build_search_batch_and_is_built(base_data, query_data):
+    index = quietly(lambda: SymqgIndex(DIM, 32))
+    built, _ = single_deprecation(lambda: index.is_built)
+    assert built is False
+    _, message = single_deprecation(lambda: index.build(base_data, 50))
+    assert message.startswith("SymqgIndex.build() is deprecated")
+    assert len(index) == N_VECTORS
+    built, _ = single_deprecation(lambda: index.is_built)
+    assert built is True
+    batch, message = single_deprecation(lambda: index.search_batch(query_data, 5, 40))
+    assert message.startswith("SymqgIndex.search_batch() is deprecated; use search()")
+    expected = index.search(query_data, 5, 40)
+    np.testing.assert_array_equal(batch[0], expected[0])
+    np.testing.assert_array_equal(batch[1], expected[1])
+    # As in 0.7, build replaces the graph, even after add or another build.
+    quietly(lambda: index.build(base_data[:100], 50, 1, "random"))
+    assert len(index) == 100
+    added = SymqgIndex(DIM)
+    added.add(base_data[:80])
+    quietly(lambda: added.build(base_data, 50))
+    assert len(added) == N_VECTORS
+
+
+def test_symqg_build_draws_a_new_seed_unless_one_was_given(base_data):
+    unseeded = quietly(lambda: SymqgIndex(DIM, 32))
+    seeds = set()
+    for init in ("pipnn", "random"):
+        quietly(lambda init=init: unseeded.build(base_data, 50, 1, init))
+        seeds.add(unseeded.seed)
+        # The settings of the current graph.
+        assert (unseeded.ef_construction, unseeded.init) == (50, init)
+    assert len(seeds) == 2
+    seeded = SymqgIndex(DIM, seed=3)
+    for _ in range(2):
+        quietly(lambda: seeded.build(base_data, 50))
+        assert seeded.seed == 3

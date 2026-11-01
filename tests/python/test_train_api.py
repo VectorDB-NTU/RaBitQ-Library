@@ -351,6 +351,19 @@ def test_hnsw_capacity_grows_and_resize_preallocates(base_data):
     assert preallocated.max_elements == 1000
 
 
+def test_hnsw_search_ef_none_means_the_default(base_data):
+    index = HnswIndex(DIM, nbits=4, num_clusters=4)
+    index.train(base_data)
+    index.add(base_data, num_threads=1)
+    expected = index.search(base_data[:10], 5, 0)
+    for found in (
+        index.search(base_data[:10], 5, None),
+        index.search(base_data[:10], 5),
+    ):
+        np.testing.assert_array_equal(found[0], expected[0])
+        np.testing.assert_array_equal(found[1], expected[1])
+
+
 def test_hnsw_failed_add_keeps_the_capacity(base_data):
     index = HnswIndex(DIM, nbits=4, num_clusters=4)
     index.train(base_data)

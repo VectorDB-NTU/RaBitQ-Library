@@ -11,7 +11,7 @@ from utils import read_fvecs
 MAX_DEGREE = 32  # degree bound for SymphonyQG
 EF_CONSTRUCTION = 200  # ef for indexing
 METRIC = "l2"  # "l2" or "ip"
-QUANTIZATION_BITS = 0  # 0 for raw SymphonyQG, or 4/8 for quantized SymphonyQG
+NBITS = 32  # 32 for raw SymphonyQG, or 4/8 for quantized SymphonyQG
 NUM_THREADS = 16  # number of threads for build
 INIT = "pipnn"  # "pipnn" or "random" initialization of SymphonyQG
 # ──────────────────────────────────────────────
@@ -22,28 +22,26 @@ def main(args=None) -> None:
     data = read_fvecs(args.data_file)
     print(f"Data shape: {data.shape}")
 
-    # 3. Build SymphonyQG index
+    # 2. Build the SymphonyQG graph; there is nothing to train.
     n, dim = data.shape
     print(
         f"\nBuilding SymphonyQG index: n={n}, dim={dim}, MaxDegree={args.max_degree}, "
         f"ef={args.ef_construction}, metric={args.metric}, "
-        f"quantization_bits={args.quantization_bits}, init={args.init}"
+        f"nbits={args.nbits}, init={args.init}"
     )
 
     idx = SymqgIndex(
-        dim=dim,
+        dim,
+        nbits=args.nbits,
         max_degree=args.max_degree,
+        ef_construction=args.ef_construction,
+        init=args.init,
         metric=args.metric,
-        quantization_bits=args.quantization_bits,
     )
 
     t0 = time()
-    idx.build(
-        data,
-        ef_construction=args.ef_construction,
-        num_threads=args.num_threads,
-        init=args.init,
-    )
+    # add builds the whole graph at once; it cannot be extended later.
+    idx.add(data, num_threads=args.num_threads)
     print(f"Indexing time: {time() - t0:.2f}s")
 
     idx.save(args.index_file)
@@ -79,12 +77,12 @@ if __name__ == "__main__":
         help="Distance metric (l2 or ip)",
     )
     parser.add_argument(
-        "--quantization-bits",
-        dest="quantization_bits",
+        "--nbits",
+        dest="nbits",
         type=int,
-        choices=[0, 4, 8],
-        default=QUANTIZATION_BITS,
-        help="Vector quantization bits: 0 for raw SymphonyQG, or 4/8 for quantized SymphonyQG",
+        choices=[4, 8, 32],
+        default=NBITS,
+        help="Storage bits: 32 for raw SymphonyQG, or 4/8 for quantized SymphonyQG",
     )
     parser.add_argument(
         "--init",

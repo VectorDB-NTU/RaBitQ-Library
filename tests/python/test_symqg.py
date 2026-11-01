@@ -1,5 +1,6 @@
 """Tests for SymqgIndex: construction, search, properties, error handling, save/load."""
 
+import inspect
 import os
 import re
 import struct
@@ -102,12 +103,8 @@ def test_search_batch_validates_inputs(built_symqg, query_data):
     for k in [0, N_VECTORS + 1]:
         with pytest.raises(ValueError, match="k must be between 1 and num_points"):
             built_symqg.search_batch(query_data, k=k, ef=_EF)
-    with pytest.raises(ValueError, match="ef must be positive"):
-        built_symqg.search_batch(query_data, k=1, ef=0)
-    with pytest.raises(ValueError, match="ef must be at least k"):
-        built_symqg.search_batch(query_data, k=5, ef=4)
     unbuilt = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
-    with pytest.raises(RuntimeError, match="must be built or loaded before search"):
+    with pytest.raises(RuntimeError, match="add them or load an index before search"):
         unbuilt.search_batch(query_data, k=1, ef=_EF)
 
 
@@ -164,7 +161,8 @@ def test_wrong_query_dim_raises(built_symqg):
 def test_save_before_build_raises(tmp_path):
     idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     with pytest.raises(
-        RuntimeError, match="^SymqgIndex must be built or loaded before save$"
+        RuntimeError,
+        match="^SymqgIndex has no vectors; add them or load an index before save$",
     ):
         idx.save(str(tmp_path / "unbuilt.index"))
 
@@ -173,14 +171,24 @@ def test_search_before_build_raises():
     idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     queries = np.zeros((5, DIM), dtype=np.float32)
     with pytest.raises(
-        RuntimeError, match="^SymqgIndex must be built or loaded before search$"
+        RuntimeError,
+        match="^SymqgIndex has no vectors; add them or load an index before search$",
     ):
         idx.search(queries, k=1, ef=_EF)
 
 
-def test_search_rejects_ef_smaller_than_k(built_symqg, query_data):
-    with pytest.raises(ValueError, match="ef must be at least k"):
-        built_symqg.search(query_data, k=10, ef=9)
+def test_search_raises_ef_to_k_and_defaults_it(built_symqg, query_data):
+    # As in HnswIndex: no or zero ef selects max(k, 10), and ef is at least k.
+    at_k = built_symqg.search(query_data, k=10, ef=10)
+    for ef in (9, 1):
+        raised = built_symqg.search(query_data, k=10, ef=ef)
+        np.testing.assert_array_equal(raised[0], at_k[0])
+    default = built_symqg.search(query_data, k=3, ef=10)
+    for ef in (None, 0):
+        np.testing.assert_array_equal(
+            built_symqg.search(query_data, 3, ef)[0], default[0]
+        )
+    np.testing.assert_array_equal(built_symqg.search(query_data, 3)[0], default[0])
 
 
 @pytest.mark.parametrize("bits", [0, 4, 8])
@@ -396,5 +404,6 @@ def test_native_pipnn_rejects_invalid_build_arguments(base_data):
 
 
 def test_default_initialization_is_pipnn():
-    # pybind11 generates this signature from the actual Python argument defaults.
-    assert "init: str = 'pipnn'" in SymqgIndex.build.__doc__
+    assert inspect.signature(SymqgIndex.__init__).parameters["init"].default == "pipnn"
+    assert SymqgIndex(DIM).init == "pipnn"
+    assert inspect.signature(SymqgIndex.build).parameters["init"].default == "pipnn"

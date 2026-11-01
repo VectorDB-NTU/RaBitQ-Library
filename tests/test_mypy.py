@@ -62,7 +62,7 @@ def test_static_public_usage(tmp_path):
 # stubs, so editors flag it while it still type-checks.
 DEPRECATED_USAGE = """\
 import numpy as np
-from rabitqlib import HnswIndex, IvfIndex
+from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 x = np.zeros((80, 64), dtype=np.float32)
 labels = np.zeros(80, dtype=np.uint32)
@@ -73,6 +73,12 @@ ivf.build(x, x[:1], labels)
 hnsw.build(x, x[:1], labels)
 ivf.add(x, labels)
 flag = ivf.is_built
+graph = SymqgIndex(64, 32, "l2", 4)
+alias = SymqgIndex(64, quantization_bits=0)
+graph.build(x, 40)
+graph.search_batch(x, 5, 32)
+bits = graph.quantization_bits
+built = graph.is_built
 """
 
 
@@ -102,4 +108,4 @@ def test_deprecated_forms_are_flagged(tmp_path):
             rf"{re.escape(str(usage))}:(\d+): error: .*\[deprecated\]", result.stdout
         )
     }
-    assert flagged == set(range(6, 13)), result.stdout
+    assert flagged == set(range(6, 19)), result.stdout
