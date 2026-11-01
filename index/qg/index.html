@@ -2003,7 +2003,9 @@ Input may be released after reset returns; rebuild before querying or saving.</p
 (<code>4 * max_elements * padded_dim</code> bytes plus factors). <a href="../../clustering/#qgkmeans">QGKMeans</a> enables
 this for its centroid graph; the cache is not persisted.</p>
 <h3 id="random-seeds">Random seeds<a class="headerlink" href="#random-seeds" title="Permanent link">&para;</a></h3>
-<p>The graph seed controls FHT/Kac rotation; MatrixRotator samples its own matrix.
+<p>The graph seed controls the rotation. An FHT/Kac seed gives the same rotation on
+every platform; a MatrixRotator seed reproduces the matrix only with the same
+standard library and build, so rely on the saved index rather than the seed.
 The builder seed controls random initialization and fallback edges. PiPNN uses
 fixed internal seeds.</p>
 <h2 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h2>
