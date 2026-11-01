@@ -1,5 +1,6 @@
 // Generated once by scripts/generate_fast_scale_table.cpp. Frozen data: never
-// regenerate or edit it; a different table would be a new, separately named table.
+// regenerate it or change its values; a different table would be a new, separately
+// named table.
 // Each value is const_scaling_factor(padded_dim, ex_bits) from libstdc++ on
 // baseline x86-64 (SSE2, no FMA), written as an exact hexadecimal floating-point
 // literal.

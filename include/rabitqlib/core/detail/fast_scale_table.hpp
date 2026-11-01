@@ -10,7 +10,7 @@ namespace rabitqlib::quant::rabitq_impl::ex_bits {
 // kFastScaleDimStep up to kFastScaleMaxDim and ex_bits in [1, kFastScaleMaxExBits].
 // Values are const_scaling_factor(padded_dim, ex_bits) as computed once by
 // scripts/generate_fast_scale_table.cpp; see src/core/fast_scale_table.cpp. The
-// table is frozen data: never regenerate or edit it.
+// table is frozen data: never regenerate it or change its values.
 inline constexpr size_t kFastScaleDimStep = 32;
 inline constexpr size_t kFastScaleMaxDim = 65536;
 inline constexpr size_t kFastScaleMaxExBits = 8;

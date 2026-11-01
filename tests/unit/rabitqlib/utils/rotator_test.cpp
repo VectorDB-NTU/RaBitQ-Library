@@ -654,8 +654,8 @@ std::vector<char> rotator_state(const Rotator<float>& rotator) {
 }  // namespace
 
 // Frozen sign flips: the top byte of each mt19937 output. These values were captured
-// from the libstdc++ std::uniform_int_distribution path this mapping replaced, so
-// existing Linux rotations are unchanged and every standard library now agrees.
+// from the GCC 11+ libstdc++ std::uniform_int_distribution path this mapping replaced,
+// so rotations from those builds are unchanged and every standard library now agrees.
 TEST(FhtRotatorTest, SeededSignFlipsAreFrozen) {
     struct Golden {
         size_t dim;

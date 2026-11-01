@@ -179,7 +179,8 @@ class FhtKacRotator : public Rotator<float> {
         : FhtKacRotator(dim, padded_dim, AllocateOnly{}) {
         // Frozen, portable mapping: the top byte of each mt19937 output. Its output
         // sequence is fixed by the standard, unlike std::uniform_int_distribution;
-        // libstdc++'s uniform_int_distribution<int>(0, 255) yields these same bytes.
+        // GCC 11+ libstdc++'s uniform_int_distribution<int>(0, 255) yields these same
+        // bytes; older libstdc++ occasionally drew different ones.
         std::mt19937 gen(seed);
         for (auto& i : flip_) {
             i = static_cast<uint8_t>(gen() >> 24);
