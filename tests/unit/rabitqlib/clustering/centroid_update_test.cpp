@@ -47,6 +47,23 @@ class RecordedAssignment {
             distances[point] = 0;
         }
     }
+
+    // These tests neither sample nor call assign() after training.
+    struct ModelState {};
+    void store_model_state(ModelState&) const {}
+    static bool has_model_state(const ModelState&, size_t) { return false; }
+    static void assign_with_state(
+        size_t,
+        size_t,
+        const float*,
+        const float*,
+        size_t,
+        uint32_t,
+        const RecordedParameters&,
+        const ModelState&,
+        PID*,
+        float*
+    ) {}
 };
 
 TEST(CentroidUpdateTest, ShiftIncludesNormalizedAndRefilledCentroids) {

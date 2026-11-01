@@ -13,6 +13,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -214,11 +215,31 @@ inline void exact_assign(
     failure.rethrow();
 }
 
+// Returns count sorted, distinct row indices in [0, n). The seed sequence keeps
+// this stream independent of the centroid initialization stream.
+[[nodiscard]] inline std::vector<size_t> sample_training_points(
+    size_t n, size_t count, uint32_t seed
+) {
+    assert(count <= n);
+    std::vector<size_t> indices(n);
+    std::iota(indices.begin(), indices.end(), size_t{0});
+    std::seed_seq sequence{seed, uint32_t{1}};
+    std::mt19937 rng(sequence);
+    for (size_t i = 0; i < count; ++i) {
+        std::uniform_int_distribution<size_t> pick(i, n - 1);
+        std::swap(indices[i], indices[pick(rng)]);
+    }
+    indices.resize(count);
+    std::sort(indices.begin(), indices.end());
+    return indices;
+}
+
 template <typename Parameters, typename Assignment>
 class LloydKMeans : public Parameters {
    public:
     using Parameters::early_stop_threshold;
     using Parameters::final_assignment;
+    using Parameters::max_points_per_centroid;
     using Parameters::min_points_per_centroid;
     using Parameters::niter;
     using Parameters::num_threads;
@@ -242,39 +263,8 @@ class LloydKMeans : public Parameters {
                 std::string(Assignment::kName) + " requires n >= k"
             );
         }
-        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " input dimensions overflow ptrdiff_t"
-            );
-        }
         const uint32_t num_workers = resolved_num_workers();
-        // Leave headroom for products of squared distances in graph pruning,
-        // as well as quantized reconstruction and rotated residuals.
-        const double max_coordinate = std::sqrt(
-            std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
-            (64.0 * static_cast<double>(d))
-        );
-        bool in_range = true;
-        bool finite = true;
-#pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
-    schedule(static)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n * d);
-             ++index) {
-            const size_t i = static_cast<size_t>(index);
-            finite = finite && std::isfinite(x[i]);
-            in_range = in_range && std::abs(static_cast<double>(x[i])) <= max_coordinate;
-        }
-        if (!finite) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " x must contain only finite values"
-            );
-        }
-        if (!in_range) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) +
-                " x exceeds the safe float32 coordinate range"
-            );
-        }
+        validate_points(n, x, num_workers, "x");
         if (verbose && min_points_per_centroid > 0 && n / k < min_points_per_centroid) {
             std::cerr << "WARNING " << Assignment::kName << " clustering " << n
                       << " points to " << k << " centroids: please provide at least "
@@ -291,13 +281,37 @@ class LloydKMeans : public Parameters {
             x = input_copy.data();
         }
 
-        Assignment assigner(d, k, x, n, num_workers, *this);
+        // Sample when n > k * max_points_per_centroid, without forming the product.
+        const bool sampled =
+            max_points_per_centroid != 0 && max_points_per_centroid <= (n - 1) / k;
+        const size_t num_samples = sampled ? k * max_points_per_centroid : n;
+        std::vector<float> samples;
+        const float* training_points = x;
+        if (sampled) {
+            if (verbose) {
+                std::cout << Assignment::kName << " sampling " << num_samples << " of " << n
+                          << " training points\n";
+            }
+            const auto indices = sample_training_points(n, num_samples, seed);
+            samples.resize(num_samples * d);
+#pragma omp parallel for num_threads(num_workers) schedule(static)
+            for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(num_samples);
+                 ++index) {
+                const auto sample = static_cast<size_t>(index);
+                std::copy_n(x + indices[sample] * d, d, samples.data() + sample * d);
+            }
+            training_points = samples.data();
+        }
+
+        std::optional<Assignment> assigner(
+            std::in_place, d, k, training_points, num_samples, num_workers, *this
+        );
 
         centroids.resize(k * d);
-        assignments.resize(n);
-        distances.resize(n);
+        assignments.resize(num_samples);
+        distances.resize(num_samples);
         iteration_stats.clear();
-        initialize_centroids(x, n);
+        initialize_centroids(training_points, num_samples);
         if (spherical) {
             normalize_centroids();
         }
@@ -316,22 +330,28 @@ class LloydKMeans : public Parameters {
                  ++cluster) {
                 update_worker_for_cluster[cluster] = worker;
             }
-            partition.points.reserve(n / update_workers);
+            partition.points.reserve(num_samples / update_workers);
         }
         double previous_obj = std::numeric_limits<double>::infinity();
 
         for (size_t iteration = 0; iteration < niter; ++iteration) {
-            assigner.assign(centroids.data(), assignments.data(), distances.data());
+            assigner->assign(centroids.data(), assignments.data(), distances.data());
             // Assignment has finished borrowing the current centroids. Keep them
             // for the shift calculation and overwrite the other buffer with means.
             previous_centroids.swap(centroids);
 
             const double obj = std::accumulate(distances.begin(), distances.end(), 0.0);
             update_centroids(
-                x, n, sums, cluster_sizes, update_partitions, update_worker_for_cluster
+                training_points,
+                num_samples,
+                sums,
+                cluster_sizes,
+                update_partitions,
+                update_worker_for_cluster
             );
-            const auto [nsplit, shift] =
-                consolidate_centroids(x, n, sums, cluster_sizes, previous_centroids);
+            const auto [nsplit, shift] = consolidate_centroids(
+                training_points, num_samples, sums, cluster_sizes, previous_centroids
+            );
             iteration_stats.push_back(
                 KMeansIterationStats{iteration + 1, obj, shift, nsplit}
             );
@@ -351,9 +371,17 @@ class LloydKMeans : public Parameters {
             }
         }
 
+        assigner->store_model_state(assignment_state_);
         // Return assignments for the final centroids, not the centroids from
         // the beginning of the last update step.
-        if (final_assignment == FinalAssignmentMode::Exact) {
+        if (sampled) {
+            // Release the sample and its encoded form before assigning all points.
+            assigner.reset();
+            std::vector<float>().swap(samples);
+            assignments.resize(n);
+            distances.resize(n);
+            assign_points(n, x, num_workers, assignments.data(), distances.data());
+        } else if (final_assignment == FinalAssignmentMode::Exact) {
             detail::exact_assign(
                 x,
                 centroids.data(),
@@ -367,9 +395,40 @@ class LloydKMeans : public Parameters {
                 assignments.data()
             );
         } else {
-            assigner.assign(centroids.data(), assignments.data(), distances.data(), true);
+            assigner->assign(centroids.data(), assignments.data(), distances.data(), true);
         }
         final_obj = std::accumulate(distances.begin(), distances.end(), 0.0);
+    }
+
+    /**
+     * Assigns n row-major vectors to the current centroids with final_assignment.
+     * Each vector's result is independent of the others in the call and of
+     * previous labels. Requires a successful train(); the outputs hold n elements
+     * each and must not overlap x or centroids.
+     */
+    void assign(
+        size_t n, const float* x, PID* point_assignments, float* point_distances
+    ) const {
+        validate_parameters();
+        if (centroids.size() != k * d ||
+            !Assignment::has_model_state(assignment_state_, d)) {
+            throw std::runtime_error(
+                std::string(Assignment::kName) + " has not been trained"
+            );
+        }
+        const uint32_t num_workers = resolved_num_workers();
+        validate_points(k, centroids.data(), num_workers, "centroids");
+        if (n == 0) {
+            return;
+        }
+        if (x == nullptr || point_assignments == nullptr || point_distances == nullptr) {
+            throw std::invalid_argument(
+                std::string(Assignment::kName) +
+                " assign input and output pointers must not be null"
+            );
+        }
+        validate_points(n, x, num_workers, "x");
+        assign_points(n, x, num_workers, point_assignments, point_distances);
     }
 
     size_t d;
@@ -382,6 +441,9 @@ class LloydKMeans : public Parameters {
     double final_obj = 0.0;
 
    private:
+    // Encoding center or centroid graph cache for assign(); see the Assignment type.
+    typename Assignment::ModelState assignment_state_;
+
     struct UpdatePartition {
         size_t first_cluster;
         size_t last_cluster;  // Exclusive; also bounds the accumulators we clear.
@@ -417,6 +479,84 @@ class LloydKMeans : public Parameters {
             throw std::invalid_argument(
                 std::string(Assignment::kName) +
                 " early_stop_threshold must be in the range [0, 1]"
+            );
+        }
+    }
+
+    // Requires a non-null x. name identifies the rows in error messages.
+    void validate_points(
+        size_t n, const float* x, uint32_t num_workers, const char* name
+    ) const {
+        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d) {
+            throw std::invalid_argument(
+                std::string(Assignment::kName) + " input dimensions overflow ptrdiff_t"
+            );
+        }
+        // Leave headroom for products of squared distances in graph pruning,
+        // as well as quantized reconstruction and rotated residuals.
+        const double max_coordinate = std::sqrt(
+            std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
+            (64.0 * static_cast<double>(d))
+        );
+        bool in_range = true;
+        bool finite = true;
+#pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
+    schedule(static)
+        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n * d);
+             ++index) {
+            const size_t i = static_cast<size_t>(index);
+            finite = finite && std::isfinite(x[i]);
+            in_range = in_range && std::abs(static_cast<double>(x[i])) <= max_coordinate;
+        }
+        if (!finite) {
+            throw std::invalid_argument(
+                std::string(Assignment::kName) + " " + name +
+                " must contain only finite values"
+            );
+        }
+        if (!in_range) {
+            throw std::invalid_argument(
+                std::string(Assignment::kName) + " " + name +
+                " exceeds the safe float32 coordinate range"
+            );
+        }
+    }
+
+    // Assigns validated points to the current centroids. Uses the state saved by
+    // train() but neither Lloyd assignments nor graph search hints, so each
+    // point's result is independent of the batch. Requires n > 0 and outputs
+    // that do not overlap x or centroids.
+    void assign_points(
+        size_t n,
+        const float* x,
+        uint32_t num_workers,
+        PID* point_assignments,
+        float* point_distances
+    ) const {
+        if (final_assignment == FinalAssignmentMode::Exact) {
+            detail::exact_assign(
+                x,
+                centroids.data(),
+                n,
+                d,
+                k,
+                spherical,
+                num_workers,
+                point_assignments,
+                point_distances
+            );
+        } else {
+            Assignment::assign_with_state(
+                d,
+                k,
+                centroids.data(),
+                x,
+                n,
+                num_workers,
+                *this,
+                assignment_state_,
+                point_assignments,
+                point_distances
             );
         }
     }
