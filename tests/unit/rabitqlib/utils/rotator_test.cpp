@@ -666,14 +666,14 @@ TEST(FhtRotatorTest, SeededSignFlipsAreFrozen) {
         std::array<uint8_t, 8> prefix;
     };
     const std::array<Golden, 4> goldens{{
-        {64, 64, 0U, 32, 0x23ac77c7fcd78e18ULL, {140, 151, 183, 216, 154, 219, 139, 216}},
-        {65, 96, 42U, 48, 0xa8609a52aeb403fbULL, {95, 203, 243, 46, 187, 199, 153, 152}},
-        {768, 768, 7U, 384, 0x7d509e6cda1a50efULL, {19, 58, 199, 81, 112, 250, 185, 116}},
+        {64, 64, 0U, 32, 0x7fcf0925975a6086ULL, {140, 151, 183, 216, 154, 219, 139, 216}},
+        {65, 96, 42U, 48, 0xd9e9cf1fc973e865ULL, {95, 203, 243, 46, 187, 199, 153, 152}},
+        {768, 768, 7U, 384, 0xfaa17c43b69f821dULL, {19, 58, 199, 81, 112, 250, 185, 116}},
         {100,
          128,
          123456789U,
          64,
-         0x0f87eeb109e9f55eULL,
+         0xe503af8f3b3cd71cULL,
          {136, 253, 136, 3, 130, 185, 182, 34}},
     }};
     for (const Golden& golden : goldens) {
@@ -685,7 +685,7 @@ TEST(FhtRotatorTest, SeededSignFlipsAreFrozen) {
         );
         const std::vector<char> state = rotator_state(*rotator);
         ASSERT_EQ(state.size(), golden.bytes);
-        uint64_t hash = 1469598103934665603ULL;
+        uint64_t hash = 14695981039346656037ULL;
         for (char byte : state) {
             hash ^= static_cast<uint8_t>(byte);
             hash *= 1099511628211ULL;

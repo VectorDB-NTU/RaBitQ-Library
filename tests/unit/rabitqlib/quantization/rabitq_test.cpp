@@ -800,7 +800,7 @@ TEST(FastScaleTableTest, WholeTableIsFrozen) {
     using rabitq_impl::ex_bits::kFastScaleDimStep;
     using rabitq_impl::ex_bits::kFastScaleMaxDim;
     using rabitq_impl::ex_bits::kFastScaleMaxExBits;
-    uint64_t hash = 1469598103934665603ULL;
+    uint64_t hash = 14695981039346656037ULL;
     for (size_t padded_dim = kFastScaleDimStep; padded_dim <= kFastScaleMaxDim;
          padded_dim += kFastScaleDimStep) {
         for (size_t ex_bits = 1; ex_bits <= kFastScaleMaxExBits; ++ex_bits) {
@@ -813,7 +813,7 @@ TEST(FastScaleTableTest, WholeTableIsFrozen) {
             }
         }
     }
-    EXPECT_EQ(hash, 0x4195f9250a4a3900ULL);
+    EXPECT_EQ(hash, 0x0e2905a5a51a323eULL);
 }
 
 TEST(FastScaleTableTest, DimensionsOutsideTheTableFallBackToTheComputation) {
