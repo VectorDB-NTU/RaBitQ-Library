@@ -19,7 +19,7 @@ namespace rabitqlib::quant {
 // Padded dimensions in the frozen table give the same factor on every platform.
 // Others fall back to computing it from std::normal_distribution samples, which differ
 // between standard libraries (by several percent) and between FMA and non-FMA builds
-// (in the last bits).
+// or math libraries (in the last bits).
 inline RabitqConfig faster_config(size_t dim, size_t total_bits) {
     RabitqConfig config;
     if (total_bits > 1) {

@@ -49,10 +49,11 @@ The factor is the average of the default path's scaling factors over sampled
 uniformly distributed unit vectors. `faster_config` reads it from a frozen,
 precomputed table for padded dimensions that are multiples of 32 up to 65536 and
 total bit widths 2 through 9, so the same arguments give the same factor on every
-platform, standard library and CPU, at no setup cost. Other dimensions compute the
-factor when called from `std::normal_distribution` samples, which differ between
-standard libraries (MSVC and libc++ results differ from libstdc++ by several percent)
-and, in the last bits, between FMA and non-FMA builds; calibrate once and reuse the
+platform, standard library and CPU, at no setup cost. For other dimensions,
+`faster_config` computes the factor from `std::normal_distribution` samples, which
+differ between standard libraries (MSVC and libc++ results differ from libstdc++ by
+several percent) and, in the last bits, between FMA and non-FMA builds and between
+math libraries; calibrate once and reuse the
 result for the same padded dimension and total bit width. This
 reduces encoding work at a possible accuracy cost; evaluate it on your data.
 
