@@ -43,7 +43,7 @@ def test_rejected_rebuild_preserves_index(base_data, clusters, tmp_path, reload)
         idx = HnswIndex.load(path)
     before = idx.search(base_data[:10], k=3, ef=_EF)
     with pytest.raises(
-        RuntimeError, match="^HNSW index is already constructed or loaded$"
+        RuntimeError, match="^HNSW index is already trained, constructed or loaded$"
     ):
         idx.build(base_data, centroids[:1], np.zeros(N_VECTORS, dtype=np.uint32))
     assert idx.is_built

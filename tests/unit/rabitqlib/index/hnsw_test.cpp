@@ -884,7 +884,9 @@ TEST_F(HnswSaveTest, RejectedRebuildPreservesConstructedAndLoadedIndexes) {
             );
             FAIL() << "A second construction must be rejected";
         } catch (const std::logic_error& error) {
-            EXPECT_STREQ(error.what(), "HNSW index is already constructed or loaded");
+            EXPECT_STREQ(
+                error.what(), "HNSW index is already trained, constructed or loaded"
+            );
         }
         EXPECT_EQ(index->num_points(), kCount);
         EXPECT_EQ(index->num_clusters(), 2U);
@@ -1530,6 +1532,16 @@ TEST(HnswTrainTest, UntrainedIndexRejectsAddAndSaveWithoutChangingState) {
     EXPECT_EQ(index.num_stored_points(), 0U);
     EXPECT_EQ(index.max_elements(), kCount);
     index.set_centroids(2, fixture.centroids.data());
+    auto cluster_ids = fixture.cluster_ids;
+    try {
+        index.construct(
+            2, fixture.centroids.data(), kCount, fixture.data.data(), cluster_ids.data(), 1
+        );
+        FAIL() << "constructing a trained index succeeded";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(error.what(), "HNSW index is already trained, constructed or loaded");
+    }
+    EXPECT_EQ(index.num_stored_points(), 0U);
     index.add(fixture.data.data(), kCount, nullptr, false, 1);
     EXPECT_EQ(index.num_points(), kCount);
 }

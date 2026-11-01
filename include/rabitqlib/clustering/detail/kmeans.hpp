@@ -234,9 +234,26 @@ inline void exact_assign(
     return indices;
 }
 
+// Copy the fields LloydKMeans reads, which every k-means parameter type shares,
+// leaving the method-specific ones of `to` unchanged. Keep this list and the
+// using-declarations below the same.
+template <typename From, typename To>
+void copy_shared_parameters(const From& from, To& to) {
+    to.early_stop_threshold = from.early_stop_threshold;
+    to.final_assignment = from.final_assignment;
+    to.max_points_per_centroid = from.max_points_per_centroid;
+    to.min_points_per_centroid = from.min_points_per_centroid;
+    to.niter = from.niter;
+    to.num_threads = from.num_threads;
+    to.seed = from.seed;
+    to.spherical = from.spherical;
+    to.verbose = from.verbose;
+}
+
 template <typename Parameters, typename Assignment>
 class LloydKMeans : public Parameters {
    public:
+    // Keep in sync with copy_shared_parameters.
     using Parameters::early_stop_threshold;
     using Parameters::final_assignment;
     using Parameters::max_points_per_centroid;

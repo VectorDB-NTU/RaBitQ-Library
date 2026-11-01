@@ -680,6 +680,42 @@ void check_train_centroids_skips_final_assignment() {
     }
 }
 
+// Every shared field gets a non-default value; QG graph settings must survive.
+TEST(KMeansParametersTest, CopySharedParametersCopiesOnlySharedFields) {
+    rabitqkmeans::RaBitQKMeansParameters from;
+    from.early_stop_threshold = 0.25;
+    from.final_assignment = FinalAssignmentMode::Exact;
+    from.max_points_per_centroid = 17;
+    from.min_points_per_centroid = 3;
+    from.niter = 7;
+    from.num_threads = 5;
+    from.seed = 11;
+    from.spherical = true;
+    from.verbose = true;
+    qgkmeans::QGKMeansParameters to;
+    to.graph_degree = 64;
+    to.ef_build = 99;
+    to.ef_search = 33;
+    to.graph_build_iterations = 2;
+    to.quantization_bits = 4;
+
+    clustering::detail::copy_shared_parameters(from, to);
+    EXPECT_EQ(to.early_stop_threshold, from.early_stop_threshold);
+    EXPECT_EQ(to.final_assignment, from.final_assignment);
+    EXPECT_EQ(to.max_points_per_centroid, from.max_points_per_centroid);
+    EXPECT_EQ(to.min_points_per_centroid, from.min_points_per_centroid);
+    EXPECT_EQ(to.niter, from.niter);
+    EXPECT_EQ(to.num_threads, from.num_threads);
+    EXPECT_EQ(to.seed, from.seed);
+    EXPECT_EQ(to.spherical, from.spherical);
+    EXPECT_EQ(to.verbose, from.verbose);
+    EXPECT_EQ(to.graph_degree, 64U);
+    EXPECT_EQ(to.ef_build, 99U);
+    EXPECT_EQ(to.ef_search, 33U);
+    EXPECT_EQ(to.graph_build_iterations, 2U);
+    EXPECT_EQ(to.quantization_bits, 4U);
+}
+
 TEST(KMeansTrainCentroidsTest, RaBitQSkipsFinalAssignment) {
     check_train_centroids_skips_final_assignment<rabitqkmeans::RaBitQKMeans>();
 }

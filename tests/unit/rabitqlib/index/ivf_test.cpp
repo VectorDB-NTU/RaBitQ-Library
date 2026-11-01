@@ -1642,6 +1642,40 @@ TEST(IvfTrainTest, UntrainedIndexRejectsAddSearchAndSaveWithoutChangingState) {
     EXPECT_EQ(index.num_points(), kCount);
 }
 
+TEST(IvfTrainTest, ConstructIsOnlyForPointCountIndexesUntilPointsAreAdded) {
+    constexpr size_t kCount = 64;
+    const auto points = random_rows(kCount, 33);
+    const auto centroids = random_rows(kDynNumClusters, 34);
+    const auto assigned = nearest_centroids(centroids, points.data(), kCount, METRIC_L2);
+    const auto cp = default_training_parameters(METRIC_L2, 7);
+
+    IVF counted(kCount, kDynDim, kDynNumClusters, 4, METRIC_L2);
+    try {
+        counted.set_centroids(centroids.data(), 1);
+        FAIL() << "setting centroids on a point-count index succeeded";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(
+            error.what(), "IVF index created with a point count must be built by construct"
+        );
+    }
+    EXPECT_THROW(counted.train(kCount, points.data(), cp), std::logic_error);
+    EXPECT_FALSE(counted.is_trained());
+    EXPECT_EQ(counted.max_elements(), kCount);
+    counted.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    EXPECT_EQ(counted.num_points(), kCount);
+
+    IVF uncounted(kDynDim, kDynNumClusters, 4, METRIC_L2, 7);
+    uncounted.set_centroids(centroids.data(), 1);
+    try {
+        uncounted.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        FAIL() << "constructing an index without a point count succeeded";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(error.what(), "IVF must be configured before construction");
+    }
+    EXPECT_TRUE(uncounted.is_trained());
+    EXPECT_EQ(uncounted.num_stored_points(), 0U);
+}
+
 TEST(IvfTrainTest, SetCentroidsAndAddMatchConstructByteForByte) {
     constexpr size_t kCount = 200;
     constexpr uint32_t kSeed = 17;
@@ -1783,6 +1817,15 @@ TEST(IvfTrainTest, TrainedIndexSearchesAndSavesOnlyAfterAdd) {
         index.train(kCount, points.data(), default_training_parameters(metric, kSeed));
         EXPECT_TRUE(index.is_trained());
         EXPECT_EQ(index.num_points(), 0U);
+        PID id = 0;
+        try {
+            index.search(points.data(), 1, 1, &id);
+            FAIL() << "searching a trained index without points succeeded";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(
+                error.what(), "IVF search k must be between 1 and the point count"
+            );
+        }
         try {
             index.save(path.c_str());
             FAIL() << "saving a trained index without points succeeded";
@@ -1823,10 +1866,7 @@ TEST(IvfTrainTest, ChoosesKMeansByClusterCount) {
         rabitqkmeans::RaBitQKMeans rabitq(kDynDim, num_clusters, cp);
         rabitq.train(count, points.data());
         qgkmeans::QGKMeansParameters qg_cp;
-        qg_cp.niter = cp.niter;
-        qg_cp.seed = cp.seed;
-        qg_cp.num_threads = cp.num_threads;
-        qg_cp.max_points_per_centroid = cp.max_points_per_centroid;
+        clustering::detail::copy_shared_parameters(cp, qg_cp);
         qgkmeans::QGKMeans qg(kDynDim, num_clusters, qg_cp);
         qg.train(count, points.data());
         ASSERT_NE(rabitq.centroids, qg.centroids);

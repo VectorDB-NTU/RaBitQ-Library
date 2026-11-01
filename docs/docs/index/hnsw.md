@@ -134,7 +134,8 @@ index.add(data.data(), num_points);
   [how added points are linked](#how-added-points-are-linked).
 - `train` and `set_centroids` replace the centroids only while the index stores
   no points, removed ones included; otherwise they throw `std::logic_error`.
-  A failed call leaves the index unchanged.
+  A failed call leaves the index unchanged. `construct` needs an untrained index,
+  so after either call it throws `std::logic_error`; use `add` instead.
 - `is_trained()` reports whether centroids are set. Before that, `add` throws
   `std::logic_error`; searching an empty index, trained or not, returns no results.
 - `save` throws `std::logic_error` for an index without stored points, trained

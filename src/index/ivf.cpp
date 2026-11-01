@@ -53,6 +53,9 @@ namespace {
 constexpr float kRemovedFAdd = std::numeric_limits<float>::infinity();
 // Files without routing metadata used HNSW routing from this many clusters.
 constexpr size_t kHistoricalHnswMinClusters = 20000;
+// An index from the point-count constructor is built by construct, never trained.
+constexpr const char* kPointCountConstructOnly =
+    "IVF index created with a point count must be built by construct";
 }  // namespace
 
 IVF::IVF() noexcept = default;
@@ -235,6 +238,9 @@ void IVF::set_centroids(const float* centroids, size_t num_threads) {
     if (num_stored_points() != 0) {
         throw std::logic_error("IVF cannot replace the centroids of an index with points");
     }
+    if (!ready_ && max_elements_ != 0) {
+        throw std::logic_error(kPointCountConstructOnly);
+    }
     if (centroids == nullptr) {
         throw std::invalid_argument("IVF centroids must not be null");
     }
@@ -266,8 +272,6 @@ void IVF::set_centroids(const float* centroids, size_t num_threads) {
     cluster_storage_ = std::move(cluster_storage);
     clusters_ = std::move(clusters);
     ip_func_ = ip_func;
-    max_elements_ = 0;
-    num_removed_ = 0;
     ready_ = true;
 }
 
@@ -280,6 +284,9 @@ void IVF::train(
     if (num_stored_points() != 0) {
         throw std::logic_error("IVF cannot retrain an index with points");
     }
+    if (!ready_ && max_elements_ != 0) {
+        throw std::logic_error(kPointCountConstructOnly);
+    }
     if (data == nullptr) {
         throw std::invalid_argument("IVF training data must not be null");
     }
@@ -289,24 +296,16 @@ void IVF::train(
     if (num_points > std::numeric_limits<size_t>::max() / sizeof(float) / dim_) {
         throw std::invalid_argument("IVF training data exceeds addressable storage");
     }
-    check_coordinates(data, num_points * dim_, dim_, "IVF training data");
-
+    // k-means checks the data for finite, in-range coordinates in parallel with
+    // the bound check_coordinates uses; set_centroids checks its centroids.
     std::vector<float> centroids;
     if (num_clusters_ <= kMaxRaBitQKMeansClusters) {
         rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters_, cp);
         kmeans.train_centroids(num_points, data);
         centroids = std::move(kmeans.centroids);
     } else {
-        qgkmeans::QGKMeansParameters qg_cp;
-        qg_cp.niter = cp.niter;
-        qg_cp.verbose = cp.verbose;
-        qg_cp.spherical = cp.spherical;
-        qg_cp.seed = cp.seed;
-        qg_cp.min_points_per_centroid = cp.min_points_per_centroid;
-        qg_cp.early_stop_threshold = cp.early_stop_threshold;
-        qg_cp.final_assignment = cp.final_assignment;
-        qg_cp.num_threads = cp.num_threads;
-        qg_cp.max_points_per_centroid = cp.max_points_per_centroid;
+        qgkmeans::QGKMeansParameters qg_cp;  // Default graph settings
+        clustering::detail::copy_shared_parameters(cp, qg_cp);
         qgkmeans::QGKMeans kmeans(dim_, num_clusters_, qg_cp);
         kmeans.train_centroids(num_points, data);
         centroids = std::move(kmeans.centroids);

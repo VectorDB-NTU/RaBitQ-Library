@@ -504,7 +504,7 @@ void HierarchicalNSW::construct(
     bool fast_quantization
 ) {
     if (num_clusters_ != 0 || num_stored_points_ != 0) {
-        throw std::logic_error("HNSW index is already constructed or loaded");
+        throw std::logic_error("HNSW index is already trained, constructed or loaded");
     }
     if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("HNSW cluster count is out of range");
@@ -639,8 +639,8 @@ void HierarchicalNSW::train(
     if (num_points > std::numeric_limits<size_t>::max() / sizeof(float) / dim_) {
         throw std::invalid_argument("HNSW training data exceeds addressable storage");
     }
-    check_coordinates(data, num_points * dim_, dim_, "HNSW training data");
-
+    // k-means checks the data for finite, in-range coordinates in parallel with
+    // the bound check_coordinates uses; set_centroids checks its centroids.
     rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters, cp);
     kmeans.train_centroids(num_points, data);
     set_centroids(num_clusters, kmeans.centroids.data());

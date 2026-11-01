@@ -207,7 +207,8 @@ class IVF {
     /**
      * @brief Create an empty index to fill with train or set_centroids, then add.
      *
-     * Unlike the constructor taking a point count, this one is not for construct.
+     * The index starts with no point storage. construct rebuilds an index from
+     * max_elements() rows, so it fails here until add has stored points.
      *
      * @param dim Original input dimension
      * @param num_clusters Number of centroids that train or set_centroids provides
@@ -251,7 +252,8 @@ class IVF {
      * Uses RaBitQKMeans up to kMaxRaBitQKMeansClusters clusters, and QGKMeans with the
      * fields the two parameter types share and default graph parameters above that.
      * Only centroids are trained: points are not assigned until add. Requires a
-     * configured index without stored points; the index is unchanged if this throws.
+     * configured index without stored points that was not created with a point
+     * count; the index is unchanged if this throws.
      *
      * @param num_points Number of training points, at least num_clusters()
      * @param data Training points (num_points * dim)
@@ -266,7 +268,8 @@ class IVF {
      * @brief Replace the centroids of an index without stored points.
      *
      * Builds the centroid initializer and empty clusters, so the index can add points.
-     * The index is unchanged if this throws.
+     * An index created with a point count is built by construct instead, so this
+     * throws std::logic_error for it. The index is unchanged if this throws.
      *
      * @param centroids Centroid vectors (num_clusters() * dim)
      * @param num_threads Threads used to build the centroid initializer
