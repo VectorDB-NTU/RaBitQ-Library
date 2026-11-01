@@ -1340,6 +1340,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Parameters and input">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#training-set-sampling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training-set sampling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1386,6 +1403,17 @@
     <span class="md-ellipsis">
       
         Results and final assignment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assign-new-vectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assign new vectors
       
     </span>
   </a>
@@ -1687,6 +1715,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Parameters and input">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#training-set-sampling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Training-set sampling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1733,6 +1778,17 @@
     <span class="md-ellipsis">
       
         Results and final assignment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assign-new-vectors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assign new vectors
       
     </span>
   </a>
@@ -1819,6 +1875,9 @@ algorithms based on the cluster count.</p>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">assignments</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">assignments</span>  <span class="c1"># shape (n,)</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">distances</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">distances</span>      <span class="c1"># shape (n,)</span>
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">final_obj</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">final_obj</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="c1"># Assign other vectors, shape (m, d), to the trained centroids.</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">query_assignments</span><span class="p">,</span> <span class="n">query_distances</span> <span class="o">=</span> <span class="n">kmeans</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>  <span class="c1"># shapes (m,), (m,)</span>
 </code></pre></div>
 <p><code>x</code> has shape <code>(n, d)</code> and is converted to a C-contiguous float32 array.</p>
 <h2 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h2>
@@ -1839,6 +1898,11 @@ Link that target; a core-only installation does not include clustering headers.<
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="o">&amp;</span><span class="w"> </span><span class="n">assignments</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">kmeans</span><span class="p">.</span><span class="n">assignments</span><span class="p">;</span>
 <a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="o">&amp;</span><span class="w"> </span><span class="n">distances</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">kmeans</span><span class="p">.</span><span class="n">distances</span><span class="p">;</span>
 <a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="k">const</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">final_obj</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">kmeans</span><span class="p">.</span><span class="n">final_obj</span><span class="p">;</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="c1">// Caller-owned outputs with num_queries elements each.</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">PID</span><span class="o">&gt;</span><span class="w"> </span><span class="n">query_assignments</span><span class="p">(</span><span class="n">num_queries</span><span class="p">);</span>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">query_distances</span><span class="p">(</span><span class="n">num_queries</span><span class="p">);</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="n">kmeans</span><span class="p">.</span><span class="n">assign</span><span class="p">(</span><span class="n">num_queries</span><span class="p">,</span><span class="w"> </span><span class="n">queries</span><span class="p">,</span><span class="w"> </span><span class="n">query_assignments</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">query_distances</span><span class="p">.</span><span class="n">data</span><span class="p">());</span>
 </code></pre></div>
 <p>Complete examples: <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/rabitqkmeans.cpp">RaBitQKMeans</a>
 (<code>bin/rabitqkmeans</code>) and <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/qgkmeans.cpp">QGKMeans</a>
@@ -1892,6 +1956,11 @@ Append <code>ip</code> for spherical clustering of normalized input; the default
 <td>Warn below this training-points-per-centroid ratio when verbose.</td>
 </tr>
 <tr>
+<td><code>max_points_per_centroid</code></td>
+<td><code>0</code></td>
+<td>When positive, train on a random sample above <code>k * max_points_per_centroid</code> vectors; <code>0</code> trains on all vectors. See <a href="#training-set-sampling">sampling</a>.</td>
+</tr>
+<tr>
 <td><code>verbose</code></td>
 <td><code>false</code></td>
 <td>Print training progress and warnings.</td>
@@ -1915,14 +1984,40 @@ mutate the input; provide normalized vectors for spherical mode.</p>
 empty clusters in the final assignment. Thread scheduling can affect graph
 construction and floating-point reductions, so a fixed seed does not guarantee
 identical multithreaded results.</p>
+<h3 id="training-set-sampling">Training-set sampling<a class="headerlink" href="#training-set-sampling" title="Permanent link">&para;</a></h3>
+<p>Sampling is disabled by default. When <code>max_points_per_centroid</code> is positive
+and <code>n &gt; k * max_points_per_centroid</code>, training draws
+<code>k * max_points_per_centroid</code> distinct vectors uniformly at random, as Faiss
+does; Faiss enables this by default with 256. Centroid initialization and all
+Lloyd iterations use only this sample. The final centroids then assign all <code>n</code>
+vectors with the selected <code>final_assignment</code> mode, as <a href="#assign-new-vectors"><code>assign</code></a>
+does, so <code>assignments</code> and <code>distances</code> keep shape <code>(n,)</code> and can be passed
+directly to index builders.</p>
+<p><code>seed</code> selects the sample through a random stream separate from centroid
+initialization. Training that does not sample, because the parameter is <code>0</code> or
+<code>n</code> is at most <code>k * max_points_per_centroid</code>, returns the same results as
+before this parameter existed. The selected vectors depend on the
+C++ standard library's random distributions, so the same seed can choose a
+different sample on another platform.</p>
+<p><code>obj</code> and <code>iteration_stats</code> (and the value returned by Python <code>train()</code>) are
+computed on the sampled vectors, while <code>distances</code> and <code>final_obj</code> cover all <code>n</code>
+vectors. Their values are not directly comparable. Validation still checks
+every input vector, including those outside the sample.</p>
+<p>Sampling reduces iteration work but raises peak memory. Training copies the
+sample into a contiguous buffer of <code>k * max_points_per_centroid * d</code> float32
+values, 4 GiB for <code>k = 4096</code>, <code>max_points_per_centroid = 256</code> and <code>d = 960</code>,
+and briefly holds <code>n</code> 8-byte row indices to select it, in addition to the
+caller's input. The final assignment still processes all <code>n</code> vectors.</p>
 <h2 id="method-details">Method details<a class="headerlink" href="#method-details" title="Permanent link">&para;</a></h2>
 <h3 id="rabitqkmeans">RaBitQKMeans<a class="headerlink" href="#rabitqkmeans" title="Permanent link">&para;</a></h3>
 <p>The flat assignment design is inspired by
 <a href="https://github.com/cwida/SuperKMeans">SuperKMeans</a>. Training points are rotated
 and encoded once around a fixed dataset mean. Each centroid becomes a query
 that scans all packed point batches, and each point receives the centroid with
-the best estimated distance.</p>
-<p>Each iteration compares all <code>n * k</code> point-centroid pairs. The batch size of 32
+the best estimated distance. The model keeps this mean of the training points
+(of the sample, when training samples), and <a href="#assign-new-vectors"><code>assign</code></a>
+encodes new vectors around it.</p>
+<p>Each iteration compares every training point with every centroid. The batch size of 32
 is not a cluster-count limit. This method uses one-bit point codes throughout;
 it has no graph parameters or <code>quantization_bits</code> setting.</p>
 <h3 id="qgkmeans">QGKMeans<a class="headerlink" href="#qgkmeans" title="Permanent link">&para;</a></h3>
@@ -1961,7 +2056,8 @@ assignments as search hints. Its additional parameters are:</p>
 </table>
 <p>The seed also controls fallback neighbors; PiPNN uses fixed internal seeds.
 <code>QGAssigner</code> in <code>qgkmeans.hpp</code> supports repeated vector-to-centroid assignment
-without the clustering loop.</p>
+without the clustering loop. To assign vectors with trained QGKMeans centroids,
+use <a href="#assign-new-vectors"><code>assign</code></a>.</p>
 <h2 id="results-and-final-assignment">Results and final assignment<a class="headerlink" href="#results-and-final-assignment" title="Permanent link">&para;</a></h2>
 <p>Python result properties are <code>None</code> until a successful fit; a failed fit
 preserves the previous successful results.</p>
@@ -1973,9 +2069,10 @@ their sum (WCSS); spherical mode sums <code>1 - inner_product</code>. <code>obj<
 <p><code>FinalAssignmentMode.Approximate</code> (default) uses the selected class's assignment
 algorithm. The legacy name <code>FinalAssignmentMode.SymphonyQG</code> remains an alias for
 <code>Approximate</code>. Labels need not identify the exact nearest centroids, but reported
-distances and WCSS remain exact for those labels. Quantized QGKMeans final
-assignment retains a previous label when it is closer. Approximate training
-objectives need not decrease monotonically.</p>
+distances and WCSS remain exact for those labels. Without sampling, quantized
+QGKMeans final assignment retains a point's last-iteration label when it is
+closer. After sampling, most points have no such label, so every point uses the
+same graph search. Approximate training objectives need not decrease monotonically.</p>
 <p>To require exact nearest-centroid <strong>final</strong> assignments with either class:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">FinalAssignmentMode</span><span class="p">,</span> <span class="n">RaBitQKMeans</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
@@ -1990,6 +2087,26 @@ enum. Training still uses the selected approximate assignment algorithm.</p>
 possible winners in float64; ties select the smallest centroid index. Returned
 distances remain float32. Work is proportional to <code>n * k * d</code>; large coordinate
 offsets or near ties can require more refinement.</p>
+<h2 id="assign-new-vectors">Assign new vectors<a class="headerlink" href="#assign-new-vectors" title="Permanent link">&para;</a></h2>
+<p>After a successful fit, <code>assign(x)</code> returns <code>(assignments, distances)</code> for an
+<code>(m, d)</code> array: uint32 centroid IDs and float32 distances to those centroids,
+each of shape <code>(m,)</code>. It uses <code>final_assignment</code> and the other parameters of the
+last successful fit and checks coordinates as training does; <code>m</code> may be <code>0</code>.
+Before the first successful fit, it raises <code>RuntimeError</code>. The C++ method
+<code>assign(n, x, assignments, distances)</code> writes to caller-owned buffers. It throws
+<code>std::runtime_error</code> until <code>train()</code> succeeds, including when <code>centroids</code> were
+written directly, and <code>std::invalid_argument</code> for invalid <code>x</code> or <code>centroids</code>.</p>
+<p><code>assign</code> uses no labels or search hints from training, so each vector's
+result is independent of the other vectors in the call. Approximate
+RaBitQKMeans encodes vectors around the stored training mean. Approximate
+QGKMeans builds a graph over the centroids on first use and reuses it;
+C++ callers that change <code>centroids</code> or graph parameters cause one rebuild on
+the next call. Each call still validates the <code>k * d</code> centroid coordinates.</p>
+<p>For the training vectors, <code>assign</code> reproduces <code>assignments</code> and <code>distances</code>
+with <code>FinalAssignmentMode.Exact</code>, for RaBitQKMeans, and whenever training
+sampled the input, because the sampled final pass is the same assignment.
+Unsampled approximate QGKMeans training also uses previous labels as graph
+search hints, so its final labels can differ.</p>
 <h2 id="compare-with-faiss">Compare with Faiss<a class="headerlink" href="#compare-with-faiss" title="Permanent link">&para;</a></h2>
 <p>The <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/python/compare_with_faiss.py">comparison script</a>
 compares both methods with FAISS and requires <code>faiss-cpu</code>. Defaults are one
