@@ -172,8 +172,9 @@ and record results and any unresolved failures or missing coverage in the releas
 or issue. These manual checks are not enforced by the automatic publishing workflow.
 
 Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt`,
-add a short README news entry and, for releases with user-facing notes, a
-`docs/docs/releases/X.Y.Z.md` page listed in the `docs/mkdocs.yml` navigation,
+add a one-line README news entry (keep the three most recent) and, for releases
+with user-facing notes, a `docs/docs/releases/X.Y.Z.md` page listed under its
+`X.Y` group in the `docs/mkdocs.yml` release-notes navigation,
 and merge into `main`. Once the `Test` and
 `Python Wheel` workflows succeed for the same commit, `Release wheels` checks
 whether that version is newer than the existing release tags. It then builds

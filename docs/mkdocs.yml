@@ -12,13 +12,17 @@ nav:
   - Migrating to 0.8: python_migration.md
   - Installation: installation.md
   - C++ Integration: cpp_integration.md
+  # Group by minor version: nested groups stay collapsed except the current page's.
   - Release notes:
-      - "0.8.1": releases/0.8.1.md
-      - "0.8.0": releases/0.8.0.md
-      - "0.7.2": releases/0.7.2.md
-      - "0.7.1": releases/0.7.1.md
-      - "0.7.0": releases/0.7.0.md
-      - "0.6.0": releases/0.6.0.md
+      - "0.8":
+          - "0.8.1": releases/0.8.1.md
+          - "0.8.0": releases/0.8.0.md
+      - "0.7":
+          - "0.7.2": releases/0.7.2.md
+          - "0.7.1": releases/0.7.1.md
+          - "0.7.0": releases/0.7.0.md
+      - "0.6":
+          - "0.6.0": releases/0.6.0.md
   - RaBitQ:
       - Overview: rabitq/rabitq.md
       - Rotation: rabitq/rotator.md

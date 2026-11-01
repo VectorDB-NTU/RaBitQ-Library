@@ -16,19 +16,14 @@ approximate nearest-neighbor search. See the [research papers](https://vectordb-
 
 ## News
 
-- **v0.8.1:** The default `num_threads=0` now respects `OMP_NUM_THREADS`, fixing a
-  macOS crash when Faiss and PyTorch share the process. See the [release notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.1/).
-- **v0.8.0:** Faiss-style `train`, `add` and `search` for all Python indexes,
-  with 0.7 calls kept as deprecated forms until 0.9; optional k-means sampling
-  and assignment; stricter input validation and atomic index saves. C++ query-factor
-  accessors gain a `g_` prefix. See the [release notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.0/).
-- **v0.7.2:** Python type hints, expanded API documentation, path-like inputs,
-  clearer input errors, and concise index representations. Internal quantization
-  refactoring and streamlined regression checks preserve existing APIs and index formats.
-  See the [release notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.7.2/).
-- **v0.7.0:** Modular C++ components, stable core API v1, optional
-  OpenMP for numerical components, and unified index counts. See the
-  [upgrade notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.7.0/).
+- **v0.8.1:** the default `num_threads=0` respects `OMP_NUM_THREADS`, fixing a macOS
+  crash alongside Faiss and PyTorch ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.1/)).
+- **v0.8.0:** Faiss-style `train`, `add` and `search` for all Python indexes; 0.7 calls
+  stay as deprecated forms until 0.9 ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.0/)).
+- **v0.7.2:** Python type hints, path-like inputs and clearer input errors
+  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.7.2/)).
+
+Earlier versions: [all releases](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
 
 ## Vector indexes
 
