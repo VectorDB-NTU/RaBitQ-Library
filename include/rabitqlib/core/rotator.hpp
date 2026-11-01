@@ -89,9 +89,13 @@ class MatrixRotator : public Rotator<T> {
     RowMajorMatrix<T> rand_mat_;
 
    public:
-    explicit MatrixRotator(size_t dim, size_t padded_dim)
+    // The seed makes the matrix reproducible only with the same standard library
+    // (std::normal_distribution) and build (QR rounding); persist it with save().
+    explicit MatrixRotator(
+        size_t dim, size_t padded_dim, uint32_t seed = std::random_device{}()
+    )
         : MatrixRotator(dim, padded_dim, AllocateOnly{}) {
-        RowMajorMatrix<T> rand = random_gaussian_matrix<T>(padded_dim, padded_dim);
+        RowMajorMatrix<T> rand = random_gaussian_matrix<T>(padded_dim, padded_dim, seed);
         Eigen::HouseholderQR<RowMajorMatrix<T>> qr(rand);
         RowMajorMatrix<T> q_inv =
             qr.householderQ()
@@ -173,10 +177,13 @@ class FhtKacRotator : public Rotator<float> {
         size_t dim, size_t padded_dim, uint32_t seed = std::random_device{}()
     )
         : FhtKacRotator(dim, padded_dim, AllocateOnly{}) {
+        // Frozen, portable mapping: the top byte of each mt19937 output. Its output
+        // sequence is fixed by the standard, unlike std::uniform_int_distribution;
+        // GCC 11+ libstdc++'s uniform_int_distribution<int>(0, 255) yields these same
+        // bytes; older libstdc++ occasionally drew different ones.
         std::mt19937 gen(seed);
-        std::uniform_int_distribution<int> dist(0, 255);
         for (auto& i : flip_) {
-            i = static_cast<uint8_t>(dist(gen));
+            i = static_cast<uint8_t>(gen() >> 24);
         }
     }
 
@@ -251,8 +258,9 @@ inline std::unique_ptr<Rotator<float>> make_rotator_for_loading(
 }  // namespace rotator_impl
 
 // Return an owning pointer; wrap it in RAII and use size() for the output dimension.
-// FHT/Kac supports float and uses seed. Matrix rotation supports float/double;
-// it samples its own matrix and does not use this factory's seed argument.
+// FHT/Kac supports float; its seed gives the same rotation on every platform.
+// Matrix rotation supports float/double; its seed reproduces the matrix only with
+// the same standard library and build, so persist matrix rotators with save().
 template <typename T>
 Rotator<T>* choose_rotator(
     size_t dim,
@@ -271,7 +279,7 @@ Rotator<T>* choose_rotator(
     }
 
     if (type == RotatorType::MatrixRotator) {
-        return ::new rotator_impl::MatrixRotator<T>(dim, padded_dim);
+        return ::new rotator_impl::MatrixRotator<T>(dim, padded_dim, seed);
     }
 
     throw std::invalid_argument("Invalid rotator type in choose_rotator()");

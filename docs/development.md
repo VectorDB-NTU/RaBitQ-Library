@@ -48,7 +48,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
-| `src/core/` | Compiled stable core v1 API implementation |
+| `src/core/` | Compiled stable core v1 API implementation and the frozen `faster_config` scale table |
 | `src/simd/` | Core kernels, dispatch, and the private shared resolver |
 | `src/fastscan/` | FastScan kernels, batch estimators, and paired backend selection |
 | `src/index/` | Compiled IVF/HNSW/SymphonyQG operations and private search kernels |
@@ -470,6 +470,8 @@ contract. For a local implementation fix, identify its affected paths from the m
 below and check those paths; broaden the audit if the shared contract changes.
 
 - `core/encoder.hpp` and `core/detail/rabitq_impl.hpp`;
+- the frozen `faster_config` scales in `core/detail/fast_scale_table.hpp` and
+  `src/core/fast_scale_table.cpp`; never regenerate them or change their values;
 - `core/data_layout.hpp` and `core/pack_excode.hpp`;
 - SIMD pack, inner-product, and FastScan kernels;
 - query-side factors in `core/query.hpp` and `fastscan/query.hpp`;

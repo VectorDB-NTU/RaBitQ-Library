@@ -547,7 +547,9 @@ inline T quantize_ex(const T* o_abs, TP* code, size_t dim, size_t ex_bits) {
     );
 }
 
-// For given dim and ex_bits, use random vectors to get the const rescale factor
+// For given dim and ex_bits, use random vectors to get the const rescale factor.
+// faster_config reads these values from the frozen table (fast_scale_table.hpp);
+// this computation generates that table and serves dimensions outside it.
 inline double const_scaling_factor(size_t dim, size_t ex_bits) {
     constexpr Eigen::Index kConstNum = 100;
 

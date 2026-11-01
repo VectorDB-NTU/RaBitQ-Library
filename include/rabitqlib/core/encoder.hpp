@@ -2,10 +2,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
+#include "rabitqlib/core/detail/fast_scale_table.hpp"
 #include "rabitqlib/core/detail/rabitq_impl.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/types.hpp"  // IWYU pragma: export
@@ -14,10 +16,19 @@ namespace rabitqlib::quant {
 
 // Prepare a constant rescaling factor for total_bits > 1. The one-bit path
 // needs no extra-code scaling and leaves the default configuration unchanged.
+// Padded dimensions in the frozen table give the same factor on every platform.
+// Others fall back to computing it from std::normal_distribution samples, which differ
+// between standard libraries (by several percent) and between FMA and non-FMA builds
+// or math libraries (in the last bits).
 inline RabitqConfig faster_config(size_t dim, size_t total_bits) {
     RabitqConfig config;
     if (total_bits > 1) {
-        config.t_const = rabitq_impl::ex_bits::const_scaling_factor(dim, total_bits - 1);
+        const size_t ex_bits = total_bits - 1;
+        const std::optional<double> frozen =
+            rabitq_impl::ex_bits::frozen_const_scaling_factor(dim, ex_bits);
+        config.t_const = frozen.has_value()
+                             ? *frozen
+                             : rabitq_impl::ex_bits::const_scaling_factor(dim, ex_bits);
     }
     return config;
 }

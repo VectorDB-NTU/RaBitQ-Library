@@ -131,7 +131,9 @@ this for its centroid graph; the cache is not persisted.
 
 ### Random seeds
 
-The graph seed controls FHT/Kac rotation; MatrixRotator samples its own matrix.
+The graph seed controls the rotation. An FHT/Kac seed gives the same rotation on
+every platform; a MatrixRotator seed reproduces the matrix only with the same
+standard library and build, so rely on the saved index rather than the seed.
 The builder seed controls random initialization and fallback edges. PiPNN uses
 fixed internal seeds.
 
