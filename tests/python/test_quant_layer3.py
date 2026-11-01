@@ -173,3 +173,27 @@ def test_rejected_arguments():
     for call, message in cases:
         with pytest.raises(ValueError, match=message):
             call()
+
+
+def test_hand_built_blocks_with_non_finite_factors_are_rejected():
+    c, bitsets, factors, q = setup("l2", 40)
+    query = quant.Query(q, metric="l2", centroid=c)
+    nan = np.frombuffer(np.float32(np.nan).tobytes(), np.uint8)
+    add = 96 * 4  # Block 1 holds vectors 32-39 in lanes 0-7.
+    blocks = quant.pack_fastscan_blocks(bitsets, factors)
+    blocks[1, add : add + 4] = nan
+    with pytest.raises(ValueError, match="blocks must contain only finite factors"):
+        query.estimate_fastscan(blocks, num_points=40)
+    # Padding lanes are not read.
+    blocks = quant.pack_fastscan_blocks(bitsets, factors)
+    blocks[1, add + 4 * 31 : add + 4 * 32] = nan
+    query.estimate_fastscan(blocks, num_points=40)
+
+
+def test_out_overlapping_an_input_is_rejected():
+    _, bitsets, factors, _ = setup("l2", 40)
+    shared = np.zeros(2 * 768, np.uint8)
+    inputs = shared[: 40 * 12].reshape(40, 12)
+    inputs[:] = bitsets
+    with pytest.raises(ValueError, match="out must not overlap bitsets"):
+        quant.pack_fastscan_blocks(inputs, factors, out=shared.reshape(2, 768))

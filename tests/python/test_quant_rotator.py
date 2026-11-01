@@ -159,3 +159,8 @@ def test_rejected_arguments():
         rotator.rotate(np.full((1, 64), np.nan, np.float32))
     with pytest.raises(ValueError, match="out must be a writable NumPy array"):
         rotator.rotate(vectors(2, 64), out=np.empty((2, 64), np.float64))
+    shared = vectors(3, 64)
+    with pytest.raises(ValueError, match="out must not overlap x"):
+        rotator.rotate(shared[:2], out=shared[1:])
+    with pytest.raises(ValueError, match="out must not overlap x"):
+        rotator.rotate(shared, out=shared)

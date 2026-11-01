@@ -14,7 +14,6 @@ __all__ = [
     "FACTORS_DTYPE",
     "FACTORS_VERSION",
     "FASTSCAN_BLOCKS_VERSION",
-    "MISSING",
     "PACKED_CODES_VERSION",
     "QUERY_TERMS_DTYPE",
     "FormatError",
@@ -37,7 +36,6 @@ QUERY_TERMS_DTYPE: np.dtype[np.void]
 PACKED_CODES_VERSION: int
 FACTORS_VERSION: int
 FASTSCAN_BLOCKS_VERSION: int
-MISSING: np.uint32
 
 class FormatError(ValueError):
     """Corrupt or incompatible serialized bytes. A subclass of ValueError."""
@@ -76,7 +74,9 @@ class Rotator:
     def to_bytes(self) -> bytes:
         """Serialize the rotation as a versioned rotator blob (docs/formats.md)."""
     @staticmethod
-    def from_bytes(data: Any) -> Rotator:
+    def from_bytes(
+        data: bytes | bytearray | memoryview | npt.NDArray[Any],
+    ) -> Rotator:
         """Load a rotator blob written by to_bytes."""
     def __copy__(self) -> Rotator:
         """Return self; rotators are immutable."""

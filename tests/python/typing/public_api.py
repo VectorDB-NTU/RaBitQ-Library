@@ -297,7 +297,6 @@ def check_quant(x: npt.NDArray[np.float32]) -> None:
         npt.NDArray[np.uint8],
     )
     assert_type(quant.padded_dim(100), int)
-    assert_type(quant.MISSING, np.uint32)
     assert_type(quant.FACTORS_DTYPE, np.dtype[np.void])
     assert issubclass(quant.FormatError, ValueError)
     f_prefix = quant.code_factors(residuals, prefix, nbits=1, metric="l2")

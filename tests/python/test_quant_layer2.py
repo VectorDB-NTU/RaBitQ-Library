@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from rabitqlib import quant
 
-BUSY = "Index is busy: conflicting operation in progress"
+BUSY = "Query is busy: set_centroid cannot overlap another call"
 
 
 def rows(n, d, seed=0, scale=1.0):
@@ -390,3 +390,31 @@ def test_rejected_arguments():
         query.estimate_codes(codes, broken, nbits=4)
     # A non-finite factor outside the selected rows is not read.
     query.estimate_codes(codes, broken, nbits=4, indices=[0, 1])
+
+
+def test_out_overlapping_an_input_is_rejected():
+    _, c, _, codes, factors, q = setup("l2", 4)
+    prefix, ex = quant.split(codes, nbits=4, prefix_bits=1)
+    query = quant.Query(q, metric="l2", centroid=c)
+    shared = np.zeros(80, quant.ESTIMATE_DTYPE)
+    shared_factors = shared.view(quant.FACTORS_DTYPE)[:40]
+    shared_factors[:] = factors
+    with pytest.raises(ValueError, match="out must not overlap factors"):
+        query.estimate_codes(codes, shared_factors, nbits=4, out=shared[20:60])
+    first = query.estimate_codes(codes, factors, nbits=4)
+    with pytest.raises(ValueError, match="out must not overlap first"):
+        query.refine(ex, factors, first, ex_bits=3, out=first.view(np.float32)[:40])
+    terms = quant.query_terms(q, metric="l2", centroid=c)
+    shared_ip = np.zeros(3 * 40, np.float32)
+    ip = shared_ip[:40]
+    ip[:] = first["refine_input"]
+    with pytest.raises(ValueError, match="out must not overlap ip"):
+        quant.estimate_from_ip(
+            ip, factors, terms, nbits=4, out=shared_ip.view(quant.ESTIMATE_DTYPE)
+        )
+
+
+def test_corrupt_pickle_state_is_rejected():
+    query = quant.Query.__new__(quant.Query)
+    with pytest.raises(ValueError, match="Invalid Query pickle state"):
+        query.__setstate__((np.zeros(64, np.float32), 5, None))

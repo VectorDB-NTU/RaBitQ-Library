@@ -34,6 +34,7 @@ class IndexAccess {
    private:
     size_t readers_ = 0;
     bool writing_ = false;
+    const char* busy_message_ = "Index is busy: conflicting operation in progress";
 
    public:
     class Guard {
@@ -44,9 +45,7 @@ class IndexAccess {
        public:
         Guard(IndexAccess& access, bool writing) : access_(access), writing_(writing) {
             if (access.writing_ || (writing && access.readers_ != 0)) {
-                throw std::runtime_error(
-                    "Index is busy: conflicting operation in progress"
-                );
+                throw std::runtime_error(access.busy_message_);
             }
             if (writing) {
                 access.writing_ = true;
@@ -64,6 +63,10 @@ class IndexAccess {
             }
         }
     };
+
+    IndexAccess() = default;
+    // busy_message must outlive the object, as a string literal does.
+    explicit IndexAccess(const char* busy_message) : busy_message_(busy_message) {}
 
     [[nodiscard]] Guard read() { return Guard(*this, false); }
     [[nodiscard]] Guard write() { return Guard(*this, true); }

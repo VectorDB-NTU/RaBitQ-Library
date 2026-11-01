@@ -23,8 +23,6 @@ Examples
 True
 """
 
-import numpy as np
-
 from ._rabitqlib._quant import (
     ESTIMATE_DTYPE,
     FACTORS_DTYPE,
@@ -52,9 +50,6 @@ FACTORS_VERSION = 1
 FASTSCAN_BLOCKS_VERSION = 1
 """Version of the pack_fastscan_blocks layout."""
 
-MISSING = np.uint32(0xFFFFFFFF)
-"""Marks an empty result slot, as the indexes' search does."""
-
 # Classes report this module, so pickle and help() find them here.
 for _public in (FormatError, Query, Rotator):
     _public.__module__ = __name__
@@ -65,7 +60,6 @@ __all__ = [
     "FACTORS_DTYPE",
     "FACTORS_VERSION",
     "FASTSCAN_BLOCKS_VERSION",
-    "MISSING",
     "PACKED_CODES_VERSION",
     "QUERY_TERMS_DTYPE",
     "FormatError",

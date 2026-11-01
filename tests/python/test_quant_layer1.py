@@ -259,3 +259,35 @@ def test_golden_packed_codes(nbits):
         np.frombuffer(golden, np.uint8).reshape(3, -1), nbits=nbits
     )
     np.testing.assert_array_equal(unpacked, codes)
+
+
+def test_out_overlapping_an_input_is_rejected():
+    rng = np.random.default_rng(7)
+    buffer = rng.standard_normal((5, 64)).astype(np.float32)
+    with pytest.raises(ValueError, match="out must not overlap residuals"):
+        quant.quantize(buffer[:4], nbits=2, out=buffer.view(np.uint8)[1:, :64])
+    codes = quant.quantize(buffer, nbits=4)
+    with pytest.raises(ValueError, match="out must not overlap codes"):
+        quant.pack_codes(codes[:4], nbits=4, out=codes[1:, :32])
+    packed = np.zeros((4, 64), np.uint8)
+    with pytest.raises(ValueError, match="out must not overlap packed"):
+        quant.unpack_codes(packed[:2, :32], nbits=4, out=packed[1:3])
+    shared = np.zeros(5 * 64 + 15, np.float32)
+    x = shared[: 5 * 64].reshape(5, 64)
+    x[:] = buffer
+    out = shared[5 * 64 - 15 : 5 * 64].view(quant.FACTORS_DTYPE)
+    with pytest.raises(ValueError, match="out must not overlap residuals"):
+        quant.code_factors(x, codes, nbits=4, metric="l2", out=out)
+    # Disjoint caller buffers are accepted.
+    assert quant.quantize(buffer, nbits=4, out=np.empty_like(codes)) is not None
+
+
+def test_code_factors_leaves_out_unchanged_on_rejection():
+    rng = np.random.default_rng(8)
+    x = rng.standard_normal((6, 64)).astype(np.float32)
+    codes = quant.quantize(x, nbits=4)
+    codes[4] = 15 - codes[4]
+    out = np.zeros(6, quant.FACTORS_DTYPE)
+    with pytest.raises(ValueError, match="codes row 4 for residuals row 4"):
+        quant.code_factors(x, codes, nbits=4, metric="l2", out=out)
+    assert not out.view(np.float32).any()

@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -52,7 +53,8 @@ struct FormatError : std::invalid_argument {
     using std::invalid_argument::invalid_argument;
 };
 
-constexpr size_t kMaxRotatorDim = 65536;
+// The blob format and both rotation methods share the FHT/Kac limit.
+constexpr size_t kMaxRotatorDim = rotator_impl::FhtKacRotator::kMaxDim;
 constexpr size_t kMaxTotalBits = 9;
 
 static_assert(sizeof(quant::v1::Factors) == 3 * sizeof(float));
@@ -127,10 +129,55 @@ py::array_t<T> new_rows(size_t rows, size_t cols) {
         static_cast<py::ssize_t>(rows), static_cast<py::ssize_t>(cols)});
 }
 
+// An input that an out= must not overlap: its name and the array the call reads.
+struct NamedInput {
+    const char* name;
+    py::handle array;  // Null or None when the input is absent.
+};
+using Inputs = std::initializer_list<NamedInput>;
+
+// The bytes an array spans, from its lowest to past its highest element.
+std::pair<std::uintptr_t, std::uintptr_t> byte_extent(const py::array& array) {
+    if (array.size() == 0) {
+        return {0, 0};
+    }
+    auto low = reinterpret_cast<std::uintptr_t>(array.data());
+    auto high = low;
+    for (py::ssize_t axis = 0; axis < array.ndim(); ++axis) {
+        const py::ssize_t span = (array.shape(axis) - 1) * array.strides(axis);
+        if (span < 0) {
+            low -= static_cast<std::uintptr_t>(-span);
+        } else {
+            high += static_cast<std::uintptr_t>(span);
+        }
+    }
+    return {low, high + static_cast<std::uintptr_t>(array.itemsize())};
+}
+
+// Reject an out= that shares memory with an input, as the C++ API rejects overlapping
+// buffers: rows written first would change rows read later. Exact aliasing is rejected
+// too, so the rule does not depend on how a call orders its reads and writes.
+void check_output_disjoint(const py::array& out, Inputs inputs) {
+    const auto [out_low, out_high] = byte_extent(out);
+    if (out_low == out_high) {
+        return;
+    }
+    for (const NamedInput& input : inputs) {
+        if (!input.array || input.array.is_none()) {
+            continue;
+        }
+        const auto [low, high] =
+            byte_extent(py::reinterpret_borrow<py::array>(input.array));
+        if (low < out_high && out_low < high) {
+            throw std::invalid_argument(std::string("out must not overlap ") + input.name);
+        }
+    }
+}
+
 // The output rows: a new array, or the caller's out= after its exact checks.
 template <typename T>
 std::pair<py::array, RowView<T>> output_rows(
-    const py::object& out, size_t rows, size_t cols
+    const py::object& out, size_t rows, size_t cols, Inputs inputs
 ) {
     if (out.is_none()) {
         py::array array = new_rows<T>(rows, cols);
@@ -138,7 +185,39 @@ std::pair<py::array, RowView<T>> output_rows(
         return {std::move(array), std::move(view)};
     }
     auto view = checked_output_rows<T>(out, rows, cols);
+    check_output_disjoint(view.owner, inputs);
     return {py::reinterpret_borrow<py::array>(out), std::move(view)};
+}
+
+// A new 1-D record array, or the caller's out= of exactly that dtype and shape.
+std::pair<py::array, float*> record_output(
+    const py::object& out,
+    const py::dtype& dtype,
+    const char* dtype_name,
+    size_t rows,
+    Inputs inputs
+) {
+    if (out.is_none()) {
+        py::array result(dtype, std::vector<py::ssize_t>{static_cast<py::ssize_t>(rows)});
+        auto* data = static_cast<float*>(result.mutable_data());
+        return {std::move(result), data};
+    }
+    const std::string expected = std::string("out must be a writable, C-contiguous ") +
+                                 "NumPy array of dtype quant." + dtype_name +
+                                 " and shape (" + std::to_string(rows) + ",)";
+    if (!py::isinstance<py::array>(out)) {
+        throw std::invalid_argument(expected + "; got " + array_input_type(out));
+    }
+    auto result = py::reinterpret_borrow<py::array>(out);
+    if (!result.dtype().attr("__eq__")(dtype).cast<bool>() || result.ndim() != 1 ||
+        static_cast<size_t>(result.shape(0)) != rows || !result.writeable() ||
+        (rows > 1 && result.strides(0) != static_cast<py::ssize_t>(dtype.itemsize())) ||
+        reinterpret_cast<std::uintptr_t>(result.data()) % alignof(float) != 0) {
+        throw std::invalid_argument(expected + "; got shape " + array_shape(result));
+    }
+    check_output_disjoint(result, inputs);
+    auto* data = static_cast<float*>(result.mutable_data());
+    return {std::move(result), data};
 }
 
 // A (d,) float32 vector, copied if misaligned.
@@ -230,10 +309,10 @@ py::array quantize(
         return array;
     };
     if (nbits == kMaxTotalBits) {
-        auto result = output_rows<uint16_t>(out, rows, d);
+        auto result = output_rows<uint16_t>(out, rows, d, {{"residuals", input}});
         return run(result);
     }
-    auto result = output_rows<uint8_t>(out, rows, d);
+    auto result = output_rows<uint8_t>(out, rows, d, {{"residuals", input}});
     return run(result);
 }
 
@@ -278,46 +357,37 @@ py::array code_factors_rows(
     const RowView<TP>& codes,
     size_t nbits,
     MetricType metric,
-    const float* centroid,
+    const float* centroid_data,
+    py::handle centroid,
     size_t num_threads,
     const py::object& out
 ) {
     const size_t rows = codes.rows;
     const size_t d = codes.cols;
-    const py::dtype dtype = factors_dtype();
-    py::array result;
-    if (out.is_none()) {
-        result = py::array(dtype, std::vector<py::ssize_t>{static_cast<py::ssize_t>(rows)});
-    } else {
-        const std::string expected =
-            "out must be a writable, C-contiguous NumPy array of "
-            "dtype quant.FACTORS_DTYPE and shape (" +
-            std::to_string(rows) + ",)";
-        if (!py::isinstance<py::array>(out)) {
-            throw std::invalid_argument(expected + "; got " + array_input_type(out));
-        }
-        result = py::reinterpret_borrow<py::array>(out);
-        if (!result.dtype().attr("__eq__")(dtype).cast<bool>() || result.ndim() != 1 ||
-            static_cast<size_t>(result.shape(0)) != rows || !result.writeable() ||
-            (rows > 1 && result.strides(0) != static_cast<py::ssize_t>(dtype.itemsize())) ||
-            reinterpret_cast<std::uintptr_t>(result.data()) % alignof(float) != 0) {
-            throw std::invalid_argument(expected + "; got shape " + array_shape(result));
-        }
-    }
-    auto* factors = static_cast<quant::v1::Factors*>(const_cast<void*>(result.data()));
+    auto [result, data] = record_output(
+        out,
+        factors_dtype(),
+        "FACTORS_DTYPE",
+        rows,
+        {{"residuals", residuals}, {"codes", codes.owner}, {"centroid", centroid}}
+    );
     {
         py::gil_scoped_release release;
         check_coordinates(residuals.data(), rows * d, d, "residuals");
-        if (centroid != nullptr) {
-            check_coordinates(centroid, d, d, "centroid");
+        if (centroid_data != nullptr) {
+            check_coordinates(centroid_data, d, d, "centroid");
         }
         check_code_values(codes, nbits, "codes");
+        // A caller's out= is written only after every row succeeds.
+        std::vector<quant::v1::Factors> staged(out.is_none() ? 0 : rows);
+        auto* factors =
+            out.is_none() ? reinterpret_cast<quant::v1::Factors*>(data) : staged.data();
         const auto factors_of = [&](size_t i) {
             return quant::provisional::code_factors(
-                residuals.data() + (i * d), centroid, d, codes.row(i), nbits, metric
+                residuals.data() + (i * d), centroid_data, d, codes.row(i), nbits, metric
             );
         };
-        // Report the lowest mismatched row, whatever the thread schedule.
+        // Report the lowest rejected row, whatever the thread schedule.
         std::atomic<size_t> first_rejected{rows};
         index_detail::parallel_for(0, rows, num_threads, [&](size_t i, size_t /*thread*/) {
             try {
@@ -336,6 +406,9 @@ py::array code_factors_rows(
                     std::to_string(i) + ": " + error.what()
                 );
             }
+        }
+        if (!staged.empty()) {
+            std::memcpy(data, staged.data(), staged.size() * sizeof(quant::v1::Factors));
         }
     }
     return result;
@@ -357,11 +430,12 @@ py::array code_factors(
         checked_working_dim(static_cast<size_t>(input.shape(1)), input, "residuals");
     const auto rows = static_cast<size_t>(input.shape(0));
 
-    py::array_t<float, py::array::c_style | py::array::forcecast> centroid_array;
+    py::object centroid_array = py::none();
     const float* centroid_data = nullptr;
     if (!centroid.is_none()) {
-        centroid_array = ensure_vector(centroid, d, "centroid");
-        centroid_data = centroid_array.data();
+        auto vector = ensure_vector(centroid, d, "centroid");
+        centroid_data = vector.data();
+        centroid_array = std::move(vector);
     }
 
     const auto run = [&](const auto& view) {
@@ -372,7 +446,7 @@ py::array code_factors(
             );
         }
         return code_factors_rows(
-            input, view, nbits, metric_type, centroid_data, num_threads, out
+            input, view, nbits, metric_type, centroid_data, centroid_array, num_threads, out
         );
     };
     if (nbits == kMaxTotalBits) {
@@ -387,7 +461,8 @@ py::array pack_codes(
     check_nbits(nbits, 1, 8);
     const auto view = exact_dtype_rows<uint8_t>(codes, "codes");
     const size_t d = checked_working_dim(view.cols, view.owner, "codes");
-    auto [array, packed] = output_rows<uint8_t>(out, view.rows, d * nbits / 8);
+    auto [array, packed] =
+        output_rows<uint8_t>(out, view.rows, d * nbits / 8, {{"codes", view.owner}});
     {
         py::gil_scoped_release release;
         check_code_values(view, nbits, "codes");
@@ -416,7 +491,7 @@ py::array unpack_codes(
         );
     }
     const size_t d = bits / nbits;
-    auto [array, codes] = output_rows<uint8_t>(out, view.rows, d);
+    auto [array, codes] = output_rows<uint8_t>(out, view.rows, d, {{"packed", view.owner}});
     {
         py::gil_scoped_release release;
         index_detail::parallel_for(
@@ -473,34 +548,10 @@ Records record_input(
     return records;
 }
 
-// A new 1-D record array, or the caller's out= of exactly that dtype and shape.
-std::pair<py::array, float*> record_output(
-    const py::object& out, const py::dtype& dtype, const char* dtype_name, size_t rows
-) {
-    if (out.is_none()) {
-        py::array result(dtype, std::vector<py::ssize_t>{static_cast<py::ssize_t>(rows)});
-        auto* data = static_cast<float*>(result.mutable_data());
-        return {std::move(result), data};
-    }
-    const std::string expected = std::string("out must be a writable, C-contiguous ") +
-                                 "NumPy array of dtype quant." + dtype_name +
-                                 " and shape (" + std::to_string(rows) + ",)";
-    if (!py::isinstance<py::array>(out)) {
-        throw std::invalid_argument(expected + "; got " + array_input_type(out));
-    }
-    auto result = py::reinterpret_borrow<py::array>(out);
-    if (!result.dtype().attr("__eq__")(dtype).cast<bool>() || result.ndim() != 1 ||
-        static_cast<size_t>(result.shape(0)) != rows || !result.writeable() ||
-        (rows > 1 && result.strides(0) != static_cast<py::ssize_t>(dtype.itemsize())) ||
-        reinterpret_cast<std::uintptr_t>(result.data()) % alignof(float) != 0) {
-        throw std::invalid_argument(expected + "; got shape " + array_shape(result));
-    }
-    auto* data = static_cast<float*>(result.mutable_data());
-    return {std::move(result), data};
-}
-
 // A new float32 vector, or the caller's out= of exactly that dtype and shape.
-std::pair<py::array, float*> float_output(const py::object& out, size_t rows) {
+std::pair<py::array, float*> float_output(
+    const py::object& out, size_t rows, Inputs inputs
+) {
     if (out.is_none()) {
         py::array_t<float> result(static_cast<py::ssize_t>(rows));
         auto* data = result.mutable_data();
@@ -519,6 +570,7 @@ std::pair<py::array, float*> float_output(const py::object& out, size_t rows) {
         reinterpret_cast<std::uintptr_t>(result.data()) % alignof(float) != 0) {
         throw std::invalid_argument(expected + "; got shape " + array_shape(result));
     }
+    check_output_disjoint(result, inputs);
     auto* data = static_cast<float*>(result.mutable_data());
     return {std::move(result), data};
 }
@@ -717,7 +769,13 @@ py::array estimate_from_ip(
         throw std::invalid_argument("terms must contain only finite values");
     }
     const QueryTerms query{values[0], values[1], values[2]};
-    auto [result, estimates] = record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", rows);
+    auto [result, estimates] = record_output(
+        out,
+        estimate_dtype(),
+        "ESTIMATE_DTYPE",
+        rows,
+        {{"ip", ips}, {"factors", records.owner}, {"terms", terms_array}}
+    );
     const Selection all_rows = selection(py::none(), rows);
     {
         py::gil_scoped_release release;
@@ -767,7 +825,9 @@ py::array pack_fastscan_blocks(
     const size_t n = codes.rows;
     const size_t num_blocks = div_round_up(n, fastscan::kBatchSize);
     const size_t block_bytes = BatchDataMap<float>::data_bytes(d);
-    auto [array, blocks] = output_rows<uint8_t>(out, num_blocks, block_bytes);
+    auto [array, blocks] = output_rows<uint8_t>(
+        out, num_blocks, block_bytes, {{"bitsets", codes.owner}, {"factors", records.owner}}
+    );
     const Selection all_rows = selection(py::none(), n);
     {
         py::gil_scoped_release release;
@@ -815,7 +875,7 @@ class QuantQuery {
     // The FastScan query, built on the first estimate_fastscan call. It borrows
     // query_, so copies and moves never take it over; they build their own.
     std::unique_ptr<SplitBatchQuery<float>> batch_query_;
-    IndexAccess access_;
+    IndexAccess access_{"Query is busy: set_centroid cannot overlap another call"};
 
     [[nodiscard]] size_t d() const { return query_.size(); }
 
@@ -930,7 +990,7 @@ class QuantQuery {
     }
 
     static QuantQuery from_state(const py::tuple& state) {
-        if (state.size() != 3) {
+        if (state.size() != 3 || !py::isinstance<py::str>(state[1])) {
             throw std::invalid_argument("Invalid Query pickle state");
         }
         return create(state[0], state[1].cast<std::string>(), state[2]);
@@ -956,8 +1016,15 @@ class QuantQuery {
                 record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
             check_record_rows(records, codes.rows, "factors", "bitsets");
             const Selection selected = selection(indices, codes.rows);
-            auto [result, estimates] =
-                record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", selected.count);
+            auto [result, estimates] = record_output(
+                out,
+                estimate_dtype(),
+                "ESTIMATE_DTYPE",
+                selected.count,
+                {{"bitsets", codes.owner},
+                 {"factors", records.owner},
+                 {"indices", selected.owner}}
+            );
             const auto ip_func = select_excode_ipfunc(1);
             {
                 py::gil_scoped_release release;
@@ -1002,8 +1069,15 @@ class QuantQuery {
                     record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
                 check_record_rows(records, view.rows, "factors", "codes");
                 const Selection selected = selection(indices, view.rows);
-                auto [result, estimates] =
-                    record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", selected.count);
+                auto [result, estimates] = record_output(
+                    out,
+                    estimate_dtype(),
+                    "ESTIMATE_DTYPE",
+                    selected.count,
+                    {{"codes", view.owner},
+                     {"factors", records.owner},
+                     {"indices", selected.owner}}
+                );
                 {
                     py::gil_scoped_release release;
                     check_selected_code_values(view, selected, nbits, "codes");
@@ -1080,7 +1154,14 @@ class QuantQuery {
                     array_shape(estimates.owner)
                 );
             }
-            auto [result, distances] = float_output(out, selected.count);
+            auto [result, distances] = float_output(
+                out,
+                selected.count,
+                {{name, codes.owner},
+                 {"factors", records.owner},
+                 {"first", estimates.owner},
+                 {"indices", selected.owner}}
+            );
             const Selection all_estimates = selection(py::none(), selected.count);
             const auto ip_func = select_excode_ipfunc(ex_bits);
             const auto scale = static_cast<float>(1U << ex_bits);
@@ -1145,11 +1226,36 @@ class QuantQuery {
                     "; got shape " + array_shape(view.owner)
                 );
             }
-            auto [result, estimates] =
-                record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", num_points);
+            auto [result, estimates] = record_output(
+                out,
+                estimate_dtype(),
+                "ESTIMATE_DTYPE",
+                num_points,
+                {{"blocks", view.owner}}
+            );
             const SplitBatchQuery<float>& query = batch_query();
             {
                 py::gil_scoped_release release;
+                // Hand-built blocks get the finite-factor check of the other calls.
+                for (size_t b = 0; b < num_blocks; ++b) {
+                    const ConstBatchDataMap<float> map(
+                        reinterpret_cast<const char*>(view.row(b)), d()
+                    );
+                    std::array<float, fastscan::kBatchSize> values{};
+                    const size_t lanes = std::min(
+                        fastscan::kBatchSize, num_points - (b * fastscan::kBatchSize)
+                    );
+                    for (const auto& field :
+                         {map.f_add(), map.f_rescale(), map.f_error()}) {
+                        field.copy_to(values.data(), values.size());
+                        if (!all_finite(values.data(), lanes)) {
+                            throw std::invalid_argument(
+                                "blocks must contain only finite factors; block " +
+                                std::to_string(b) + " does not"
+                            );
+                        }
+                    }
+                }
                 index_detail::parallel_for(
                     0, num_blocks, num_threads, [&](size_t b, size_t /*thread*/) {
                         std::array<float, fastscan::kBatchSize> distances{};
@@ -1199,8 +1305,8 @@ constexpr uint32_t kMethodMatrix = 2;
 constexpr uint32_t kScalarFloat32 = 1;
 constexpr uint32_t kScalarFloat64 = 2;
 
-// CRC-32 with the IEEE polynomial, as zlib.crc32 computes it.
-uint32_t crc32(const uint8_t* data, size_t size) {
+// CRC-32 with the IEEE polynomial, continued from crc as zlib.crc32(data, crc) does.
+uint32_t crc32(uint32_t crc, const uint8_t* data, size_t size) {
     static const std::array<uint32_t, 256> kTable = [] {
         std::array<uint32_t, 256> table{};
         for (uint32_t i = 0; i < table.size(); ++i) {
@@ -1212,18 +1318,22 @@ uint32_t crc32(const uint8_t* data, size_t size) {
         }
         return table;
     }();
-    uint32_t crc = 0xFFFFFFFFU;
+    crc ^= 0xFFFFFFFFU;
     for (size_t i = 0; i < size; ++i) {
         crc = kTable[(crc ^ data[i]) & 0xFFU] ^ (crc >> 8U);
     }
     return crc ^ 0xFFFFFFFFU;
 }
 
-// Checksum of a blob with its crc32 field (offset 32) taken as zero.
+// Checksum of a blob with its crc32 field (offset 32) taken as zero, without a copy.
+// The caller has checked that the blob covers the common header.
 uint32_t blob_checksum(const uint8_t* blob, size_t size) {
-    std::vector<uint8_t> copy(blob, blob + size);
-    std::fill_n(copy.begin() + 32, 4, uint8_t{0});
-    return crc32(copy.data(), copy.size());
+    constexpr size_t kChecksumOffset = 32;
+    constexpr std::array<uint8_t, 4> kZero{};
+    uint32_t crc = crc32(0, blob, kChecksumOffset);
+    crc = crc32(crc, kZero.data(), kZero.size());
+    const size_t rest = kChecksumOffset + kZero.size();
+    return crc32(crc, blob + rest, size - rest);
 }
 
 void put_u32(uint8_t* out, uint32_t value) {
@@ -1389,7 +1499,7 @@ class QuantRotator {
         auto input = ensure_2d_array<float>(x, "x");
         ensure_dimension(input, dim_, "x dimension does not match dim");
         const auto rows = static_cast<size_t>(input.shape(0));
-        auto [array, view] = output_rows<float>(out, rows, padded_dim_);
+        auto [array, view] = output_rows<float>(out, rows, padded_dim_, {{"x", input}});
         {
             py::gil_scoped_release release;
             check_coordinates(input.data(), rows * dim_, dim_, "x");
@@ -1404,8 +1514,19 @@ class QuantRotator {
 
     [[nodiscard]] py::bytes to_bytes() const {
         const size_t body = rotator_->dump_bytes();
-        std::vector<uint8_t> blob(kRotatorHeaderBytes + body, 0);
-        std::memcpy(blob.data(), kBlobMagic.data(), kBlobMagic.size());
+        const size_t size = kRotatorHeaderBytes + body;
+        // Written in place: a matrix rotator's body is up to 16 GiB, so no staging copy.
+        // Not py::bytes(nullptr, size): it turns a failed allocation into RuntimeError
+        // while leaving Python's MemoryError set. Raise that MemoryError instead.
+        auto result = py::reinterpret_steal<py::bytes>(
+            PYBIND11_BYTES_FROM_STRING_AND_SIZE(nullptr, static_cast<py::ssize_t>(size))
+        );
+        if (!result) {
+            throw py::error_already_set();
+        }
+        auto* blob = reinterpret_cast<uint8_t*>(PYBIND11_BYTES_AS_STRING(result.ptr()));
+        std::memset(blob, 0, kRotatorHeaderBytes);
+        std::memcpy(blob, kBlobMagic.data(), kBlobMagic.size());
         put_u32(&blob[8], kRotatorKind);
         put_u32(&blob[12], kRotatorVersion);
         put_u32(&blob[16], static_cast<uint32_t>(kRotatorHeaderBytes));
@@ -1418,9 +1539,9 @@ class QuantRotator {
         put_u32(&blob[48], static_cast<uint32_t>(dim_));
         put_u32(&blob[52], static_cast<uint32_t>(padded_dim_));
         put_u32(&blob[56], seed_.value_or(0));
-        rotator_->save(reinterpret_cast<char*>(blob.data() + kRotatorHeaderBytes));
-        put_u32(&blob[32], blob_checksum(blob.data(), blob.size()));
-        return {reinterpret_cast<const char*>(blob.data()), blob.size()};
+        rotator_->save(reinterpret_cast<char*>(blob + kRotatorHeaderBytes));
+        put_u32(&blob[32], blob_checksum(blob, size));
+        return result;
     }
 
     static QuantRotator from_bytes(py::handle data) {
@@ -1574,7 +1695,8 @@ nbits : int
     Total bits per coordinate, 1 to 9, including the sign bit.
 fast_quantization : bool, optional
     Use the frozen fast-mode scale instead of the exact search. Default is
-    False. Rejected for d above 65536.
+    False. It has no effect at nbits=1, where no scale is searched, and is
+    rejected for d above 65536 otherwise.
 num_threads : int, optional
     Worker threads; 0 (the default) uses every available CPU. Results do not
     depend on the thread count.
@@ -2118,7 +2240,8 @@ distances : numpy.ndarray of float32)doc")
             py::arg("out") = py::none(),
             (std::string(R"doc(Refine prefix estimates with packed extra bits.
 
-Uses the dispatched SIMD kernel; on one build it equals refine.
+Uses the dispatched SIMD kernel, so it agrees with refine within float32
+rounding.
 
 Parameters
 ----------
