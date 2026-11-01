@@ -238,16 +238,17 @@ class HnswIndex {
         return index_->num_stored_points();
     }
 
-    py::tuple search(py::handle queries, size_t k, size_t ef, size_t num_threads) {
+    py::tuple search(
+        py::handle queries, size_t k, std::optional<size_t> ef, size_t num_threads
+    ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
         check_trained("search");
         ensure_dimension(
             query_array, index_->dimension(), "query dimension does not match index dim"
         );
-        if (ef == 0) {
-            ef = std::max<size_t>(k, 10);
-        }
+        // None and 0 select max(k, 10), as SymqgIndex does.
+        const size_t ef_search = ef.value_or(0) == 0 ? std::max<size_t>(k, 10) : *ef;
         // Capacity grows geometrically, so bound k by what is stored, as IVF does.
         if (k == 0 || k > index_->num_stored_points()) {
             throw std::invalid_argument("k must be between 1 and num_stored_points");
@@ -262,7 +263,7 @@ class HnswIndex {
         std::vector<std::vector<std::pair<float, PID>>> results;
         {
             py::gil_scoped_release release;
-            results = index_->search(queries_data, num_queries, k, ef, num_threads);
+            results = index_->search(queries_data, num_queries, k, ef_search, num_threads);
         }
 
         for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(results.size()); ++i) {
@@ -589,7 +590,7 @@ queries : array_like of float, shape (n_queries, dim)
 k : int
     Number of neighbors requested, between 1 and num_stored_points.
 ef : int, optional
-    Search breadth. 0 (default) selects max(k, 10); values above the stored
+    Search breadth. None or 0 (default) selects max(k, 10); values above the stored
     point count are clamped.
 num_threads : int, optional
     Worker count. Default is 1; 0 selects the available CPU count.

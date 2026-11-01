@@ -68,7 +68,7 @@ see [C++ integration](../cpp_integration.md).
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
 | `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
 | `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
-| `k`, `ef` | Positive result count and search window. Python requires `k <= num_stored_points`, so a trained index without points rejects every `k`; omitted/zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
+| `k`, `ef` | Positive result count and search window. Python requires `k <= num_stored_points`, so a trained index without points rejects every `k`; omitted, `None` or zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
 `seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible

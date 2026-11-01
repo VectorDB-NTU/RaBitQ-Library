@@ -1,12 +1,20 @@
 # Migrating Python code from 0.7 to 0.8
 
-In 0.8, `IvfIndex` and `HnswIndex` follow a `train` → `add` → `search` workflow,
-as Faiss indexes do: the index learns its own centroids, so you no longer run
-k-means and pass the centroids and assignments to `build`. Code written for 0.7
+In 0.8, `IvfIndex`, `HnswIndex` and `SymqgIndex` follow a `train` → `add` →
+`search` workflow, as Faiss indexes do. IVF-RaBitQ and HNSW-RaBitQ learn their
+own centroids, so you no longer run k-means and pass the centroids and
+assignments to `build`; SymphonyQG has nothing to train and builds its graph in
+`add`. Code written for 0.7
 still runs in 0.8. Each old form raises a `DeprecationWarning` at your call site
-and will be removed in **0.9**. Search calls are unchanged.
+and will be removed in **0.9**.
 
-## Old and new calls
+Unless an item below says otherwise, a 0.7 call that raises a deprecation
+warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
+`add(x)` and `search`, follow the 0.8 rules.
+
+## IVF-RaBitQ and HNSW-RaBitQ
+
+### Old and new calls
 
 | 0.7 | 0.8 |
 | --- | --- |
@@ -29,11 +37,7 @@ See [IVF-RaBitQ training](index/ivf.md#training-centroids-in-python) for the
 details and for `set_centroids`. The [clustering classes](clustering.md) still
 work if you want to run k-means yourself.
 
-## Behavior changes
-
-Unless an item says otherwise, a 0.7 call that raises a deprecation warning
-keeps its 0.7 behavior. Calls that are valid in both versions, such as
-`add(x)` and `search`, follow the 0.8 rules below.
+### Behavior changes
 
 - **Thread defaults.** `train` and `add` now default to every available CPU
   (`num_threads=0`); 0.7 `build` and `add` defaulted to one thread. This applies
@@ -65,6 +69,33 @@ keeps its 0.7 behavior. Calls that are valid in both versions, such as
 - An `IvfIndex` created with `max_elements` is filled by `build`; `train` and
   `set_centroids` raise `RuntimeError` for it. Create the index in the 0.8 form
   to train it.
+
+## SymphonyQG
+
+| 0.7 | 0.8 |
+| --- | --- |
+| `SymqgIndex(dim, max_degree, metric, quantization_bits)` | `SymqgIndex(dim, max_degree=..., metric=..., nbits=...)`; every argument after `dim` is keyword-only |
+| `quantization_bits=0` (raw vectors), `4`, `8` | `nbits=32` (raw vectors, the default), `4`, `8` |
+| `index.build(x, ef_construction, num_threads, init)` | `SymqgIndex(dim, ef_construction=..., init=..., seed=...)`<br>`index.add(x, num_threads=...)` |
+| `index.search_batch(q, k, ef)` | `index.search(q, k, ef)`; `ef` is now optional |
+| `index.quantization_bits` | `index.nbits` (32 instead of 0 for raw vectors) |
+| `index.is_built` | `len(index) > 0` |
+
+`train(x)` exists for a uniform workflow but only checks `x` as `add` would,
+and `is_trained` is always `True`. `add` builds the graph from all vectors and can run only once;
+a second `add`, or `add` on a loaded index, raises `RuntimeError`, as Faiss's
+NSG index does. The deprecated `build` keeps its 0.7 behavior: it replaces any
+existing graph and, unless you passed `seed`, draws a new random seed each time.
+
+`search` now treats `ef` like HNSW-RaBitQ: an omitted or zero `ef` uses
+`max(k, 10)`, and a smaller one is raised to `k`. In 0.7, both raised
+`ValueError`. `add` uses every CPU by default, while the deprecated `build`
+keeps one thread. The seed now also drives graph construction: without `seed`,
+each index draws one random seed and reports it as `index.seed`; 0.7 drew
+separate random seeds for the rotation and the graph. Before vectors are added,
+`search` and `save` raise `RuntimeError("SymqgIndex has no vectors; ...")`.
+
+## Files and C++
 
 Saved files, the `max_elements` property, and `search` results for the same
 index are unchanged. Files written by 0.7 load as trained indexes.

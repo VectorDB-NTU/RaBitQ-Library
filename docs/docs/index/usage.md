@@ -17,8 +17,7 @@ storage before native processing; inputs remain unchanged.
 Data, centroids and queries must be finite. Coordinates are also limited to the
 magnitude the clustering APIs accept, `sqrt(sqrt(FLT_MAX) / (64 * dim))` (about
 `5e7` for `dim = 128`), so that squared distances and their products stay inside
-float32. `train`, `set_centroids`, `add` and `search` (and SymphonyQG `build`)
-raise `ValueError` (C++:
+float32. `train`, `set_centroids`, `add` and `search` raise `ValueError` (C++:
 `std::invalid_argument`) for NaN, infinite, or larger coordinates before changing
 the index. The C++ `quantize_*` encoders in `core/encoder.hpp` assume their
 callers have validated the input.
@@ -45,8 +44,9 @@ IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
 
 `0 <= num_points <= num_stored_points <= max_elements`. Before vectors are
 added, both point counts are zero; configured capacity may be nonzero. For
-IVF-RaBitQ and HNSW-RaBitQ, `len(index)` equals `num_points`, and `is_trained`
-reports whether centroids are set (by `train`, `set_centroids`, or `load`).
+all three indexes, `len(index)` equals `num_points`. `is_trained` reports
+whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by `train`, `set_centroids`,
+or `load`), and is always `True` for SymphonyQG.
 
 Removal decreases only `num_points`; slots and IDs remain occupied. Append IDs
 start at the previous `num_stored_points`. Use this stored count for ID bounds,
@@ -55,10 +55,10 @@ and `num_points` for a live count. Counts survive save/load.
 IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
 HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `resize` changes
 only capacity, for example to preallocate it. SymphonyQG has no incremental
-updates; all three counts are equal after build.
+updates: `add` builds the graph once, and all three counts are equal afterwards.
 
 `repr(index)` shows dimension, metric, quantization bits and live point count,
-with the training state for IVF/HNSW and the build state for SymphonyQG. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
+plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
 the resolved initializer, and SymphonyQG includes its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.
 
@@ -119,7 +119,7 @@ construction, updates, and file I/O. The following contract applies to
 | Operation on the same index | Concurrent access |
 | --- | --- |
 | `search`, `search_batch`, `save`, `repr`, and property reads | May run together |
-| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `resize`, and setting `cp`, where available | Require exclusive access |
+| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `resize`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input and may run with reads |
 
 A conflicting call immediately raises
 `RuntimeError("Index is busy: conflicting operation in progress")`.
@@ -139,8 +139,8 @@ index updates themselves and use separate search output buffers.
 
 `num_threads=0` selects the detected available logical CPU count. Positive values
 set an upper limit, capped at that count; small workloads may use fewer workers.
-IVF-RaBitQ and HNSW-RaBitQ `train` and `add` default to `0`, as does clustering;
-`search`, the deprecated `build`, and SymphonyQG methods default to one thread.
+`train` and `add` on every index default to `0`, as does clustering; `search`
+and the deprecated `build` default to one thread.
 Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, so pass
 `num_threads=1` when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding

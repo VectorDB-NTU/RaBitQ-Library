@@ -1,9 +1,9 @@
 """txtai's rabitqlib backend, call for call, must keep working in 0.8.
 
-Mirrors txtai.ann.dense.rabitq.RabitQ (index, append, delete, search, count,
-save, load). txtai trains centroids with scikit-learn; any centroids exercise the
-same calls, so these come from the data. The only warnings allowed are the
-compatibility layer's DeprecationWarnings.
+Mirrors txtai.ann.dense.rabitq.RabitQ at neuml/txtai 4d5e05f (index, append,
+delete, search, count, save, load). txtai trains centroids with scikit-learn;
+any centroids exercise the same calls, so these come from the data. The only
+warnings allowed are the compatibility layer's DeprecationWarnings.
 """
 
 import math
@@ -48,8 +48,21 @@ def index_like_txtai(mode, vectors):
     return backend
 
 
-def search_like_txtai(backend, mode, queries, limit, deletes):
-    count = backend.max_elements - deletes
+def append_like_txtai(backend, vectors):
+    backend.add(np.ascontiguousarray(vectors, dtype=np.float32))
+    return backend.num_stored_points  # txtai's next id offset
+
+
+def delete_like_txtai(backend, ids):
+    ids = [uid for uid in ids if 0 <= uid < backend.num_stored_points]
+    if ids:
+        backend.remove(np.array(ids, dtype=np.int64))
+
+
+def search_like_txtai(backend, mode, queries, limit):
+    count = backend.num_points
+    if not count:
+        return [[] for _ in queries]
     k = min(limit, count)
     if mode == "ivf":
         nprobe = max(1, round(backend.num_clusters / 16))
@@ -71,25 +84,22 @@ def test_txtai_calls(mode, embeddings, tmp_path):
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         backend = index_like_txtai(mode, embeddings[:300])
-        deletes = 0
-        results = search_like_txtai(backend, mode, embeddings[:5], 3, deletes)
+        results = search_like_txtai(backend, mode, embeddings[:5], 3)
         assert [hits[0][0] for hits in results] == list(range(5))
 
         if mode == "ivf":
             # append and delete exist for ivf only.
-            backend.add(np.ascontiguousarray(embeddings[300:], dtype=np.float32))
-            assert backend.max_elements == 400
-            ids = [uid for uid in [0, 1, 399, 1000] if 0 <= uid < backend.max_elements]
-            deletes += backend.remove(np.array(ids, dtype=np.int64))
-            assert deletes == 3
-            results = search_like_txtai(backend, mode, embeddings[300:305], 3, deletes)
+            assert append_like_txtai(backend, embeddings[300:]) == 400
+            delete_like_txtai(backend, [0, 1, 399, 1000])
+            assert backend.num_points == 397
+            results = search_like_txtai(backend, mode, embeddings[300:305], 3)
             assert results[0][0][0] == 300
 
         path = str(tmp_path / f"{mode}.index")
         backend.save(path)
         loaded = IvfIndex.load(path) if mode == "ivf" else HnswIndex.load(path)
-        assert search_like_txtai(
-            loaded, mode, embeddings[:5], 3, deletes
-        ) == search_like_txtai(backend, mode, embeddings[:5], 3, deletes)
+        assert search_like_txtai(loaded, mode, embeddings[:5], 3) == (
+            search_like_txtai(backend, mode, embeddings[:5], 3)
+        )
     categories = {w.category for w in caught}
     assert categories == {DeprecationWarning}, [str(w.message) for w in caught]

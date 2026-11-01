@@ -196,8 +196,8 @@ def test_documented_search_result_types(kind):
 
     data = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
     if kind == "symqg":
-        index = rabitqlib.SymqgIndex(64, 32)
-        index.build(data, 40)
+        index = rabitqlib.SymqgIndex(64, ef_construction=40)
+        index.add(data)
         result = index.search(data[:2], 3, ef=20)
     else:
         if kind == "ivf":

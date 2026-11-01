@@ -28,6 +28,7 @@ _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
 _Metric: TypeAlias = Literal["l2", "ip", "innerproduct"]
 _Initializer: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
+_QGInit: TypeAlias = Literal["pipnn", "random"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
 
@@ -781,7 +782,7 @@ class HnswIndex:
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex = 0,
+        ef: SupportsIndex | None = 0,
         num_threads: SupportsIndex = 1,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
@@ -794,7 +795,7 @@ class HnswIndex:
         k : int
             Number of neighbors requested, between 1 and num_stored_points.
         ef : int, optional
-            Search breadth. 0 (default) selects max(k, 10); values above the stored
+            Search breadth. None or 0 (default) selects max(k, 10); values above the stored
             point count are clamped.
         num_threads : int, optional
             Worker count. Default is 1; 0 selects the available CPU count.
@@ -861,29 +862,60 @@ class SymqgIndex:
     ----------
     dim : int
         Original vector dimension, from 64 through 65536.
-    max_degree : int
-        Graph degree bound; a positive multiple of 32.
+    nbits : {4, 8, 32}, optional
+        Keyword-only. Storage bits: 32 (default) keeps raw float32 vectors, and 4
+        or 8 store centroid-relative RaBitQ codes.
+    max_degree : int, optional
+        Keyword-only. Graph degree bound; a positive multiple of 32, smaller than
+        the number of vectors added. Default is 32.
+    ef_construction : int, optional
+        Keyword-only. Positive construction search breadth fitting uint32.
+        Default is 200.
+    init : {'pipnn', 'random'}, optional
+        Keyword-only. Graph initialization method. Default is 'pipnn'.
     metric : {'l2', 'ip', 'innerproduct'}, optional
-        Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-        automatically normalized for cosine similarity.
-    quantization_bits : {0, 4, 8}, optional
-        Centroid-relative RaBitQ storage at 4 or 8 bits, or raw float32 at 0
-        (default).
+        Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
+        Vectors are not automatically normalized for cosine similarity.
+    seed : int, optional
+        Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
+        None (default) draws one at random; the seed property reports it.
 
     Notes
     -----
-    Build or load the index before searching or saving. Concurrent reads are
-    supported; an overlapping mutation raises RuntimeError.
-    Data, centroids and queries must be finite float32 values within the index
-    coordinate range; other values raise ValueError.
+    There is nothing to train: train only checks its input, and is_trained is
+    always True. add builds the graph from all vectors at once and may be called
+    only once; to add more vectors, create a new index. Load an index or add
+    vectors before searching or saving. Concurrent reads are supported; an
+    overlapping mutation raises RuntimeError.
+    Data and queries must be finite float32 values within the index coordinate
+    range; other values raise ValueError.
+    The 0.7 forms SymqgIndex(dim, max_degree, metric, quantization_bits),
+    quantization_bits=, build() and search_batch() still work in 0.8, raise
+    DeprecationWarning, and will be removed in 0.9.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from rabitqlib import SymqgIndex
+    >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
+    >>> index = SymqgIndex(64, ef_construction=40, seed=7)
+    >>> index.add(x, num_threads=1)
+    >>> ids, distances = index.search(x[:2], k=3)
+    >>> ids.shape, distances.shape
+    ((2, 3), (2, 3))
     """
 
+    @overload
     def __init__(
         self,
         dim: SupportsIndex,
-        max_degree: SupportsIndex,
+        *,
+        nbits: SupportsIndex = 32,
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 200,
+        init: _QGInit = "pipnn",
         metric: _Metric = "l2",
-        quantization_bits: SupportsIndex = 0,
+        seed: SupportsIndex | None = None,
     ) -> None:
         """An approximate nearest-neighbor index using SymphonyQG.
 
@@ -891,25 +923,70 @@ class SymqgIndex:
         ----------
         dim : int
             Original vector dimension, from 64 through 65536.
-        max_degree : int
-            Graph degree bound; a positive multiple of 32.
+        nbits : {4, 8, 32}, optional
+            Keyword-only. Storage bits: 32 (default) keeps raw float32 vectors, and 4
+            or 8 store centroid-relative RaBitQ codes.
+        max_degree : int, optional
+            Keyword-only. Graph degree bound; a positive multiple of 32, smaller than
+            the number of vectors added. Default is 32.
+        ef_construction : int, optional
+            Keyword-only. Positive construction search breadth fitting uint32.
+            Default is 200.
+        init : {'pipnn', 'random'}, optional
+            Keyword-only. Graph initialization method. Default is 'pipnn'.
         metric : {'l2', 'ip', 'innerproduct'}, optional
-            Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-            automatically normalized for cosine similarity.
-        quantization_bits : {0, 4, 8}, optional
-            Centroid-relative RaBitQ storage at 4 or 8 bits, or raw float32 at 0
-            (default).
+            Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
+            Vectors are not automatically normalized for cosine similarity.
+        seed : int, optional
+            Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
+            None (default) draws one at random; the seed property reports it.
 
         Notes
         -----
-        Build or load the index before searching or saving. Concurrent reads are
-        supported; an overlapping mutation raises RuntimeError.
-        Data, centroids and queries must be finite float32 values within the index
-        coordinate range; other values raise ValueError.
+        There is nothing to train: train only checks its input, and is_trained is
+        always True. add builds the graph from all vectors at once and may be called
+        only once; to add more vectors, create a new index. Load an index or add
+        vectors before searching or saving. Concurrent reads are supported; an
+        overlapping mutation raises RuntimeError.
+        Data and queries must be finite float32 values within the index coordinate
+        range; other values raise ValueError.
+        The 0.7 forms SymqgIndex(dim, max_degree, metric, quantization_bits),
+        quantization_bits=, build() and search_batch() still work in 0.8, raise
+        DeprecationWarning, and will be removed in 0.9.
         """
-
+    @overload
+    @deprecated(
+        "SymqgIndex(dim, max_degree, metric, quantization_bits) is deprecated since "
+        "0.8; use SymqgIndex(dim, max_degree=..., metric=..., nbits=...)"
+    )
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        max_degree: SupportsIndex,
+        metric: _Metric = "l2",
+        quantization_bits: SupportsIndex = 0,
+    ) -> None: ...
+    @overload
+    @deprecated(
+        "SymqgIndex(quantization_bits=...) is deprecated since 0.8; use nbits=, "
+        "with 32 instead of 0 for raw vectors"
+    )
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        *,
+        quantization_bits: SupportsIndex,
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 200,
+        init: _QGInit = "pipnn",
+        metric: _Metric = "l2",
+        seed: SupportsIndex | None = None,
+    ) -> None: ...
     def __repr__(self) -> str:
-        """Return a one-line summary of configuration, counts and build state."""
+        """Return a one-line summary of configuration and counts."""
+
+    def __len__(self) -> int:
+        """Return the number of live, searchable points."""
 
     @property
     def dim(self) -> int:
@@ -928,8 +1005,13 @@ class SymqgIndex:
         """Number of stored points, including removed points."""
 
     @property
+    def is_trained(self) -> bool:
+        """Always True: SymphonyQG needs no training."""
+
+    @property
+    @deprecated("SymqgIndex.is_built is deprecated since 0.8; use len()")
     def is_built(self) -> bool:
-        """Whether the index has been built or loaded."""
+        """Deprecated since 0.8: whether the index holds a graph; use len()."""
 
     @property
     def metric(self) -> Literal["l2", "ip"]:
@@ -940,41 +1022,105 @@ class SymqgIndex:
         """Graph degree bound."""
 
     @property
-    def quantization_bits(self) -> int:
-        """Storage bits: 0 for raw float32, or 4 or 8 for RaBitQ."""
+    def ef_construction(self) -> int | None:
+        """Construction search breadth of the current graph or the next add, or None for an index loaded from disk."""
 
+    @property
+    def init(self) -> _QGInit | None:
+        """Graph initialization method of the current graph or the next add, or None for an index loaded from disk."""
+
+    @property
+    def nbits(self) -> int:
+        """Storage bits: 32 for raw float32, or 4 or 8 for RaBitQ."""
+
+    @property
+    @deprecated(
+        "SymqgIndex.quantization_bits is deprecated since 0.8; use nbits, which is "
+        "32 instead of 0 for raw vectors"
+    )
+    def quantization_bits(self) -> int:
+        """Deprecated since 0.8: storage bits with 0 for raw vectors; use nbits."""
+
+    @property
+    def seed(self) -> int | None:
+        """Rotation and graph-construction seed, or None for an index loaded from disk."""
+
+    def train(
+        self, x: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
+    ) -> None:
+        """Check training vectors; SymphonyQG has nothing to train.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (n, dim)
+            Vectors in the original, unpadded coordinates, checked like the data of
+            add.
+        num_threads : int, optional
+            Keyword-only. Accepted for interface consistency with the other indexes.
+            Default is None.
+
+        Notes
+        -----
+        Provided so that SymphonyQG follows the same train/add/search workflow as
+        the other indexes. It does not change the index, so it may run alongside
+        searches.
+        """
+
+    def add(self, data: npt.ArrayLike, *, num_threads: SupportsIndex = 0) -> None:
+        """Build the graph from all vectors.
+
+        Parameters
+        ----------
+        data : array_like of float, shape (n, dim)
+            Vectors in the original, unpadded coordinates, with n > max_degree.
+            Converted to contiguous float32; a copy may be made.
+        num_threads : int, optional
+            Keyword-only. Worker count. Default is 0, which selects the available
+            CPU count.
+
+        Notes
+        -----
+        Uses the constructor's ef_construction, init and seed. The graph cannot be
+        extended: a second call raises RuntimeError, so add every vector in one
+        call, or create a new index to rebuild. Point IDs are the row numbers of
+        data. Input arrays need not be retained after this synchronous call.
+        """
+
+    @deprecated(
+        "SymqgIndex.build() is deprecated since 0.8; pass ef_construction and init "
+        "to SymqgIndex() and call add()"
+    )
     def build(
         self,
         data: npt.ArrayLike,
         ef_construction: SupportsIndex,
         num_threads: SupportsIndex = 1,
-        init: Literal["pipnn", "random"] = "pipnn",
+        init: _QGInit = "pipnn",
     ) -> None:
-        """Build the graph from input vectors.
+        """Build the graph from input vectors, replacing any existing graph.
+
+        Deprecated since 0.8 and removed in 0.9: pass ef_construction and init to
+        the constructor, then call add() once. The defaults match 0.7, including
+        a single thread.
 
         Parameters
         ----------
         data : array_like of float, shape (n, dim)
-            Vectors in the original, unpadded coordinates. Converted to contiguous
-            float32; a copy may be made.
+            Vectors in the original, unpadded coordinates, with n > max_degree.
+            Converted to contiguous float32; a copy may be made.
         ef_construction : int
             Positive construction search breadth fitting uint32.
         num_threads : int, optional
             Worker count. Default is 1; 0 selects the available CPU count.
         init : {'pipnn', 'random'}, optional
             Graph initialization method. Default is 'pipnn'.
-
-        Notes
-        -----
-        Requires n > max_degree. Input arrays need not be retained after this
-        synchronous call.
         """
 
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex,
+        ef: SupportsIndex | None = None,
         num_threads: SupportsIndex = 1,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
@@ -986,8 +1132,9 @@ class SymqgIndex:
             float32; a copy may be made.
         k : int
             Number of neighbors requested, between 1 and num_points.
-        ef : int
-            Search breadth. Must be positive and at least k.
+        ef : int, optional
+            Search breadth. None or 0 (default) selects max(k, 10); smaller values
+            are raised to k.
         num_threads : int, optional
             Worker count. Default is 1; 0 selects the available CPU count.
 
@@ -1005,6 +1152,7 @@ class SymqgIndex:
         checked at runtime, not by static type checkers.
         """
 
+    @deprecated("SymqgIndex.search_batch() is deprecated since 0.8; use search()")
     def search_batch(
         self,
         queries: npt.ArrayLike,
@@ -1012,36 +1160,10 @@ class SymqgIndex:
         ef: SupportsIndex,
         num_threads: SupportsIndex = 1,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
-        """Search a batch of query vectors.
-
-        Parameters
-        ----------
-        queries : array_like of float, shape (n_queries, dim)
-            Vectors in the original, unpadded coordinates. Converted to contiguous
-            float32; a copy may be made.
-        k : int
-            Number of neighbors requested, between 1 and num_points.
-        ef : int
-            Search breadth. Must be positive and at least k.
-        num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
-
-        Returns
-        -------
-        ids : ndarray of uint32, shape (n_queries, k)
-            Point IDs of the selected neighbors.
-        distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
-
-        Notes
-        -----
-        Returns (ids, distances), in that order. Array shapes and value ranges are
-        checked at runtime, not by static type checkers.
-        """
+        """Deprecated since 0.8: the same as search(); use search()."""
 
     def save(self, path: _Path) -> None:
-        """Save a built index to disk.
+        """Save an index with vectors to disk.
 
         Parameters
         ----------
@@ -1067,7 +1189,7 @@ class SymqgIndex:
         Returns
         -------
         index : SymqgIndex
-            A built index ready for search.
+            An index ready for search; add raises because it already has a graph.
         """
 
 class QGKMeans:
