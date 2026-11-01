@@ -370,6 +370,18 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#ivf-rabitq-and-hnsw-rabitq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IVF-RaBitQ and HNSW-RaBitQ
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IVF-RaBitQ and HNSW-RaBitQ">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#old-and-new-calls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -379,12 +391,39 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#behavior-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Behavior changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#symphonyqg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SymphonyQG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-and-c" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files and C++
       
     </span>
   </a>
@@ -1590,6 +1629,18 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#ivf-rabitq-and-hnsw-rabitq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IVF-RaBitQ and HNSW-RaBitQ
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="IVF-RaBitQ and HNSW-RaBitQ">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#old-and-new-calls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1599,12 +1650,39 @@
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#behavior-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Behavior changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#symphonyqg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SymphonyQG
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-and-c" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files and C++
       
     </span>
   </a>
@@ -1637,12 +1715,18 @@
 
 
 <h1 id="migrating-python-code-from-07-to-08">Migrating Python code from 0.7 to 0.8<a class="headerlink" href="#migrating-python-code-from-07-to-08" title="Permanent link">&para;</a></h1>
-<p>In 0.8, <code>IvfIndex</code> and <code>HnswIndex</code> follow a <code>train</code> → <code>add</code> → <code>search</code> workflow,
-as Faiss indexes do: the index learns its own centroids, so you no longer run
-k-means and pass the centroids and assignments to <code>build</code>. Code written for 0.7
+<p>In 0.8, <code>IvfIndex</code>, <code>HnswIndex</code> and <code>SymqgIndex</code> follow a <code>train</code> → <code>add</code> →
+<code>search</code> workflow, as Faiss indexes do. IVF-RaBitQ and HNSW-RaBitQ learn their
+own centroids, so you no longer run k-means and pass the centroids and
+assignments to <code>build</code>; SymphonyQG has nothing to train and builds its graph in
+<code>add</code>. Code written for 0.7
 still runs in 0.8. Each old form raises a <code>DeprecationWarning</code> at your call site
-and will be removed in <strong>0.9</strong>. Search calls are unchanged.</p>
-<h2 id="old-and-new-calls">Old and new calls<a class="headerlink" href="#old-and-new-calls" title="Permanent link">&para;</a></h2>
+and will be removed in <strong>0.9</strong>.</p>
+<p>Unless an item below says otherwise, a 0.7 call that raises a deprecation
+warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
+<code>add(x)</code> and <code>search</code>, follow the 0.8 rules.</p>
+<h2 id="ivf-rabitq-and-hnsw-rabitq">IVF-RaBitQ and HNSW-RaBitQ<a class="headerlink" href="#ivf-rabitq-and-hnsw-rabitq" title="Permanent link">&para;</a></h2>
+<h3 id="old-and-new-calls">Old and new calls<a class="headerlink" href="#old-and-new-calls" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -1693,10 +1777,7 @@ vectors per centroid, spherical k-means for <code>metric="ip"</code>, and the in
 See <a href="../index/ivf/#training-centroids-in-python">IVF-RaBitQ training</a> for the
 details and for <code>set_centroids</code>. The <a href="../clustering/">clustering classes</a> still
 work if you want to run k-means yourself.</p>
-<h2 id="behavior-changes">Behavior changes<a class="headerlink" href="#behavior-changes" title="Permanent link">&para;</a></h2>
-<p>Unless an item says otherwise, a 0.7 call that raises a deprecation warning
-keeps its 0.7 behavior. Calls that are valid in both versions, such as
-<code>add(x)</code> and <code>search</code>, follow the 0.8 rules below.</p>
+<h3 id="behavior-changes">Behavior changes<a class="headerlink" href="#behavior-changes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Thread defaults.</strong> <code>train</code> and <code>add</code> now default to every available CPU
   (<code>num_threads=0</code>); 0.7 <code>build</code> and <code>add</code> defaulted to one thread. This applies
@@ -1729,6 +1810,54 @@ keeps its 0.7 behavior. Calls that are valid in both versions, such as
   <code>set_centroids</code> raise <code>RuntimeError</code> for it. Create the index in the 0.8 form
   to train it.</li>
 </ul>
+<h2 id="symphonyqg">SymphonyQG<a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>0.7</th>
+<th>0.8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SymqgIndex(dim, max_degree, metric, quantization_bits)</code></td>
+<td><code>SymqgIndex(dim, max_degree=..., metric=..., nbits=...)</code>; every argument after <code>dim</code> is keyword-only</td>
+</tr>
+<tr>
+<td><code>quantization_bits=0</code> (raw vectors), <code>4</code>, <code>8</code></td>
+<td><code>nbits=32</code> (raw vectors, the default), <code>4</code>, <code>8</code></td>
+</tr>
+<tr>
+<td><code>index.build(x, ef_construction, num_threads, init)</code></td>
+<td><code>SymqgIndex(dim, ef_construction=..., init=..., seed=...)</code><br><code>index.add(x, num_threads=...)</code></td>
+</tr>
+<tr>
+<td><code>index.search_batch(q, k, ef)</code></td>
+<td><code>index.search(q, k, ef)</code>; <code>ef</code> is now optional</td>
+</tr>
+<tr>
+<td><code>index.quantization_bits</code></td>
+<td><code>index.nbits</code> (32 instead of 0 for raw vectors)</td>
+</tr>
+<tr>
+<td><code>index.is_built</code></td>
+<td><code>len(index) &gt; 0</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>train(x)</code> exists for a uniform workflow but only checks <code>x</code> as <code>add</code> would,
+and <code>is_trained</code> is always <code>True</code>. <code>add</code> builds the graph from all vectors and can run only once;
+a second <code>add</code>, or <code>add</code> on a loaded index, raises <code>RuntimeError</code>, as Faiss's
+NSG index does. The deprecated <code>build</code> keeps its 0.7 behavior: it replaces any
+existing graph and, unless you passed <code>seed</code>, draws a new random seed each time.</p>
+<p><code>search</code> now treats <code>ef</code> like HNSW-RaBitQ: an omitted or zero <code>ef</code> uses
+<code>max(k, 10)</code>, and a smaller one is raised to <code>k</code>. In 0.7, both raised
+<code>ValueError</code>. <code>add</code> uses every CPU by default, while the deprecated <code>build</code>
+keeps one thread. The seed now also drives graph construction: without <code>seed</code>,
+each index draws one random seed and reports it as <code>index.seed</code>; 0.7 drew
+separate random seeds for the rotation and the graph. Before vectors are added,
+<code>search</code> and <code>save</code> raise <code>RuntimeError("SymqgIndex has no vectors; ...")</code>.</p>
+<h2 id="files-and-c">Files and C++<a class="headerlink" href="#files-and-c" title="Permanent link">&para;</a></h2>
 <p>Saved files, the <code>max_elements</code> property, and <code>search</code> results for the same
 index are unchanged. Files written by 0.7 load as trained indexes.</p>
 <p>For C++, the existing constructors and <code>construct</code> are unchanged; see

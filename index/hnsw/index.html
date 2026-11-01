@@ -2222,7 +2222,7 @@ see <a href="../../cpp_integration/">C++ integration</a>.</p>
 </tr>
 <tr>
 <td><code>k</code>, <code>ef</code></td>
-<td>Positive result count and search window. Python requires <code>k &lt;= num_stored_points</code>, so a trained index without points rejects every <code>k</code>; omitted/zero <code>ef</code> uses <code>max(k, 10)</code>, positive <code>ef</code> is raised to at least <code>k</code>, and <code>ef</code> above the stored point count is clamped to it.</td>
+<td>Positive result count and search window. Python requires <code>k &lt;= num_stored_points</code>, so a trained index without points rejects every <code>k</code>; omitted, <code>None</code> or zero <code>ef</code> uses <code>max(k, 10)</code>, positive <code>ef</code> is raised to at least <code>k</code>, and <code>ef</code> above the stored point count is clamped to it.</td>
 </tr>
 </tbody>
 </table>

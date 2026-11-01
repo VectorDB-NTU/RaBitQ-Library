@@ -1912,14 +1912,21 @@ step. The degree-32 example requires at least 33 data points.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">SymqgIndex</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># data and queries are float32 arrays with shape (count, dim).</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">index</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">max_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">"l2"</span><span class="p">,</span> <span class="n">quantization_bits</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">index</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="s2">"pipnn"</span><span class="p">)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">index</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">max_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="s2">"pipnn"</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># builds the whole graph</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search_batch</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 </code></pre></div>
-<p><code>search()</code> accepts the same arguments and is equivalent to <code>search_batch()</code>.</p>
+<p>SymphonyQG follows the same <code>train</code> → <code>add</code> → <code>search</code> workflow as the other
+indexes, but has nothing to train: <code>train(x)</code> only checks <code>x</code> as <code>add</code> would,
+and <code>is_trained</code> is always <code>True</code>. <code>add</code> builds the graph from every vector at once
+and can be called only once, as in Faiss's NSG index; a second call, or <code>add</code> on
+a loaded index, raises <code>RuntimeError</code>. To index more vectors, create a new index
+and add all of them. Point IDs are the row numbers of the added data. Files do
+not store the construction settings, so a loaded index reports
+<code>ef_construction</code>, <code>init</code> and <code>seed</code> as <code>None</code>.</p>
 <h3 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h3>
 <p>Link <code>rabitqlib::index</code>. Here <code>data</code> is a row-major <code>std::vector&lt;float&gt;</code> with
 <code>rows * cols</code> values, and <code>query</code> contains <code>cols</code> values; use at least 33 rows.
@@ -1956,36 +1963,40 @@ See <a href="../../cpp_integration/">C++ integration</a> for build setup.</p>
 <td>Original input dimension; Python supports 64–65,536 and pads internally.</td>
 </tr>
 <tr>
+<td><code>nbits</code> / C++ <code>quantization_bits</code></td>
+<td>Python keyword: 32 (default) for owned raw vectors, or 4/8 for quantized storage. C++ uses 0 for raw vectors, as Python's <code>quantization_bits</code> did before 0.8.</td>
+</tr>
+<tr>
 <td><code>max_degree</code></td>
-<td>Required positive multiple of 32, strictly smaller than the point count.</td>
-</tr>
-<tr>
-<td><code>quantization_bits</code></td>
-<td>0 for owned raw vectors (default), or 4/8 for quantized storage.</td>
-</tr>
-<tr>
-<td><code>metric</code></td>
-<td>Python <code>"l2"</code> or <code>"ip"</code>; defaults to <code>"l2"</code>.</td>
+<td>Python keyword, default 32: a positive multiple of 32, strictly smaller than the point count. It is a hard degree bound, unlike HNSW-RaBitQ's <code>M</code>.</td>
 </tr>
 <tr>
 <td><code>ef_construction</code></td>
-<td>Required positive construction search window.</td>
+<td>Python keyword, default 200: positive construction search window used by <code>add</code>.</td>
 </tr>
 <tr>
 <td><code>init</code></td>
-<td>Python <code>"pipnn"</code> (default) or <code>"random"</code>.</td>
+<td>Python keyword: <code>"pipnn"</code> (default) or <code>"random"</code>.</td>
+</tr>
+<tr>
+<td><code>metric</code></td>
+<td>Python keyword: <code>"l2"</code> (default) or <code>"ip"</code>.</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>Python keyword: rotation and graph-construction seed in <code>[0, 2**32 - 1]</code>. The default <code>None</code> draws one at random; <code>index.seed</code> reports it, and passing it back with <code>num_threads=1</code> rebuilds the same graph from the same data.</td>
 </tr>
 <tr>
 <td><code>k</code>, <code>ef</code></td>
-<td>Python requires <code>1 &lt;= k &lt;= num_points</code> and <code>ef &gt;= k</code>.</td>
+<td>Python requires <code>1 &lt;= k &lt;= num_points</code>. Omitted or zero <code>ef</code> uses <code>max(k, 10)</code>, and smaller values are raised to <code>k</code>, as for HNSW-RaBitQ.</td>
 </tr>
 <tr>
 <td><code>num_threads</code></td>
-<td>Python defaults to 1; 0 selects available logical CPUs.</td>
+<td>Python <code>add</code> defaults to 0 (every available logical CPU) and <code>search</code> to 1.</td>
 </tr>
 </tbody>
 </table>
-<p>Both Python search names return <code>(ids, distances)</code> arrays. Distances are squared
+<p>Python search returns <code>(ids, distances)</code> arrays. Distances are squared
 L2 or <code>1 - dot</code>, ordered from smallest to largest; quantized storage returns
 estimates. SymphonyQG has no incremental add/remove API. See shared
 <a href="../usage/">input, count and concurrency contracts</a>.</p>
@@ -2021,7 +2032,7 @@ for PiPNN or three passes for <code>QGInitialization::Random</code>; <code>build
 as the random-initialization seed.</p>
 <h3 id="input-lifetime-and-rebuilds">Input lifetime and rebuilds<a class="headerlink" href="#input-lifetime-and-rebuilds" title="Permanent link">&para;</a></h3>
 <p>The caller can release input vectors after the <code>QGBuilder</code> constructor returns.
-Python retains the caller's array during <code>build</code>. Complete construction before
+Python retains the caller's array during <code>add</code>. Complete construction before
 querying or saving.</p>
 <p><code>builder.reset(data)</code> reinitializes vectors of the same shape and reuses workspace.
 Input may be released after reset returns; rebuild before querying or saving.</p>
@@ -2034,7 +2045,7 @@ this for its centroid graph; the cache is not persisted.</p>
 every platform; a MatrixRotator seed reproduces the matrix only with the same
 standard library and build, so rely on the saved index rather than the seed.
 The builder seed controls random initialization and fallback edges. PiPNN uses
-fixed internal seeds.</p>
+fixed internal seeds. Python's <code>seed</code> sets both the graph seed and the builder seed.</p>
 <h2 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h2>
 <p>C++ search accepts one vector in the original input dimension and writes <code>k</code> IDs
 and distances:</p>
@@ -2062,10 +2073,11 @@ buffers are required and contain <code>num_queries * k</code> elements. Empty C+
 do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 <code>set_ef()</code> while searches are running.</p>
-<p>Python <code>search_batch(queries, k, ef, num_threads=1)</code> and <code>search()</code> accept
-the same two-dimensional query array. Both return <code>(ids, distances)</code> arrays
-of shape <code>(num_queries, k)</code>, including empty batches. Both APIs default to one worker; <code>num_threads=0</code>
-selects the available logical CPU count, capped by the number of queries.
+<p>Python <code>search(queries, k, ef=None, num_threads=1)</code> accepts a two-dimensional
+query array and returns <code>(ids, distances)</code> arrays of shape <code>(num_queries, k)</code>,
+including empty batches. It defaults to one worker; <code>num_threads=0</code> selects the
+available logical CPU count, capped by the number of queries. The 0.7 name
+<code>search_batch</code> still works in 0.8 with a <code>DeprecationWarning</code>.
 Queries use the original dimension, including when the internal rotation pads it.</p>
 <p>Python searches use per-call <code>ef</code> values. For access rules, see the
 <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>

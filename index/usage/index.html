@@ -1718,8 +1718,7 @@ storage before native processing; inputs remain unchanged.</p>
 <p>Data, centroids and queries must be finite. Coordinates are also limited to the
 magnitude the clustering APIs accept, <code>sqrt(sqrt(FLT_MAX) / (64 * dim))</code> (about
 <code>5e7</code> for <code>dim = 128</code>), so that squared distances and their products stay inside
-float32. <code>train</code>, <code>set_centroids</code>, <code>add</code> and <code>search</code> (and SymphonyQG <code>build</code>)
-raise <code>ValueError</code> (C++:
+float32. <code>train</code>, <code>set_centroids</code>, <code>add</code> and <code>search</code> raise <code>ValueError</code> (C++:
 <code>std::invalid_argument</code>) for NaN, infinite, or larger coordinates before changing
 the index. The C++ <code>quantize_*</code> encoders in <code>core/encoder.hpp</code> assume their
 callers have validated the input.</p>
@@ -1757,17 +1756,18 @@ HNSW-RaBitQ's <code>num_points</code> now excludes removed records; see the
 </table>
 <p><code>0 &lt;= num_points &lt;= num_stored_points &lt;= max_elements</code>. Before vectors are
 added, both point counts are zero; configured capacity may be nonzero. For
-IVF-RaBitQ and HNSW-RaBitQ, <code>len(index)</code> equals <code>num_points</code>, and <code>is_trained</code>
-reports whether centroids are set (by <code>train</code>, <code>set_centroids</code>, or <code>load</code>).</p>
+all three indexes, <code>len(index)</code> equals <code>num_points</code>. <code>is_trained</code> reports
+whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by <code>train</code>, <code>set_centroids</code>,
+or <code>load</code>), and is always <code>True</code> for SymphonyQG.</p>
 <p>Removal decreases only <code>num_points</code>; slots and IDs remain occupied. Append IDs
 start at the previous <code>num_stored_points</code>. Use this stored count for ID bounds,
 and <code>num_points</code> for a live count. Counts survive save/load.</p>
 <p>IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
 HNSW-RaBitQ's Python <code>add</code> grows its capacity geometrically, and <code>resize</code> changes
 only capacity, for example to preallocate it. SymphonyQG has no incremental
-updates; all three counts are equal after build.</p>
+updates: <code>add</code> builds the graph once, and all three counts are equal afterwards.</p>
 <p><code>repr(index)</code> shows dimension, metric, quantization bits and live point count,
-with the training state for IVF/HNSW and the build state for SymphonyQG. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
+plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
 the resolved initializer, and SymphonyQG includes its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.</p>
 <h2 id="estimate-storage">Estimate storage<a class="headerlink" href="#estimate-storage" title="Permanent link">&para;</a></h2>
@@ -1851,7 +1851,7 @@ construction, updates, and file I/O. The following contract applies to
 </tr>
 <tr>
 <td><code>train</code>, <code>set_centroids</code>, <code>build</code>, <code>add</code>, <code>remove</code>, <code>reserve</code>, <code>resize</code>, and setting <code>cp</code>, where available</td>
-<td>Require exclusive access</td>
+<td>Require exclusive access, except SymphonyQG's <code>train</code>, which only checks its input and may run with reads</td>
 </tr>
 </tbody>
 </table>
@@ -1870,8 +1870,8 @@ thread. Returned result arrays own their storage.</p>
 index updates themselves and use separate search output buffers.</p>
 <p><code>num_threads=0</code> selects the detected available logical CPU count. Positive values
 set an upper limit, capped at that count; small workloads may use fewer workers.
-IVF-RaBitQ and HNSW-RaBitQ <code>train</code> and <code>add</code> default to <code>0</code>, as does clustering;
-<code>search</code>, the deprecated <code>build</code>, and SymphonyQG methods default to one thread.
+<code>train</code> and <code>add</code> on every index default to <code>0</code>, as does clustering; <code>search</code>
+and the deprecated <code>build</code> default to one thread.
 Multithreaded HNSW-RaBitQ <code>add</code> links points in a nondeterministic order, so pass
 <code>num_threads=1</code> when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
