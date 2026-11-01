@@ -58,12 +58,12 @@ The core example is built as the `core_example` CMake target. For the GIST bench
 
 The [core quantization v1 API](rabitq/core_api.md) has a C++ source-compatibility contract.
 Other C++ APIs may evolve, and no cross-version C++ binary ABI is promised.
-Pin the `v0.7.2` release and include RaBitQ-Library as a Git submodule:
+Pin the `v0.8.0` release and include RaBitQ-Library as a Git submodule:
 
 ```bash
 git submodule add https://github.com/VectorDB-NTU/RaBitQ-Library.git third_party/rabitqlib
 git submodule update --init --recursive
-git -C third_party/rabitqlib checkout v0.7.2
+git -C third_party/rabitqlib checkout v0.8.0
 git add third_party/rabitqlib
 ```
 

@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "rabitqlib"
-version = "0.7.2"
+version = "0.8.0"
 description = "Official RaBitQ library for vector quantization and approximate nearest-neighbor search"
 readme = "README.md"
 requires-python = ">=3.11"
