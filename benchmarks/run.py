@@ -135,25 +135,24 @@ def build_index(cfg, base, path):
         training_s = time.perf_counter() - stage_start
         stage_start = time.perf_counter()
         if method == "rabitq-ivf":
-            index = IvfIndex(dim, n, cluster_count, cfg["bits"], cfg["metric"])
+            index = IvfIndex(
+                dim, cluster_count, nbits=cfg["bits"], metric=cfg["metric"]
+            )
         else:
             from rabitqlib import HnswIndex
 
             index = HnswIndex(
                 dim,
-                n,
-                cfg["m"],
-                cfg["ef_construction"],
-                cfg["bits"],
-                cfg["metric"],
-                random_seed=42,
+                nbits=cfg["bits"],
+                num_clusters=cluster_count,
+                M=cfg["m"],
+                ef_construction=cfg["ef_construction"],
+                metric=cfg["metric"],
+                seed=42,
             )
-        index.build(
-            base,
-            kmeans.centroids,
-            kmeans.assignments,
-            num_threads=cfg["threads"],
-        )
+            index.resize(n)
+        index.set_centroids(kmeans.centroids)
+        index.add(base, cluster_ids=kmeans.assignments, num_threads=cfg["threads"])
         indexing_s = time.perf_counter() - stage_start
         details = {
             "clustering": "RaBitQKMeans",
@@ -164,14 +163,17 @@ def build_index(cfg, base, path):
     elif method == "rabitq-symqg":
         from rabitqlib import SymqgIndex
 
-        index = SymqgIndex(dim, cfg["degree"], cfg["metric"], cfg["quantization_bits"])
-        stage_start = time.perf_counter()
-        index.build(
-            base,
+        # 0.7 quantization_bits=0 (raw vectors) is nbits=32 in 0.8.
+        index = SymqgIndex(
+            dim,
+            max_degree=cfg["degree"],
+            metric=cfg["metric"],
+            nbits=cfg["quantization_bits"] or 32,
             ef_construction=cfg["ef_construction"],
-            num_threads=cfg["threads"],
             init="pipnn",
         )
+        stage_start = time.perf_counter()
+        index.add(base, num_threads=cfg["threads"])
         indexing_s = time.perf_counter() - stage_start
         details = {"initialization": "pipnn", "refinement_iterations": 1}
     else:
