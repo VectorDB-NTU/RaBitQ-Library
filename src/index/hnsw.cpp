@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <queue>
 #include <random>
 #include <stdexcept>
@@ -22,6 +23,7 @@
 #include <vector>
 
 #include "file_replacement.hpp"
+#include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/estimator.hpp"
@@ -140,6 +142,9 @@ void HierarchicalNSW::set_record_layout() {
 void HierarchicalNSW::save(const char* filename) const {
     if (level0_record_bytes_ == 0) {
         throw std::logic_error("HNSW index must be initialized before save");
+    }
+    if (num_stored_points_ == 0) {
+        throw std::logic_error("HNSW index has no points to save; add points first");
     }
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("HNSW index filename must not be empty");
@@ -534,6 +539,23 @@ void HierarchicalNSW::construct(
             );
         }
 
+        link_exact(num_points, data, cluster_ids, num_threads, fast_quantization);
+    } catch (...) {
+        // Also discard the centroids, retaining capacity and rotation for a retry.
+        centroids_memory_.reset();
+        num_clusters_ = 0;
+        throw;
+    }
+}
+
+void HierarchicalNSW::link_exact(
+    size_t num_points,
+    const float* data,
+    const PID* cluster_ids,
+    size_t num_threads,
+    bool fast_quantization
+) {
+    try {
         quant::RabitqConfig config;
         if (fast_quantization) {
             config = quant::faster_config(padded_dim_, ex_bits_ + 1);
@@ -547,7 +569,7 @@ void HierarchicalNSW::construct(
         );
     } catch (...) {
         // parallel_for joins every worker before propagating an exception.
-        // Discard the partial graph, retaining capacity and rotation for a retry.
+        // Discard the partial graph, retaining capacity, rotation and centroids.
         std::fill_n(element_levels_.begin(), num_stored_points_.load(), 0);
         link_lists_.clear();
         num_stored_points_ = 0;
@@ -555,12 +577,73 @@ void HierarchicalNSW::construct(
         label_lookup_.clear();
         entry_point_id_ = kPidMax;
         max_level_ = -1;
-        centroids_memory_.reset();
-        num_clusters_ = 0;
         construction_data_ = nullptr;
         throw;
     }
     construction_data_ = nullptr;
+}
+
+void HierarchicalNSW::set_centroids(size_t num_clusters, const float* centroids) {
+    if (level0_record_bytes_ == 0) {
+        throw std::logic_error("HNSW index must be initialized before setting centroids");
+    }
+    if (num_stored_points_ != 0) {
+        throw std::logic_error("HNSW cannot replace the centroids of an index with points");
+    }
+    if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("HNSW cluster count is out of range");
+    }
+    if (centroids == nullptr) {
+        throw std::invalid_argument("HNSW centroids must not be null");
+    }
+    if (num_clusters > std::numeric_limits<size_t>::max() / sizeof(float) / padded_dim_) {
+        throw std::invalid_argument("HNSW centroids exceed addressable storage");
+    }
+    check_coordinates(centroids, num_clusters * dim_, dim_, "HNSW centroids");
+
+    // construct rotates centroids the same way, so both paths quantize identically.
+    AlignedStorage rotated(
+        memory::huge_page_allocate<char>(num_clusters * padded_dim_ * sizeof(float))
+    );
+    for (size_t i = 0; i < num_clusters; ++i) {
+        rotator_->rotate(
+            centroids + (i * dim_),
+            reinterpret_cast<float*>(rotated.get()) + (i * padded_dim_)
+        );
+    }
+    centroids_memory_ = std::move(rotated);
+    num_clusters_ = num_clusters;
+}
+
+void HierarchicalNSW::train(
+    size_t num_clusters,
+    size_t num_points,
+    const float* data,
+    const rabitqkmeans::RaBitQKMeansParameters& cp
+) {
+    if (level0_record_bytes_ == 0) {
+        throw std::logic_error("HNSW index must be initialized before training");
+    }
+    if (num_stored_points_ != 0) {
+        throw std::logic_error("HNSW cannot retrain an index with points");
+    }
+    if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("HNSW cluster count is out of range");
+    }
+    if (data == nullptr) {
+        throw std::invalid_argument("HNSW training data must not be null");
+    }
+    if (num_points < num_clusters) {
+        throw std::invalid_argument("HNSW training needs at least num_clusters points");
+    }
+    if (num_points > std::numeric_limits<size_t>::max() / sizeof(float) / dim_) {
+        throw std::invalid_argument("HNSW training data exceeds addressable storage");
+    }
+    check_coordinates(data, num_points * dim_, dim_, "HNSW training data");
+
+    rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters, cp);
+    kmeans.train_centroids(num_points, data);
+    set_centroids(num_clusters, kmeans.centroids.data());
 }
 
 template <class Distance>
@@ -1292,7 +1375,9 @@ std::vector<PID> HierarchicalNSW::add(
 ) {
     if (data_level0_memory_ == nullptr || centroids_memory_ == nullptr ||
         rotator_ == nullptr || num_clusters_ == 0) {
-        throw std::logic_error("HNSW index must be constructed or loaded before add");
+        throw std::logic_error(
+            "HNSW index must be trained, constructed or loaded before add"
+        );
     }
     if (num_points == 0) {
         return {};
@@ -1334,6 +1419,13 @@ std::vector<PID> HierarchicalNSW::add(
                 }
             }
         });
+    }
+
+    if (num_stored_points_ == 0) {
+        // The exact vectors are at hand, so link them as construct would.
+        link_exact(num_points, data, assigned.data(), num_threads, fast_quantization);
+        std::iota(labels.begin(), labels.end(), PID{0});
+        return labels;
     }
 
     quant::RabitqConfig config;

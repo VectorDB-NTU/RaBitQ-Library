@@ -630,5 +630,63 @@ TEST(KMeansSamplingTest, QGSampledRetrainingOnOwnCentroids) {
     check_sampled_retraining_on_own_centroids<qgkmeans::QGKMeans>();
 }
 
+// train_centroids trains what train trains, with and without sampling, but assigns
+// nothing; assign still works afterwards.
+template <typename Clustering>
+void check_train_centroids_skips_final_assignment() {
+    constexpr size_t kNumPoints = 600;
+    const auto points = clustered_points(kNumPoints, 23);
+    const size_t num_clusters = kClusters<Clustering>;
+    for (const size_t max_points_per_centroid : {size_t{0}, size_t{8}}) {
+        for (const auto mode :
+             {FinalAssignmentMode::Approximate, FinalAssignmentMode::Exact}) {
+            SCOPED_TRACE(
+                ::testing::Message()
+                << "max_points_per_centroid=" << max_points_per_centroid
+                << " exact=" << (mode == FinalAssignmentMode::Exact)
+            );
+            auto parameters = test_parameters<Clustering>();
+            parameters.max_points_per_centroid = max_points_per_centroid;
+            parameters.final_assignment = mode;
+            Clustering trained(kDim, num_clusters, parameters);
+            trained.train(kNumPoints, points.data());
+            Clustering centroids_only(kDim, num_clusters, parameters);
+            centroids_only.train_centroids(kNumPoints, points.data());
+
+            EXPECT_EQ(centroids_only.centroids, trained.centroids);
+            ASSERT_EQ(
+                centroids_only.iteration_stats.size(), trained.iteration_stats.size()
+            );
+            for (size_t i = 0; i < trained.iteration_stats.size(); ++i) {
+                EXPECT_EQ(
+                    centroids_only.iteration_stats[i].obj, trained.iteration_stats[i].obj
+                );
+            }
+            EXPECT_TRUE(centroids_only.assignments.empty());
+            EXPECT_TRUE(centroids_only.distances.empty());
+            EXPECT_EQ(centroids_only.final_obj, 0.0);
+
+            std::vector<PID> expected_ids(kNumPoints), actual_ids(kNumPoints);
+            std::vector<float> expected_distances(kNumPoints), actual_distances(kNumPoints);
+            trained.assign(
+                kNumPoints, points.data(), expected_ids.data(), expected_distances.data()
+            );
+            centroids_only.assign(
+                kNumPoints, points.data(), actual_ids.data(), actual_distances.data()
+            );
+            EXPECT_EQ(actual_ids, expected_ids);
+            EXPECT_EQ(actual_distances, expected_distances);
+        }
+    }
+}
+
+TEST(KMeansTrainCentroidsTest, RaBitQSkipsFinalAssignment) {
+    check_train_centroids_skips_final_assignment<rabitqkmeans::RaBitQKMeans>();
+}
+
+TEST(KMeansTrainCentroidsTest, QGSkipsFinalAssignment) {
+    check_train_centroids_skips_final_assignment<qgkmeans::QGKMeans>();
+}
+
 }  // namespace
 }  // namespace rabitqlib

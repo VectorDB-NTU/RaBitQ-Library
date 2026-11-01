@@ -199,6 +199,42 @@ For example:
 ivf.construct(data.data(), centroids.data(), cluster_ids.data(), true);
 ```
 
+### Training centroids in C++
+
+Instead of passing centroids to `construct`, create an index without a point
+count, train or set its centroids, then add the points:
+
+```c++
+#include <rabitqlib/index/ivf/ivf.hpp>
+#include <rabitqlib/index/training.hpp>
+
+rabitqlib::ivf::IVF index(dim, num_clusters, 4, rabitqlib::METRIC_L2, /*seed=*/42);
+index.train(num_points, data.data(),
+            rabitqlib::default_training_parameters(rabitqlib::METRIC_L2, 42));
+// Or supply centroids: index.set_centroids(centroids.data());
+index.add(data.data(), num_points);
+```
+
+- The constructor takes `dim`, `num_clusters`, `total_bits`, the metric and the
+  rotation seed, followed by the optional rotator and initializer types. It
+  allocates no point storage and cannot be used with `construct`.
+- `train` uses [RaBitQKMeans](../clustering.md#rabitqkmeans) for up to
+  `kMaxRaBitQKMeansClusters` (2,000) clusters and
+  [QGKMeans](../clustering.md#qgkmeans) above that, copying the fields the two
+  parameter types share and keeping QGKMeans' default graph settings. The
+  threshold is provisional and has not been measured. Only centroids are
+  trained; `add` assigns the points. `cp.num_threads` also limits building the
+  centroid routing.
+- `default_training_parameters(metric, seed)` runs 25 iterations on at most
+  256 sampled points per centroid and selects spherical k-means for inner
+  product. The k-means classes keep their own defaults, which train on every point.
+- `train` and `set_centroids` replace the centroids only while the index stores
+  no points, removed ones included; otherwise they throw `std::logic_error`.
+  A failed call leaves the index unchanged.
+- `is_trained()` reports whether centroids are set. Before that, `add` and
+  `search` throw `std::logic_error`. `save` also throws until the index stores
+  at least one point.
+
 ## Querying
 
 To search a saved index, load it first:
@@ -271,7 +307,8 @@ Concurrent Python searches may use independent `nprobe`, `high_accuracy`, and
 ## Updating an index
 
 C++ `IVF` and Python `IvfIndex` support `add()` and `remove()` on a constructed
-or loaded index without the original dataset. Updates preserve the file format.
+or loaded index without the original dataset; C++ also adds to a
+[trained](#training-centroids-in-c) index. Updates preserve the file format.
 
 ```c++
 void IVF::add(

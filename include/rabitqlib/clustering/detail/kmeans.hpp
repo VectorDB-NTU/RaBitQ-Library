@@ -251,7 +251,19 @@ class LloydKMeans : public Parameters {
         validate_parameters();
     }
 
-    void train(size_t n, const float* x) {
+    void train(size_t n, const float* x) { fit(n, x, true); }
+
+    /**
+     * Trains the same centroids as train() but skips its final assignment of all n
+     * vectors, which can cost more than every sampled iteration together. Leaves
+     * assignments and distances empty and final_obj zero; centroids,
+     * iteration_stats and assign() match a train() call.
+     */
+    void train_centroids(size_t n, const float* x) { fit(n, x, false); }
+
+   private:
+    // assign_all selects the final assignment that train() returns.
+    void fit(size_t n, const float* x, bool assign_all) {
         validate_parameters();
         if (x == nullptr) {
             throw std::invalid_argument(
@@ -372,6 +384,12 @@ class LloydKMeans : public Parameters {
         }
 
         assigner->store_model_state(assignment_state_);
+        if (!assign_all) {
+            std::vector<PID>().swap(assignments);
+            std::vector<float>().swap(distances);
+            final_obj = 0.0;
+            return;
+        }
         // Return assignments for the final centroids, not the centroids from
         // the beginning of the last update step.
         if (sampled) {
@@ -400,11 +418,12 @@ class LloydKMeans : public Parameters {
         final_obj = std::accumulate(distances.begin(), distances.end(), 0.0);
     }
 
+   public:
     /**
      * Assigns n row-major vectors to the current centroids with final_assignment.
      * Each vector's result is independent of the others in the call and of
-     * previous labels. Requires a successful train(); the outputs hold n elements
-     * each and must not overlap x or centroids.
+     * previous labels. Requires a successful train() or train_centroids(); the
+     * outputs hold n elements each and must not overlap x or centroids.
      */
     void assign(
         size_t n, const float* x, PID* point_assignments, float* point_distances
