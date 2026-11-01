@@ -72,24 +72,24 @@ def test_constructor_options_are_keyword_only():
 @pytest.mark.parametrize(
     "make,message",
     [
+        # Python 3.11 omits "keyword-only" from inspect's message; 3.12+ includes it.
         (
             lambda: IvfIndex(DIM, 4),
-            "IvfIndex() missing a required keyword-only argument: 'nbits'",
+            r"^IvfIndex\(\) missing a required (keyword-only )?argument: 'nbits'$",
         ),
         (
             lambda: HnswIndex(DIM),
-            "HnswIndex() missing a required keyword-only argument: 'nbits'",
+            r"^HnswIndex\(\) missing a required (keyword-only )?argument: 'nbits'$",
         ),
         (
             lambda: IvfIndex(DIM, 4, nbits=4, max_degree=8),
-            "IvfIndex() got an unexpected keyword argument 'max_degree'",
+            r"^IvfIndex\(\) got an unexpected keyword argument 'max_degree'$",
         ),
     ],
 )
 def test_constructor_argument_errors(make, message):
-    with pytest.raises(TypeError) as error:
+    with pytest.raises(TypeError, match=message):
         make()
-    assert str(error.value) == message
 
 
 def test_positional_nbits_is_read_as_the_old_form_and_explained():
