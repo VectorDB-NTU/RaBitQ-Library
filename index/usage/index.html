@@ -403,6 +403,8 @@
       
         
       
+        
+      
     
     
     
@@ -447,6 +449,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1898,8 +1928,13 @@ storage unchanged for the entire call; do not resize or modify them from another
 thread. Returned result arrays own their storage.</p>
 <p>These access checks belong to the Python wrappers. C++ callers must synchronize
 index updates themselves and use separate search output buffers.</p>
-<p><code>num_threads=0</code> selects the detected available logical CPU count. Positive values
-set an upper limit, capped at that count; small workloads may use fewer workers.
+<p><code>num_threads=0</code> selects the detected available logical CPU count, capped by the
+OpenMP thread limit (<code>OMP_NUM_THREADS</code>, or <code>omp_set_num_threads</code> in C++). Positive
+values set an upper limit, capped at the CPU count only; small workloads may use
+fewer workers. On macOS, OpenMP runtimes bundled by different packages (for
+example Faiss or PyTorch wheels) can crash when more than one of them starts
+worker threads in the same process; set <code>OMP_NUM_THREADS=1</code> before the first
+native call, or pass <code>num_threads=1</code>, in such processes.
 <code>train</code> and <code>add</code> on every index default to <code>0</code>, as does clustering; <code>search</code>
 and the deprecated <code>build</code> default to one thread.
 Multithreaded HNSW-RaBitQ <code>add</code> links points in a nondeterministic order, so pass

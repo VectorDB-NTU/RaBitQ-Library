@@ -403,6 +403,8 @@
       
         
       
+        
+      
     
     
     
@@ -447,6 +449,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.8.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2002,7 +2032,7 @@ Append <code>ip</code> for spherical clustering of normalized input; the default
 <tr>
 <td><code>num_threads</code></td>
 <td><code>0</code></td>
-<td>Use detected available logical CPUs; positive requests are capped at that count. See <a href="../index/usage/#threading-and-file-paths">threading</a>.</td>
+<td>Use detected available logical CPUs, capped by <code>OMP_NUM_THREADS</code>; positive requests are capped at the CPU count. See <a href="../index/usage/#threading-and-file-paths">threading</a>.</td>
 </tr>
 <tr>
 <td><code>spherical</code></td>

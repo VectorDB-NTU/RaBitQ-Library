@@ -511,6 +511,8 @@
       
         
       
+        
+      
     
     
     
@@ -555,6 +557,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.8.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1810,10 +1840,11 @@ work if you want to run k-means yourself.</p>
 <h3 id="behavior-changes">Behavior changes<a class="headerlink" href="#behavior-changes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Thread defaults.</strong> <code>train</code> and <code>add</code> now default to every available CPU
-  (<code>num_threads=0</code>); 0.7 <code>build</code> and <code>add</code> defaulted to one thread. This applies
-  to every <code>add</code> call that does not pass <code>num_threads</code>, including 0.7 code such as
-  <code>index.add(x)</code>, without a warning. <code>search</code> still defaults to one thread, and
-  the deprecated <code>build</code> keeps its default of 1.</li>
+  (<code>num_threads=0</code>), capped by <code>OMP_NUM_THREADS</code> since 0.8.1; 0.7 <code>build</code> and
+  <code>add</code> defaulted to one thread. This applies to every <code>add</code> call that does not
+  pass <code>num_threads</code>, including 0.7 code such as <code>index.add(x)</code>, without a
+  warning. <code>search</code> still defaults to one thread, and the deprecated <code>build</code>
+  keeps its default of 1.</li>
 <li><strong>HNSW-RaBitQ builds are not reproducible by default.</strong> With more than one
   thread, <code>add</code> links points in a nondeterministic order. Pass <code>num_threads=1</code>
   to <code>add</code> for the same graph on every run. With one thread and the same seed,

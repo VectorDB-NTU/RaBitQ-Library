@@ -516,6 +516,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,6 +562,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.8.1/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.1
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1756,11 +1786,11 @@
 
 <h1 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h1>
 <p>Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
-<strong>0.8.0</strong> and uses synthetic data, so no dataset download is required. Coming from 0.7?
+<strong>0.8.1</strong> and uses synthetic data, so no dataset download is required. Coming from 0.7?
 See the <a href="../python_migration/">migration guide</a>.
 For C++, go directly to <a href="../cpp_integration/">C++ integration</a>.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.8.0"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.8.1"</span>
 </code></pre></div>
 <p>Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64 and
 macOS 14+ ARM64. x86-64 requires AVX2/FMA; ARM64 uses NEON.
@@ -1791,9 +1821,9 @@ require a dataset download:</p>
 iterations on at most 256 sampled vectors per centroid, spherical k-means for
 <code>metric="ip"</code>, and the index <code>seed</code>. Change <code>index.cp</code> before training to tune
 them, or call <code>index.set_centroids(centroids)</code> to use centroids you computed
-elsewhere. <code>train</code> and <code>add</code> use every available CPU by default; pass
-<code>num_threads=</code> to limit them. Without <code>seed</code>, each index draws a random rotation
-seed and reports it as <code>index.seed</code>.</p>
+elsewhere. <code>train</code> and <code>add</code> use every available CPU by default, capped by
+<code>OMP_NUM_THREADS</code>; pass <code>num_threads=</code> to limit them. Without <code>seed</code>, each index
+draws a random rotation seed and reports it as <code>index.seed</code>.</p>
 <h2 id="read-the-results">Read the results<a class="headerlink" href="#read-the-results" title="Permanent link">&para;</a></h2>
 <p>Both outputs have shape <code>(number_of_queries, k)</code>. IDs are zero-based and follow
 the order vectors were added: here they are row numbers of <code>data</code>, and later
