@@ -1,7 +1,7 @@
 # Python examples
 
 Run these commands from the repository root in your project Python environment
-with `rabitqlib>=0.8.0` and NumPy installed. When working from source,
+with `rabitqlib>=0.8.1` and NumPy installed. When working from source,
 [install the library from the same checkout](../../.github/CONTRIBUTING.md#python-changes)
 so the examples and native extension use matching APIs. Clustering and indexing
 both use RaBitQ Library; FAISS is needed only for `compare_with_faiss.py`.

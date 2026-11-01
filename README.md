@@ -16,6 +16,8 @@ approximate nearest-neighbor search. See the [research papers](https://vectordb-
 
 ## News
 
+- **v0.8.1:** The default `num_threads=0` now respects `OMP_NUM_THREADS`, fixing a
+  macOS crash when Faiss and PyTorch share the process. See the [release notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.1/).
 - **v0.8.0:** Faiss-style `train`, `add` and `search` for all Python indexes,
   with 0.7 calls kept as deprecated forms until 0.9; optional k-means sampling
   and assignment; stricter input validation and atomic index saves. C++ query-factor
@@ -52,7 +54,7 @@ settings, and limitations.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.8.0"
+python -m pip install --upgrade "rabitqlib>=0.8.1"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
