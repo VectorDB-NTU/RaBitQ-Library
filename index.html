@@ -1841,21 +1841,21 @@ Start with IVF-RaBitQ for the complete introductory example, then compare on you
 <p>Search selected clusters of compressed vectors. Tune the bit width and number
 of clusters probed to balance storage, recall, and query time.</p>
 <p><strong>Updates:</strong> append and remove vectors.</p>
-<p><strong>GIST1M, 5-bit:</strong> 1,038 QPS at 92.8% Recall@10; 0.60 GiB index.</p>
+<p><strong>GIST1M, 5-bit:</strong> 1,025 QPS at 92.8% Recall@10; 0.60 GiB index.</p>
 </div>
 <div class="feature-card">
 <h3 id="hnsw-rabitq"><a href="index/hnsw/">HNSW-RaBitQ</a><a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h3>
 <p>Traverse a graph over compressed vectors. Graph links add storage; tune the
 search window and graph degree alongside the code precision.</p>
 <p><strong>Updates:</strong> append and remove vectors.</p>
-<p><strong>GIST1M, 5-bit:</strong> 1,866 QPS at 92.7% Recall@10; 0.72 GiB index.</p>
+<p><strong>GIST1M, 5-bit:</strong> 2,042 QPS at 92.8% Recall@10; 0.72 GiB index.</p>
 </div>
 <div class="feature-card">
 <h3 id="symphonyqg"><a href="index/qg/">SymphonyQG</a><a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h3>
 <p>Build a graph directly from vectors, without a separate clustering step.
 Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
 <p><strong>Updates:</strong> rebuild to change the dataset.</p>
-<p><strong>GIST1M, 4-bit:</strong> 3,086 QPS at 90.4% Recall@10; 4.39 GiB index.</p>
+<p><strong>GIST1M, 4-bit:</strong> 3,062 QPS at 90.7% Recall@10; 4.39 GiB index.</p>
 </div>
 </div>
 <p>For input shapes, distance conventions, memory estimates, and threading, see
@@ -1870,7 +1870,7 @@ Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
 </ul>
 <h2 id="compare-measured-performance">Compare measured performance<a class="headerlink" href="#compare-measured-performance" title="Permanent link">&para;</a></h2>
 <p>The GIST1M numbers above are the fastest measured setting with Recall@10 ≥ 90%,
-using one search thread and one query per call with RaBitQ-Library 0.7.1; index
+using one search thread and one query per call with RaBitQ-Library 0.8.0; index
 size is serialized storage. See the <a href="benchmarks/bench/#key-results">benchmark results</a>
 for datasets, baselines, settings, and limitations. Evaluate recall and query time
 on your own dataset when choosing an index.</p>
