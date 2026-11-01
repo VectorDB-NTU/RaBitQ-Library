@@ -8,3 +8,16 @@ These files freeze the `rabitqlib.quant` byte formats described in [docs/formats
 i, j = np.meshgrid(np.arange(3), np.arange(96), indexing="ij")
 codes = ((i * 37 + j * 11 + (j // 32) * 5) % (1 << nbits)).astype(np.uint8)
 ```
+
+`fastscan_blocks_n33_d64.bin` is `quant.pack_fastscan_blocks(bitsets, factors).tobytes()` (FastScan blocks version 1): two blocks, the second with one vector and 31 zero-padded lanes, with
+
+```python
+i, byte = np.arange(33)[:, None], np.arange(8)[None, :]
+bitsets = ((i * 37 + byte * 11 + 3) % 256).astype(np.uint8)
+factors = np.zeros(33, quant.FACTORS_DTYPE)
+factors["add"] = np.arange(33) * 0.5
+factors["rescale"] = -(np.arange(33) + 1) * 0.25
+factors["error"] = np.arange(33) / 8
+```
+
+It was checked against an independent NumPy implementation of the layout in `docs/formats.md` before it was frozen.

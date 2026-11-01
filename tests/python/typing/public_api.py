@@ -323,6 +323,12 @@ def check_quant(x: npt.NDArray[np.float32]) -> None:
         quant.estimate_from_ip(first["refine_input"], f_prefix, terms, nbits=1),
         npt.NDArray[np.void],
     )
+    blocks = quant.pack_fastscan_blocks(bitsets, f_prefix, num_threads=0)
+    assert_type(blocks, npt.NDArray[np.uint8])
+    assert_type(
+        query.estimate_fastscan(blocks, num_points=len(bitsets)), npt.NDArray[np.void]
+    )
+    assert_type(quant.FASTSCAN_BLOCKS_VERSION, int)
     quant.Query(residuals[0], metric="cosine")  # type: ignore[arg-type]
     quant.code_factors(residuals, codes, nbits=4, metric="cosine")  # type: ignore[arg-type]
     quant.quantize(residuals, 4)  # type: ignore[call-overload]

@@ -13,6 +13,7 @@ __all__ = [
     "ESTIMATE_DTYPE",
     "FACTORS_DTYPE",
     "FACTORS_VERSION",
+    "FASTSCAN_BLOCKS_VERSION",
     "MISSING",
     "PACKED_CODES_VERSION",
     "QUERY_TERMS_DTYPE",
@@ -22,6 +23,7 @@ __all__ = [
     "code_factors",
     "estimate_from_ip",
     "pack_codes",
+    "pack_fastscan_blocks",
     "padded_dim",
     "quantize",
     "query_terms",
@@ -34,6 +36,7 @@ ESTIMATE_DTYPE: np.dtype[np.void]
 QUERY_TERMS_DTYPE: np.dtype[np.void]
 PACKED_CODES_VERSION: int
 FACTORS_VERSION: int
+FASTSCAN_BLOCKS_VERSION: int
 MISSING: np.uint32
 
 class FormatError(ValueError):
@@ -147,6 +150,15 @@ class Query:
         out: npt.NDArray[np.float32] | None = None,
     ) -> npt.NDArray[np.float32]:
         """Refine prefix estimates with packed extra bits."""
+    def estimate_fastscan(
+        self,
+        blocks: npt.NDArray[np.uint8],
+        *,
+        num_points: int,
+        num_threads: int = 1,
+        out: npt.NDArray[np.void] | None = None,
+    ) -> npt.NDArray[np.void]:
+        """Estimate distances for FastScan blocks with a 4-bit query table."""
     def copy(self) -> Query:
         """Return an independent copy of the query."""
     def __copy__(self) -> Query:
@@ -227,6 +239,15 @@ def unpack_codes(
     out: npt.NDArray[np.uint8] | None = None,
 ) -> npt.NDArray[np.uint8]:
     """Unpack codes written by pack_codes; the inverse is lossless."""
+
+def pack_fastscan_blocks(
+    bitsets: npt.NDArray[np.uint8],
+    factors: npt.NDArray[np.void],
+    *,
+    num_threads: int = 0,
+    out: npt.NDArray[np.uint8] | None = None,
+) -> npt.NDArray[np.uint8]:
+    """Pack bitsets and their factors into FastScan blocks (version 1)."""
 
 def query_terms(
     rotated_query: npt.ArrayLike,

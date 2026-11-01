@@ -33,6 +33,10 @@
 #include "rabitqlib/core/provisional/quantize.hpp"
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/core/types.hpp"
+#include "rabitqlib/fastscan/data_layout.hpp"
+#include "rabitqlib/fastscan/estimator.hpp"
+#include "rabitqlib/fastscan/pack_codes.hpp"
+#include "rabitqlib/fastscan/query.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -736,6 +740,70 @@ py::array estimate_from_ip(
     return result;
 }
 
+constexpr uint8_t reversed_byte(uint8_t value) {
+    uint8_t reversed = 0;
+    for (size_t bit = 0; bit < 8; ++bit) {
+        reversed = static_cast<uint8_t>(reversed | (((value >> bit) & 1U) << (7 - bit)));
+    }
+    return reversed;
+}
+
+// FastScan blocks (docs/formats.md): 32 vectors per block, the last one zero-padded.
+py::array pack_fastscan_blocks(
+    py::handle bitsets, py::handle factors, size_t num_threads, const py::object& out
+) {
+    const auto codes = exact_dtype_rows<uint8_t>(bitsets, "bitsets");
+    if (codes.cols == 0 || (codes.cols * 8) % 32 != 0) {
+        throw std::invalid_argument(
+            "bitsets must have d // 8 bytes per row for a positive multiple of 32 d; got "
+            "shape " +
+            array_shape(codes.owner)
+        );
+    }
+    const size_t d = codes.cols * 8;
+    const Records records =
+        record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
+    check_record_rows(records, codes.rows, "factors", "bitsets");
+    const size_t n = codes.rows;
+    const size_t num_blocks = div_round_up(n, fastscan::kBatchSize);
+    const size_t block_bytes = BatchDataMap<float>::data_bytes(d);
+    auto [array, blocks] = output_rows<uint8_t>(out, num_blocks, block_bytes);
+    const Selection all_rows = selection(py::none(), n);
+    {
+        py::gil_scoped_release release;
+        check_finite_records(
+            records, all_rows, 0, kRecordFloats, "factors must contain only finite values"
+        );
+        // The FastScan packer reads sign bytes with the first coordinate highest.
+        std::vector<uint8_t> msb_first(n * codes.cols);
+        index_detail::parallel_for(0, n, num_threads, [&](size_t i, size_t /*thread*/) {
+            const uint8_t* row = codes.row(i);
+            for (size_t byte = 0; byte < codes.cols; ++byte) {
+                msb_first[(i * codes.cols) + byte] = reversed_byte(row[byte]);
+            }
+        });
+        index_detail::parallel_for(
+            0, num_blocks, num_threads, [&](size_t b, size_t /*thread*/) {
+                const size_t begin = b * fastscan::kBatchSize;
+                const size_t lanes = std::min(fastscan::kBatchSize, n - begin);
+                uint8_t* block = blocks.row(b);
+                fastscan::pack_codes(
+                    d, msb_first.data() + (begin * codes.cols), lanes, block
+                );
+                BatchDataMap<float> map(reinterpret_cast<char*>(block), d);
+                for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
+                    const float* factor =
+                        lane < lanes ? records.record(begin + lane) : nullptr;
+                    map.f_add()[lane] = factor == nullptr ? 0.0F : factor[0];
+                    map.f_rescale()[lane] = factor == nullptr ? 0.0F : factor[1];
+                    map.f_error()[lane] = factor == nullptr ? 0.0F : factor[2];
+                }
+            }
+        );
+    }
+    return array;
+}
+
 // A rotated query in the working space, with the terms of its current centroid. It owns
 // copies of the query and centroid, so copies and unpickled queries never share storage.
 class QuantQuery {
@@ -744,9 +812,32 @@ class QuantQuery {
     std::vector<float> centroid_;  // Empty means no centroid (zero).
     MetricType metric_;
     QueryTerms terms_;
+    // The FastScan query, built on the first estimate_fastscan call. It borrows
+    // query_, so copies and moves never take it over; they build their own.
+    std::unique_ptr<SplitBatchQuery<float>> batch_query_;
     IndexAccess access_;
 
     [[nodiscard]] size_t d() const { return query_.size(); }
+
+    // SplitBatchQuery::set_g_add uses the -<q, c> IP convention of the terms here.
+    void apply_batch_terms() {
+        if (metric_ == METRIC_L2) {
+            batch_query_->set_g_add(terms_.g_error);
+        } else {
+            batch_query_->set_g_add(terms_.g_error, -terms_.g_add);
+        }
+    }
+
+    // Called with the GIL held, so concurrent readers cannot both build it.
+    const SplitBatchQuery<float>& batch_query() {
+        if (!batch_query_) {
+            batch_query_ = std::make_unique<SplitBatchQuery<float>>(
+                query_.data(), d(), 0, metric_, true
+            );
+            apply_batch_terms();
+        }
+        return *batch_query_;
+    }
 
     // The guard is taken before any input conversion, so conversion cannot race
     // set_centroid.
@@ -815,6 +906,9 @@ class QuantQuery {
         );
         centroid_ = std::move(center);
         terms_ = terms;
+        if (batch_query_) {
+            apply_batch_terms();
+        }
     }
 
     [[nodiscard]] QuantQuery copy() {
@@ -1030,6 +1124,60 @@ class QuantQuery {
                             terms_.g_add,
                             terms_.g_k1xsumq
                         );
+                    }
+                );
+            }
+            return result;
+        });
+    }
+    py::array estimate_fastscan(
+        py::handle blocks, size_t num_points, size_t num_threads, const py::object& out
+    ) {
+        return scored([&] {
+            const auto view = exact_dtype_rows<uint8_t>(blocks, "blocks");
+            const size_t block_bytes = BatchDataMap<float>::data_bytes(d());
+            const size_t num_blocks = div_round_up(num_points, fastscan::kBatchSize);
+            if (view.rows != num_blocks || view.cols != block_bytes) {
+                throw std::invalid_argument(
+                    "blocks must have shape (" + std::to_string(num_blocks) + ", " +
+                    std::to_string(block_bytes) + ") for num_points " +
+                    std::to_string(num_points) + " and d " + std::to_string(d()) +
+                    "; got shape " + array_shape(view.owner)
+                );
+            }
+            auto [result, estimates] =
+                record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", num_points);
+            const SplitBatchQuery<float>& query = batch_query();
+            {
+                py::gil_scoped_release release;
+                index_detail::parallel_for(
+                    0, num_blocks, num_threads, [&](size_t b, size_t /*thread*/) {
+                        std::array<float, fastscan::kBatchSize> distances{};
+                        std::array<float, fastscan::kBatchSize> lower_bounds{};
+                        std::array<float, fastscan::kBatchSize> ips{};
+                        std::array<float, fastscan::kBatchSize> errors{};
+                        const auto* block = reinterpret_cast<const char*>(view.row(b));
+                        split_batch_estdist(
+                            block,
+                            query,
+                            d(),
+                            distances.data(),
+                            lower_bounds.data(),
+                            ips.data(),
+                            true
+                        );
+                        ConstBatchDataMap<float>(block, d())
+                            .f_error()
+                            .copy_to(errors.data(), errors.size());
+                        const size_t begin = b * fastscan::kBatchSize;
+                        const size_t lanes =
+                            std::min(fastscan::kBatchSize, num_points - begin);
+                        for (size_t lane = 0; lane < lanes; ++lane) {
+                            float* record = estimates + (kRecordFloats * (begin + lane));
+                            record[0] = distances[lane];
+                            record[1] = errors[lane] * terms_.g_error;
+                            record[2] = ips[lane];
+                        }
                     }
                 );
             }
@@ -1738,6 +1886,35 @@ Returns
 estimates : numpy.ndarray of ESTIMATE_DTYPE, shape (n,))doc"
     );
 
+    quant.def(
+        "pack_fastscan_blocks",
+        &pack_fastscan_blocks,
+        py::arg("bitsets"),
+        py::arg("factors"),
+        py::kw_only(),
+        py::arg("num_threads") = 0,
+        py::arg("out") = py::none(),
+        R"doc(Pack bitsets and their factors into FastScan blocks (version 1).
+
+Each block holds 32 vectors, the library's fixed FastScan batch; the last block
+is zero-padded when n % 32 != 0.
+
+Parameters
+----------
+bitsets : numpy.ndarray of uint8, shape (n, d // 8)
+    pack_codes(prefix, nbits=1) output.
+factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
+    The 1-bit (prefix) factors.
+num_threads : int, optional
+    Worker threads; 0 (the default) uses every available CPU.
+out : numpy.ndarray of uint8, optional
+    Shape (ceil(n / 32), d * 4 + 384) with contiguous rows.
+
+Returns
+-------
+blocks : numpy.ndarray of uint8, shape (ceil(n / 32), d * 4 + 384))doc"
+    );
+
     static constexpr const char* kQueryDoc =
         R"doc(A rotated, padded query for scoring codes in the working space.
 
@@ -1962,6 +2139,33 @@ Returns
 -------
 distances : numpy.ndarray of float32)doc")
                 .c_str()
+        )
+        .def(
+            "estimate_fastscan",
+            &QuantQuery::estimate_fastscan,
+            py::arg("blocks"),
+            py::kw_only(),
+            py::arg("num_points"),
+            py::arg("num_threads") = 1,
+            py::arg("out") = py::none(),
+            R"doc(Estimate distances for FastScan blocks with a 4-bit query table.
+
+The query table is built on the first call. Its quantization makes these
+estimates agree with estimate_bitset only within that table's error.
+
+Parameters
+----------
+blocks : numpy.ndarray of uint8, shape (ceil(num_points / 32), d * 4 + 384)
+    pack_fastscan_blocks output.
+num_points : int
+    Number of vectors in the blocks; padding lanes are not returned.
+num_threads : int, optional
+    Worker threads; 1 by default, 0 uses every available CPU.
+out : numpy.ndarray of ESTIMATE_DTYPE, shape (num_points,), optional
+
+Returns
+-------
+estimates : numpy.ndarray of ESTIMATE_DTYPE, shape (num_points,))doc"
         )
         .def("copy", &QuantQuery::copy, "Return an independent copy of the query.")
         .def("__copy__", &QuantQuery::copy, "Return an independent copy of the query.")

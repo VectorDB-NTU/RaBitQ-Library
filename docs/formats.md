@@ -14,6 +14,7 @@ Raw arrays have no header: their layout is fixed by the version below, which the
 | --- | --- | --- |
 | `PACKED_CODES_VERSION` | 1 | `pack_codes` output: one row of `d * nbits / 8` bytes per vector, for `nbits` 1–8 and `d` a positive multiple of 32 |
 | `FACTORS_VERSION` | 1 | `FACTORS_DTYPE`, `ESTIMATE_DTYPE` and `QUERY_TERMS_DTYPE`: three `<f4` fields each, 12 bytes per record with no padding |
+| `FASTSCAN_BLOCKS_VERSION` | 1 | `pack_fastscan_blocks` output: one row of `d * 4 + 384` bytes per block of 32 vectors |
 
 ### Packed codes, version 1
 
@@ -30,6 +31,24 @@ At `nbits = 1` it is the sign bitset: bits are LSB-first within each byte, so a 
 | `QUERY_TERMS_DTYPE` | `g_add`, `g_error`, `g_k1xsumq` |
 
 Each field is a little-endian float32 at offsets 0, 4 and 8. Consumers that do not take structured dtypes can use `a.view(np.float32).reshape(-1, 3)`.
+
+### FastScan blocks, version 1
+
+A block holds 32 vectors, the library's fixed FastScan batch (`fastscan::kBatchSize`), in the C++ `BatchDataMap<float>` layout. Vectors `32b` to `32b + 31` go to block `b`; in the last block, lanes past `n` have zero codes and zero factors.
+
+| Offset | Size | Content |
+| --- | --- | --- |
+| 0 | `d * 4` | Sign codes, `d / 8` groups of 32 bytes |
+| `d * 4` | 128 | `add` of lanes 0–31, float32 |
+| `d * 4 + 128` | 128 | `rescale` of lanes 0–31, float32 |
+| `d * 4 + 256` | 128 | `error` of lanes 0–31, float32 |
+
+Group `i` covers coordinates `8i` to `8i + 7`. Let `a[v]` be byte `i` of vector `v`'s bitset with its bit order reversed, so coordinate `8i` is in bit 7. With `perm = [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15]`, for `j` in 0–15, `p = perm[j]`:
+
+- byte `j` is `(a[p] >> 4) | (a[p + 16] & 0xF0)`: coordinates `8i` to `8i + 3` of vectors `p` (low nibble) and `p + 16` (high nibble);
+- byte `j + 16` is `(a[p] & 0x0F) | (a[p + 16] << 4)`: coordinates `8i + 4` to `8i + 7` of the same vectors.
+
+This is the order `fastscan::pack_codes` writes. The high-accuracy lookup table that scores the blocks is internal and not part of the format.
 
 ## Blobs
 

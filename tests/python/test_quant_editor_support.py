@@ -87,6 +87,7 @@ def test_module_docs_and_exports():
         "unpack_codes",
         "query_terms",
         "estimate_from_ip",
+        "pack_fastscan_blocks",
     ],
 )
 def test_function_signatures_and_docs(name):
@@ -112,6 +113,7 @@ def test_classes_match_runtime():
             "estimate_codes",
             "refine",
             "refine_packed",
+            "estimate_fastscan",
         ),
     }
     for name, signatures in checked.items():

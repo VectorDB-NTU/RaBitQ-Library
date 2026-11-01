@@ -35,6 +35,7 @@ from ._rabitqlib._quant import (
     code_factors,
     estimate_from_ip,
     pack_codes,
+    pack_fastscan_blocks,
     padded_dim,
     quantize,
     query_terms,
@@ -48,6 +49,9 @@ PACKED_CODES_VERSION = 1
 FACTORS_VERSION = 1
 """Version of FACTORS_DTYPE, ESTIMATE_DTYPE and QUERY_TERMS_DTYPE."""
 
+FASTSCAN_BLOCKS_VERSION = 1
+"""Version of the pack_fastscan_blocks layout."""
+
 MISSING = np.uint32(0xFFFFFFFF)
 """Marks an empty result slot, as the indexes' search does."""
 
@@ -60,6 +64,7 @@ __all__ = [
     "ESTIMATE_DTYPE",
     "FACTORS_DTYPE",
     "FACTORS_VERSION",
+    "FASTSCAN_BLOCKS_VERSION",
     "MISSING",
     "PACKED_CODES_VERSION",
     "QUERY_TERMS_DTYPE",
@@ -69,6 +74,7 @@ __all__ = [
     "code_factors",
     "estimate_from_ip",
     "pack_codes",
+    "pack_fastscan_blocks",
     "padded_dim",
     "quantize",
     "query_terms",
