@@ -630,5 +630,99 @@ TEST(KMeansSamplingTest, QGSampledRetrainingOnOwnCentroids) {
     check_sampled_retraining_on_own_centroids<qgkmeans::QGKMeans>();
 }
 
+// train_centroids trains what train trains, with and without sampling, but assigns
+// nothing; assign still works afterwards.
+template <typename Clustering>
+void check_train_centroids_skips_final_assignment() {
+    constexpr size_t kNumPoints = 600;
+    const auto points = clustered_points(kNumPoints, 23);
+    const size_t num_clusters = kClusters<Clustering>;
+    for (const size_t max_points_per_centroid : {size_t{0}, size_t{8}}) {
+        for (const auto mode :
+             {FinalAssignmentMode::Approximate, FinalAssignmentMode::Exact}) {
+            SCOPED_TRACE(
+                ::testing::Message()
+                << "max_points_per_centroid=" << max_points_per_centroid
+                << " exact=" << (mode == FinalAssignmentMode::Exact)
+            );
+            auto parameters = test_parameters<Clustering>();
+            parameters.max_points_per_centroid = max_points_per_centroid;
+            parameters.final_assignment = mode;
+            Clustering trained(kDim, num_clusters, parameters);
+            trained.train(kNumPoints, points.data());
+            Clustering centroids_only(kDim, num_clusters, parameters);
+            centroids_only.train_centroids(kNumPoints, points.data());
+
+            EXPECT_EQ(centroids_only.centroids, trained.centroids);
+            ASSERT_EQ(
+                centroids_only.iteration_stats.size(), trained.iteration_stats.size()
+            );
+            for (size_t i = 0; i < trained.iteration_stats.size(); ++i) {
+                EXPECT_EQ(
+                    centroids_only.iteration_stats[i].obj, trained.iteration_stats[i].obj
+                );
+            }
+            EXPECT_TRUE(centroids_only.assignments.empty());
+            EXPECT_TRUE(centroids_only.distances.empty());
+            EXPECT_EQ(centroids_only.final_obj, 0.0);
+
+            std::vector<PID> expected_ids(kNumPoints), actual_ids(kNumPoints);
+            std::vector<float> expected_distances(kNumPoints), actual_distances(kNumPoints);
+            trained.assign(
+                kNumPoints, points.data(), expected_ids.data(), expected_distances.data()
+            );
+            centroids_only.assign(
+                kNumPoints, points.data(), actual_ids.data(), actual_distances.data()
+            );
+            EXPECT_EQ(actual_ids, expected_ids);
+            EXPECT_EQ(actual_distances, expected_distances);
+        }
+    }
+}
+
+// Every shared field gets a non-default value; QG graph settings must survive.
+TEST(KMeansParametersTest, CopySharedParametersCopiesOnlySharedFields) {
+    rabitqkmeans::RaBitQKMeansParameters from;
+    from.early_stop_threshold = 0.25;
+    from.final_assignment = FinalAssignmentMode::Exact;
+    from.max_points_per_centroid = 17;
+    from.min_points_per_centroid = 3;
+    from.niter = 7;
+    from.num_threads = 5;
+    from.seed = 11;
+    from.spherical = true;
+    from.verbose = true;
+    qgkmeans::QGKMeansParameters to;
+    to.graph_degree = 64;
+    to.ef_build = 99;
+    to.ef_search = 33;
+    to.graph_build_iterations = 2;
+    to.quantization_bits = 4;
+
+    clustering::detail::copy_shared_parameters(from, to);
+    EXPECT_EQ(to.early_stop_threshold, from.early_stop_threshold);
+    EXPECT_EQ(to.final_assignment, from.final_assignment);
+    EXPECT_EQ(to.max_points_per_centroid, from.max_points_per_centroid);
+    EXPECT_EQ(to.min_points_per_centroid, from.min_points_per_centroid);
+    EXPECT_EQ(to.niter, from.niter);
+    EXPECT_EQ(to.num_threads, from.num_threads);
+    EXPECT_EQ(to.seed, from.seed);
+    EXPECT_EQ(to.spherical, from.spherical);
+    EXPECT_EQ(to.verbose, from.verbose);
+    EXPECT_EQ(to.graph_degree, 64U);
+    EXPECT_EQ(to.ef_build, 99U);
+    EXPECT_EQ(to.ef_search, 33U);
+    EXPECT_EQ(to.graph_build_iterations, 2U);
+    EXPECT_EQ(to.quantization_bits, 4U);
+}
+
+TEST(KMeansTrainCentroidsTest, RaBitQSkipsFinalAssignment) {
+    check_train_centroids_skips_final_assignment<rabitqkmeans::RaBitQKMeans>();
+}
+
+TEST(KMeansTrainCentroidsTest, QGSkipsFinalAssignment) {
+    check_train_centroids_skips_final_assignment<qgkmeans::QGKMeans>();
+}
+
 }  // namespace
 }  // namespace rabitqlib

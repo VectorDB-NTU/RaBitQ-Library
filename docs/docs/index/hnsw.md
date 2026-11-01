@@ -106,6 +106,41 @@ void HierarchicalNSW::construct(
 - **num_threads**: Number of threads to use (default: every available thread; `0` also auto-selects).
 - **fast_quantization**: Use calibrated scaling instead of per-vector scale search; see [encoding paths](../rabitq/quantizer.md#implementations).
 
+### Training centroids in C++
+
+Instead of passing centroids to `construct`, train or set them on an empty
+index, then add the points:
+
+```cpp
+#include <rabitqlib/index/hnsw/hnsw.hpp>
+#include <rabitqlib/index/training.hpp>
+
+rabitqlib::hnsw::HierarchicalNSW index(max_elements, dim, 4, 16, 200);
+index.train(16, num_points, data.data(),
+            rabitqlib::default_training_parameters(rabitqlib::METRIC_L2, 100));
+// Or supply centroids: index.set_centroids(num_clusters, centroids.data());
+index.add(data.data(), num_points);
+```
+
+- `train(num_clusters, num_points, data, cp)` trains centroids with
+  [RaBitQKMeans](../clustering.md#rabitqkmeans); `num_points` must be at least
+  `num_clusters`. Points are assigned by `add`, not by training. See the
+  [IVF-RaBitQ defaults](ivf.md#training-centroids-in-c) for
+  `default_training_parameters`.
+- The first `add` into an empty graph links points with their exact vectors, as
+  `construct` does; with one thread it produces the same index as `construct`
+  with the same centroids and cluster IDs. If it fails, the graph is left empty
+  and the centroids are kept. Later adds link through the stored codes; see
+  [how added points are linked](#how-added-points-are-linked).
+- `train` and `set_centroids` replace the centroids only while the index stores
+  no points, removed ones included; otherwise they throw `std::logic_error`.
+  A failed call leaves the index unchanged. `construct` needs an untrained index,
+  so after either call it throws `std::logic_error`; use `add` instead.
+- `is_trained()` reports whether centroids are set. Before that, `add` throws
+  `std::logic_error`; searching an empty index, trained or not, returns no results.
+- `save` throws `std::logic_error` for an index without stored points, trained
+  or not. Earlier releases saved an untrained empty index; such files still load.
+
 ## Querying
 
 ```cpp
@@ -131,7 +166,8 @@ Python follows the shared [concurrency contract](usage.md#threading-and-file-pat
 ## Updating an index
 
 A constructed or loaded index supports `add()`, `resize()`,
-and `remove()` without the original data. Adding points and resizing preserve
+and `remove()` without the original data; C++ also adds to a
+[trained](#training-centroids-in-c) index. Adding points and resizing preserve
 the index file format; files with removals have
 [compatibility restrictions](#how-removal-is-stored).
 

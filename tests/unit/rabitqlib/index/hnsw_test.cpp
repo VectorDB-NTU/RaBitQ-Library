@@ -21,10 +21,13 @@
 #include <utility>
 #include <vector>
 
+#include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/hnsw_dispatch.hpp"
 #include "rabitqlib/index/hnsw/hnsw_quant.hpp"
+#include "rabitqlib/index/training.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
@@ -59,6 +62,12 @@ struct HnswTestAccess {
         candidates.emplace(index.quantized_distance(0, incoming, cached), 0);
         index.mutually_connect_quant(incoming, candidates, 0, cached);
         return {neighbors + 1, neighbors + 1 + index.link_count(neighbors)};
+    }
+
+    // Rotated centroids as the index quantizes with them.
+    static std::vector<float> centroids(const HierarchicalNSW& index) {
+        const auto* first = reinterpret_cast<const float*>(index.centroids_memory_.get());
+        return {first, first + (index.num_clusters_ * index.padded_dim_)};
     }
 
     static PID entry_point_label(const HierarchicalNSW& index) {
@@ -875,7 +884,9 @@ TEST_F(HnswSaveTest, RejectedRebuildPreservesConstructedAndLoadedIndexes) {
             );
             FAIL() << "A second construction must be rejected";
         } catch (const std::logic_error& error) {
-            EXPECT_STREQ(error.what(), "HNSW index is already constructed or loaded");
+            EXPECT_STREQ(
+                error.what(), "HNSW index is already trained, constructed or loaded"
+            );
         }
         EXPECT_EQ(index->num_points(), kCount);
         EXPECT_EQ(index->num_clusters(), 2U);
@@ -1474,6 +1485,242 @@ TEST(HnswSearchTest, ClampsEfToStoredPointsAndChecksClusterLookups) {
     for (size_t q = 0; q < huge.size(); ++q) {
         EXPECT_EQ(huge[q], exhaustive[q]);
     }
+}
+
+// Two centroids and alternating cluster IDs for AddFixture data.
+struct TrainFixture : AddFixture {
+    std::vector<float> centroids;
+
+    TrainFixture(size_t total, unsigned seed)
+        : AddFixture(total, seed), centroids(2 * kDim, 0.0F) {
+        centroids[0] = 0.5F;
+        centroids[kDim] = -0.5F;
+        for (size_t i = 0; i < total; ++i) {
+            cluster_ids[i] = static_cast<PID>(i % 2);
+        }
+    }
+};
+
+TEST(HnswTrainTest, UntrainedIndexRejectsAddAndSaveWithoutChangingState) {
+    constexpr size_t kCount = 64;
+    TrainFixture fixture(kCount, 101);
+    HierarchicalNSW index(kCount, AddFixture::kDim, 4, 8, 50);
+    EXPECT_FALSE(index.is_trained());
+
+    try {
+        index.add(fixture.data.data(), kCount, nullptr, false, 1);
+        FAIL() << "adding to an untrained index succeeded";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(
+            error.what(), "HNSW index must be trained, constructed or loaded before add"
+        );
+    }
+    const rabitq_test::TempFile path_file("rabitq_hnsw_untrained.index");
+    try {
+        index.save(path_file.path().c_str());
+        FAIL() << "saving an index without points succeeded";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(error.what(), "HNSW index has no points to save; add points first");
+    }
+    EXPECT_FALSE(std::filesystem::exists(std::filesystem::u8path(path_file.path())));
+    // Searching an empty index, trained or not, returns no results.
+    const auto results = index.search(fixture.data.data(), 1, 1, 10, 1);
+    ASSERT_EQ(results.size(), 1U);
+    EXPECT_TRUE(results[0].empty());
+
+    EXPECT_FALSE(index.is_trained());
+    EXPECT_EQ(index.num_stored_points(), 0U);
+    EXPECT_EQ(index.max_elements(), kCount);
+    index.set_centroids(2, fixture.centroids.data());
+    auto cluster_ids = fixture.cluster_ids;
+    try {
+        index.construct(
+            2, fixture.centroids.data(), kCount, fixture.data.data(), cluster_ids.data(), 1
+        );
+        FAIL() << "constructing a trained index succeeded";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(error.what(), "HNSW index is already trained, constructed or loaded");
+    }
+    EXPECT_EQ(index.num_stored_points(), 0U);
+    index.add(fixture.data.data(), kCount, nullptr, false, 1);
+    EXPECT_EQ(index.num_points(), kCount);
+}
+
+TEST(HnswTrainTest, SetCentroidsAndFirstAddMatchConstructByteForByte) {
+    constexpr size_t kCount = 160;
+    TrainFixture fixture(kCount, 103);
+    const rabitq_test::TempFile path_file("rabitq_hnsw_set_centroids.index");
+    const std::string& path = path_file.path();
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        for (size_t bits : {1UL, 4UL, 9UL}) {
+            for (const bool fast_quantization : {false, true}) {
+                SCOPED_TRACE(
+                    ::testing::Message()
+                    << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
+                    << " fast=" << fast_quantization
+                );
+                auto cluster_ids = fixture.cluster_ids;
+                HierarchicalNSW constructed(
+                    kCount, AddFixture::kDim, bits, 8, 50, 7, metric
+                );
+                constructed.construct(
+                    2,
+                    fixture.centroids.data(),
+                    kCount,
+                    fixture.data.data(),
+                    cluster_ids.data(),
+                    1,
+                    fast_quantization
+                );
+                const auto expected = saved_bytes(constructed, path);
+
+                HierarchicalNSW added(kCount, AddFixture::kDim, bits, 8, 50, 7, metric);
+                added.set_centroids(2, fixture.centroids.data());
+                EXPECT_TRUE(added.is_trained());
+                const auto labels = added.add(
+                    fixture.data.data(),
+                    kCount,
+                    fixture.cluster_ids.data(),
+                    fast_quantization,
+                    1
+                );
+                ASSERT_EQ(labels.size(), kCount);
+                for (size_t i = 0; i < kCount; ++i) {
+                    EXPECT_EQ(labels[i], i);
+                }
+                EXPECT_TRUE(saved_bytes(added, path) == expected);
+            }
+        }
+    }
+}
+
+TEST(HnswTrainTest, ReplacesCentroidsOnlyWhileEmpty) {
+    constexpr size_t kCount = 96;
+    TrainFixture fixture(kCount, 107);
+    const auto cp = default_training_parameters(METRIC_L2, 7);
+    auto second = fixture.centroids;
+    std::reverse(second.begin(), second.end());
+    const rabitq_test::TempFile path_file("rabitq_hnsw_retrain.index");
+    const std::string& path = path_file.path();
+
+    HierarchicalNSW index(kCount, AddFixture::kDim, 4, 8, 50);
+    index.set_centroids(2, fixture.centroids.data());
+    index.train(4, kCount, fixture.data.data(), cp);
+    EXPECT_EQ(index.num_clusters(), 4U);
+    index.set_centroids(2, second.data());
+    HierarchicalNSW reference(kCount, AddFixture::kDim, 4, 8, 50);
+    reference.set_centroids(2, second.data());
+    index.add(fixture.data.data(), kCount, nullptr, false, 1);
+    reference.add(fixture.data.data(), kCount, nullptr, false, 1);
+    // Only the last centroids remain.
+    const auto saved = saved_bytes(index, path);
+    EXPECT_TRUE(saved_bytes(reference, path) == saved);
+
+    HierarchicalNSW loaded;
+    loaded.load(path.c_str());
+    for (HierarchicalNSW* holder : {&index, &loaded}) {
+        try {
+            holder->train(2, kCount, fixture.data.data(), cp);
+            FAIL() << "training an index with points succeeded";
+        } catch (const std::logic_error& error) {
+            EXPECT_STREQ(error.what(), "HNSW cannot retrain an index with points");
+        }
+        try {
+            holder->set_centroids(2, fixture.centroids.data());
+            FAIL() << "replacing the centroids of an index with points succeeded";
+        } catch (const std::logic_error& error) {
+            EXPECT_STREQ(
+                error.what(), "HNSW cannot replace the centroids of an index with points"
+            );
+        }
+        EXPECT_TRUE(saved_bytes(*holder, path) == saved);
+    }
+}
+
+TEST(HnswTrainTest, RejectsInvalidCentroidsAndTrainingDataWithoutChangingState) {
+    constexpr size_t kCount = 64;
+    TrainFixture fixture(kCount, 109);
+    auto bad_centroids = fixture.centroids;
+    bad_centroids[3] = std::numeric_limits<float>::quiet_NaN();
+    auto bad_points = fixture.data;
+    bad_points[5] = std::numeric_limits<float>::infinity();
+    const auto cp = default_training_parameters(METRIC_L2, 7);
+    auto bad_cp = cp;
+    bad_cp.niter = 0;
+    const float* data = fixture.data.data();
+
+    HierarchicalNSW index(kCount, AddFixture::kDim, 4, 8, 50);
+    const auto expect_rejected = [&] {
+        for (const size_t count : {size_t{0}, buffer::kSearchBufferMaxPointCount + 1}) {
+            try {
+                index.set_centroids(count, fixture.centroids.data());
+                FAIL() << "setting " << count << " centroids succeeded";
+            } catch (const std::invalid_argument& error) {
+                EXPECT_STREQ(error.what(), "HNSW cluster count is out of range");
+            }
+            EXPECT_THROW(index.train(count, kCount, data, cp), std::invalid_argument);
+        }
+        EXPECT_THROW(index.set_centroids(2, nullptr), std::invalid_argument);
+        EXPECT_THROW(index.set_centroids(2, bad_centroids.data()), std::invalid_argument);
+        EXPECT_THROW(index.train(2, kCount, nullptr, cp), std::invalid_argument);
+        try {
+            index.train(kCount + 1, kCount, data, cp);
+            FAIL() << "training with fewer points than clusters succeeded";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(error.what(), "HNSW training needs at least num_clusters points");
+        }
+        EXPECT_THROW(index.train(2, kCount, bad_points.data(), cp), std::invalid_argument);
+        EXPECT_THROW(index.train(2, kCount, data, bad_cp), std::invalid_argument);
+    };
+    expect_rejected();
+    EXPECT_FALSE(index.is_trained());
+
+    index.set_centroids(2, fixture.centroids.data());
+    const auto before = HnswTestAccess::centroids(index);
+    expect_rejected();
+    // A rejected first add also keeps the centroids.
+    EXPECT_THROW(
+        index.add(bad_points.data(), kCount, nullptr, false, 1), std::invalid_argument
+    );
+    EXPECT_EQ(index.num_clusters(), 2U);
+    EXPECT_EQ(index.num_stored_points(), 0U);
+    EXPECT_EQ(HnswTestAccess::centroids(index), before);
+
+    HierarchicalNSW uninitialized;
+    EXPECT_THROW(
+        uninitialized.set_centroids(2, fixture.centroids.data()), std::logic_error
+    );
+    EXPECT_THROW(uninitialized.train(2, kCount, data, cp), std::logic_error);
+}
+
+TEST(HnswTrainTest, TrainsRaBitQKMeansCentroidsAndSearchesAfterAdd) {
+    constexpr size_t kCount = 256;
+    constexpr size_t kNumClusters = 4;
+    TrainFixture fixture(kCount, 113);
+    auto cp = default_training_parameters(METRIC_L2, 7);
+    cp.num_threads = 1;
+
+    HierarchicalNSW index(kCount, AddFixture::kDim, 4, 8, 50);
+    index.train(kNumClusters, kCount, fixture.data.data(), cp);
+    EXPECT_TRUE(index.is_trained());
+    EXPECT_EQ(index.num_points(), 0U);
+
+    rabitqkmeans::RaBitQKMeans kmeans(AddFixture::kDim, kNumClusters, cp);
+    kmeans.train(kCount, fixture.data.data());
+    HierarchicalNSW expected(kCount, AddFixture::kDim, 4, 8, 50);
+    expected.set_centroids(kNumClusters, kmeans.centroids.data());
+    EXPECT_EQ(HnswTestAccess::centroids(index), HnswTestAccess::centroids(expected));
+
+    // Several threads link the first batch; results then need not be reproducible.
+    index.add(fixture.data.data(), kCount, nullptr, false, 4);
+    EXPECT_EQ(index.num_points(), kCount);
+    const auto results = index.search(fixture.data.data(), kCount, 1, 64, 1);
+    size_t found = 0;
+    for (size_t i = 0; i < kCount; ++i) {
+        found += !results[i].empty() && results[i][0].second == i;
+    }
+    EXPECT_GE(found, kCount * 95 / 100);
 }
 
 }  // namespace

@@ -22,6 +22,8 @@
 
 #include "file_replacement.hpp"
 #include "ivf_search.hpp"
+#include "rabitqlib/clustering/qgkmeans.hpp"
+#include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/estimator.hpp"
@@ -37,6 +39,7 @@
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/ivf/cluster.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
+#include "rabitqlib/index/training.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/path.hpp"
@@ -50,6 +53,9 @@ namespace {
 constexpr float kRemovedFAdd = std::numeric_limits<float>::infinity();
 // Files without routing metadata used HNSW routing from this many clusters.
 constexpr size_t kHistoricalHnswMinClusters = 20000;
+// An index from the point-count constructor is built by construct, never trained.
+constexpr const char* kPointCountConstructOnly =
+    "IVF index created with a point count must be built by construct";
 }  // namespace
 
 IVF::IVF() noexcept = default;
@@ -162,28 +168,149 @@ IVF::IVF(
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
     , metric_type_(metric_type) {
-    validate_metric_type(metric_type);
-    if ((total_bits < 1 || total_bits > 9) && total_bits != 32) {
-        throw std::invalid_argument("IVF bits must be in [1, 9] or 32 for raw reranking");
-    }
+    configure(total_bits);
     if (num_points == 0 || num_points > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("IVF point count exceeds the supported ID range");
     }
-    if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
+    if (exceeds_storage(num_points)) {
+        throw std::invalid_argument("IVF configuration exceeds addressable storage");
+    }
+    rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_));
+}
+
+IVF::IVF(
+    size_t dim,
+    size_t num_clusters,
+    size_t total_bits,
+    MetricType metric_type,
+    uint32_t seed,
+    RotatorType rotator_type,
+    InitializerType initializer_type
+)
+    : initializer_type_(resolve_initializer_type(initializer_type, num_clusters))
+    , dim_(dim)
+    , padded_dim_(dim)
+    , num_clusters_(num_clusters)
+    , raw_reranking_(total_bits == 32)
+    , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
+    , rotator_type_(rotator_type)
+    , metric_type_(metric_type) {
+    configure(total_bits);
+    rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_, seed));
+}
+
+void IVF::configure(size_t total_bits) {
+    validate_metric_type(metric_type_);
+    if ((total_bits < 1 || total_bits > 9) && total_bits != 32) {
+        throw std::invalid_argument("IVF bits must be in [1, 9] or 32 for raw reranking");
+    }
+    if (num_clusters_ == 0 || num_clusters_ > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("IVF cluster count exceeds the supported ID range");
     }
-    if (dim == 0 || dim > (std::numeric_limits<size_t>::max() / 32) - 64) {
+    if (dim_ == 0 || dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
         throw std::invalid_argument("IVF dimension is invalid or too large");
     }
     padded_dim_ = round_up_to_multiple(dim_, 32);
     const size_t max_size = std::numeric_limits<size_t>::max();
-    if (exceeds_storage(num_points) ||
-        num_clusters > max_size / sizeof(float) / padded_dim_ ||
-        (rotator_type == RotatorType::MatrixRotator &&
-         dim > max_size / sizeof(float) / padded_dim_)) {
+    if (num_clusters_ > max_size / sizeof(float) / padded_dim_ ||
+        (rotator_type_ == RotatorType::MatrixRotator &&
+         dim_ > max_size / sizeof(float) / padded_dim_)) {
         throw std::invalid_argument("IVF configuration exceeds addressable storage");
     }
-    rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_));
+}
+
+std::unique_ptr<Initializer> IVF::make_initializer() const {
+    if (initializer_type_ == InitializerType::Flat) {
+        return std::make_unique<FlatInitializer>(padded_dim_, num_clusters_, metric_type_);
+    }
+    if (initializer_type_ == InitializerType::FlatRaBitQ) {
+        return std::make_unique<FlatRaBitQInitializer>(
+            padded_dim_, num_clusters_, metric_type_
+        );
+    }
+    return std::make_unique<HNSWInitializer>(padded_dim_, num_clusters_, metric_type_);
+}
+
+void IVF::set_centroids(const float* centroids, size_t num_threads) {
+    if (rotator_ == nullptr) {
+        throw std::logic_error("IVF must be configured before setting centroids");
+    }
+    if (num_stored_points() != 0) {
+        throw std::logic_error("IVF cannot replace the centroids of an index with points");
+    }
+    if (!ready_ && max_elements_ != 0) {
+        throw std::logic_error(kPointCountConstructOnly);
+    }
+    if (centroids == nullptr) {
+        throw std::invalid_argument("IVF centroids must not be null");
+    }
+    check_coordinates(centroids, num_clusters_ * dim_, dim_, "IVF centroids");
+
+    // construct rotates centroids the same way, so both paths route identically.
+    std::vector<float> rotated_centroids(num_clusters_ * padded_dim_);
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        rotator_->rotate(centroids + (i * dim_), &rotated_centroids[i * padded_dim_]);
+    }
+    auto initializer = make_initializer();
+    initializer->add_vectors(
+        rotated_centroids.data(), std::min(resolve_num_threads(num_threads), num_clusters_)
+    );
+    std::vector<ClusterStorage> cluster_storage(
+        num_clusters_, ClusterStorage(raw_reranking_)
+    );
+    std::vector<Cluster> clusters;
+    clusters.reserve(num_clusters_);
+    for (auto& cs : cluster_storage) {
+        clusters.emplace_back(
+            0, cs.batch_data(), has_rerank_data() ? cs.rerank_data() : nullptr, cs.ids()
+        );
+    }
+    const auto ip_func = select_excode_ipfunc(ex_bits_);
+
+    // Commit. Moving the vectors keeps the empty views' storage, and nothing throws.
+    initializer_ = std::move(initializer);
+    cluster_storage_ = std::move(cluster_storage);
+    clusters_ = std::move(clusters);
+    ip_func_ = ip_func;
+    ready_ = true;
+}
+
+void IVF::train(
+    size_t num_points, const float* data, const rabitqkmeans::RaBitQKMeansParameters& cp
+) {
+    if (rotator_ == nullptr) {
+        throw std::logic_error("IVF must be configured before training");
+    }
+    if (num_stored_points() != 0) {
+        throw std::logic_error("IVF cannot retrain an index with points");
+    }
+    if (!ready_ && max_elements_ != 0) {
+        throw std::logic_error(kPointCountConstructOnly);
+    }
+    if (data == nullptr) {
+        throw std::invalid_argument("IVF training data must not be null");
+    }
+    if (num_points < num_clusters_) {
+        throw std::invalid_argument("IVF training needs at least num_clusters points");
+    }
+    if (num_points > std::numeric_limits<size_t>::max() / sizeof(float) / dim_) {
+        throw std::invalid_argument("IVF training data exceeds addressable storage");
+    }
+    // k-means checks the data for finite, in-range coordinates in parallel with
+    // the bound check_coordinates uses; set_centroids checks its centroids.
+    std::vector<float> centroids;
+    if (num_clusters_ <= kMaxRaBitQKMeansClusters) {
+        rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters_, cp);
+        kmeans.train_centroids(num_points, data);
+        centroids = std::move(kmeans.centroids);
+    } else {
+        qgkmeans::QGKMeansParameters qg_cp;  // Default graph settings
+        clustering::detail::copy_shared_parameters(cp, qg_cp);
+        qgkmeans::QGKMeans kmeans(dim_, num_clusters_, qg_cp);
+        kmeans.train_centroids(num_points, data);
+        centroids = std::move(kmeans.centroids);
+    }
+    set_centroids(centroids.data(), cp.num_threads);
 }
 
 void IVF::construct(
@@ -258,17 +385,7 @@ void IVF::allocate_storage(const std::vector<size_t>& cluster_sizes) {
     free_storage();
     clusters_.clear();
 
-    if (initializer_type_ == InitializerType::Flat) {
-        initializer_ =
-            std::make_unique<FlatInitializer>(padded_dim_, num_clusters_, metric_type_);
-    } else if (initializer_type_ == InitializerType::FlatRaBitQ) {
-        initializer_ = std::make_unique<FlatRaBitQInitializer>(
-            padded_dim_, num_clusters_, metric_type_
-        );
-    } else {
-        initializer_ =
-            std::make_unique<HNSWInitializer>(padded_dim_, num_clusters_, metric_type_);
-    }
+    initializer_ = make_initializer();
     cluster_storage_.assign(num_clusters_, ClusterStorage(raw_reranking_));
     for (size_t i = 0; i < num_clusters_; ++i) {
         resize_storage(cluster_storage_[i], cluster_sizes[i]);
@@ -344,7 +461,9 @@ void IVF::add(
     size_t num_threads
 ) {
     if (!ready_) {
-        throw std::logic_error("IVF index must be constructed or loaded before add");
+        throw std::logic_error(
+            "IVF index must be trained, constructed or loaded before add"
+        );
     }
     if (num_points == 0) {
         return;
@@ -685,6 +804,9 @@ size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
 void IVF::save(const char* filename) const {
     if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before save");
+    }
+    if (max_elements_ == 0) {
+        throw std::logic_error("IVF index has no points to save; add points first");
     }
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("IVF save filename must not be empty");
@@ -1088,7 +1210,9 @@ inline void IVF::validate_search(
     const float* query, size_t k, size_t nprobe, const PID* result_ids
 ) const {
     if (!ready_) {
-        throw std::logic_error("IVF index must be constructed or loaded before search");
+        throw std::logic_error(
+            "IVF index must be trained, constructed or loaded before search"
+        );
     }
     if (query == nullptr) {
         throw std::invalid_argument("IVF search query must not be null");

@@ -23,6 +23,9 @@ namespace buffer {
 template <typename T>
 class SearchBuffer;
 }
+namespace rabitqkmeans {
+struct RaBitQKMeansParameters;
+}
 }  // namespace rabitqlib
 
 namespace rabitqlib::ivf {
@@ -83,7 +86,7 @@ class IVF {
     size_t padded_dim_ = 0;
     size_t num_clusters_ = 0;
     bool raw_reranking_ = false;  // raw vectors replace extra-bit codes
-    bool ready_ = false;          // construction or loading completed
+    bool ready_ = false;          // centroids set, construction or loading completed
     size_t ex_bits_ = 0;          // total bits = ex_bits_ + 1; 0 with raw reranking
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     std::unique_ptr<Rotator<float>> rotator_;
@@ -146,6 +149,11 @@ class IVF {
 
     [[nodiscard]] bool has_capacity(const ClusterStorage& cs, size_t num_points) const;
 
+    // Validate the settings both constructors share and derive padded_dim_
+    void configure(size_t total_bits);
+
+    [[nodiscard]] std::unique_ptr<Initializer> make_initializer() const;
+
     // Reset the index and allocate a new initializer and per-cluster storage
     void allocate_storage(const std::vector<size_t>& cluster_sizes);
 
@@ -196,6 +204,31 @@ class IVF {
         InitializerType initializer_type = InitializerType::Auto
     );
 
+    /**
+     * @brief Create an empty index to fill with train or set_centroids, then add.
+     *
+     * The index starts with no point storage. construct rebuilds an index from
+     * max_elements() rows, so it fails here until add has stored points.
+     *
+     * @param dim Original input dimension
+     * @param num_clusters Number of centroids that train or set_centroids provides
+     * @param total_bits 1-9 for quantized storage (including the sign bit), or 32 for
+     * raw-vector reranking
+     * @param metric_type Distance metric
+     * @param seed Rotation seed
+     * @param rotator_type Rotation type
+     * @param initializer_type Centroid routing strategy
+     */
+    explicit IVF(
+        size_t dim,
+        size_t num_clusters,
+        size_t total_bits,
+        MetricType metric_type,
+        uint32_t seed,
+        RotatorType rotator_type = RotatorType::FhtKacRotator,
+        InitializerType initializer_type = InitializerType::Auto
+    );
+
     ~IVF();
 
     // Logical capacity, including slots occupied by removed points. add grows it.
@@ -210,6 +243,40 @@ class IVF {
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
     [[nodiscard]] RotatorType rotator_type() const { return rotator_type_; }
     [[nodiscard]] InitializerType initializer_type() const { return initializer_type_; }
+    // Centroids are set, by train, set_centroids, construct or load.
+    [[nodiscard]] bool is_trained() const { return ready_; }
+
+    /**
+     * @brief Train num_clusters() centroids on `data` and set them as set_centroids does.
+     *
+     * Uses RaBitQKMeans up to kMaxRaBitQKMeansClusters clusters, and QGKMeans with the
+     * fields the two parameter types share and default graph parameters above that.
+     * Only centroids are trained: points are not assigned until add. Requires a
+     * configured index without stored points that was not created with a point
+     * count; the index is unchanged if this throws.
+     *
+     * @param num_points Number of training points, at least num_clusters()
+     * @param data Training points (num_points * dim)
+     * @param cp Clustering parameters, for example default_training_parameters();
+     * cp.num_threads also limits building the centroid initializer
+     */
+    void train(
+        size_t num_points, const float* data, const rabitqkmeans::RaBitQKMeansParameters& cp
+    );
+
+    /**
+     * @brief Replace the centroids of an index without stored points.
+     *
+     * Builds the centroid initializer and empty clusters, so the index can add points.
+     * An index created with a point count is built by construct instead, so this
+     * throws std::logic_error for it. The index is unchanged if this throws.
+     *
+     * @param centroids Centroid vectors (num_clusters() * dim)
+     * @param num_threads Threads used to build the centroid initializer
+     */
+    void set_centroids(
+        const float* centroids, size_t num_threads = std::numeric_limits<size_t>::max()
+    );
 
     /**
      * @brief Quantize every point into its cluster and build the centroid initializer.
@@ -233,7 +300,7 @@ class IVF {
     );
 
     /**
-     * @brief Append points to a constructed or loaded index without the original data.
+     * @brief Append points to a trained, constructed or loaded index.
      *
      * Points are quantized against the centroids and rotator the index already holds, so
      * the centroids never move: recall can degrade if the added data drifts away from the
@@ -292,6 +359,7 @@ class IVF {
      */
     size_t remove(const PID* ids_to_remove, size_t num_points);
 
+    // Requires at least one stored point; a trained index must add points first.
     void save(const char* filename) const;
 
     void load(const char* filename);

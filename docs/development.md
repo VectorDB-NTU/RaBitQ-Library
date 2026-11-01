@@ -349,7 +349,10 @@ mutating state: non-finite values and magnitudes above the clustering bound rais
 `std::invalid_argument`. The core `quantize_*` encoders and `Lut` rely on that (the
 LUT additionally rejects non-finite rotated queries) because quantization converts
 floats to integers, which is undefined for NaN. Keep the check at the boundary rather
-than inside per-vector kernels.
+than inside per-vector kernels. IVF and HNSW `train` are the exception: they pass
+training data only to k-means, which applies the same rule and bound in parallel
+before using it, so they skip the serial pass; `set_centroids` still checks the
+trained centroids.
 
 **Python conversion**
 

@@ -30,6 +30,9 @@ class VisitedSetPool;
 namespace detail {
 struct DistanceEstimate;
 }
+namespace rabitqkmeans {
+struct RaBitQKMeansParameters;
+}
 }  // namespace rabitqlib
 
 namespace rabitqlib::hnsw {
@@ -73,6 +76,9 @@ class HierarchicalNSW {
         return num_stored_points_.load() - num_removed_;
     }
     [[nodiscard]] size_t num_stored_points() const { return num_stored_points_; }
+    // Centroids are set, by train, set_centroids or construct, or the index was loaded
+    // with clusters.
+    [[nodiscard]] bool is_trained() const { return num_clusters_ != 0; }
     // Cluster of a stored record by internal ID (0 through num_stored_points() - 1;
     // these coincide with labels only for points added in order). Removed points
     // keep their cluster.
@@ -88,8 +94,38 @@ class HierarchicalNSW {
         return stored_cluster_id(internal_id);
     }
 
+    // Requires at least one stored point; a trained index must add points first.
     void save(const char* filename) const;
     void load(const char* filename);
+
+    /**
+     * @brief Replace the centroids of an initialized index without stored points.
+     *
+     * The index is unchanged if this throws. Later adds route and quantize against
+     * these centroids; the first add into the empty graph links like construct.
+     *
+     * @param num_clusters Number of centroids, from 1 through 2^31
+     * @param centroids Centroid vectors (num_clusters * dim) in the original coordinates
+     */
+    void set_centroids(size_t num_clusters, const float* centroids);
+
+    /**
+     * @brief Train centroids with RaBitQKMeans and set them as set_centroids does.
+     *
+     * Only centroids are trained: points are not assigned until add. The index is
+     * unchanged if this throws.
+     *
+     * @param num_clusters Number of centroids, at most num_points
+     * @param num_points Number of training points
+     * @param data Training points (num_points * dim)
+     * @param cp Clustering parameters, for example default_training_parameters()
+     */
+    void train(
+        size_t num_clusters,
+        size_t num_points,
+        const float* data,
+        const rabitqkmeans::RaBitQKMeansParameters& cp
+    );
 
     // Centroids and data use the original dimension; cluster_ids has num_points entries.
     // Input buffers must remain valid until this synchronous call returns or throws;
@@ -107,10 +143,12 @@ class HierarchicalNSW {
     );
 
     /**
-     * @brief Insert points into a constructed or loaded index.
+     * @brief Insert points into a trained, constructed or loaded index.
      *
-     * Linked with the stored quantized codes, not the exact vectors construct uses,
-     * which are not kept. Centroids and rotation are never retrained. Point `i` gets
+     * Into an empty graph, points are linked with their exact vectors as construct
+     * links them, and a failure leaves the graph empty. Otherwise they are linked with
+     * the stored quantized codes, since the exact vectors are not kept. Centroids and
+     * rotation are never retrained. Point `i` gets
      * the label `num_stored_points() + i` whatever `num_threads` is. Throws rather than
      * growing past `max_elements()`. Not safe to call while another thread searches.
      * Preparation failures leave the graph and point count unchanged. A failure
@@ -168,7 +206,8 @@ class HierarchicalNSW {
 
     // Queries use the original dimension. Each result is (distance, external label),
     // where distance estimates squared L2 or 1 - dot according to the index metric.
-    // ef_search is raised to k and clamped to the stored point count.
+    // ef_search is raised to k and clamped to the stored point count. An empty index,
+    // trained or not, returns no results.
     std::vector<std::vector<std::pair<float, PID>>> search(
         const float* queries,
         size_t num_queries,
@@ -436,6 +475,16 @@ class HierarchicalNSW {
     }
 
     void add_point(PID label, PID cluster_id, const quant::RabitqConfig& config);
+
+    // Link validated points into an empty graph that has centroids, scoring with their
+    // exact vectors. Labels are 0 through num_points - 1. A failure empties the graph.
+    void link_exact(
+        size_t num_points,
+        const float* data,
+        const PID* cluster_ids,
+        size_t num_threads,
+        bool fast_quantization
+    );
 
     // Insertion steps shared by raw and quantized scoring. distance(id) scores an
     // existing node against the node being inserted; prefetch(id) may warm its data.

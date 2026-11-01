@@ -151,6 +151,48 @@ TEST(HnswConstructionAllocationTest, EveryAllocationFailureLeavesEmptyReusableIn
     }
 }
 
+TEST(HnswFirstAddAllocationTest, EveryAllocationFailureKeepsCentroidsAndAnEmptyGraph) {
+    Fixture fixture;
+    for (const size_t threads : {1U, 4U}) {
+        SCOPED_TRACE(threads);
+        size_t failures = 0;
+        bool succeeded = false;
+        for (size_t allocation = 0; allocation < 512; ++allocation) {
+            SCOPED_TRACE(allocation);
+            HierarchicalNSW index(kCapacity, kDim, 4, 2, 10, 1);
+            index.set_centroids(1, fixture.centroid.data());
+            bool failed = false;
+            {
+                AllocationFailure failure(allocation);
+                try {
+                    index.add(fixture.data.data(), kAdded, nullptr, false, threads);
+                } catch (const std::bad_alloc&) { failed = true; }
+            }
+            if (!failed) {
+                succeeded = true;
+                break;
+            }
+            ++failures;
+            EXPECT_EQ(index.num_stored_points(), 0U);
+            EXPECT_TRUE(index.is_trained());
+            EXPECT_EQ(index.num_clusters(), 1U);
+            const auto empty = index.search(fixture.data.data(), 1, 1, kCapacity, 1);
+            ASSERT_EQ(empty.size(), 1U);
+            EXPECT_TRUE(empty[0].empty());
+            ASSERT_NO_THROW(
+                index.add(fixture.data.data(), kAdded, nullptr, false, threads)
+            );
+            const auto results = index.search(fixture.data.data(), kAdded, 1, kCapacity, 1);
+            for (size_t i = 0; i < kAdded; ++i) {
+                ASSERT_EQ(results[i].size(), 1U);
+                EXPECT_EQ(results[i][0].second, i);
+            }
+        }
+        EXPECT_GT(failures, 0U);
+        EXPECT_TRUE(succeeded);
+    }
+}
+
 TEST(HnswResizeAllocationTest, FailurePreservesEveryLinkOwner) {
     Fixture fixture;
     size_t failures = 0;
