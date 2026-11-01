@@ -1712,7 +1712,7 @@ TEST(IvfTrainTest, SetCentroidsAndAddMatchConstructByteForByte) {
             EXPECT_TRUE(saved_bytes(explicit_ids, path) == expected) << "explicit IDs";
 
             IVF routed(kDynDim, kDynNumClusters, bits, metric, kSeed);
-            routed.set_centroids(centroids.data(), 1);
+            routed.set_centroids(centroids.data());  // Rotates on every thread.
             routed.add(points.data(), kCount, nullptr, false, 1);
             EXPECT_TRUE(saved_bytes(routed, path) == expected) << "routed";
         }

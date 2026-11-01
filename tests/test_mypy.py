@@ -56,3 +56,50 @@ def test_static_public_usage(tmp_path):
         )
     }
     assert error_lines == expected_lines, result.stdout
+
+
+# Each 0.7 call form the compatibility layer accepts is marked deprecated in the
+# stubs, so editors flag it while it still type-checks.
+DEPRECATED_USAGE = """\
+import numpy as np
+from rabitqlib import HnswIndex, IvfIndex
+
+x = np.zeros((80, 64), dtype=np.float32)
+labels = np.zeros(80, dtype=np.uint32)
+ivf = IvfIndex(dim=64, max_elements=80, num_clusters=1, nbits=4, metric="ip")
+hnsw = HnswIndex(dim=64, max_elements=80, M=16, ef_construction=200, nbits=4)
+seeded = HnswIndex(64, nbits=4, random_seed=5)
+ivf.build(x, x[:1], labels)
+hnsw.build(x, x[:1], labels)
+ivf.add(x, labels)
+flag = ivf.is_built
+"""
+
+
+def test_deprecated_forms_are_flagged(tmp_path):
+    usage = tmp_path / "deprecated_usage.py"
+    usage.write_text(DEPRECATED_USAGE)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--strict",
+            "--enable-error-code",
+            "deprecated",
+            "--no-incremental",
+            "--cache-dir",
+            str(tmp_path / "cache"),
+            str(usage),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    flagged = {
+        int(number)
+        for number in re.findall(
+            rf"{re.escape(str(usage))}:(\d+): error: .*\[deprecated\]", result.stdout
+        )
+    }
+    assert flagged == set(range(6, 13)), result.stdout

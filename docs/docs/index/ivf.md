@@ -14,8 +14,9 @@ width, number of clusters, and `nprobe`.
 ### Python
 
 The [complete Quick Start](../quick_start.md) is the runnable IVF-RaBitQ example:
-train centroids, call `IvfIndex.build`, search, then save and reload the index.
-The update examples below reuse its built `index`.
+create an index, `train` its centroids, `add` the vectors, search, then save and
+reload it. [Training](#training-centroids-in-python) describes the clustering
+options, and the update examples below reuse the Quick Start's `index`.
 
 ### C++
 
@@ -46,12 +47,12 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `max_elements` | Python IVF-RaBitQ build requires exactly this many rows; `add` grows storage automatically. C++ calls this constructor argument `num_points`. |
-| `num_clusters` | Must match the centroid count; every cluster ID must be in `[0, num_clusters)`. |
-| `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. |
+| `num_clusters` | Number of centroids `train` learns or `set_centroids` supplies; every cluster ID must be in `[0, num_clusters)`. |
+| `nbits` / C++ `total_bits` | Required and, in Python, keyword-only: 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. |
+| `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count; C++ and Python both require `k` not to exceed `max_elements`, which `add` increases. |
+| `k`, `nprobe` | Positive result count and cluster probe count; C++ and Python both require `k` not to exceed the stored point count (`max_elements`), which `add` increases. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
@@ -125,8 +126,7 @@ The optional final C++ constructor argument selects `InitializerType::Auto`,
 `initializer="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:
 
 ```python
-index = IvfIndex(dim, max_elements, num_clusters, nbits=4,
-                 initializer="flat_rabitq")
+index = IvfIndex(dim, num_clusters, nbits=4, initializer="flat_rabitq")
 print(index.initializer)  # resolved routing type
 ```
 
@@ -199,6 +199,39 @@ For example:
 ivf.construct(data.data(), centroids.data(), cluster_ids.data(), true);
 ```
 
+### Training centroids in Python
+
+`train(x)` learns `num_clusters` centroids from the rows of `x`, which must have
+at least `num_clusters` rows, and stores them in the index; `add` then assigns
+and quantizes vectors. Training uses the settings in `index.cp`, a
+[`RaBitQKMeansParameters`](../clustering.md#rabitqkmeans) whose defaults differ
+from the k-means classes: 25 iterations, at most 256 sampled vectors per
+centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"`, and
+`seed` equal to the index seed. Change fields before training:
+
+```python
+index = IvfIndex(dim, 1024, nbits=4, metric="ip")
+index.cp.niter = 10
+index.train(sample)  # num_threads=None uses index.cp.num_threads (0: all CPUs)
+index.add(vectors)
+```
+
+- Up to 2,000 clusters, training uses RaBitQKMeans; above that it uses
+  [QGKMeans](../clustering.md#qgkmeans), copying the shared fields of `cp` and
+  keeping its default graph settings. The threshold is provisional and has not
+  been measured.
+- `set_centroids(centroids)` uses centroids of shape `(num_clusters, dim)`
+  computed elsewhere instead of training.
+- Training or setting centroids again replaces them while the index stores no
+  vectors; once it stores any (including removed ones), both raise
+  `RuntimeError`. A failed call leaves the index unchanged.
+- Before training, `add`, `search`, `remove`, `reserve` and `save` raise
+  `RuntimeError`. A trained index without vectors cannot be saved, and its
+  `search` rejects every `k` with `ValueError`; add vectors first. Loaded
+  indexes are trained, and their `seed` is `None`.
+- `train` and `add` default to every available CPU; `search` defaults to one
+  thread.
+
 ### Training centroids in C++
 
 Instead of passing centroids to `construct`, create an index without a point
@@ -216,7 +249,11 @@ index.add(data.data(), num_points);
 ```
 
 - The constructor takes `dim`, `num_clusters`, `total_bits`, the metric and the
-  rotation seed, followed by the optional rotator and initializer types. The
+  rotation seed, followed by the optional rotator and initializer types. Pass
+  the seed: without it, four arguments such as `IVF(dim, num_clusters, 4,
+  METRIC_IP)` select the point-count constructor instead, reading them as
+  `(num_points, dim, num_clusters, total_bits)` with the metric converted to a
+  bit count, which may compile and run without an error. The
   index starts with no point storage. `construct` rebuilds an index from
   `max_elements()` rows, so it fails on this index until `add` has stored points.
 - An index created with a point count is built by `construct`: `train` and
@@ -358,10 +395,11 @@ Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float
 one-dimensional integer array or sequence with one valid cluster ID per vector;
 `remove()` likewise accepts a one-dimensional integer array or sequence of point
 IDs and returns the number newly removed. Duplicate IDs count once. Python
-`num_threads` defaults to 1; `fast_quantization` defaults to `False`.
+`num_threads` defaults to 0 (every available CPU) and `fast_quantization` to
+`False`; pass both by keyword.
 
-After appending, rebuilding with `construct` or `build` requires
-`num_stored_points` rows, including removed records. Updates require exclusive
+After appending, rebuilding with C++ `construct` requires `num_stored_points`
+rows, including removed records. Updates require exclusive
 access; see the
 [concurrency contract](usage.md#threading-and-file-paths).
 

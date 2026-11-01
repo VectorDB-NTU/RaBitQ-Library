@@ -12,6 +12,7 @@ TOTAL_BITS = 8  # total number of bits for quantization
 METRIC = "l2"  # "l2" or "ip"
 FASTER_QUANT = True  # use faster quantization
 NUM_THREADS = 16  # number of threads for building the index
+NUM_CLUSTERS = 4096  # centroids to train when no clustering file is given
 # ──────────────────────────────────────────────
 
 
@@ -23,29 +24,29 @@ def main(args=None) -> None:
     print(f"\tN: {n}")
     print(f"\tDIM: {dim}")
 
-    # 2. Load clusters computed by RaBitQKMeans or QGKMeans.
-    centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
-    print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
-
-    # 3. Build IVF index
+    # 2. Train centroids in the index, or reuse a kmeans_clustering.py file.
     print(
         f"\nBuilding IVF index: bits={args.total_bits}, metric={args.metric}, "
         f"num_threads={args.num_threads}, faster_quant={args.faster_quant}"
     )
-
-    idx = IvfIndex(
-        dim=dim,
-        max_elements=n,
-        num_clusters=len(centroids),
-        nbits=args.total_bits,
-        metric=args.metric,
-    )
-
     t0 = time()
-    idx.build(
+    if args.clusters is None:
+        idx = IvfIndex(
+            dim, args.num_clusters, nbits=args.total_bits, metric=args.metric
+        )
+        idx.train(data, num_threads=args.num_threads)
+        cluster_ids = None
+        print(f"Trained {args.num_clusters} centroids")
+    else:
+        centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
+        print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
+        idx = IvfIndex(dim, len(centroids), nbits=args.total_bits, metric=args.metric)
+        idx.set_centroids(centroids)
+
+    # 3. Add the vectors
+    idx.add(
         data,
-        centroids,
-        cluster_ids,
+        cluster_ids=cluster_ids,
         num_threads=args.num_threads,
         fast_quantization=args.faster_quant,
     )
@@ -64,8 +65,19 @@ if __name__ == "__main__":
     parser.add_argument("index_file", type=str, help="Path to save the index")
     parser.add_argument(
         "--clusters",
-        required=True,
-        help="Clustering file produced by kmeans_clustering.py for this data and metric",
+        default=None,
+        help=(
+            "Clustering file produced by kmeans_clustering.py for this data and "
+            "metric; without it, the index trains its own centroids"
+        ),
+    )
+    parser.add_argument(
+        "--num-clusters",
+        dest="num_clusters",
+        type=int,
+        metavar="INT",
+        default=NUM_CLUSTERS,
+        help="Number of centroids to train when --clusters is not given",
     )
     parser.add_argument(
         "--total-bits",

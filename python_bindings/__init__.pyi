@@ -5,10 +5,11 @@ Array shapes and numeric ranges are documented runtime constraints.
 
 from collections.abc import Sequence
 from os import PathLike
-from typing import Any, ClassVar, Literal, SupportsIndex, TypeAlias
+from typing import Any, ClassVar, Literal, SupportsIndex, TypeAlias, overload
 
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import deprecated
 
 __all__ = [
     "FinalAssignmentMode",
@@ -76,39 +77,91 @@ class IvfIndex:
     ----------
     dim : int
         Original vector dimension, from 64 through 65536.
-    max_elements : int
-        Number of vectors required by the initial build. Later adds grow
-        storage.
     num_clusters : int
-        Number of supplied centroids.
+        Number of centroids, from train or set_centroids.
     nbits : int
-        Total quantization bits, 1 through 9, or 32 for owned float32 vectors
-        with one-bit filtering and raw reranking.
+        Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
+        float32 vectors with one-bit filtering and raw reranking.
     metric : {'l2', 'ip', 'innerproduct'}, optional
         Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
         automatically normalized for cosine similarity.
     initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
         Centroid routing strategy. Default is 'auto'.
+    seed : int, optional
+        Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
+        (default) draws one at random; the seed property reports it.
 
     Notes
     -----
-    Build or load the index before searching or saving. Concurrent reads are
-    supported; an overlapping mutation raises RuntimeError.
+    Train the index or set its centroids, then add vectors before searching or
+    saving; loaded indexes are already trained. Concurrent reads are supported;
+    an overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
     coordinate range; other values raise ValueError.
+    The 0.7 form IvfIndex(dim, max_elements, num_clusters, nbits, ...) and
+    build() still work in 0.8, raise DeprecationWarning, and will be removed in
+    0.9.
 
     Examples
     --------
     >>> import numpy as np
     >>> from rabitqlib import IvfIndex
     >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-    >>> index = IvfIndex(64, len(x), num_clusters=1, nbits=4)
-    >>> index.build(x, x.mean(axis=0, keepdims=True), np.zeros(len(x), dtype=np.uint32))
-    >>> ids, distances = index.search(x[:2], k=3, nprobe=1)
+    >>> index = IvfIndex(64, 2, nbits=4, seed=7)
+    >>> index.train(x)
+    >>> ids = index.add(x)
+    >>> ids, distances = index.search(x[:2], k=3, nprobe=2)
     >>> ids.shape, distances.shape
     ((2, 3), (2, 3))
     """
 
+    @overload
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        num_clusters: SupportsIndex,
+        *,
+        nbits: SupportsIndex,
+        metric: _Metric = "l2",
+        initializer: _Initializer = "auto",
+        seed: SupportsIndex | None = None,
+    ) -> None:
+        """An approximate nearest-neighbor index using IVF.
+
+        Parameters
+        ----------
+        dim : int
+            Original vector dimension, from 64 through 65536.
+        num_clusters : int
+            Number of centroids, from train or set_centroids.
+        nbits : int
+            Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
+            float32 vectors with one-bit filtering and raw reranking.
+        metric : {'l2', 'ip', 'innerproduct'}, optional
+            Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
+            automatically normalized for cosine similarity.
+        initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+            Centroid routing strategy. Default is 'auto'.
+        seed : int, optional
+            Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
+            (default) draws one at random; the seed property reports it.
+
+        Notes
+        -----
+        Train the index or set its centroids, then add vectors before searching or
+        saving; loaded indexes are already trained. Concurrent reads are supported;
+        an overlapping mutation raises RuntimeError.
+        Data, centroids and queries must be finite float32 values within the index
+        coordinate range; other values raise ValueError.
+        The 0.7 form IvfIndex(dim, max_elements, num_clusters, nbits, ...) and
+        build() still work in 0.8, raise DeprecationWarning, and will be removed in
+        0.9.
+        """
+    @overload
+    @deprecated(
+        "IvfIndex(dim, max_elements, num_clusters, nbits, ...) is deprecated since "
+        "0.8; use IvfIndex(dim, num_clusters, nbits=...)"
+    )
     def __init__(
         self,
         dim: SupportsIndex,
@@ -117,48 +170,12 @@ class IvfIndex:
         nbits: SupportsIndex,
         metric: _Metric = "l2",
         initializer: _Initializer = "auto",
-    ) -> None:
-        """An approximate nearest-neighbor index using IVF.
-
-        Parameters
-        ----------
-        dim : int
-            Original vector dimension, from 64 through 65536.
-        max_elements : int
-            Number of vectors required by the initial build. Later adds grow
-            storage.
-        num_clusters : int
-            Number of supplied centroids.
-        nbits : int
-            Total quantization bits, 1 through 9, or 32 for owned float32 vectors
-            with one-bit filtering and raw reranking.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-            automatically normalized for cosine similarity.
-        initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
-            Centroid routing strategy. Default is 'auto'.
-
-        Notes
-        -----
-        Build or load the index before searching or saving. Concurrent reads are
-        supported; an overlapping mutation raises RuntimeError.
-        Data, centroids and queries must be finite float32 values within the index
-        coordinate range; other values raise ValueError.
-
-        Examples
-        --------
-        >>> import numpy as np
-        >>> from rabitqlib import IvfIndex
-        >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-        >>> index = IvfIndex(64, len(x), num_clusters=1, nbits=4)
-        >>> index.build(x, x.mean(axis=0, keepdims=True), np.zeros(len(x), dtype=np.uint32))
-        >>> ids, distances = index.search(x[:2], k=3, nprobe=1)
-        >>> ids.shape, distances.shape
-        ((2, 3), (2, 3))
-        """
-
+    ) -> None: ...
     def __repr__(self) -> str:
-        """Return a one-line summary of configuration, counts and build state."""
+        """Return a one-line summary of configuration, counts and training state."""
+
+    def __len__(self) -> int:
+        """Return the number of live, searchable points."""
 
     @property
     def dim(self) -> int:
@@ -166,7 +183,7 @@ class IvfIndex:
 
     @property
     def max_elements(self) -> int:
-        """Current storage capacity."""
+        """Logical capacity: stored points, or the build row count of a 0.7-form index before build."""
 
     @property
     def num_points(self) -> int:
@@ -177,9 +194,24 @@ class IvfIndex:
         """Number of stored points, including removed points."""
 
     @property
-    def is_built(self) -> bool:
-        """Whether the index has been built or loaded."""
+    def is_trained(self) -> bool:
+        """Whether centroids are set, by train, set_centroids, build or load."""
 
+    @property
+    @deprecated("IvfIndex.is_built is deprecated since 0.8; use is_trained or len()")
+    def is_built(self) -> bool:
+        """Deprecated since 0.8: whether the index stores points; use len()."""
+
+    @property
+    def seed(self) -> int | None:
+        """Rotation seed, or None for an index loaded from disk or created in the 0.7 form."""
+
+    @property
+    def cp(self) -> RaBitQKMeansParameters:
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 25, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed."""
+
+    @cp.setter
+    def cp(self, value: RaBitQKMeansParameters) -> None: ...
     @property
     def metric(self) -> Literal["l2", "ip"]:
         """Canonical metric name: 'l2' or 'ip'."""
@@ -192,6 +224,49 @@ class IvfIndex:
     def num_clusters(self) -> int:
         """Number of centroids used for quantization."""
 
+    def train(
+        self, x: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
+    ) -> None:
+        """Train num_clusters centroids on vectors and set them.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (n, dim)
+            Training vectors in the original, unpadded coordinates, with
+            n >= num_clusters. Converted to contiguous float32; a copy may be made.
+        num_threads : int, optional
+            Keyword-only. Worker count for this call. None (default) uses
+            cp.num_threads; 0 selects the available CPU count.
+
+        Notes
+        -----
+        Clusters with the settings in cp: RaBitQKMeans up to 2000 clusters, and
+        QGKMeans with its default graph settings above that (a provisional,
+        unmeasured threshold). Only centroids are trained; add assigns vectors.
+        Retraining replaces the centroids while the index stores no vectors, and
+        raises RuntimeError afterwards. A failed call leaves the index unchanged.
+        """
+
+    def set_centroids(self, centroids: npt.ArrayLike) -> None:
+        """Use the given centroids instead of training.
+
+        Parameters
+        ----------
+        centroids : array_like of float, shape (num_clusters, dim)
+            Centroids in the original, unpadded coordinates. Converted to
+            contiguous float32; a copy may be made.
+
+        Notes
+        -----
+        The index counts as trained afterwards. Replacing centroids is allowed
+        while the index stores no vectors and raises RuntimeError afterwards. A
+        failed call leaves the index unchanged.
+        """
+
+    @deprecated(
+        "IvfIndex.build() is deprecated since 0.8; use set_centroids() or "
+        "train(), then add()"
+    )
     def build(
         self,
         data: npt.ArrayLike,
@@ -202,14 +277,18 @@ class IvfIndex:
     ) -> None:
         """Build the index from vectors and supplied centroid assignments.
 
+        Deprecated since 0.8 and removed in 0.9: use set_centroids() (or
+        train()) and then add(). The defaults match 0.7, including a single
+        thread.
+
         Parameters
         ----------
         data : array_like of float, shape (n, dim)
-            Vectors in the original, unpadded coordinates. Converted to contiguous
-            float32; a copy may be made.
+            Vectors in the original, unpadded coordinates. Converted to
+            contiguous float32; a copy may be made.
         centroids : array_like of float, shape (num_clusters, dim)
-            Vectors in the original, unpadded coordinates. Converted to contiguous
-            float32; a copy may be made.
+            Vectors in the original, unpadded coordinates. Converted to
+            contiguous float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,)
             Centroid ID per vector, in [0, num_clusters). Floating-point and
             boolean IDs are rejected.
@@ -217,22 +296,18 @@ class IvfIndex:
             Worker count. Default is 1; 0 selects the available CPU count.
         fast_quantization : bool, optional
             Use faster quantizer configuration. Default is False.
-
-        Notes
-        -----
-        The initial data must satisfy n == max_elements. Centroids and data use
-        original coordinates. The input arrays need not be retained after this
-        synchronous call.
         """
 
+    @overload
     def add(
         self,
         data: npt.ArrayLike,
+        *,
         cluster_ids: _IntegerIds | None = None,
-        num_threads: SupportsIndex = 1,
+        num_threads: SupportsIndex = 0,
         fast_quantization: bool | np.bool_ = False,
     ) -> npt.NDArray[np.uint32]:
-        """Append vectors using the existing centroids.
+        """Add vectors using the trained centroids.
 
         Parameters
         ----------
@@ -240,13 +315,14 @@ class IvfIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,), optional
-            Existing centroid IDs. None routes each vector using the index's
-            configured centroid initializer; routing may be approximate.
+            Keyword-only. Existing centroid IDs. None routes each vector using the
+            index's configured centroid initializer; routing may be approximate.
             Centroids do not move.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Keyword-only. Worker count. Default is 0, which selects the available
+            CPU count.
         fast_quantization : bool, optional
-            Use faster quantizer configuration. Default is False.
+            Keyword-only. Use faster quantizer configuration. Default is False.
 
         Returns
         -------
@@ -255,10 +331,22 @@ class IvfIndex:
 
         Notes
         -----
-        Batch additions to reduce repeated cluster copying; reserve can preallocate
-        room.
+        Requires a trained or loaded index. Batch additions to reduce repeated
+        cluster copying; reserve can preallocate room. Passing the options
+        positionally is deprecated.
         """
-
+    @overload
+    @deprecated(
+        "Passing options to IvfIndex.add() by position is deprecated since 0.8; "
+        "pass them by keyword"
+    )
+    def add(
+        self,
+        data: npt.ArrayLike,
+        cluster_ids: _IntegerIds | None,
+        num_threads: SupportsIndex = ...,
+        fast_quantization: bool | np.bool_ = ...,
+    ) -> npt.NDArray[np.uint32]: ...
     def remove(self, ids: _IntegerIds) -> int:
         """Exclude point IDs from subsequent search results.
 
@@ -313,13 +401,13 @@ class IvfIndex:
 
         Notes
         -----
-        Returns (ids, distances), in that order. Missing neighbors have ID
-        4294967295 and distance inf. Array shapes and value ranges are checked at
-        runtime, not by static type checkers.
+        Requires a trained or loaded index. Returns (ids, distances), in that
+        order. Missing neighbors have ID 4294967295 and distance inf. Array shapes
+        and value ranges are checked at runtime, not by static type checkers.
         """
 
     def save(self, path: _Path) -> None:
-        """Save a built index to disk.
+        """Save an index with stored vectors to disk.
 
         Parameters
         ----------
@@ -329,6 +417,7 @@ class IvfIndex:
 
         Notes
         -----
+        A trained index without vectors raises RuntimeError; add vectors first.
         IVF with HNSW centroid routing also writes its required sidecar file.
         """
 
@@ -345,7 +434,7 @@ class IvfIndex:
         Returns
         -------
         index : IvfIndex
-            A built index ready for search.
+            A trained index ready for search.
         """
 
     @property
@@ -364,7 +453,7 @@ class IvfIndex:
 
         Notes
         -----
-        Requires a built index. Reserved room is not saved.
+        Requires a trained or loaded index. Reserved room is not saved.
         """
 
 class HnswIndex:
@@ -374,28 +463,102 @@ class HnswIndex:
     ----------
     dim : int
         Original vector dimension, from 64 through 65536.
-    max_elements : int
-        Storage capacity, at least 1, including removed points. Use resize to grow it.
+    nbits : int
+        Keyword-only. Total quantization bits, 1 through 9.
+    num_clusters : int, optional
+        Keyword-only. Number of centroids train or set_centroids provides.
+        Default is 16.
     M : int, optional
-        Graph connectivity, at least 2. Default is 16.
+        Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
+        2 * M edges. Default is 16.
     ef_construction : int, optional
-        Construction search breadth. Default is 200.
-    nbits : int, optional
-        Total quantization bits, 1 through 9. Default is 8.
+        Keyword-only. Construction search breadth. Default is 200.
     metric : {'l2', 'ip', 'innerproduct'}, optional
-        Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-        automatically normalized for cosine similarity.
-    random_seed : int, optional
-        Graph random seed. Default is 100.
+        Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
+        Vectors are not automatically normalized for cosine similarity.
+    seed : int, optional
+        Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
+        32 bits). Default is 100.
 
     Notes
     -----
-    Build or load the index before searching or saving. Concurrent reads are
-    supported; an overlapping mutation raises RuntimeError.
+    Train the index or set its centroids, then add vectors before searching or
+    saving; loaded indexes are already trained. Capacity grows automatically
+    on add; resize can preallocate it. Concurrent reads are supported; an
+    overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
     coordinate range; other values raise ValueError.
+    With more than one thread, add links points in a nondeterministic order;
+    pass num_threads=1 for a reproducible graph.
+    The 0.7 forms HnswIndex(dim, max_elements, ...), random_seed= and build()
+    still work in 0.8, raise DeprecationWarning, and will be removed in 0.9.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from rabitqlib import HnswIndex
+    >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
+    >>> index = HnswIndex(64, nbits=4, num_clusters=2)
+    >>> index.train(x)
+    >>> ids = index.add(x, num_threads=1)
+    >>> ids, distances = index.search(x[:2], k=3)
+    >>> ids.shape, distances.shape
+    ((2, 3), (2, 3))
     """
 
+    @overload
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        *,
+        nbits: SupportsIndex,
+        num_clusters: SupportsIndex = 16,
+        M: SupportsIndex = 16,
+        ef_construction: SupportsIndex = 200,
+        metric: _Metric = "l2",
+        seed: SupportsIndex = 100,
+    ) -> None:
+        """An approximate nearest-neighbor index using HNSW.
+
+        Parameters
+        ----------
+        dim : int
+            Original vector dimension, from 64 through 65536.
+        nbits : int
+            Keyword-only. Total quantization bits, 1 through 9.
+        num_clusters : int, optional
+            Keyword-only. Number of centroids train or set_centroids provides.
+            Default is 16.
+        M : int, optional
+            Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
+            2 * M edges. Default is 16.
+        ef_construction : int, optional
+            Keyword-only. Construction search breadth. Default is 200.
+        metric : {'l2', 'ip', 'innerproduct'}, optional
+            Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
+            Vectors are not automatically normalized for cosine similarity.
+        seed : int, optional
+            Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
+            32 bits). Default is 100.
+
+        Notes
+        -----
+        Train the index or set its centroids, then add vectors before searching or
+        saving; loaded indexes are already trained. Capacity grows automatically
+        on add; resize can preallocate it. Concurrent reads are supported; an
+        overlapping mutation raises RuntimeError.
+        Data, centroids and queries must be finite float32 values within the index
+        coordinate range; other values raise ValueError.
+        With more than one thread, add links points in a nondeterministic order;
+        pass num_threads=1 for a reproducible graph.
+        The 0.7 forms HnswIndex(dim, max_elements, ...), random_seed= and build()
+        still work in 0.8, raise DeprecationWarning, and will be removed in 0.9.
+        """
+    @overload
+    @deprecated(
+        "HnswIndex(dim, max_elements, ...) is deprecated since 0.8; use "
+        "HnswIndex(dim, nbits=...), whose capacity grows on add"
+    )
     def __init__(
         self,
         dim: SupportsIndex,
@@ -405,37 +568,25 @@ class HnswIndex:
         nbits: SupportsIndex = 8,
         metric: _Metric = "l2",
         random_seed: SupportsIndex = 100,
-    ) -> None:
-        """An approximate nearest-neighbor index using HNSW.
-
-        Parameters
-        ----------
-        dim : int
-            Original vector dimension, from 64 through 65536.
-        max_elements : int
-            Storage capacity, at least 1, including removed points. Use resize to grow it.
-        M : int, optional
-            Graph connectivity, at least 2. Default is 16.
-        ef_construction : int, optional
-            Construction search breadth. Default is 200.
-        nbits : int, optional
-            Total quantization bits, 1 through 9. Default is 8.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-            automatically normalized for cosine similarity.
-        random_seed : int, optional
-            Graph random seed. Default is 100.
-
-        Notes
-        -----
-        Build or load the index before searching or saving. Concurrent reads are
-        supported; an overlapping mutation raises RuntimeError.
-        Data, centroids and queries must be finite float32 values within the index
-        coordinate range; other values raise ValueError.
-        """
-
+    ) -> None: ...
+    @overload
+    @deprecated("HnswIndex(random_seed=...) is deprecated since 0.8; use seed=")
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        *,
+        nbits: SupportsIndex,
+        num_clusters: SupportsIndex = 16,
+        M: SupportsIndex = 16,
+        ef_construction: SupportsIndex = 200,
+        metric: _Metric = "l2",
+        random_seed: SupportsIndex,
+    ) -> None: ...
     def __repr__(self) -> str:
-        """Return a one-line summary of configuration, counts and build state."""
+        """Return a one-line summary of configuration, counts and training state."""
+
+    def __len__(self) -> int:
+        """Return the number of live, searchable points."""
 
     @property
     def dim(self) -> int:
@@ -454,9 +605,24 @@ class HnswIndex:
         """Number of stored points, including removed points."""
 
     @property
-    def is_built(self) -> bool:
-        """Whether the index has been built or loaded."""
+    def is_trained(self) -> bool:
+        """Whether centroids are set, by train, set_centroids, build or load."""
 
+    @property
+    @deprecated("HnswIndex.is_built is deprecated since 0.8; use is_trained or len()")
+    def is_built(self) -> bool:
+        """Deprecated since 0.8: whether the index stores points; use len()."""
+
+    @property
+    def seed(self) -> int | None:
+        """Graph and rotation seed, or None for an index loaded from disk."""
+
+    @property
+    def cp(self) -> RaBitQKMeansParameters:
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 25, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed."""
+
+    @cp.setter
+    def cp(self, value: RaBitQKMeansParameters) -> None: ...
     @property
     def metric(self) -> Literal["l2", "ip"]:
         """Canonical metric name: 'l2' or 'ip'."""
@@ -467,8 +633,50 @@ class HnswIndex:
 
     @property
     def num_clusters(self) -> int:
-        """Number of centroids used for quantization."""
+        """Number of centroids: the configured count until centroids are set."""
 
+    def train(
+        self, x: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
+    ) -> None:
+        """Train num_clusters centroids on vectors with RaBitQKMeans and set them.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (n, dim)
+            Training vectors in the original, unpadded coordinates, with
+            n >= num_clusters. Converted to contiguous float32; a copy may be made.
+        num_threads : int, optional
+            Keyword-only. Worker count for this call. None (default) uses
+            cp.num_threads; 0 selects the available CPU count.
+
+        Notes
+        -----
+        Clusters with the settings in cp. Only centroids are trained; add assigns
+        vectors. Retraining replaces the centroids while the index stores no
+        vectors, and raises RuntimeError afterwards. A failed call leaves the index
+        unchanged.
+        """
+
+    def set_centroids(self, centroids: npt.ArrayLike) -> None:
+        """Use the given centroids instead of training.
+
+        Parameters
+        ----------
+        centroids : array_like of float, shape (num_clusters, dim)
+            Centroids in the original, unpadded coordinates. Converted to
+            contiguous float32; a copy may be made.
+
+        Notes
+        -----
+        The index counts as trained afterwards. Replacing centroids is allowed
+        while the index stores no vectors and raises RuntimeError afterwards. A
+        failed call leaves the index unchanged.
+        """
+
+    @deprecated(
+        "HnswIndex.build() is deprecated since 0.8; use set_centroids() or "
+        "train(), then add()"
+    )
     def build(
         self,
         data: npt.ArrayLike,
@@ -479,14 +687,18 @@ class HnswIndex:
     ) -> None:
         """Build the index from vectors and supplied centroid assignments.
 
+        Deprecated since 0.8 and removed in 0.9: use set_centroids() (or
+        train()) and then add(). The defaults match 0.7, including a single
+        thread.
+
         Parameters
         ----------
         data : array_like of float, shape (n, dim)
-            Vectors in the original, unpadded coordinates. Converted to contiguous
-            float32; a copy may be made.
+            Vectors in the original, unpadded coordinates. Converted to
+            contiguous float32; a copy may be made.
         centroids : array_like of float, shape (num_clusters, dim)
-            Vectors in the original, unpadded coordinates. Converted to contiguous
-            float32; a copy may be made.
+            Vectors in the original, unpadded coordinates. Converted to
+            contiguous float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,)
             Centroid ID per vector, in [0, num_clusters). Floating-point and
             boolean IDs are rejected.
@@ -494,22 +706,18 @@ class HnswIndex:
             Worker count. Default is 1; 0 selects the available CPU count.
         fast_quantization : bool, optional
             Use faster quantizer configuration. Default is False.
-
-        Notes
-        -----
-        The initial data must satisfy 1 <= n <= max_elements. Centroids and data
-        use original coordinates. The input arrays need not be retained after this
-        synchronous call.
         """
 
+    @overload
     def add(
         self,
         data: npt.ArrayLike,
+        *,
         cluster_ids: _IntegerIds | None = None,
-        num_threads: SupportsIndex = 1,
+        num_threads: SupportsIndex = 0,
         fast_quantization: bool | np.bool_ = False,
     ) -> npt.NDArray[np.uint32]:
-        """Append vectors using the existing centroids.
+        """Add vectors using the trained centroids.
 
         Parameters
         ----------
@@ -517,12 +725,14 @@ class HnswIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,), optional
-            Existing centroid IDs. None assigns each vector to its nearest
-            centroid. Centroids do not move.
+            Keyword-only. Existing centroid IDs. None assigns each vector to its
+            nearest centroid. Centroids do not move.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Keyword-only. Worker count. Default is 0, which selects the available
+            CPU count; more than one thread links nondeterministically, so pass 1
+            for a reproducible graph.
         fast_quantization : bool, optional
-            Use faster quantizer configuration. Default is False.
+            Keyword-only. Use faster quantizer configuration. Default is False.
 
         Returns
         -------
@@ -531,10 +741,23 @@ class HnswIndex:
 
         Notes
         -----
-        The stored point count plus n must fit max_elements; resize first if
-        needed. Removed IDs are not reused.
+        Requires a trained or loaded index. The first add into an empty index links
+        vectors with their exact coordinates; later adds link through the stored
+        codes. Capacity grows geometrically when needed. Removed IDs are not
+        reused. Passing the options positionally is deprecated.
         """
-
+    @overload
+    @deprecated(
+        "Passing options to HnswIndex.add() by position is deprecated since 0.8; "
+        "pass them by keyword"
+    )
+    def add(
+        self,
+        data: npt.ArrayLike,
+        cluster_ids: _IntegerIds | None,
+        num_threads: SupportsIndex = ...,
+        fast_quantization: bool | np.bool_ = ...,
+    ) -> npt.NDArray[np.uint32]: ...
     def remove(self, ids: _IntegerIds) -> int:
         """Exclude point IDs from subsequent search results.
 
@@ -569,7 +792,7 @@ class HnswIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         k : int
-            Number of neighbors requested, between 1 and max_elements.
+            Number of neighbors requested, between 1 and num_stored_points.
         ef : int, optional
             Search breadth. 0 (default) selects max(k, 10); values above the stored
             point count are clamped.
@@ -586,13 +809,13 @@ class HnswIndex:
 
         Notes
         -----
-        Returns (ids, distances), in that order. Missing neighbors have ID
-        4294967295 and distance inf. Array shapes and value ranges are checked at
-        runtime, not by static type checkers.
+        Requires a trained or loaded index. Returns (ids, distances), in that
+        order. Missing neighbors have ID 4294967295 and distance inf. Array shapes
+        and value ranges are checked at runtime, not by static type checkers.
         """
 
     def save(self, path: _Path) -> None:
-        """Save a built index to disk.
+        """Save an index with stored vectors to disk.
 
         Parameters
         ----------
@@ -602,6 +825,7 @@ class HnswIndex:
 
         Notes
         -----
+        A trained index without vectors raises RuntimeError; add vectors first.
         The saved state includes the rotation used to build the index.
         """
 
@@ -618,11 +842,11 @@ class HnswIndex:
         Returns
         -------
         index : HnswIndex
-            A built index ready for search.
+            A trained index ready for search.
         """
 
     def resize(self, max_elements: SupportsIndex) -> None:
-        """Resize the storage capacity of a built index.
+        """Change the storage capacity, for example to preallocate before add.
 
         Parameters
         ----------

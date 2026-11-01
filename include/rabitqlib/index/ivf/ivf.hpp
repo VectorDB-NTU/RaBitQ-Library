@@ -209,6 +209,9 @@ class IVF {
      *
      * The index starts with no point storage. construct rebuilds an index from
      * max_elements() rows, so it fails here until add has stored points.
+     * Pass the seed: four arguments such as (dim, num_clusters, 4, METRIC_IP)
+     * select the point-count constructor instead, which converts the metric to
+     * total_bits.
      *
      * @param dim Original input dimension
      * @param num_clusters Number of centroids that train or set_centroids provides

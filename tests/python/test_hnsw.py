@@ -190,7 +190,7 @@ def test_wrong_query_dim_raises(built_hnsw):
 def test_search_before_build_raises(query_data):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     with pytest.raises(
-        RuntimeError, match="^HnswIndex must be built or loaded before search$"
+        RuntimeError, match="^HnswIndex must be trained or loaded before search$"
     ):
         idx.search(query_data[:1], k=1)
 
@@ -284,10 +284,12 @@ def test_add_without_cluster_ids_preserves_self_retrieval(partial_hnsw, base_dat
     assert np.count_nonzero(found[:, 0] == np.arange(400, N_VECTORS)) >= 0.95 * 100
 
 
-def test_add_beyond_capacity_raises(partial_hnsw, base_data):
-    with pytest.raises(ValueError, match="capacity"):
-        partial_hnsw.add(base_data)
-    assert partial_hnsw.num_points == 400
+def test_add_beyond_capacity_grows_it(partial_hnsw, base_data):
+    capacity = partial_hnsw.max_elements
+    partial_hnsw.add(base_data)
+    assert partial_hnsw.num_points == 400 + N_VECTORS
+    # Geometric growth: at least double, so repeated small adds stay cheap.
+    assert partial_hnsw.max_elements == max(400 + N_VECTORS, 2 * capacity)
 
 
 def test_add_rejects_bad_cluster_ids(partial_hnsw, base_data):
@@ -310,7 +312,7 @@ def test_add_rejects_wrong_dimension(partial_hnsw):
 
 def test_add_before_build_raises(base_data):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
-    with pytest.raises(RuntimeError, match="built or loaded"):
+    with pytest.raises(RuntimeError, match="trained or loaded"):
         idx.add(base_data[:4])
 
 
@@ -319,9 +321,6 @@ def test_resize_grows_capacity_and_allows_more(base_data, clusters):
     idx = HnswIndex(DIM, 400, M=8, ef_construction=50, nbits=4)
     idx.build(base_data[:400], centroids, cluster_ids[:400])
     assert idx.max_elements == 400
-
-    with pytest.raises(ValueError, match="capacity"):
-        idx.add(base_data[400:])
 
     idx.resize(N_VECTORS)
     assert idx.max_elements == N_VECTORS
@@ -495,7 +494,7 @@ def test_remove_rejects_invalid_ids_without_removing_anything():
     assert idx.remove([0, 1]) == 2
 
     unbuilt = HnswIndex(64, 4, M=8, ef_construction=50, nbits=4)
-    with pytest.raises(RuntimeError, match="built or loaded"):
+    with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.remove([0])
 
 

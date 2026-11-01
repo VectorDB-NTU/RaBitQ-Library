@@ -8,12 +8,12 @@ SUMMARIES = {
     "ivf": (
         "IvfIndex(dim=64, metric='ip', nbits={bits}, num_points={live}, "
         "num_stored_points={stored}, max_elements={capacity}, "
-        "num_clusters={clusters}, initializer='flat', is_built={built})"
+        "num_clusters={clusters}, initializer='flat', is_trained={built})"
     ),
     "hnsw": (
         "HnswIndex(dim=64, metric='ip', nbits={bits}, num_points={live}, "
         "num_stored_points={stored}, max_elements={capacity}, "
-        "num_clusters={clusters}, is_built={built})"
+        "num_clusters={clusters}, is_trained={built})"
     ),
     "symqg": (
         "SymqgIndex(dim=64, metric='ip', quantization_bits={bits}, "
@@ -55,7 +55,7 @@ def test_repr_lifecycle(kind, bits, vectors, tmp_path):
         live=0,
         stored=0,
         capacity=capacity,
-        clusters=0 if kind == "hnsw" else 1,
+        clusters=16 if kind == "hnsw" else 1,
         built=False,
     )
     assert repr(index) == str(index) == before

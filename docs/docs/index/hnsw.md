@@ -13,19 +13,24 @@ degree, and index parameters.
 ### Python
 
 Run the [Quick start](../quick_start.md#build-and-search-an-ivf-index) to prepare
-`data`, `queries` and `clustering`, then use those same arrays with HNSW-RaBitQ:
+`data` and `queries`, then use those same arrays with HNSW-RaBitQ:
 
 ```python
 from rabitqlib import HnswIndex
 
-index = HnswIndex(
-    dim=data.shape[1], max_elements=len(data), M=16, ef_construction=100, nbits=4,
-)
-index.build(data, clustering.centroids, clustering.assignments)
+index = HnswIndex(data.shape[1], nbits=4, M=16, ef_construction=100)
+index.train(data)  # 16 RaBitQKMeans centroids by default
+index.add(data, num_threads=1)  # one thread gives a reproducible graph
 ids, distances = index.search(queries, k=10, ef=100)
 index.save("hnsw.index")
 loaded = HnswIndex.load("hnsw.index")
 ```
+
+`train` and `set_centroids` work as for [IVF-RaBitQ](ivf.md#training-centroids-in-python),
+with `num_clusters` centroids (default 16) and always RaBitQKMeans; `index.cp`
+starts from the same defaults with `seed`'s low 32 bits. The first `add` into the
+empty index links vectors with their exact coordinates, like the 0.7 `build`;
+later adds link through the stored codes (see [Recall after `add`](#recall-after-add)).
 
 ### C++
 
@@ -58,16 +63,19 @@ see [C++ integration](../cpp_integration.md).
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `max_elements` | Capacity; build accepts 1 through this many rows. Reserve extra capacity or call `resize` before adding beyond it. |
-| `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit; Python defaults to 8. Raw-vector storage is not supported. |
-| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. |
-| `metric`, `random_seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. |
-| `k`, `ef` | Positive result count and search window. Python requires `k <= max_elements`; omitted/zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
+| `nbits` / C++ `total_bits` | Required and, in Python, keyword-only: 1–9 total bits including the sign bit. Raw-vector storage is not supported. |
+| `num_clusters` | Python keyword, default 16: centroids `train` learns or `set_centroids` supplies. |
+| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
+| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
+| `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
+| `k`, `ef` | Positive result count and search window. Python requires `k <= num_stored_points`, so a trained index without points rejects every `k`; omitted/zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
-`random_seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
+`seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
-within the same build environment. Parallel insertion order and different toolchains
-or SIMD backends can still change results. Loading restores the saved rotation.
+within the same build environment. Python `train` and `add` default to every
+available CPU, so **default builds are not reproducible**: pass `num_threads=1` to
+`add` when you need the same graph again. Different toolchains or SIMD backends can
+still change results. Loading restores the saved rotation.
 
 Results use squared L2 or `1 - dot` estimates, ordered from smallest to largest.
 Python fills missing results with ID `2**32 - 1` and distance `+inf`; C++ returns
@@ -196,11 +204,9 @@ void HierarchicalNSW::resize(size_t new_max_elements);
   In C++, initialize the index through its parameterized constructor or `load`
   before calling `resize`.
 
-In Python:
+In Python, `add` grows the capacity when needed:
 
 ```python
-# Grow before adding; preserve any capacity already available.
-index.resize(max(index.max_elements, index.num_stored_points + len(vectors)))
 new_ids = index.add(vectors)                       # route to the nearest centroids
 # Alternatively, choose the clusters instead of the call above:
 # new_ids = index.add(vectors, cluster_ids=labels)
@@ -221,9 +227,10 @@ retrying, or rebuild to restore full reachability.
 See the shared [index count contract](usage.md#index-counts). Removed
 records still occupy capacity.
 
-`add` never grows the index: it rejects a whole batch whose size exceeds
+C++ `add` never grows the index: it rejects a whole batch whose size exceeds
 `max_elements() - num_stored_points()`, and `resize` is the only way to raise
-that. Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
+that. Python `add` calls `resize` first when the batch does not fit, to at least
+double the capacity. Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.
 

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -123,6 +124,67 @@ inline void ensure_dimension(const py::array& array, size_t expected, const char
             ", got shape " + array_shape(array)
         );
     }
+}
+
+// A seed is an integer in [0, max_seed]; bool is rejected like other integer options.
+inline uint64_t checked_seed(py::handle value, uint64_t max_seed) {
+    const std::string range =
+        "seed must be an integer in [0, " + std::to_string(max_seed) + "]";
+    if (PyBool_Check(value.ptr())) {
+        throw py::type_error(range);
+    }
+    auto integer = py::reinterpret_steal<py::object>(PyNumber_Index(value.ptr()));
+    if (!integer) {
+        PyErr_Clear();
+        throw py::type_error(range);
+    }
+    const unsigned long long seed = PyLong_AsUnsignedLongLong(integer.ptr());
+    if (PyErr_Occurred() != nullptr) {
+        PyErr_Clear();
+        throw std::invalid_argument(range);
+    }
+    if (seed > max_seed) {
+        throw std::invalid_argument(range);
+    }
+    return seed;
+}
+
+// Call only after rank validation.
+inline void check_centroid_shape(
+    const py::array& centroids, size_t num_clusters, size_t dim
+) {
+    if (static_cast<size_t>(centroids.shape(0)) != num_clusters ||
+        static_cast<size_t>(centroids.shape(1)) != dim) {
+        throw std::invalid_argument(
+            "centroids must have shape (num_clusters, dim); expected (" +
+            std::to_string(num_clusters) + ", " + std::to_string(dim) + "), got shape " +
+            array_shape(centroids)
+        );
+    }
+}
+
+// Training input rows, which must cover num_clusters centroids. Call only after
+// rank validation.
+inline size_t training_rows(const py::array& x, size_t num_clusters) {
+    const auto rows = static_cast<size_t>(x.shape(0));
+    if (rows < num_clusters) {
+        throw std::invalid_argument(
+            "x must have at least num_clusters rows; expected at least " +
+            std::to_string(num_clusters) + ", got shape " + array_shape(x)
+        );
+    }
+    return rows;
+}
+
+// The parameters for one train call: an explicit num_threads overrides cp's.
+template <typename Parameters>
+Parameters training_parameters(Parameters cp, std::optional<size_t> num_threads) {
+    if (num_threads.has_value()) {
+        cp.num_threads = static_cast<uint32_t>(
+            std::min<size_t>(*num_threads, std::numeric_limits<int>::max())
+        );
+    }
+    return cp;
 }
 
 inline MetricType metric_from_string(const std::string& metric) {

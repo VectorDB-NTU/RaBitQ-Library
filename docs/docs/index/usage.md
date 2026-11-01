@@ -17,7 +17,8 @@ storage before native processing; inputs remain unchanged.
 Data, centroids and queries must be finite. Coordinates are also limited to the
 magnitude the clustering APIs accept, `sqrt(sqrt(FLT_MAX) / (64 * dim))` (about
 `5e7` for `dim = 128`), so that squared distances and their products stay inside
-float32. `build`, `add` and `search` raise `ValueError` (C++:
+float32. `train`, `set_centroids`, `add` and `search` (and SymphonyQG `build`)
+raise `ValueError` (C++:
 `std::invalid_argument`) for NaN, infinite, or larger coordinates before changing
 the index. The C++ `quantize_*` encoders in `core/encoder.hpp` assume their
 callers have validated the input.
@@ -42,22 +43,22 @@ IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
 | `num_points` | Nonremoved points |
 | `num_stored_points` | Stored records, including removed ones |
 
-`0 <= num_points <= num_stored_points <= max_elements`. Before building, both
-point counts are zero; configured capacity may be nonzero.
-
-At build time, IVF-RaBitQ requires exactly `max_elements` input rows. HNSW-RaBitQ accepts
-1 through `max_elements` rows, so it can reserve capacity for later additions.
+`0 <= num_points <= num_stored_points <= max_elements`. Before vectors are
+added, both point counts are zero; configured capacity may be nonzero. For
+IVF-RaBitQ and HNSW-RaBitQ, `len(index)` equals `num_points`, and `is_trained`
+reports whether centroids are set (by `train`, `set_centroids`, or `load`).
 
 Removal decreases only `num_points`; slots and IDs remain occupied. Append IDs
 start at the previous `num_stored_points`. Use this stored count for ID bounds,
 and `num_points` for a live count. Counts survive save/load.
 
-IVF-RaBitQ grows automatically and has no spare logical capacity after build or append.
-HNSW-RaBitQ's `resize` changes only capacity. SymphonyQG has no incremental updates;
-all three counts are equal after build.
+IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
+HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `resize` changes
+only capacity, for example to preallocate it. SymphonyQG has no incremental
+updates; all three counts are equal after build.
 
-`repr(index)` shows dimension, metric, quantization bits, live point count and build
-state. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
+`repr(index)` shows dimension, metric, quantization bits and live point count,
+with the training state for IVF/HNSW and the build state for SymphonyQG. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
 the resolved initializer, and SymphonyQG includes its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.
 
@@ -118,7 +119,7 @@ construction, updates, and file I/O. The following contract applies to
 | Operation on the same index | Concurrent access |
 | --- | --- |
 | `search`, `search_batch`, `save`, `repr`, and property reads | May run together |
-| `build`, `add`, `remove`, `reserve`, and `resize`, where available | Require exclusive access |
+| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `resize`, and setting `cp`, where available | Require exclusive access |
 
 A conflicting call immediately raises
 `RuntimeError("Index is busy: conflicting operation in progress")`.
@@ -138,7 +139,10 @@ index updates themselves and use separate search output buffers.
 
 `num_threads=0` selects the detected available logical CPU count. Positive values
 set an upper limit, capped at that count; small workloads may use fewer workers.
-Python index methods default to one thread; clustering defaults to `0`.
+IVF-RaBitQ and HNSW-RaBitQ `train` and `add` default to `0`, as does clustering;
+`search`, the deprecated `build`, and SymphonyQG methods default to one thread.
+Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, so pass
+`num_threads=1` when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.
 

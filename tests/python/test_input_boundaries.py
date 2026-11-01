@@ -227,14 +227,15 @@ def test_path_callback_runs_before_access_guard(built_index, tmp_path):
     np.testing.assert_array_equal(restored.search(queries, 3, 32)[0], expected[0])
 
 
-@pytest.mark.parametrize("index_kind,rows", [("ivf", 79), ("hnsw", 81)])
+@pytest.mark.parametrize("index_kind,rows", [("ivf", 79), ("hnsw", 0)])
 def test_build_row_count_diagnostics(index_kind, rows):
     if index_kind == "ivf":
         index = IvfIndex(64, 80, 1, 4)
         expected = "number of data rows must match index max_elements; expected 80, got shape (79, 64)"
     else:
+        # HNSW capacity grows, so only an empty build is rejected.
         index = HnswIndex(64, 80)
-        expected = "number of data rows must be between 1 and max_elements; expected 1 to 80, got shape (81, 64)"
+        expected = "number of data rows must be at least 1; got shape (0, 64)"
     with pytest.raises(ValueError) as error:
         index.build(
             np.zeros((rows, 64)), np.zeros((1, 64)), np.zeros(rows, dtype=np.uint32)

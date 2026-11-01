@@ -246,7 +246,7 @@ def test_wrong_query_dim_raises(built_ivf):
 def test_search_before_build_raises(query_data):
     idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
     with pytest.raises(
-        RuntimeError, match="^IvfIndex must be built or loaded before search$"
+        RuntimeError, match="^IvfIndex must be trained or loaded before search$"
     ):
         idx.search(query_data[:1], k=1, nprobe=1)
 
@@ -635,7 +635,7 @@ def test_reserve_rejects_invalid_arguments():
     assert idx.max_elements == len(old)
 
     unbuilt = IvfIndex(65, 4, 1, 4)
-    with pytest.raises(RuntimeError, match="built or loaded"):
+    with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.reserve(0, 1)
 
 
@@ -663,7 +663,7 @@ def test_add_rejects_invalid_arguments():
     assert idx.max_elements == len(old)
 
     unbuilt = IvfIndex(65, 4, 1, 4)
-    with pytest.raises(RuntimeError, match="built or loaded"):
+    with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.add(new[:2])
 
 
@@ -743,7 +743,7 @@ def test_remove_rejects_invalid_ids_without_removing_anything():
     np.testing.assert_array_equal(before[1], after[1])
 
     unbuilt = IvfIndex(65, 4, 1, 4)
-    with pytest.raises(RuntimeError, match="built or loaded"):
+    with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.remove([0])
 
 

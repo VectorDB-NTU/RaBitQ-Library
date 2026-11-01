@@ -60,26 +60,26 @@ required. This example demonstrates the API, not performance.
 
 ```python
 import numpy as np
-from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
+from rabitqlib import IvfIndex
 
 rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-clustering = RaBitQKMeans(
-    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
-)
-clustering.train(data)
-index = IvfIndex(dim=64, max_elements=len(data), num_clusters=5, nbits=4, metric="l2")
-index.build(data, clustering.centroids, clustering.assignments)
+index = IvfIndex(64, 5, nbits=4, metric="l2")
+index.train(data)
+index.add(data)
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 ```
 
-IDs identify input rows; distances here estimate squared L2 distance, with smaller
-values first. Quantization remains approximate even when all clusters are probed.
+`train` learns the centroids, and `add` quantizes the vectors into their
+clusters. IDs identify added rows; distances here estimate squared L2 distance,
+with smaller values first. Quantization remains approximate even when all clusters are probed.
 The [complete quick start](https://vectordb-ntu.github.io/RaBitQ-Library/quick_start/) explains result handling,
-measures recall while varying `nprobe`, and shows save/load.
+measures recall while varying `nprobe`, and shows save/load. Code written for
+0.7 still runs in 0.8 with deprecation warnings; see the
+[migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/).
 
 For other indexes, see the [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/#minimal-workflow) and
 [SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/#minimal-workflow) examples.

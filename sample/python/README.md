@@ -6,13 +6,24 @@ with `rabitqlib>=0.7.0` and NumPy installed. When working from source,
 so the examples and native extension use matching APIs. Clustering and indexing
 both use RaBitQ Library; FAISS is needed only for `compare_with_faiss.py`.
 
-## IVF-RaBitQ: cluster, then index
+## IVF-RaBitQ
 
-`kmeans_clustering.py` uses `--method qg` (the default) for QGKMeans graph
+The indexing script trains the centroids itself unless you pass a clustering
+file:
+
+```sh
+python sample/python/ivf_rabitq_indexing.py --total-bits 5 --num-clusters 4096 \
+  data/gist/gist_base.fvecs data/gist/ivf_4096_5.index
+
+python sample/python/ivf_rabitq_querying.py \
+  data/gist/ivf_4096_5.index data/gist/gist_query.fvecs data/gist/gist_groundtruth.ivecs
+```
+
+To reuse one clustering across index configurations, cluster once and pass the
+file with `--clusters`. `kmeans_clustering.py` uses `--method qg` (the default) for QGKMeans graph
 assignment or `--method rabitq` for RaBitQKMeans flat assignment. Both make exact
 final assignments. The saved `.npz` contains float32 `centroids`, uint32
-`cluster_ids`, and `metric` (`l2` or `ip`), and can be reused across index
-configurations. Choose the method explicitly; the script does not switch based
+`cluster_ids`, and `metric` (`l2` or `ip`). Choose the method explicitly; the script does not switch based
 on the cluster count.
 
 ```sh
@@ -22,9 +33,6 @@ python sample/python/kmeans_clustering.py --method qg --num-clusters 4096 \
 python sample/python/ivf_rabitq_indexing.py --total-bits 5 \
   --clusters data/gist/clusters_4096_l2.npz \
   data/gist/gist_base.fvecs data/gist/ivf_4096_5.index
-
-python sample/python/ivf_rabitq_querying.py \
-  data/gist/ivf_4096_5.index data/gist/gist_query.fvecs data/gist/gist_groundtruth.ivecs
 ```
 
 Use the same base vectors in the same row order for clustering and indexing.
@@ -33,25 +41,25 @@ detect replaced or reordered vectors. See [QGKMeans](../../docs/docs/clustering.
 and [RaBitQKMeans](../../docs/docs/clustering.md#rabitqkmeans) for input limits and assignment
 behavior.
 
-For inner product, pass `--metric ip` to both stages and provide normalized
-training vectors. Use queries and ground truth prepared for the same metric.
+For inner product, pass `--metric ip` to every stage and provide normalized
+vectors. Use queries and ground truth prepared for the same metric.
 `--num-threads 0` uses the library's available logical CPU count; each stage accepts
 its own limit. See [threading](../../docs/docs/index/usage.md#threading-and-file-paths)
 for affinity and OpenMP placement behavior.
 
 ## HNSW-RaBitQ
 
-Use [RaBitQKMeans](../../docs/docs/clustering.md#rabitqkmeans) for this small-cluster
-example, with the same clustering file format:
+The indexing script trains 16 centroids by default (`--num-clusters`):
 
 ```sh
-python sample/python/kmeans_clustering.py --method rabitq --num-clusters 16 \
-  data/gist/gist_base.fvecs data/gist/clusters_16_l2.npz
-
 python sample/python/hnsw_rabitq_indexing.py --total-bits 5 --degree 16 \
-  --ef-construction 200 --clusters data/gist/clusters_16_l2.npz \
-  data/gist/gist_base.fvecs data/gist/hnsw_5.index
+  --ef-construction 200 data/gist/gist_base.fvecs data/gist/hnsw_5.index
 ```
+
+It also accepts `--clusters` with a file from `kmeans_clustering.py`; use
+`--method rabitq` there for a small cluster count. With more than one thread
+(`--num-threads`), the graph links vectors in a nondeterministic order; pass
+`--num-threads 1` for a reproducible index.
 
 Query with `hnsw_rabitq_querying.py`. SymphonyQG builds directly from vectors;
 use `symqg_indexing.py` and `symqg_querying.py` without a clustering stage.

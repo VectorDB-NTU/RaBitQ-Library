@@ -7,6 +7,14 @@ algorithms based on the cluster count.
 
 For installation, see [Quick start](quick_start.md#install).
 
+You do not need these classes to build an index: `IvfIndex.train` and
+`HnswIndex.train` run them for you (see
+[IVF-RaBitQ training](index/ivf.md#training-centroids-in-python)). Use them
+directly to inspect assignments, reuse one clustering across several indexes,
+or pass the result to `set_centroids` and `add(..., cluster_ids=...)`. The
+indexes train with their own defaults, including sampling at most 256 vectors
+per centroid; the classes below default to training on every vector.
+
 ## Choose a method
 
 | Class | Assignment | Recommended use | Cluster count |
@@ -118,8 +126,11 @@ and `n > k * max_points_per_centroid`, training draws
 does; Faiss enables this by default with 256. Centroid initialization and all
 Lloyd iterations use only this sample. The final centroids then assign all `n`
 vectors with the selected `final_assignment` mode, as [`assign`](#assign-new-vectors)
-does, so `assignments` and `distances` keep shape `(n,)` and can be passed
-directly to index builders.
+does, so `assignments` and `distances` keep shape `(n,)` and `assignments` can be
+passed directly to an index's `add(..., cluster_ids=...)`. C++ callers that need
+only the centroids can call `train_centroids(n, x)` instead of `train`, which
+skips this final assignment and leaves `assignments`, `distances` and
+`final_obj` empty or zero.
 
 `seed` selects the sample through a random stream separate from centroid
 initialization. Training that does not sample, because the parameter is `0` or
