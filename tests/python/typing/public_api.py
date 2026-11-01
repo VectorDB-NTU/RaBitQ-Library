@@ -18,6 +18,7 @@ from rabitqlib import (
     RaBitQKMeansIterationStats,
     RaBitQKMeansParameters,
     SymqgIndex,
+    quant,
 )
 
 
@@ -273,3 +274,32 @@ def check_paths(
         assert_type(SymqgIndex.load(filename), SymqgIndex)
     ivf.save(42)  # type: ignore[arg-type]
     HnswIndex.load(object())  # type: ignore[arg-type]
+
+
+def check_quant(x: npt.NDArray[np.float32]) -> None:
+    rotator = quant.Rotator(64, method="fht_kac", seed=0)
+    assert_type(rotator.padded_dim, int)
+    assert_type(rotator.seed, int | None)
+    assert_type(rotator.method, Literal["fht_kac", "matrix"])
+    residuals = rotator.rotate(x, num_threads=1)
+    assert_type(residuals, npt.NDArray[np.float32])
+    assert_type(quant.Rotator.from_bytes(rotator.to_bytes()), quant.Rotator)
+    codes = quant.quantize(residuals, nbits=4)
+    assert_type(codes, npt.NDArray[np.uint8])
+    assert_type(quant.quantize(residuals, nbits=9), npt.NDArray[np.uint16])
+    prefix, ex = quant.split(codes, nbits=4, prefix_bits=1)
+    assert_type(prefix, npt.NDArray[np.uint8])
+    factors = quant.code_factors(residuals, codes, nbits=4, metric="l2")
+    assert_type(factors, npt.NDArray[np.void])
+    assert_type(quant.pack_codes(ex, nbits=3), npt.NDArray[np.uint8])
+    assert_type(
+        quant.unpack_codes(quant.pack_codes(ex, nbits=3), nbits=3),
+        npt.NDArray[np.uint8],
+    )
+    assert_type(quant.padded_dim(100), int)
+    assert_type(quant.MISSING, np.uint32)
+    assert_type(quant.FACTORS_DTYPE, np.dtype[np.void])
+    assert issubclass(quant.FormatError, ValueError)
+    quant.code_factors(residuals, codes, nbits=4, metric="cosine")  # type: ignore[arg-type]
+    quant.quantize(residuals, 4)  # type: ignore[call-overload]
+    quant.Rotator(64, method="hadamard")  # type: ignore[arg-type]

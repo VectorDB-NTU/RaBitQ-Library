@@ -1,0 +1,261 @@
+"""Python boundary coverage for rabitqlib.quant layer 1: quantize, split, factors, packing."""
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+from rabitqlib import quant
+
+D = 96  # one full 64-coordinate block plus a 32-coordinate tail
+EPSILON = 1.9  # folded into the error factor (kConstEpsilon)
+
+
+def residuals(n=8, d=D, seed=0):
+    return np.random.default_rng(seed).standard_normal((n, d)).astype(np.float32)
+
+
+def code_dtype(nbits):
+    return np.uint16 if nbits == 9 else np.uint8
+
+
+def reference_factors(r, codes, nbits, metric, centroid):
+    """The published factor formulas (docs/docs/rabitq/estimator.md) in float64."""
+    r = r.astype(np.float64)
+    c = np.zeros(r.shape[1]) if centroid is None else centroid.astype(np.float64)
+    xu = codes.astype(np.float64) - (2**nbits - 1) / 2
+    l2 = np.sum(r * r, axis=1)
+    ip_r = np.sum(r * xu, axis=1)
+    ip_c = xu @ c
+    # error = scale * sqrt((ratio - 1) / (d - 1)) with ratio = |r|^2 |xu|^2 / <r, xu>^2.
+    ratio = l2 * np.sum(xu * xu, axis=1) / ip_r**2
+    scale = (2 if metric == "l2" else 1) * EPSILON * np.sqrt(l2)
+    if metric == "l2":
+        return l2 + 2 * l2 * ip_c / ip_r, -2 * l2 / ip_r, ratio, scale
+    return 1 - r @ c + l2 * ip_c / ip_r, -l2 / ip_r, ratio, scale
+
+
+def test_padded_dim():
+    assert [quant.padded_dim(d) for d in (1, 32, 33, 100, 128)] == [
+        32,
+        32,
+        64,
+        128,
+        128,
+    ]
+    with pytest.raises(ValueError, match="dim must be positive"):
+        quant.padded_dim(0)
+
+
+@pytest.mark.parametrize("nbits", range(1, 10))
+def test_quantize_codes_and_factors(nbits):
+    r = residuals()
+    codes = quant.quantize(r, nbits=nbits)
+    assert codes.dtype == code_dtype(nbits) and codes.shape == r.shape
+    assert codes.max() < 2**nbits
+    # The top bit of each code is the sign of its residual.
+    np.testing.assert_array_equal(codes >> (nbits - 1), (r > 0).astype(codes.dtype))
+    centroid = residuals(1, seed=1)[0]
+    for metric in ("l2", "ip"):
+        factors = quant.code_factors(
+            r, codes, nbits=nbits, metric=metric, centroid=centroid
+        )
+        assert factors.dtype == quant.FACTORS_DTYPE and factors.shape == (len(r),)
+        add, rescale, ratio, scale = reference_factors(
+            r, codes, nbits, metric, centroid
+        )
+        np.testing.assert_allclose(factors["add"], add, rtol=1e-4, atol=1e-4)
+        np.testing.assert_allclose(factors["rescale"], rescale, rtol=1e-4)
+        # The float32 ratio - 1 cancels at high widths, so compare the ratio itself.
+        error = factors["error"].astype(np.float64)
+        np.testing.assert_allclose((error / scale) ** 2 * (D - 1) + 1, ratio, rtol=1e-5)
+
+
+def test_fast_quantization_and_thread_counts():
+    r = residuals(n=40)
+    exact = quant.quantize(r, nbits=5, num_threads=1)
+    np.testing.assert_array_equal(quant.quantize(r, nbits=5, num_threads=0), exact)
+    fast = quant.quantize(r, nbits=5, fast_quantization=True)
+    assert fast.dtype == np.uint8 and fast.max() < 32
+    # The sign bit does not depend on the scale.
+    np.testing.assert_array_equal(fast >> 4, exact >> 4)
+    np.testing.assert_array_equal(
+        quant.quantize(r, nbits=5, fast_quantization=True, num_threads=3), fast
+    )
+
+
+@pytest.mark.parametrize("nbits", [2, 4, 9])
+def test_split_prefix_factors(nbits):
+    r = residuals()
+    codes = quant.quantize(r, nbits=nbits)
+    for prefix_bits in range(1, nbits):
+        prefix, ex = quant.split(codes, nbits=nbits, prefix_bits=prefix_bits)
+        ex_bits = nbits - prefix_bits
+        assert prefix.dtype == ex.dtype == np.uint8
+        np.testing.assert_array_equal(prefix, codes >> ex_bits)
+        np.testing.assert_array_equal(ex, codes & (2**ex_bits - 1))
+        # A prefix is itself a code of the prefix width for the same residual.
+        quant.code_factors(r, prefix, nbits=prefix_bits, metric="l2")
+
+
+@pytest.mark.parametrize("nbits", range(1, 9))
+def test_pack_round_trip(nbits):
+    codes = np.random.default_rng(nbits).integers(0, 2**nbits, (5, D), dtype=np.uint8)
+    packed = quant.pack_codes(codes, nbits=nbits)
+    assert packed.dtype == np.uint8 and packed.shape == (5, D * nbits // 8)
+    np.testing.assert_array_equal(quant.unpack_codes(packed, nbits=nbits), codes)
+    if nbits == 1:
+        np.testing.assert_array_equal(
+            packed, np.packbits(codes, axis=1, bitorder="little")
+        )
+
+
+def test_empty_inputs():
+    r = np.empty((0, D), dtype=np.float32)
+    codes = quant.quantize(r, nbits=4)
+    assert codes.shape == (0, D)
+    assert quant.code_factors(r, codes, nbits=4, metric="ip").shape == (0,)
+    assert quant.pack_codes(codes, nbits=4).shape == (0, D // 2)
+    assert quant.unpack_codes(np.empty((0, D // 2), np.uint8), nbits=4).shape == (0, D)
+    prefix, ex = quant.split(codes, nbits=4, prefix_bits=1)
+    assert prefix.shape == ex.shape == (0, D)
+
+
+def test_strided_noncontiguous_misaligned_and_memmapped_codes(tmp_path):
+    codes = np.random.default_rng(3).integers(0, 16, (6, 128), dtype=np.uint8)
+    expected = quant.pack_codes(codes, nbits=4)
+    # A column slice of a wider record buffer is read through its row stride.
+    records = np.zeros((6, 200), dtype=np.uint8)
+    records[:, 9 : 9 + 128] = codes
+    np.testing.assert_array_equal(
+        quant.pack_codes(records[:, 9 : 9 + 128], nbits=4), expected
+    )
+    # Rows that are not contiguous are copied.
+    np.testing.assert_array_equal(
+        quant.pack_codes(codes[:, ::2], nbits=4),
+        quant.pack_codes(np.ascontiguousarray(codes[:, ::2]), nbits=4),
+    )
+    np.testing.assert_array_equal(
+        quant.pack_codes(codes[::-1], nbits=4), expected[::-1]
+    )
+    mapped = np.memmap(
+        tmp_path / "codes.bin", dtype=np.uint8, mode="w+", shape=codes.shape
+    )
+    mapped[:] = codes
+    np.testing.assert_array_equal(quant.pack_codes(mapped, nbits=4), expected)
+    # Misaligned uint16 codes are copied before typed reads.
+    r = residuals()
+    wide = quant.quantize(r, nbits=9)
+    storage = np.zeros(wide.nbytes + 1, dtype=np.uint8)
+    misaligned = np.frombuffer(storage[1:].data, dtype=np.uint16).reshape(wide.shape)
+    misaligned[:] = wide
+    np.testing.assert_array_equal(
+        quant.code_factors(r, misaligned, nbits=9, metric="l2"),
+        quant.code_factors(r, wide, nbits=9, metric="l2"),
+    )
+
+
+def test_out_arguments():
+    r = residuals()
+    out = np.empty(r.shape, dtype=np.uint8)
+    assert quant.quantize(r, nbits=4, out=out) is out
+    np.testing.assert_array_equal(out, quant.quantize(r, nbits=4))
+    factors = np.empty(len(r), dtype=quant.FACTORS_DTYPE)
+    assert quant.code_factors(r, out, nbits=4, metric="l2", out=factors) is factors
+    packed = np.empty((len(r), D // 2), dtype=np.uint8)
+    assert quant.pack_codes(out, nbits=4, out=packed) is packed
+    unpacked = np.empty_like(out)
+    assert quant.unpack_codes(packed, nbits=4, out=unpacked) is unpacked
+    np.testing.assert_array_equal(unpacked, out)
+    # A row-strided output is written through its stride.
+    wide = np.zeros((len(r), 2 * D), dtype=np.uint8)
+    quant.quantize(r, nbits=4, out=wide[:, :D])
+    np.testing.assert_array_equal(wide[:, :D], out)
+
+    readonly = np.empty_like(out)
+    readonly.flags.writeable = False
+    for bad in (
+        np.empty(r.shape, dtype=np.uint16),
+        np.empty((len(r), D + 32), dtype=np.uint8),
+        readonly,
+        np.empty((len(r), 2 * D), dtype=np.uint8)[:, ::2],
+        out.tolist(),
+    ):
+        with pytest.raises(ValueError, match="out must be a writable NumPy array"):
+            quant.quantize(r, nbits=4, out=bad)
+    with pytest.raises(ValueError, match="out must be a writable, C-contiguous"):
+        quant.code_factors(
+            r, out, nbits=4, metric="l2", out=np.empty(len(r), np.float32)
+        )
+
+
+def test_rejected_arguments():
+    r = residuals()
+    codes = quant.quantize(r, nbits=4)
+    with pytest.raises(ValueError, match=r"nbits must be in \[1, 9\]; got 0"):
+        quant.quantize(r, nbits=0)
+    with pytest.raises(ValueError, match="positive multiple of 32"):
+        quant.quantize(r[:, :40], nbits=4)
+    for bad in (np.nan, np.inf):
+        nonfinite = r.copy()
+        nonfinite[2, 5] = bad
+        with pytest.raises(
+            ValueError, match="residuals must contain only finite values"
+        ):
+            quant.quantize(nonfinite, nbits=4)
+    with pytest.raises(
+        ValueError, match="residuals exceeds the safe float32 coordinate range"
+    ):
+        quant.quantize(np.full((1, D), 1e30, np.float32), nbits=4)
+    with pytest.raises(ValueError, match="metric must be 'l2' or 'ip'"):
+        quant.code_factors(r, codes, nbits=4, metric="cosine")
+    with pytest.raises(TypeError):
+        quant.code_factors(r, codes, nbits=4)  # metric is required
+    with pytest.raises(
+        ValueError, match="codes must have dtype uint8; got dtype int64"
+    ):
+        quant.code_factors(r, codes.astype(np.int64), nbits=4, metric="l2")
+    with pytest.raises(ValueError, match="codes must have dtype uint8; got dtype bool"):
+        quant.pack_codes(codes > 7, nbits=1)
+    with pytest.raises(ValueError, match="codes must have dtype uint16"):
+        quant.code_factors(r, codes, nbits=9, metric="l2")
+    with pytest.raises(ValueError, match="codes must have the shape of residuals"):
+        quant.code_factors(r, codes[:4], nbits=4, metric="l2")
+    with pytest.raises(ValueError, match=r"codes values must be below 2\*\*nbits = 8"):
+        quant.code_factors(r, codes, nbits=3, metric="l2")
+    with pytest.raises(
+        ValueError, match="codes row 0 for residuals row 0: code does not"
+    ):
+        quant.code_factors(-r, codes, nbits=4, metric="l2")
+    with pytest.raises(ValueError, match=r"centroid must have shape \(96,\)"):
+        quant.code_factors(r, codes, nbits=4, metric="l2", centroid=np.zeros(64))
+    with pytest.raises(ValueError, match="centroid must contain only finite values"):
+        quant.code_factors(r, codes, nbits=4, metric="l2", centroid=np.full(D, np.nan))
+    with pytest.raises(ValueError, match=r"prefix_bits must be in \[1, 3\]"):
+        quant.split(codes, nbits=4, prefix_bits=4)
+    with pytest.raises(ValueError, match=r"nbits must be in \[1, 8\]; got 9"):
+        quant.pack_codes(codes, nbits=9)
+    with pytest.raises(
+        ValueError, match="packed must have d \\* nbits / 8 bytes per row"
+    ):
+        quant.unpack_codes(np.zeros((2, 10), np.uint8), nbits=3)
+    with pytest.raises(
+        ValueError, match="fast_quantization requires a working dimension"
+    ):
+        quant.quantize(
+            np.zeros((1, 65568), np.float32), nbits=2, fast_quantization=True
+        )
+
+
+@pytest.mark.parametrize("nbits", range(1, 9))
+def test_golden_packed_codes(nbits):
+    """Packed-codes version 1 is frozen; see tests/python/fixtures/quant/README.md."""
+    assert quant.PACKED_CODES_VERSION == 1
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "quant"
+    golden = (fixtures / f"packed_codes_nbits{nbits}_n3_d96.bin").read_bytes()
+    i, j = np.meshgrid(np.arange(3), np.arange(96), indexing="ij")
+    codes = ((i * 37 + j * 11 + (j // 32) * 5) % (1 << nbits)).astype(np.uint8)
+    assert quant.pack_codes(codes, nbits=nbits).tobytes() == golden
+    unpacked = quant.unpack_codes(
+        np.frombuffer(golden, np.uint8).reshape(3, -1), nbits=nbits
+    )
+    np.testing.assert_array_equal(unpacked, codes)
