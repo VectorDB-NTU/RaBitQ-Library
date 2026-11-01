@@ -1,6 +1,6 @@
 # Graph benchmark
 
-RaBitQ-Library results were measured with **0.7.1 on 2026-10-23 (Asia/Singapore)**.
+RaBitQ-Library results were measured with **0.8.0 on 2026-11-01 (Asia/Singapore)**.
 Each baseline retains its latest measurement and was not rerun.
 See the [source revisions, environments and comparison limits](bench.md#package-installation).
 
@@ -25,11 +25,11 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:gist1m:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| SymphonyQG raw | 0.00 | 31.45 | 31.45 | 3.34 | 7.51 |
-| SymphonyQG 4-bit | 0.00 | 30.69 | 30.69 | 1.87 | 4.39 |
-| SymphonyQG 8-bit | 0.00 | 32.33 | 32.33 | 2.08 | 4.84 |
-| HNSW-RaBitQ 1+4 | 1.28 | 70.72 | 72.00 | 0.37 | 0.72 |
-| HNSW-RaBitQ 1+8 | 1.24 | 76.69 | 77.93 | 0.58 | 1.16 |
+| SymphonyQG raw | 0.00 | 35.67 | 35.67 | 3.23 | 7.51 |
+| SymphonyQG 4-bit | 0.00 | 31.45 | 31.45 | 1.79 | 4.39 |
+| SymphonyQG 8-bit | 0.00 | 33.30 | 33.30 | 2.01 | 4.84 |
+| HNSW-RaBitQ 1+4 | 1.33 | 70.72 | 72.05 | 0.33 | 0.72 |
+| HNSW-RaBitQ 1+8 | 1.46 | 74.19 | 75.64 | 0.55 | 1.16 |
 | Faiss HNSW Flat | 0.00 | 78.94 | 78.94 | 1.61 | 3.71 |
 | Faiss HNSW SQ4 | 1.06 | 55.11 | 56.17 | 0.24 | 0.58 |
 | Faiss HNSW SQ8 | 1.08 | 47.12 | 48.20 | 0.42 | 1.03 |
@@ -44,11 +44,11 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:dbpedia:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| SymphonyQG raw | 0.00 | 50.55 | 50.55 | 4.94 | 11.79 |
-| SymphonyQG 4-bit | 0.00 | 50.14 | 50.14 | 2.72 | 6.80 |
-| SymphonyQG 8-bit | 0.00 | 51.26 | 51.26 | 3.02 | 7.51 |
-| HNSW-RaBitQ 1+4 | 1.56 | 115.03 | 116.60 | 0.49 | 1.05 |
-| HNSW-RaBitQ 1+8 | 1.70 | 125.33 | 127.03 | 0.81 | 1.76 |
+| SymphonyQG raw | 0.00 | 57.30 | 57.30 | 5.27 | 11.79 |
+| SymphonyQG 4-bit | 0.00 | 51.70 | 51.70 | 2.79 | 6.80 |
+| SymphonyQG 8-bit | 0.00 | 52.69 | 52.69 | 3.24 | 7.51 |
+| HNSW-RaBitQ 1+4 | 1.49 | 112.24 | 113.73 | 0.52 | 1.05 |
+| HNSW-RaBitQ 1+8 | 1.58 | 124.77 | 126.35 | 0.80 | 1.76 |
 | Faiss HNSW Flat | 0.00 | 147.53 | 147.53 | 2.69 | 5.85 |
 | Faiss HNSW SQ4 | 1.74 | 101.82 | 103.57 | 0.36 | 0.85 |
 | Faiss HNSW SQ8 | 1.79 | 80.66 | 82.45 | 0.64 | 1.56 |

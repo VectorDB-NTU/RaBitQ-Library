@@ -14,11 +14,11 @@ differ; this is neither an exact-recall nor an equal-memory comparison.
 
 | Configuration | Measured Recall@10 | Queries / second | Index GiB | Selected search setting |
 | --- | ---: | ---: | ---: | --- |
-| IVF-RaBitQ · 5-bit | 92.82% | 1,038 | 0.60 | `nprobe=128` |
-| HNSW-RaBitQ · 5-bit | 92.70% | 1,866 | 0.72 | `ef=512` |
-| SymphonyQG · 4-bit | 90.36% | 3,086 | 4.39 | `ef=512` |
+| IVF-RaBitQ · 5-bit | 92.82% | 1,025 | 0.60 | `nprobe=128` |
+| HNSW-RaBitQ · 5-bit | 92.80% | 2,042 | 0.72 | `ef=512` |
+| SymphonyQG · 4-bit | 90.71% | 3,062 | 4.39 | `ef=512` |
 
-These use the 0.7.1 measurements with one search thread and one query per call.
+These use the 0.8.0 measurements with one search thread and one query per call.
 Each setting has one timing pass. QPS includes Python call overhead after warm-up
 and excludes loading. Index size is serialized storage including sidecars, not
 resident or peak RAM. The figure and this table are a static export:
@@ -72,10 +72,10 @@ L2 ground truth for OpenAI.
 | CPU | One Intel Xeon Gold 6418H, 24 cores, 48 hardware threads |
 | Construction / clustering | 48 threads |
 | Query throughput | 1 process, 1 search thread, 1 query per call |
-| Platform | Ubuntu 22.04, x86-64; RaBitQ 0.7.1: Linux 6.8.0-138-generic; retained baselines: Linux 6.8.0-84-generic |
+| Platform | Ubuntu 22.04, x86-64; RaBitQ 0.8.0: Linux 6.8.0-138-generic; retained baselines: Linux 6.8.0-84-generic |
 | Python / NumPy | 3.13.15 / 2.5.2 |
-| Compiler / CMake | RaBitQ 0.7.1: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; retained baselines: GCC 13.1.0 / 3.28.3, Release |
-| RaBitQ-Library | 0.7.1, measured 2026-10-23 (Asia/Singapore) |
+| Compiler / CMake | RaBitQ 0.8.0: GCC 14.3.0 / 3.28.3, Release, native optimization OFF; retained baselines: GCC 13.1.0 / 3.28.3, Release |
+| RaBitQ-Library | 0.8.0, measured 2026-11-01 (Asia/Singapore) |
 | Baselines | Faiss 1.15.0, SuperKMeans 0.2.0; Intel MKL 2020.4, GNU OpenMP |
 
 ## Construction and search settings
@@ -98,7 +98,7 @@ index loading. Each setting has one timing pass.
 Each method has one build or fit per dataset; results do not measure run-to-run
 variation.
 The committed CSVs support checking the displayed tables and plotted points,
-but do not include raw run logs or measurement binaries. The 0.7.1 raw records,
+but do not include raw run logs or measurement binaries. The 0.8.0 raw records,
 logs, indexes, source/build manifest and validation logs are not published.
 Historical baseline raw logs and
 binaries are not included. No run-to-run or shared-host noise correction is
@@ -106,14 +106,12 @@ applied. The experiments in the cited papers are separate measurements.
 
 ## Package installation
 
-The RaBitQ-Library rows and curves were refreshed on 2026-10-23 (Asia/Singapore)
-using a locally built 0.7.1 wheel. The measurement checkout was
-`1f2a271fea16afabee63a96cf15ecbb3ff1c3723`, with only the package versions in
-`CMakeLists.txt` and `pyproject.toml` changed from 0.7.0 to 0.7.1 before building.
-The SHA-256 of that `git diff --binary` snapshot was
-`c678630e695c45434b1c5296c8b37404abc66f1739a97d9ffe7550f41de68432`.
-The measured extension SHA-256 was
-`c80b90dc666006c5bdcf9884e445da288b8f280f53232d0560c1ff55d4a06d4d`.
+The RaBitQ-Library rows and curves were refreshed on 2026-11-01 (Asia/Singapore)
+using a wheel built locally from the `v0.8.0` tag
+(`4768b74fe9595f87c8298287b034cee5cecd645a`) without local changes. The wheel
+SHA-256 was `cb498a7c7aa3a4905dac204e0628daf59c50c6ebddaadf7b54565b87c11b2a03`,
+and the measured extension SHA-256 was
+`a375e636bb0bf89d07039085bfab866fdab9c790dca5189388792d7dd5427b40`.
 
 The latest available Faiss and SuperKMeans measurements are retained unchanged from
 snapshot `a332c1ce97588aaed4f6a8a5476f84a81f947313`; they were not rerun.
@@ -126,23 +124,21 @@ To use the measured library source, start in a separate checkout and
 activate your benchmark Python environment:
 
 ```bash
-git clone --no-checkout https://github.com/VectorDB-NTU/RaBitQ-Library.git RaBitQ-benchmark-snapshot
+git clone --branch v0.8.0 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git RaBitQ-benchmark-snapshot
 cd RaBitQ-benchmark-snapshot
-git checkout --detach 1f2a271fea16afabee63a96cf15ecbb3ff1c3723
 ```
 
-Set the two package version declarations to 0.7.1 to reproduce the wheel metadata;
-the library code is unchanged from that commit. The retained baseline snapshot
+The retained baseline snapshot
 does not identify its original measurement binaries, whose exact reproduction
 remains unverified. For any new measurement, record the source commit, local changes,
 compiler and build options, and use a separate output directory.
 
 Use a Python 3.13 environment on Ubuntu x86-64. Ubuntu 22.04 needs a package
-source providing `g++-13` and the `multiverse` component for MKL.
+source providing `g++-13` and `g++-14`, and the `multiverse` component for MKL.
 
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential g++-13 git numactl curl \
+sudo apt-get install build-essential g++-13 g++-14 git numactl curl \
   libmkl-dev libmkl-rt libmkl-gnu-thread
 
 python benchmarks/install_baselines.py --jobs 12
@@ -155,9 +151,18 @@ and verification records are saved in `build/benchmark-baselines/`.
 Use `--dry-run` to check prerequisites and print the installation commands
 without running them. The installer defaults to the historical GCC 13 toolchain
 and builds RaBitQ with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=ON`; it does not
-recreate the GCC 14.3.0, native-optimization-OFF wheel used for the 0.7.1
-measurements. Match the recorded compiler and native-optimization setting when
-comparing new library timings.
+recreate the GCC 14.3.0, native-optimization-OFF wheel used for the 0.8.0
+measurements. That wheel was built and installed in the same environment with:
+
+```bash
+python -m pip wheel . --no-build-isolation --no-deps -w build/benchmark-wheel \
+  -Ccmake.define.CMAKE_CXX_COMPILER=g++-14 -Ccmake.define.CMAKE_BUILD_TYPE=Release \
+  -Ccmake.define.RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF
+python -m pip install --no-deps --force-reinstall build/benchmark-wheel/rabitqlib-0.8.0-*.whl
+```
+
+Match the recorded compiler and native-optimization setting when comparing new
+library timings.
 
 ## Data and reproduction
 

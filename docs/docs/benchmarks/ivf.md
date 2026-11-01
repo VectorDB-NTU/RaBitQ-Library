@@ -1,6 +1,6 @@
 # IVF-RaBitQ benchmark
 
-RaBitQ-Library results were measured with **0.7.1 on 2026-10-23 (Asia/Singapore)**.
+RaBitQ-Library results were measured with **0.8.0 on 2026-11-01 (Asia/Singapore)**.
 Each baseline retains its latest measurement and was not rerun.
 See the [source revisions, environments and comparison limits](bench.md#package-installation).
 
@@ -25,9 +25,9 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:gist1m:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| IVF-RaBitQ raw | 15.03 | 1.50 | 16.53 | 1.61 | 3.73 |
-| IVF-RaBitQ 1+4 | 14.97 | 1.95 | 16.92 | 0.28 | 0.60 |
-| IVF-RaBitQ 1+8 | 14.81 | 7.23 | 22.04 | 0.46 | 1.05 |
+| IVF-RaBitQ raw | 14.83 | 2.15 | 16.98 | 1.58 | 3.73 |
+| IVF-RaBitQ 1+4 | 14.71 | 2.54 | 17.24 | 0.28 | 0.60 |
+| IVF-RaBitQ 1+8 | 14.57 | 7.73 | 22.30 | 0.46 | 1.05 |
 | Faiss IVF RaBitQfs raw + RFlat | 41.61 | 6.76 | 48.37 | 1.58 | 3.73 |
 | Faiss IVF RaBitQfs 1+4 | 41.24 | 13.16 | 54.40 | 0.29 | 0.68 |
 | Faiss IVF RaBitQfs 1+8 | 41.38 | 39.82 | 81.20 | 0.52 | 1.19 |
@@ -44,9 +44,9 @@ See [figure definitions](bench.md#reading-the-figures) and
 <!-- indexing:dbpedia:start -->
 | Method | Train s | Construct s | Total s | Save s | Index GiB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| IVF-RaBitQ raw | 23.97 | 2.15 | 26.12 | 2.54 | 5.95 |
-| IVF-RaBitQ 1+4 | 23.79 | 3.22 | 27.01 | 0.42 | 0.95 |
-| IVF-RaBitQ 1+8 | 24.11 | 12.74 | 36.85 | 0.70 | 1.67 |
+| IVF-RaBitQ raw | 23.67 | 3.66 | 27.32 | 2.64 | 5.95 |
+| IVF-RaBitQ 1+4 | 23.87 | 4.13 | 28.00 | 0.41 | 0.95 |
+| IVF-RaBitQ 1+8 | 23.81 | 13.50 | 37.31 | 0.70 | 1.67 |
 | Faiss IVF RaBitQfs raw + RFlat | 85.29 | 12.97 | 98.26 | 2.71 | 6.02 |
 | Faiss IVF RaBitQfs 1+4 | 86.94 | 28.05 | 114.99 | 0.60 | 1.33 |
 | Faiss IVF RaBitQfs 1+8 | 119.86 | 91.11 | 210.97 | 1.00 | 2.34 |

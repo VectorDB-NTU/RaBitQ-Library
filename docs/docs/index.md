@@ -50,7 +50,7 @@ of clusters probed to balance storage, recall, and query time.
 
 **Updates:** append and remove vectors.
 
-**GIST1M, 5-bit:** 1,038 QPS at 92.8% Recall@10; 0.60 GiB index.
+**GIST1M, 5-bit:** 1,025 QPS at 92.8% Recall@10; 0.60 GiB index.
 
 </div>
 
@@ -63,7 +63,7 @@ search window and graph degree alongside the code precision.
 
 **Updates:** append and remove vectors.
 
-**GIST1M, 5-bit:** 1,866 QPS at 92.7% Recall@10; 0.72 GiB index.
+**GIST1M, 5-bit:** 2,042 QPS at 92.8% Recall@10; 0.72 GiB index.
 
 </div>
 
@@ -76,7 +76,7 @@ Combine batched neighbor scoring with raw or 4/8-bit vector storage.
 
 **Updates:** rebuild to change the dataset.
 
-**GIST1M, 4-bit:** 3,086 QPS at 90.4% Recall@10; 4.39 GiB index.
+**GIST1M, 4-bit:** 3,062 QPS at 90.7% Recall@10; 4.39 GiB index.
 
 </div>
 
@@ -96,7 +96,7 @@ For input shapes, distance conventions, memory estimates, and threading, see
 ## Compare measured performance
 
 The GIST1M numbers above are the fastest measured setting with Recall@10 ≥ 90%,
-using one search thread and one query per call with RaBitQ-Library 0.7.1; index
+using one search thread and one query per call with RaBitQ-Library 0.8.0; index
 size is serialized storage. See the [benchmark results](benchmarks/bench.md#key-results)
 for datasets, baselines, settings, and limitations. Evaluate recall and query time
 on your own dataset when choosing an index.
