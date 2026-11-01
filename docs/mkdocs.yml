@@ -13,6 +13,7 @@ nav:
   - Installation: installation.md
   - C++ Integration: cpp_integration.md
   - Release notes:
+      - "0.8.1": releases/0.8.1.md
       - "0.8.0": releases/0.8.0.md
       - "0.7.2": releases/0.7.2.md
       - "0.7.1": releases/0.7.1.md

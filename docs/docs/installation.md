@@ -1,6 +1,6 @@
 # Installation
 
-Platform requirements and source installation for RaBitQ Library **0.8.0**.
+Platform requirements and source installation for RaBitQ Library **0.8.1**.
 For the first Python example, see [Quick Start](quick_start.md).
 
 ## Requirements
@@ -40,7 +40,7 @@ build can use scalar kernels without the FastScan CPU baseline.
 ## Python wheels
 
 ```bash
-python -m pip install "rabitqlib>=0.8.0"
+python -m pip install "rabitqlib>=0.8.1"
 ```
 
 For changes from 0.6.0, see the [0.7.0 upgrade notes](releases/0.7.0.md).
@@ -61,11 +61,11 @@ importing those classes. Array shapes and parameter ranges are still checked at 
 
 ## Get the source
 
-For Python source builds or C++ use, obtain the 0.8.0 checkout once. With Git
+For Python source builds or C++ use, obtain the 0.8.1 checkout once. With Git
 installed, run:
 
 ```bash
-git clone --branch v0.8.0 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git
+git clone --branch v0.8.1 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git
 cd RaBitQ-Library
 ```
 

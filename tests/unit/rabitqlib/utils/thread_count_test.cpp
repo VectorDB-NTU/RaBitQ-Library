@@ -19,7 +19,10 @@
 TEST(ThreadCount, AutomaticAndOversizedRequestsUseAvailableCount) {
     const size_t available = rabitqlib::total_threads();
     ASSERT_GE(available, 1U);
-    EXPECT_EQ(rabitqlib::resolve_num_threads(0), available);
+    EXPECT_EQ(
+        rabitqlib::resolve_num_threads(0),
+        std::min(available, static_cast<size_t>(omp_get_max_threads()))
+    );
     EXPECT_EQ(rabitqlib::resolve_num_threads(1), 1U);
     EXPECT_EQ(rabitqlib::resolve_num_threads(available), available);
     EXPECT_EQ(rabitqlib::resolve_num_threads(available + 1), available);
@@ -29,6 +32,37 @@ TEST(ThreadCount, AutomaticAndOversizedRequestsUseAvailableCount) {
     if (available > 1) {
         EXPECT_EQ(rabitqlib::resolve_num_threads(available - 1), available - 1);
     }
+}
+
+// Applications such as txtai set OMP_NUM_THREADS=1 on macOS so that coexisting
+// OpenMP runtimes stay single-threaded; automatic teams must respect that limit.
+TEST(ThreadCount, AutomaticRequestsRespectOpenMpThreadLimit) {
+    const int original = omp_get_max_threads();
+    struct RestoreLimit {
+        int limit;
+        ~RestoreLimit() { omp_set_num_threads(limit); }
+    } restore{original};
+    const size_t available = rabitqlib::total_threads();
+
+    omp_set_num_threads(1);
+    EXPECT_EQ(rabitqlib::default_threads(), 1U);
+    EXPECT_EQ(rabitqlib::resolve_num_threads(0), 1U);
+    EXPECT_EQ(rabitqlib::detail::openmp_team_size(0, 100), 1);
+    rabitqlib::index_detail::parallel_for(0, 19, 0, [](size_t, size_t worker) {
+        EXPECT_EQ(worker, 0U);
+    });
+    // Explicit requests are capped only by the available CPUs.
+    EXPECT_EQ(rabitqlib::resolve_num_threads(2), std::min<size_t>(2, available));
+    EXPECT_EQ(
+        rabitqlib::resolve_num_threads(std::numeric_limits<size_t>::max()), available
+    );
+
+    if (available >= 2) {
+        omp_set_num_threads(2);
+        EXPECT_EQ(rabitqlib::resolve_num_threads(0), 2U);
+    }
+    omp_set_num_threads(static_cast<int>(available) + 1);
+    EXPECT_EQ(rabitqlib::resolve_num_threads(0), available);
 }
 
 #if defined(__linux__)
@@ -58,8 +92,11 @@ TEST(ThreadCount, AutomaticAndExplicitRequestsRespectAffinity) {
     ASSERT_GT(available, 0U);
     ASSERT_EQ(sched_setaffinity(0, sizeof(restricted), &restricted), 0);
     EXPECT_EQ(rabitqlib::total_threads(), available);
+    const size_t automatic =
+        std::min(available, static_cast<size_t>(omp_get_max_threads()));
     for (size_t requested : {size_t{0}, size_t{1}, std::numeric_limits<size_t>::max()}) {
-        const size_t expected = requested == 1 ? 1 : available;
+        const size_t expected =
+            requested == 1 ? 1 : (requested == 0 ? automatic : available);
         EXPECT_EQ(rabitqlib::resolve_num_threads(requested), expected);
         rabitqlib::index_detail::parallel_for(0, 19, requested, [&](size_t, size_t worker) {
             EXPECT_LT(worker, expected);
@@ -272,7 +309,13 @@ TEST(ThreadCount, OpenMpTeamSizeIsPositiveAndBounded) {
     EXPECT_EQ(rabitqlib::detail::openmp_team_size(1, 100), 1);
     EXPECT_EQ(rabitqlib::detail::openmp_team_size(0, 1), 1);
     EXPECT_EQ(
-        rabitqlib::detail::openmp_team_size(0, std::numeric_limits<size_t>::max()),
+        rabitqlib::detail::openmp_team_size(
+            std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()
+        ),
         static_cast<int>(std::min<size_t>(available, std::numeric_limits<int>::max()))
+    );
+    EXPECT_EQ(
+        rabitqlib::detail::openmp_team_size(0, std::numeric_limits<size_t>::max()),
+        static_cast<int>(rabitqlib::default_threads())
     );
 }

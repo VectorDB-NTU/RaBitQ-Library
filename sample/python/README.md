@@ -1,7 +1,7 @@
 # Python examples
 
 Run these commands from the repository root in your project Python environment
-with `rabitqlib>=0.8.0` and NumPy installed. When working from source,
+with `rabitqlib>=0.8.1` and NumPy installed. When working from source,
 [install the library from the same checkout](../../.github/CONTRIBUTING.md#python-changes)
 so the examples and native extension use matching APIs. Clustering and indexing
 both use RaBitQ Library; FAISS is needed only for `compare_with_faiss.py`.
@@ -43,9 +43,10 @@ behavior.
 
 For inner product, pass `--metric ip` to every stage and provide normalized
 vectors. Use queries and ground truth prepared for the same metric.
-`--num-threads 0` uses the library's available logical CPU count; each stage accepts
-its own limit. See [threading](../../docs/docs/index/usage.md#threading-and-file-paths)
-for affinity and OpenMP placement behavior.
+`--num-threads 0` uses the library's available logical CPU count, capped by
+`OMP_NUM_THREADS`; each stage accepts its own limit. See
+[threading](../../docs/docs/index/usage.md#threading-and-file-paths) for affinity
+and OpenMP placement behavior.
 
 ## HNSW-RaBitQ
 

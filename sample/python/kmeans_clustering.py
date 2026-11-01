@@ -5,7 +5,7 @@ from time import time
 
 import numpy as np
 from rabitqlib import FinalAssignmentMode, QGKMeans, RaBitQKMeans
-from rabitqlib._rabitqlib import _available_cpu_count
+from rabitqlib._rabitqlib import _available_cpu_count, _default_thread_count
 
 from utils import read_fvecs
 
@@ -26,9 +26,10 @@ def cluster_data(
     if method not in ("rabitq", "qg"):
         raise ValueError("method must be rabitq or qg")
     clustering_type = RaBitQKMeans if method == "rabitq" else QGKMeans
-    available_threads = _available_cpu_count()
     threads = (
-        available_threads if num_threads == 0 else min(num_threads, available_threads)
+        _default_thread_count()
+        if num_threads == 0
+        else min(num_threads, _available_cpu_count())
     )
     print(f"Clustering metric: {metric.upper()}, threads: {threads}")
     kmeans = clustering_type(

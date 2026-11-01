@@ -1,14 +1,14 @@
 # Quick start
 
 Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
-**0.8.0** and uses synthetic data, so no dataset download is required. Coming from 0.7?
+**0.8.1** and uses synthetic data, so no dataset download is required. Coming from 0.7?
 See the [migration guide](python_migration.md).
 For C++, go directly to [C++ integration](cpp_integration.md).
 
 ## Install
 
 ```bash
-python -m pip install "rabitqlib>=0.8.0"
+python -m pip install "rabitqlib>=0.8.1"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64 and
@@ -47,9 +47,9 @@ print(ids[0])
 iterations on at most 256 sampled vectors per centroid, spherical k-means for
 `metric="ip"`, and the index `seed`. Change `index.cp` before training to tune
 them, or call `index.set_centroids(centroids)` to use centroids you computed
-elsewhere. `train` and `add` use every available CPU by default; pass
-`num_threads=` to limit them. Without `seed`, each index draws a random rotation
-seed and reports it as `index.seed`.
+elsewhere. `train` and `add` use every available CPU by default, capped by
+`OMP_NUM_THREADS`; pass `num_threads=` to limit them. Without `seed`, each index
+draws a random rotation seed and reports it as `index.seed`.
 
 ## Read the results
 

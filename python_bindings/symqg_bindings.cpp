@@ -381,7 +381,8 @@ ef : int, optional
     Search breadth. None or 0 (default) selects max(k, 10); smaller values
     are raised to k.
 num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count.
+    Worker count. Default is 1; 0 selects the available CPU count,
+    capped by OMP_NUM_THREADS.
 
 Returns
 -------

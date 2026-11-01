@@ -108,7 +108,7 @@ void bind_training_parameters(py::class_<Parameters>& binding) {
         .def_readwrite(
             "num_threads",
             &Parameters::num_threads,
-            R"doc(Worker count; 0 selects the available CPU count. Default is 0.)doc"
+            R"doc(Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0.)doc"
         )
         .def_readwrite(
             "final_assignment",

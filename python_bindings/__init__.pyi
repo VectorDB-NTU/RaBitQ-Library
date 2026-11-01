@@ -237,7 +237,8 @@ class IvfIndex:
             n >= num_clusters. Converted to contiguous float32; a copy may be made.
         num_threads : int, optional
             Keyword-only. Worker count for this call. None (default) uses
-            cp.num_threads; 0 selects the available CPU count.
+            cp.num_threads; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Notes
         -----
@@ -294,7 +295,8 @@ class IvfIndex:
             Centroid ID per vector, in [0, num_clusters). Floating-point and
             boolean IDs are rejected.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
         fast_quantization : bool, optional
             Use faster quantizer configuration. Default is False.
         """
@@ -390,7 +392,8 @@ class IvfIndex:
             Enable HACC. None (default) selects it for 4-9 bits and standard
             FastScan otherwise. Raw storage uses standard FastScan.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -648,7 +651,8 @@ class HnswIndex:
             n >= num_clusters. Converted to contiguous float32; a copy may be made.
         num_threads : int, optional
             Keyword-only. Worker count for this call. None (default) uses
-            cp.num_threads; 0 selects the available CPU count.
+            cp.num_threads; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Notes
         -----
@@ -704,7 +708,8 @@ class HnswIndex:
             Centroid ID per vector, in [0, num_clusters). Floating-point and
             boolean IDs are rejected.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
         fast_quantization : bool, optional
             Use faster quantizer configuration. Default is False.
         """
@@ -798,7 +803,8 @@ class HnswIndex:
             Search breadth. None or 0 (default) selects max(k, 10); values above the stored
             point count are clamped.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -1111,7 +1117,8 @@ class SymqgIndex:
         ef_construction : int
             Positive construction search breadth fitting uint32.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
         init : {'pipnn', 'random'}, optional
             Graph initialization method. Default is 'pipnn'.
         """
@@ -1136,7 +1143,8 @@ class SymqgIndex:
             Search breadth. None or 0 (default) selects max(k, 10); smaller values
             are raised to k.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -1222,7 +1230,8 @@ class QGKMeans:
         Stop when the absolute relative objective change is at most this
         threshold. Default is 0.0.
     num_threads : int, optional
-        Worker count; 0 selects the available CPU count. Default is 0.
+        Worker count; 0 selects the available CPU count,
+        capped by OMP_NUM_THREADS. Default is 0.
     final_assignment : FinalAssignmentMode, optional
         Approximate uses the training assignment method; Exact uses exhaustive
         assignment against final centroids. Default is
@@ -1306,7 +1315,8 @@ class QGKMeans:
             Stop when the absolute relative objective change is at most this
             threshold. Default is 0.0.
         num_threads : int, optional
-            Worker count; 0 selects the available CPU count. Default is 0.
+            Worker count; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS. Default is 0.
         final_assignment : FinalAssignmentMode, optional
             Approximate uses the training assignment method; Exact uses exhaustive
             assignment against final centroids. Default is
@@ -1464,7 +1474,7 @@ class QGKMeansParameters:
 
     @property
     def num_threads(self) -> int:
-        """Worker count; 0 selects the available CPU count. Default is 0."""
+        """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
     @num_threads.setter
     def num_threads(self, value: SupportsIndex) -> None: ...
 
@@ -1528,7 +1538,8 @@ class RaBitQKMeans:
         Stop when the absolute relative objective change is at most this
         threshold. Default is 0.0.
     num_threads : int, optional
-        Worker count; 0 selects the available CPU count. Default is 0.
+        Worker count; 0 selects the available CPU count,
+        capped by OMP_NUM_THREADS. Default is 0.
     final_assignment : FinalAssignmentMode, optional
         Approximate uses the training assignment method; Exact uses exhaustive
         assignment against final centroids. Default is
@@ -1604,7 +1615,8 @@ class RaBitQKMeans:
             Stop when the absolute relative objective change is at most this
             threshold. Default is 0.0.
         num_threads : int, optional
-            Worker count; 0 selects the available CPU count. Default is 0.
+            Worker count; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS. Default is 0.
         final_assignment : FinalAssignmentMode, optional
             Approximate uses the training assignment method; Exact uses exhaustive
             assignment against final centroids. Default is
@@ -1760,7 +1772,7 @@ class RaBitQKMeansParameters:
 
     @property
     def num_threads(self) -> int:
-        """Worker count; 0 selects the available CPU count. Default is 0."""
+        """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
     @num_threads.setter
     def num_threads(self, value: SupportsIndex) -> None: ...
 

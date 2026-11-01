@@ -563,7 +563,7 @@ x : array_like of float, shape (n, dim)
     n >= num_clusters. Converted to contiguous float32; a copy may be made.
 num_threads : int, optional
     Keyword-only. Worker count for this call. None (default) uses
-    cp.num_threads; 0 selects the available CPU count.
+    cp.num_threads; 0 selects the available CPU count, capped by OMP_NUM_THREADS.
 
 Notes
 -----
@@ -672,7 +672,8 @@ high_accuracy : bool, optional
     Enable HACC. None (default) selects it for 4-9 bits and standard
     FastScan otherwise. Raw storage uses standard FastScan.
 num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count.
+    Worker count. Default is 1; 0 selects the available CPU count,
+    capped by OMP_NUM_THREADS.
 
 Returns
 -------

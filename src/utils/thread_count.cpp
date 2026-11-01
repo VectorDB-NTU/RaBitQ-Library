@@ -63,4 +63,15 @@ size_t total_threads() {
     return threads == 0 ? 1 : threads;
 }
 
+size_t default_threads() {
+    const size_t available = total_threads();
+#if RABITQ_USE_OPENMP && defined(_OPENMP)
+    const int limit = omp_get_max_threads();
+    if (limit > 0) {
+        return std::min(available, static_cast<size_t>(limit));
+    }
+#endif
+    return available;
+}
+
 }  // namespace rabitqlib

@@ -17,6 +17,7 @@ PYBIND11_MODULE(_rabitqlib, m) {
     m.doc() = "RabitQ Python bindings combined module";
 
     m.def("_available_cpu_count", &rabitqlib::total_threads);
+    m.def("_default_thread_count", &rabitqlib::default_threads);
 
     // Register shared enums once
     py::enum_<rabitqlib::MetricType>(m, "MetricType")

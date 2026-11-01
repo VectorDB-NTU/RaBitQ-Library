@@ -40,10 +40,11 @@ work if you want to run k-means yourself.
 ### Behavior changes
 
 - **Thread defaults.** `train` and `add` now default to every available CPU
-  (`num_threads=0`); 0.7 `build` and `add` defaulted to one thread. This applies
-  to every `add` call that does not pass `num_threads`, including 0.7 code such as
-  `index.add(x)`, without a warning. `search` still defaults to one thread, and
-  the deprecated `build` keeps its default of 1.
+  (`num_threads=0`), capped by `OMP_NUM_THREADS` since 0.8.1; 0.7 `build` and
+  `add` defaulted to one thread. This applies to every `add` call that does not
+  pass `num_threads`, including 0.7 code such as `index.add(x)`, without a
+  warning. `search` still defaults to one thread, and the deprecated `build`
+  keeps its default of 1.
 - **HNSW-RaBitQ builds are not reproducible by default.** With more than one
   thread, `add` links points in a nondeterministic order. Pass `num_threads=1`
   to `add` for the same graph on every run. With one thread and the same seed,
