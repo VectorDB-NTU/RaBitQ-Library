@@ -229,7 +229,8 @@ def _patch_build(cls):
             Centroid ID per vector, in [0, num_clusters). Floating-point and
             boolean IDs are rejected.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
         fast_quantization : bool, optional
             Use faster quantizer configuration. Default is False.
         """
@@ -328,7 +329,8 @@ def _patch_symqg(cls):
         ef_construction : int
             Positive construction search breadth fitting uint32.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count.
+            Worker count. Default is 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
         init : {'pipnn', 'random'}, optional
             Graph initialization method. Default is 'pipnn'.
         """
@@ -522,7 +524,8 @@ class QGKMeans(_KMeans):
         Stop when the absolute relative objective change is at most this
         threshold. Default is 0.0.
     num_threads : int, optional
-        Worker count; 0 selects the available CPU count. Default is 0.
+        Worker count; 0 selects the available CPU count,
+        capped by OMP_NUM_THREADS. Default is 0.
     final_assignment : FinalAssignmentMode, optional
         Approximate uses the training assignment method; Exact uses exhaustive
         assignment against final centroids. Default is
@@ -586,7 +589,8 @@ class RaBitQKMeans(_KMeans):
         Stop when the absolute relative objective change is at most this
         threshold. Default is 0.0.
     num_threads : int, optional
-        Worker count; 0 selects the available CPU count. Default is 0.
+        Worker count; 0 selects the available CPU count,
+        capped by OMP_NUM_THREADS. Default is 0.
     final_assignment : FinalAssignmentMode, optional
         Approximate uses the training assignment method; Exact uses exhaustive
         assignment against final centroids. Default is

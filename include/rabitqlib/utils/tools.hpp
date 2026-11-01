@@ -85,13 +85,19 @@ inline bool is_powerof2(size_t n) { return n > 0 && (n & (n - 1)) == 0; }
 // Available logical CPUs in the calling context, with a hardware-count fallback.
 size_t total_threads();
 
-// Zero selects all available CPUs; explicit requests cannot exceed that count.
+// total_threads() capped by the OpenMP thread limit (OMP_NUM_THREADS or
+// omp_set_num_threads), so applications can limit every automatic team.
+size_t default_threads();
+
+// Zero selects default_threads(); explicit requests cannot exceed total_threads().
 inline size_t resolve_num_threads(size_t requested) {
     if (requested == 1) {
         return 1;
     }
-    const size_t available = total_threads();
-    return requested == 0 ? available : std::min(requested, available);
+    if (requested == 0) {
+        return default_threads();
+    }
+    return std::min(requested, total_threads());
 }
 
 namespace detail {

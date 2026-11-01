@@ -43,9 +43,10 @@ behavior.
 
 For inner product, pass `--metric ip` to every stage and provide normalized
 vectors. Use queries and ground truth prepared for the same metric.
-`--num-threads 0` uses the library's available logical CPU count; each stage accepts
-its own limit. See [threading](../../docs/docs/index/usage.md#threading-and-file-paths)
-for affinity and OpenMP placement behavior.
+`--num-threads 0` uses the library's available logical CPU count, capped by
+`OMP_NUM_THREADS`; each stage accepts its own limit. See
+[threading](../../docs/docs/index/usage.md#threading-and-file-paths) for affinity
+and OpenMP placement behavior.
 
 ## HNSW-RaBitQ
 

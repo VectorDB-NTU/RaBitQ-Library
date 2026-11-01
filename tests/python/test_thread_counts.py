@@ -1,5 +1,9 @@
 """Thread requests are safe and preserve search results across all indexes."""
 
+import os
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
@@ -52,3 +56,25 @@ def test_build_and_search_thread_counts(kind, metric, build_threads):
             )
             np.testing.assert_array_equal(ids, expected_ids[:count])
             np.testing.assert_array_equal(distances, expected_distances[:count])
+
+
+@pytest.mark.parametrize("limit", ["1", "2"])
+def test_automatic_thread_count_respects_omp_num_threads(limit):
+    # txtai sets OMP_NUM_THREADS=1 on macOS so coexisting OpenMP runtimes (Faiss,
+    # PyTorch) stay single-threaded; a default add must not start a worker team.
+    code = """
+import sys
+from rabitqlib._rabitqlib import _available_cpu_count, _default_thread_count
+expected = min(int(sys.argv[1]), _available_cpu_count())
+assert _default_thread_count() == expected, (_default_thread_count(), expected)
+"""
+    env = os.environ.copy()
+    env["OMP_NUM_THREADS"] = limit
+    result = subprocess.run(
+        [sys.executable, "-c", code, limit],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

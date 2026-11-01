@@ -47,9 +47,9 @@ print(ids[0])
 iterations on at most 256 sampled vectors per centroid, spherical k-means for
 `metric="ip"`, and the index `seed`. Change `index.cp` before training to tune
 them, or call `index.set_centroids(centroids)` to use centroids you computed
-elsewhere. `train` and `add` use every available CPU by default; pass
-`num_threads=` to limit them. Without `seed`, each index draws a random rotation
-seed and reports it as `index.seed`.
+elsewhere. `train` and `add` use every available CPU by default, capped by
+`OMP_NUM_THREADS`; pass `num_threads=` to limit them. Without `seed`, each index
+draws a random rotation seed and reports it as `index.seed`.
 
 ## Read the results
 

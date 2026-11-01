@@ -95,7 +95,7 @@ Set Python keyword arguments or fields of the corresponding C++ parameter type:
 | --- | --- | --- |
 | `niter` | `25` | Maximum clustering iterations. |
 | `early_stop_threshold` | `0.0` | Stop from iteration 2 when the absolute relative objective change is at most this value; range `[0, 1]`. Zero stops only on an unchanged objective. |
-| `num_threads` | `0` | Use detected available logical CPUs; positive requests are capped at that count. See [threading](index/usage.md#threading-and-file-paths). |
+| `num_threads` | `0` | Use detected available logical CPUs, capped by `OMP_NUM_THREADS`; positive requests are capped at the CPU count. See [threading](index/usage.md#threading-and-file-paths). |
 | `spherical` | `false` | Normalize centroids and assign by inner product; input must already be normalized. |
 | `seed` | `42` | Seed for centroid selection and rotation. |
 | `min_points_per_centroid` | `39` | Warn below this training-points-per-centroid ratio when verbose. |

@@ -137,8 +137,13 @@ thread. Returned result arrays own their storage.
 These access checks belong to the Python wrappers. C++ callers must synchronize
 index updates themselves and use separate search output buffers.
 
-`num_threads=0` selects the detected available logical CPU count. Positive values
-set an upper limit, capped at that count; small workloads may use fewer workers.
+`num_threads=0` selects the detected available logical CPU count, capped by the
+OpenMP thread limit (`OMP_NUM_THREADS`, or `omp_set_num_threads` in C++). Positive
+values set an upper limit, capped at the CPU count only; small workloads may use
+fewer workers. On macOS, OpenMP runtimes bundled by different packages (for
+example Faiss or PyTorch wheels) can crash when more than one of them starts
+worker threads in the same process; set `OMP_NUM_THREADS=1` before the first
+native call, or pass `num_threads=1`, in such processes.
 `train` and `add` on every index default to `0`, as does clustering; `search`
 and the deprecated `build` default to one thread.
 Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, so pass

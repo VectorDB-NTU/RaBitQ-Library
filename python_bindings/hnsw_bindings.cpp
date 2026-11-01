@@ -537,7 +537,7 @@ x : array_like of float, shape (n, dim)
     n >= num_clusters. Converted to contiguous float32; a copy may be made.
 num_threads : int, optional
     Keyword-only. Worker count for this call. None (default) uses
-    cp.num_threads; 0 selects the available CPU count.
+    cp.num_threads; 0 selects the available CPU count, capped by OMP_NUM_THREADS.
 
 Notes
 -----
@@ -593,7 +593,8 @@ ef : int, optional
     Search breadth. None or 0 (default) selects max(k, 10); values above the stored
     point count are clamped.
 num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count.
+    Worker count. Default is 1; 0 selects the available CPU count,
+    capped by OMP_NUM_THREADS.
 
 Returns
 -------

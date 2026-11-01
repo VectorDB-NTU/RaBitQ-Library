@@ -57,6 +57,7 @@ def test_clustering_example_uses_native_cpu_budget(monkeypatch, requested, expec
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "_available_cpu_count", lambda: 2)
+    monkeypatch.setattr(module, "_default_thread_count", lambda: 2)
     calls = []
 
     def clustering(*args, **kwargs):
