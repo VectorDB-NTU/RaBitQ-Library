@@ -282,6 +282,32 @@ def test_separate_clustering_and_indexing(
     check_saved_index_and_query(tmp_path, kind, metric, data)
 
 
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("kind", ["ivf", "hnsw"])
+def test_indexing_trains_without_a_clustering_file(
+    tmp_path, example_data, metric, kind, monkeypatch
+):
+    # The samples teach the 0.8 API, so they must not hit the compatibility layer.
+    monkeypatch.setenv("PYTHONWARNINGS", "error::DeprecationWarning")
+    data_path, data = example_data
+    output = run_example(
+        f"{kind}_rabitq_indexing.py",
+        data_path,
+        tmp_path / "test.index",
+        "--num-clusters",
+        4,
+        "--metric",
+        metric,
+        "--total-bits",
+        5,
+        "--num-threads",
+        2,
+    )
+    if kind == "ivf":
+        assert "Trained 4 centroids" in output
+    check_saved_index_and_query(tmp_path, kind, metric, data)
+
+
 def check_exact_cluster_labels(data, centroids, labels, metric):
     original = data.astype(np.float64)
     centers = centroids.astype(np.float64)

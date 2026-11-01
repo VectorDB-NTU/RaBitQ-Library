@@ -23,17 +23,22 @@ from rabitqlib import (
 
 def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(rabitqlib.__all__, list[str])
-    ivf = IvfIndex(64, 64, 2, 4)
-    hnsw = HnswIndex(64, 128)
+    ivf = IvfIndex(64, 2, nbits=4, seed=7)
+    hnsw = HnswIndex(64, nbits=4, num_clusters=2)
     graph = SymqgIndex(64, 32)
     for index in (ivf, hnsw, graph):
         assert_type(index.__repr__(), str)
     for index in (ivf, hnsw):
-        index.build(x, x[:2], labels)
-        assert_type(index.add(x, labels), npt.NDArray[np.uint32])
+        assert_type(index.cp, RaBitQKMeansParameters)
+        index.cp.niter = 10
+        index.train(x, num_threads=1)
+        index.set_centroids(x[:2])
+        assert_type(index.is_trained, bool)
+        assert_type(index.seed, int | None)
+        assert_type(index.add(x, cluster_ids=labels), npt.NDArray[np.uint32])
         assert_type(index.remove([0, 1]), int)
         assert_type(index.dim, int)
-        assert_type(index.is_built, bool)
+        assert_type(len(index), int)
         index.save("index.bin")
     ids, distances = ivf.search(x, k=5, nprobe=2)
     assert_type(ids, npt.NDArray[np.uint32])
@@ -74,6 +79,8 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     qg.cp.niter = "two"  # type: ignore[assignment]
     RaBitQKMeans(64, 2, graph_degree=32)  # type: ignore[call-arg]
     hnsw.search(x, 5, nprobe=2)  # type: ignore[call-arg]
+    IvfIndex(64, 2, 4)  # type: ignore[call-overload]
+    hnsw.train(x, 1)  # type: ignore[call-arg]
 
 
 def stats_alias(stats: RaBitQKMeansIterationStats) -> QGKMeansIterationStats:
@@ -98,14 +105,16 @@ def check_numpy_scalars() -> None:
     x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
     labels = np.zeros(80, dtype=np.uint32)
     centroids = x.mean(axis=0, keepdims=True)
-    ivf = IvfIndex(np.int64(64), np.int64(80), np.int64(1), np.int64(4))
-    hnsw = HnswIndex(np.int64(64), np.int64(80), M=np.int64(16))
+    ivf = IvfIndex(np.int64(64), np.int64(1), nbits=np.int64(4), seed=np.uint32(7))
+    hnsw = HnswIndex(
+        np.int64(64), nbits=np.int64(4), num_clusters=np.int64(1), M=np.int64(16)
+    )
     graph = SymqgIndex(np.int64(64), np.int64(32), quantization_bits=np.int64(4))
     for index in (ivf, hnsw):
-        index.build(
+        index.set_centroids(centroids)
+        index.add(
             x,
-            centroids,
-            labels,
+            cluster_ids=labels,
             num_threads=np.int64(1),
             fast_quantization=np.bool_(False),
         )
@@ -172,8 +181,8 @@ def check_input_contracts() -> None:
         "innerproduct",
     )
     for metric in metrics:
-        ivf = IvfIndex(64, 80, 1, 4, metric=metric)
-        HnswIndex(64, 80, metric=metric)
+        ivf = IvfIndex(64, 1, nbits=4, metric=metric)
+        HnswIndex(64, nbits=4, metric=metric)
         SymqgIndex(64, 32, metric=metric)
     initializers: tuple[Literal["auto", "flat", "flat_rabitq", "hnsw"], ...] = (
         "auto",
@@ -182,21 +191,23 @@ def check_input_contracts() -> None:
         "hnsw",
     )
     for initializer in initializers:
-        IvfIndex(64, 80, 1, 4, initializer=initializer)
+        IvfIndex(64, 1, nbits=4, initializer=initializer)
     for ids in (signed, unsigned, [0] * 80, (0,) * 80):
-        ivf = IvfIndex(64, 80, 1, 4)
-        ivf.build(x, centroids, ids)
-        ivf.add(x[:1], [np.int64(0)])
-        ivf.add(x[:1], (np.uint32(0),))
+        ivf = IvfIndex(64, 1, nbits=4)
+        ivf.set_centroids(centroids)
+        ivf.add(x, cluster_ids=ids)
+        ivf.add(x[:1], cluster_ids=[np.int64(0)])
+        ivf.add(x[:1], cluster_ids=(np.uint32(0),))
         ivf.remove(np.array([0], dtype=np.int32))
         ivf.remove(np.array([1], dtype=np.uint64))
         ivf.remove([2])
         ivf.remove((3,))
         ivf.remove([])
         ivf.remove(())
-        hnsw = HnswIndex(64, 82)
-        hnsw.build(x, centroids, ids)
-        hnsw.add(x[:1], [np.uint32(0)])
+        hnsw = HnswIndex(64, nbits=4, num_clusters=1)
+        hnsw.set_centroids(centroids)
+        hnsw.add(x, cluster_ids=ids, num_threads=1)
+        hnsw.add(x[:1], cluster_ids=[np.uint32(0)])
         hnsw.remove([0])
         hnsw.remove(np.array([1], dtype=np.int64))
     initializations: tuple[Literal["random", "pipnn"], ...] = ("random", "pipnn")
@@ -204,25 +215,25 @@ def check_input_contracts() -> None:
         graph = SymqgIndex(64, 32)
         graph.build(x, 40, init=init)
     # Returned option values must be usable as inputs without casts.
-    IvfIndex(64, 80, 1, 4, metric=ivf.metric, initializer=ivf.initializer)
+    IvfIndex(64, 1, nbits=4, metric=ivf.metric, initializer=ivf.initializer)
 
 
 def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
     float_ids: npt.NDArray[np.float64] = np.zeros(80, dtype=np.float64)
     bool_ids: npt.NDArray[np.bool_] = np.array([True], dtype=np.bool_)
     string_ids: npt.NDArray[np.str_] = np.array(["1"], dtype=np.str_)
-    ivf = IvfIndex(64, 80, 1, 4)
-    hnsw = HnswIndex(64, 80)
+    ivf = IvfIndex(64, 1, nbits=4)
+    hnsw = HnswIndex(64, nbits=4)
     graph = SymqgIndex(64, 32)
-    IvfIndex(64, 80, 1, 4, metric="cosine")  # type: ignore[arg-type]
-    HnswIndex(64, 80, metric="L2")  # type: ignore[arg-type]
+    IvfIndex(64, 1, nbits=4, metric="cosine")  # type: ignore[call-overload]
+    HnswIndex(64, nbits=4, metric="L2")  # type: ignore[call-overload]
     SymqgIndex(64, 32, metric="inner_product")  # type: ignore[arg-type]
-    IvfIndex(64, 80, 1, 4, initializer="flat_rabit")  # type: ignore[arg-type]
+    IvfIndex(64, 1, nbits=4, initializer="flat_rabit")  # type: ignore[call-overload]
     graph.build(x, 40, init="pippn")  # type: ignore[arg-type]
-    ivf.build(x, x[:1], [0.0] * 80)  # type: ignore[list-item]
-    hnsw.build(x, x[:1], float_ids)  # type: ignore[arg-type]
-    ivf.add(x, float_ids)  # type: ignore[arg-type]
-    hnsw.add(x, (0.0,))  # type: ignore[arg-type]
+    ivf.add(x, cluster_ids=[0.0] * 80)  # type: ignore[list-item]
+    hnsw.add(x, cluster_ids=float_ids)  # type: ignore[arg-type]
+    ivf.train(x, num_threads="1")  # type: ignore[arg-type]
+    hnsw.add(x, cluster_ids=(0.0,))  # type: ignore[arg-type]
     ivf.remove([1.5])  # type: ignore[list-item]
     hnsw.remove(bool_ids)  # type: ignore[arg-type]
     ivf.remove(string_ids)  # type: ignore[arg-type]

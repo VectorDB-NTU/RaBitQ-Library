@@ -14,6 +14,7 @@ TOTAL_BITS = 8  # total number of bits for quantization
 METRIC = "l2"  # "l2" or "ip"
 FASTER_QUANT = False  # use faster quantization
 NUM_THREADS = 16  # number of threads for build
+NUM_CLUSTERS = 16  # centroids to train when no clustering file is given
 # ──────────────────────────────────────────────
 
 
@@ -22,31 +23,38 @@ def main(args=None) -> None:
     data = read_fvecs(args.data_file)
     print(f"Data shape: {data.shape}")
 
-    # 2. Load clusters computed by RaBitQKMeans or QGKMeans.
-    centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
-    print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
-
-    # 3. Build HNSW index
+    # 2. Train centroids in the index, or reuse a kmeans_clustering.py file.
     n, dim = data.shape
     print(
         f"\nBuilding HNSW index: n={n}, dim={dim}, M={args.degree}, "
         f"ef={args.ef_construction}, bits={args.total_bits}, metric={args.metric}"
     )
-
+    if args.clusters is None:
+        centroids, cluster_ids = None, None
+        num_clusters = args.num_clusters
+    else:
+        centroids, cluster_ids = load_clusters(args.clusters, data.shape, args.metric)
+        print(f"Centroids: {centroids.shape}, cluster_ids: {cluster_ids.shape}")
+        num_clusters = len(centroids)
     idx = HnswIndex(
-        dim=dim,
-        max_elements=n,
+        dim,
+        nbits=args.total_bits,
+        num_clusters=num_clusters,
         M=args.degree,
         ef_construction=args.ef_construction,
-        nbits=args.total_bits,
         metric=args.metric,
     )
 
     t0 = time()
-    idx.build(
+    if centroids is None:
+        idx.train(data, num_threads=args.num_threads)
+    else:
+        idx.set_centroids(centroids)
+    # The first add into the empty index links vectors with their exact
+    # coordinates. More than one thread links them in a nondeterministic order.
+    idx.add(
         data,
-        centroids,
-        cluster_ids,
+        cluster_ids=cluster_ids,
         num_threads=args.num_threads,
         fast_quantization=args.faster_quant,
     )
@@ -63,8 +71,19 @@ if __name__ == "__main__":
     parser.add_argument("index_file", type=str, help="Path to save the index")
     parser.add_argument(
         "--clusters",
-        required=True,
-        help="Clustering file produced by kmeans_clustering.py for this data and metric",
+        default=None,
+        help=(
+            "Clustering file produced by kmeans_clustering.py for this data and "
+            "metric; without it, the index trains its own centroids"
+        ),
+    )
+    parser.add_argument(
+        "--num-clusters",
+        dest="num_clusters",
+        type=int,
+        metavar="INT",
+        default=NUM_CLUSTERS,
+        help="Number of centroids to train when --clusters is not given",
     )
     parser.add_argument(
         "--degree",

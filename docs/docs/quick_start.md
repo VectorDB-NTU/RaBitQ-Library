@@ -1,7 +1,8 @@
 # Quick start
 
 Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
-**0.7.2** and uses synthetic data, so no dataset download is required.
+**0.7.2** and uses synthetic data, so no dataset download is required. Coming from 0.7?
+See the [migration guide](python_migration.md).
 For C++, go directly to [C++ integration](cpp_integration.md).
 
 ## Install
@@ -27,37 +28,34 @@ require a dataset download:
 
 ```python
 import numpy as np
-from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
+from rabitqlib import IvfIndex
 
 rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-clustering = RaBitQKMeans(
-    64, 5, num_threads=2, final_assignment=FinalAssignmentMode.Exact
-)
-clustering.train(data)
-
-# IVF-RaBitQ requires exactly max_elements rows when building.
-index = IvfIndex(
-    dim=64,
-    max_elements=len(data),
-    num_clusters=5,
-    nbits=4,
-    metric="l2",
-)
-index.build(data, clustering.centroids, clustering.assignments)
+index = IvfIndex(64, 5, nbits=4, metric="l2", seed=42)
+index.train(data)  # learn 5 centroids
+index.add(data)  # quantize every vector into its nearest cluster
 
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 print(ids[0])
 ```
 
+`train` clusters the data with the settings in `index.cp`: 25 k-means
+iterations on at most 256 sampled vectors per centroid, spherical k-means for
+`metric="ip"`, and the index `seed`. Change `index.cp` before training to tune
+them, or call `index.set_centroids(centroids)` to use centroids you computed
+elsewhere. `train` and `add` use every available CPU by default; pass
+`num_threads=` to limit them. Without `seed`, each index draws a random rotation
+seed and reports it as `index.seed`.
+
 ## Read the results
 
-Both outputs have shape `(number_of_queries, k)`. IDs are zero-based row numbers
-in the data supplied to `build`; added vectors receive new IDs without renumbering
-existing ones. Results are ordered by increasing distance: `metric="l2"` estimates
+Both outputs have shape `(number_of_queries, k)`. IDs are zero-based and follow
+the order vectors were added: here they are row numbers of `data`, and later
+`add` calls continue the numbering without renumbering existing vectors. Results are ordered by increasing distance: `metric="l2"` estimates
 squared Euclidean distance, while `metric="ip"` estimates `1 - dot(data, query)`.
 Smaller values are better for both metrics. Quantized distances are estimates,
 not exact distances to the original vectors.
@@ -73,7 +71,7 @@ cosine search, normalize database and query vectors first and use `metric="ip"`.
 ## Measure recall
 
 For this small L2 example, compute exact neighbors from the original vectors,
-then compare several probe counts on the same built index. Recall@10 is the mean
+then compare several probe counts on the same index. Recall@10 is the mean
 fraction of exact top-10 IDs returned for each query.
 
 ```python

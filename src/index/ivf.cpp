@@ -248,9 +248,15 @@ void IVF::set_centroids(const float* centroids, size_t num_threads) {
 
     // construct rotates centroids the same way, so both paths route identically.
     std::vector<float> rotated_centroids(num_clusters_ * padded_dim_);
-    for (size_t i = 0; i < num_clusters_; ++i) {
-        rotator_->rotate(centroids + (i * dim_), &rotated_centroids[i * padded_dim_]);
-    }
+    index_detail::parallel_for(
+        0,
+        num_clusters_,
+        num_threads,
+        [&](size_t i, size_t /*thread*/) {
+            rotator_->rotate(centroids + (i * dim_), &rotated_centroids[i * padded_dim_]);
+        },
+        /*reuse_workers=*/true
+    );
     auto initializer = make_initializer();
     initializer->add_vectors(
         rotated_centroids.data(), std::min(resolve_num_threads(num_threads), num_clusters_)

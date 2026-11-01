@@ -2,6 +2,7 @@
 
 import ast
 import doctest
+import inspect
 import re
 from pathlib import Path
 
@@ -84,26 +85,72 @@ def test_editor_docs_match_runtime_help():
             assert normalized(documentation) in normalized(actual), (name, node.name)
 
 
+def is_deprecated(node):
+    return any(
+        isinstance(d, ast.Call)
+        and isinstance(d.func, ast.Name)
+        and d.func.id == "deprecated"
+        for d in node.decorator_list
+    )
+
+
+def stub_parameters(node):
+    """Names, keyword-only names and literal defaults declared in the stub."""
+    args = node.args
+    positional = args.posonlyargs + args.args
+    defaults = {
+        arg.arg: ast.literal_eval(value)
+        for arg, value in zip(
+            positional[len(positional) - len(args.defaults) :], args.defaults
+        )
+    }
+    defaults.update(
+        (arg.arg, ast.literal_eval(value))
+        for arg, value in zip(args.kwonlyargs, args.kw_defaults)
+        if value is not None
+    )
+    names = [arg.arg for arg in positional + args.kwonlyargs]
+    return names, [arg.arg for arg in args.kwonlyargs], defaults
+
+
+def runtime_parameters(member):
+    """The same, from a Python replacement's signature or pybind11's first doc line."""
+    if inspect.isfunction(member):
+        parameters = inspect.signature(member).parameters.values()
+        return (
+            [p.name for p in parameters],
+            [p.name for p in parameters if p.kind is inspect.Parameter.KEYWORD_ONLY],
+            {p.name: p.default for p in parameters if p.default is not p.empty},
+        )
+    signature = member.__doc__.splitlines()[0]
+    names = re.findall(r"(?:\(|, )([A-Za-z_]\w*):", signature)
+    _, star, keyword_part = signature.partition(", *, ")
+    keyword = re.findall(r"(?:^|, )([A-Za-z_]\w*):", keyword_part) if star else []
+    defaults = {
+        found[1]: ast.literal_eval(found[2])
+        for found in re.finditer(r"\b([A-Za-z_]\w*): [^=,]+ = ([^,)]+)", signature)
+    }
+    return names, keyword, defaults
+
+
 @pytest.mark.parametrize("name", ["IvfIndex", "HnswIndex", "SymqgIndex"])
 def test_native_signature_names_and_defaults(name):
     cls = declarations()[name]
     runtime = getattr(rabitqlib, name)
     for node in cls.body:
-        if not isinstance(node, ast.FunctionDef):
+        if not isinstance(node, ast.FunctionDef) or is_deprecated(node):
+            # Deprecated overloads describe the 0.7 forms the compatibility layer
+            # accepts; the runtime signature documents only the current form.
             continue
         if any(
-            isinstance(d, ast.Name) and d.id == "property" for d in node.decorator_list
+            (isinstance(d, ast.Name) and d.id == "property")
+            or (isinstance(d, ast.Attribute) and d.attr == "setter")
+            for d in node.decorator_list
         ):
             continue
-        signature = getattr(runtime, node.name).__doc__.splitlines()[0]
-        actual_names = re.findall(r"(?:\(|, )([A-Za-z_]\w*):", signature)
-        expected_names = [a.arg for a in node.args.args]
-        assert actual_names == expected_names, (name, node.name, signature)
-        default_args = node.args.args[len(node.args.args) - len(node.args.defaults) :]
-        for arg, value in zip(default_args, node.args.defaults):
-            actual = re.search(rf"\b{arg.arg}: [^=]+ = ([^,)]+)", signature)
-            assert actual is not None, (name, node.name, arg.arg)
-            assert ast.literal_eval(actual[1]) == ast.literal_eval(value)
+        expected = stub_parameters(node)
+        actual = runtime_parameters(getattr(runtime, node.name))
+        assert actual == expected, (name, node.name)
 
 
 @pytest.mark.parametrize("name", ["QGKMeans", "RaBitQKMeans"])
@@ -153,13 +200,12 @@ def test_documented_search_result_types(kind):
         index.build(data, 40)
         result = index.search(data[:2], 3, ef=20)
     else:
-        centroids = data[:2].copy()
-        labels = np.arange(80, dtype=np.uint32) % 2
         if kind == "ivf":
-            index = rabitqlib.IvfIndex(64, 80, 2, 4)
+            index = rabitqlib.IvfIndex(64, 2, nbits=4)
         else:
-            index = rabitqlib.HnswIndex(64, 80)
-        index.build(data, centroids, labels)
+            index = rabitqlib.HnswIndex(64, nbits=4, num_clusters=2)
+        index.set_centroids(data[:2])
+        index.add(data, cluster_ids=np.arange(80, dtype=np.uint32) % 2)
         if isinstance(index, rabitqlib.IvfIndex):
             result = index.search(data[:2], 3, nprobe=2)
         else:
