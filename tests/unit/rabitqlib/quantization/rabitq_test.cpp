@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -790,6 +791,29 @@ TEST(FastScaleTableTest, FrozenValuesMatchTheComputation) {
 #endif
         }
     }
+}
+
+TEST(FastScaleTableTest, WholeTableIsFrozen) {
+    // FNV-1a over every entry's IEEE-754 bits, least significant byte first, in
+    // padded_dim-major order. Any edited, dropped or reordered entry changes it.
+    using rabitq_impl::ex_bits::frozen_const_scaling_factor;
+    using rabitq_impl::ex_bits::kFastScaleDimStep;
+    using rabitq_impl::ex_bits::kFastScaleMaxDim;
+    using rabitq_impl::ex_bits::kFastScaleMaxExBits;
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t padded_dim = kFastScaleDimStep; padded_dim <= kFastScaleMaxDim;
+         padded_dim += kFastScaleDimStep) {
+        for (size_t ex_bits = 1; ex_bits <= kFastScaleMaxExBits; ++ex_bits) {
+            const double scale = frozen_const_scaling_factor(padded_dim, ex_bits).value();
+            uint64_t bits = 0;
+            std::memcpy(&bits, &scale, sizeof(bits));
+            for (size_t byte = 0; byte < sizeof(bits); ++byte) {
+                hash ^= (bits >> (8 * byte)) & 0xFFU;
+                hash *= 1099511628211ULL;
+            }
+        }
+    }
+    EXPECT_EQ(hash, 0x4195f9250a4a3900ULL);
 }
 
 TEST(FastScaleTableTest, DimensionsOutsideTheTableFallBackToTheComputation) {
