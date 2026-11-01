@@ -1,4 +1,4 @@
-"""Core quantization building blocks: rotation, quantization, factors and packing.
+"""Core quantization building blocks: rotation, quantization, factors, packing and estimation.
 
 This module is provisional in the sense of PEP 411: any minor release may change
 or remove its API, with a changelog note, until it is declared stable.
@@ -17,11 +17,14 @@ __all__ = [
     "PACKED_CODES_VERSION",
     "QUERY_TERMS_DTYPE",
     "FormatError",
+    "Query",
     "Rotator",
     "code_factors",
+    "estimate_from_ip",
     "pack_codes",
     "padded_dim",
     "quantize",
+    "query_terms",
     "split",
     "unpack_codes",
 ]
@@ -77,6 +80,80 @@ class Rotator:
     def __deepcopy__(self, memo: Any) -> Rotator:
         """Return self; rotators are immutable."""
 
+_Metric = Literal["l2", "ip", "innerproduct"]
+
+class Query:
+    """A rotated, padded query for scoring codes in the working space."""
+
+    def __init__(
+        self,
+        rotated_query: npt.ArrayLike,
+        *,
+        metric: _Metric,
+        centroid: npt.ArrayLike | None = None,
+    ) -> None: ...
+    @property
+    def dim(self) -> int:
+        """Working dimension d of the query."""
+    @property
+    def metric(self) -> Literal["l2", "ip"]:
+        """The metric, 'l2' or 'ip'."""
+    def set_centroid(self, centroid: npt.ArrayLike | None) -> None:
+        """Switch to the factors of another centroid; None is zero."""
+    def estimate_bitset(
+        self,
+        bitsets: npt.NDArray[np.uint8],
+        factors: npt.NDArray[np.void],
+        *,
+        indices: npt.ArrayLike | None = None,
+        num_threads: int = 1,
+        out: npt.NDArray[np.void] | None = None,
+    ) -> npt.NDArray[np.void]:
+        """Estimate distances from packed 1-bit codes with the float query."""
+    def estimate_codes(
+        self,
+        codes: npt.NDArray[np.uint8] | npt.NDArray[np.uint16],
+        factors: npt.NDArray[np.void],
+        *,
+        nbits: int,
+        indices: npt.ArrayLike | None = None,
+        num_threads: int = 1,
+        out: npt.NDArray[np.void] | None = None,
+    ) -> npt.NDArray[np.void]:
+        """Estimate distances from unpacked codes of any width."""
+    def refine(
+        self,
+        ex: npt.NDArray[np.uint8],
+        factors: npt.NDArray[np.void],
+        first: npt.NDArray[np.void],
+        *,
+        ex_bits: int,
+        prefix_bits: int = 1,
+        indices: npt.ArrayLike | None = None,
+        num_threads: int = 1,
+        out: npt.NDArray[np.float32] | None = None,
+    ) -> npt.NDArray[np.float32]:
+        """Refine prefix estimates with the unpacked extra bits."""
+    def refine_packed(
+        self,
+        packed: npt.NDArray[np.uint8],
+        factors: npt.NDArray[np.void],
+        first: npt.NDArray[np.void],
+        *,
+        ex_bits: int,
+        prefix_bits: int = 1,
+        indices: npt.ArrayLike | None = None,
+        num_threads: int = 1,
+        out: npt.NDArray[np.float32] | None = None,
+    ) -> npt.NDArray[np.float32]:
+        """Refine prefix estimates with packed extra bits."""
+    def copy(self) -> Query:
+        """Return an independent copy of the query."""
+    def __copy__(self) -> Query:
+        """Return an independent copy of the query."""
+    def __deepcopy__(self, memo: Any) -> Query:
+        """Return an independent copy of the query."""
+
 def padded_dim(dim: int) -> int:
     """Return the working dimension for dim: dim rounded up to a multiple of 32."""
 
@@ -126,7 +203,7 @@ def code_factors(
     codes: npt.NDArray[np.uint8] | npt.NDArray[np.uint16],
     *,
     nbits: int,
-    metric: Literal["l2", "ip", "innerproduct"],
+    metric: _Metric,
     centroid: npt.ArrayLike | None = None,
     num_threads: int = 0,
     out: npt.NDArray[np.void] | None = None,
@@ -150,3 +227,22 @@ def unpack_codes(
     out: npt.NDArray[np.uint8] | None = None,
 ) -> npt.NDArray[np.uint8]:
     """Unpack codes written by pack_codes; the inverse is lossless."""
+
+def query_terms(
+    rotated_query: npt.ArrayLike,
+    *,
+    metric: _Metric,
+    centroid: npt.ArrayLike | None = None,
+) -> np.void:
+    """Return the query-side terms of the reference estimator formula."""
+
+def estimate_from_ip(
+    ip: npt.ArrayLike,
+    factors: npt.NDArray[np.void],
+    terms: np.void | npt.NDArray[np.void],
+    *,
+    nbits: int,
+    num_threads: int = 1,
+    out: npt.NDArray[np.void] | None = None,
+) -> npt.NDArray[np.void]:
+    """Apply the reference estimator formula to the caller's inner products."""

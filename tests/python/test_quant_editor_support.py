@@ -78,7 +78,16 @@ def test_module_docs_and_exports():
 
 @pytest.mark.parametrize(
     "name",
-    ["padded_dim", "quantize", "split", "code_factors", "pack_codes", "unpack_codes"],
+    [
+        "padded_dim",
+        "quantize",
+        "split",
+        "code_factors",
+        "pack_codes",
+        "unpack_codes",
+        "query_terms",
+        "estimate_from_ip",
+    ],
 )
 def test_function_signatures_and_docs(name):
     node = stub_functions(installed_stub().body)[name]
@@ -89,21 +98,34 @@ def test_function_signatures_and_docs(name):
 
 def test_classes_match_runtime():
     classes = {n.name: n for n in installed_stub().body if isinstance(n, ast.ClassDef)}
-    assert set(classes) == {"FormatError", "Rotator"}
+    assert set(classes) == {"FormatError", "Query", "Rotator"}
     for name, cls in classes.items():
         runtime = getattr(quant, name)
         assert runtime.__module__ == "rabitqlib.quant"
         assert normalized(ast.get_docstring(cls)) in normalized(runtime.__doc__)
-    members = stub_functions(classes["Rotator"].body)
-    public = {key for key in vars(quant.Rotator) if not key.startswith("_")}
-    assert public <= set(members), public - set(members)
-    for member, node in members.items():
-        runtime = getattr(quant.Rotator, member)
-        documentation = ast.get_docstring(node)
-        if documentation is not None:
-            assert normalized(documentation) in normalized(runtime.__doc__), member
-        if member in ("rotate", "from_bytes", "__init__"):
-            assert runtime_parameters(runtime) == stub_parameters(node), member
+    checked = {
+        "Rotator": ("rotate", "from_bytes", "__init__"),
+        "Query": (
+            "__init__",
+            "set_centroid",
+            "estimate_bitset",
+            "estimate_codes",
+            "refine",
+            "refine_packed",
+        ),
+    }
+    for name, signatures in checked.items():
+        cls = getattr(quant, name)
+        members = stub_functions(classes[name].body)
+        public = {key for key in vars(cls) if not key.startswith("_")}
+        assert public <= set(members), public - set(members)
+        for member, node in members.items():
+            runtime = getattr(cls, member)
+            documentation = ast.get_docstring(node)
+            if documentation is not None:
+                assert normalized(documentation) in normalized(runtime.__doc__), member
+            if member in signatures:
+                assert runtime_parameters(runtime) == stub_parameters(node), member
 
 
 def test_documentation_examples():
@@ -112,6 +134,7 @@ def test_documentation_examples():
     for name, documentation in (
         ("quant", quant.__doc__),
         ("Rotator", quant.Rotator.__doc__),
+        ("Query", quant.Query.__doc__),
     ):
         runner.run(parser.get_doctest(documentation, {}, name, None, 0))
     assert runner.failures == 0

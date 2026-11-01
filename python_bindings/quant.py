@@ -1,4 +1,4 @@
-"""Core quantization building blocks: rotation, quantization, factors and packing.
+"""Core quantization building blocks: rotation, quantization, factors, packing and estimation.
 
 This module is provisional in the sense of PEP 411: any minor release may change
 or remove its API, with a changelog note, until it is declared stable. Byte
@@ -18,6 +18,9 @@ Examples
 >>> factors = quant.code_factors(residuals, codes, nbits=4, metric="l2")
 >>> quant.pack_codes(codes, nbits=4).shape
 (4, 64)
+>>> q = quant.Query(residuals[0], metric="l2")
+>>> q.estimate_codes(codes, factors, nbits=4).dtype == quant.ESTIMATE_DTYPE
+True
 """
 
 import numpy as np
@@ -27,11 +30,14 @@ from ._rabitqlib._quant import (
     FACTORS_DTYPE,
     QUERY_TERMS_DTYPE,
     FormatError,
+    Query,
     Rotator,
     code_factors,
+    estimate_from_ip,
     pack_codes,
     padded_dim,
     quantize,
+    query_terms,
     split,
     unpack_codes,
 )
@@ -46,7 +52,7 @@ MISSING = np.uint32(0xFFFFFFFF)
 """Marks an empty result slot, as the indexes' search does."""
 
 # Classes report this module, so pickle and help() find them here.
-for _public in (FormatError, Rotator):
+for _public in (FormatError, Query, Rotator):
     _public.__module__ = __name__
 del _public
 
@@ -58,11 +64,14 @@ __all__ = [
     "PACKED_CODES_VERSION",
     "QUERY_TERMS_DTYPE",
     "FormatError",
+    "Query",
     "Rotator",
     "code_factors",
+    "estimate_from_ip",
     "pack_codes",
     "padded_dim",
     "quantize",
+    "query_terms",
     "split",
     "unpack_codes",
 ]

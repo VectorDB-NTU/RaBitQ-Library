@@ -300,6 +300,30 @@ def check_quant(x: npt.NDArray[np.float32]) -> None:
     assert_type(quant.MISSING, np.uint32)
     assert_type(quant.FACTORS_DTYPE, np.dtype[np.void])
     assert issubclass(quant.FormatError, ValueError)
+    f_prefix = quant.code_factors(residuals, prefix, nbits=1, metric="l2")
+    query = quant.Query(residuals[0], metric="l2", centroid=None)
+    assert_type(query.metric, Literal["l2", "ip"])
+    bitsets = quant.pack_codes(prefix, nbits=1)
+    first = query.estimate_bitset(bitsets, f_prefix, indices=[0], num_threads=1)
+    assert_type(first, npt.NDArray[np.void])
+    assert_type(query.estimate_codes(codes, factors, nbits=4), npt.NDArray[np.void])
+    assert_type(
+        query.refine(ex, factors, first, ex_bits=3, indices=[0]),
+        npt.NDArray[np.float32],
+    )
+    assert_type(
+        query.refine_packed(quant.pack_codes(ex, nbits=3), factors, first, ex_bits=3),
+        npt.NDArray[np.float32],
+    )
+    query.set_centroid(None)
+    assert_type(query.copy(), quant.Query)
+    terms = quant.query_terms(residuals[0], metric="ip")
+    assert_type(terms, np.void)
+    assert_type(
+        quant.estimate_from_ip(first["refine_input"], f_prefix, terms, nbits=1),
+        npt.NDArray[np.void],
+    )
+    quant.Query(residuals[0], metric="cosine")  # type: ignore[arg-type]
     quant.code_factors(residuals, codes, nbits=4, metric="cosine")  # type: ignore[arg-type]
     quant.quantize(residuals, 4)  # type: ignore[call-overload]
     quant.Rotator(64, method="hadamard")  # type: ignore[arg-type]

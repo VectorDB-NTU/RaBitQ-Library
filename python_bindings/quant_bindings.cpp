@@ -10,11 +10,13 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -25,6 +27,7 @@
 #include "bindings_common.hpp"
 #include "rabitqlib/core/api.hpp"
 #include "rabitqlib/core/detail/fast_scale_table.hpp"
+#include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/pack_excode.hpp"
 #include "rabitqlib/core/provisional/quantize.hpp"
@@ -32,6 +35,7 @@
 #include "rabitqlib/core/types.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
+#include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
 namespace py = pybind11;
@@ -421,6 +425,618 @@ py::array unpack_codes(
     }
     return array;
 }
+
+// --- Layer 2 --------------------------------------------------------------------
+
+constexpr size_t kRecordFloats = 3;
+
+// A 1-D array of one of the float-record dtypes, read as contiguous aligned records.
+// Strided or misaligned input is copied; other dtypes are rejected, never cast.
+struct Records {
+    py::array owner;
+    const float* data = nullptr;
+    size_t rows = 0;
+
+    [[nodiscard]] const float* record(size_t i) const { return data + (kRecordFloats * i); }
+};
+
+Records record_input(
+    py::handle value, const py::dtype& dtype, const char* dtype_name, const char* name
+) {
+    const std::string expected =
+        std::string(name) + " must be a 1D NumPy array of dtype quant." + dtype_name;
+    auto array = py::array::ensure(value);
+    if (!array) {
+        throw std::invalid_argument(expected + "; got " + array_input_type(value));
+    }
+    if (!array.dtype().attr("__eq__")(dtype).cast<bool>()) {
+        throw std::invalid_argument(
+            expected + "; got dtype " + py::str(array.dtype()).cast<std::string>()
+        );
+    }
+    if (array.ndim() != 1) {
+        throw std::invalid_argument(expected + "; got shape " + array_shape(array));
+    }
+    const auto rows = static_cast<size_t>(array.shape(0));
+    if ((rows > 1 && array.strides(0) != static_cast<py::ssize_t>(dtype.itemsize())) ||
+        reinterpret_cast<std::uintptr_t>(array.data()) % alignof(float) != 0) {
+        array = py::array(array.attr("copy")());
+    }
+    Records records;
+    records.rows = rows;
+    records.data = static_cast<const float*>(array.data());
+    records.owner = std::move(array);
+    return records;
+}
+
+// A new 1-D record array, or the caller's out= of exactly that dtype and shape.
+std::pair<py::array, float*> record_output(
+    const py::object& out, const py::dtype& dtype, const char* dtype_name, size_t rows
+) {
+    if (out.is_none()) {
+        py::array result(dtype, std::vector<py::ssize_t>{static_cast<py::ssize_t>(rows)});
+        auto* data = static_cast<float*>(result.mutable_data());
+        return {std::move(result), data};
+    }
+    const std::string expected = std::string("out must be a writable, C-contiguous ") +
+                                 "NumPy array of dtype quant." + dtype_name +
+                                 " and shape (" + std::to_string(rows) + ",)";
+    if (!py::isinstance<py::array>(out)) {
+        throw std::invalid_argument(expected + "; got " + array_input_type(out));
+    }
+    auto result = py::reinterpret_borrow<py::array>(out);
+    if (!result.dtype().attr("__eq__")(dtype).cast<bool>() || result.ndim() != 1 ||
+        static_cast<size_t>(result.shape(0)) != rows || !result.writeable() ||
+        (rows > 1 && result.strides(0) != static_cast<py::ssize_t>(dtype.itemsize())) ||
+        reinterpret_cast<std::uintptr_t>(result.data()) % alignof(float) != 0) {
+        throw std::invalid_argument(expected + "; got shape " + array_shape(result));
+    }
+    auto* data = static_cast<float*>(result.mutable_data());
+    return {std::move(result), data};
+}
+
+// A new float32 vector, or the caller's out= of exactly that dtype and shape.
+std::pair<py::array, float*> float_output(const py::object& out, size_t rows) {
+    if (out.is_none()) {
+        py::array_t<float> result(static_cast<py::ssize_t>(rows));
+        auto* data = result.mutable_data();
+        return {std::move(result), data};
+    }
+    const std::string expected =
+        "out must be a writable, C-contiguous NumPy array of dtype float32 and shape (" +
+        std::to_string(rows) + ",)";
+    if (!py::isinstance<py::array_t<float>>(out)) {
+        throw std::invalid_argument(expected + "; got " + array_input_type(out));
+    }
+    auto result = py::reinterpret_borrow<py::array>(out);
+    if (result.ndim() != 1 || static_cast<size_t>(result.shape(0)) != rows ||
+        !result.writeable() ||
+        (rows > 1 && result.strides(0) != static_cast<py::ssize_t>(sizeof(float))) ||
+        reinterpret_cast<std::uintptr_t>(result.data()) % alignof(float) != 0) {
+        throw std::invalid_argument(expected + "; got shape " + array_shape(result));
+    }
+    auto* data = static_cast<float*>(result.mutable_data());
+    return {std::move(result), data};
+}
+
+// The rows a call reads: all of them, or the caller's indices, checked against n.
+struct Selection {
+    py::object owner;  // Keeps the converted indices alive; none for all rows.
+    const int64_t* indices = nullptr;
+    size_t count = 0;
+
+    [[nodiscard]] size_t row(size_t k) const {
+        return indices == nullptr ? k : static_cast<size_t>(indices[k]);
+    }
+};
+
+Selection selection(const py::object& indices, size_t rows) {
+    Selection selected;
+    if (indices.is_none()) {
+        selected.count = rows;
+        return selected;
+    }
+    auto array = ensure_1d_integer_array(indices, "indices");
+    selected.indices = array.data();
+    selected.count = static_cast<size_t>(array.shape(0));
+    selected.owner = std::move(array);
+    for (size_t k = 0; k < selected.count; ++k) {
+        const int64_t i = selected.indices[k];
+        if (i < 0 || static_cast<uint64_t>(i) >= rows) {
+            throw std::invalid_argument(
+                "indices must be in [0, " + std::to_string(rows) + "); got " +
+                std::to_string(i) + " at position " + std::to_string(k)
+            );
+        }
+    }
+    return selected;
+}
+
+void check_finite_records(
+    const Records& records,
+    const Selection& selected,
+    size_t field_begin,
+    size_t field_end,
+    const char* message
+) {
+    for (size_t k = 0; k < selected.count; ++k) {
+        const float* record = records.record(selected.row(k));
+        for (size_t field = field_begin; field < field_end; ++field) {
+            if (!std::isfinite(record[field])) {
+                throw std::invalid_argument(message);
+            }
+        }
+    }
+}
+
+template <typename TP>
+void check_selected_code_values(
+    const RowView<TP>& codes, const Selection& selected, size_t nbits, const char* name
+) {
+    const auto maximum = static_cast<TP>((1U << nbits) - 1);
+    for (size_t k = 0; k < selected.count; ++k) {
+        const size_t i = selected.row(k);
+        const TP* row = codes.row(i);
+        for (size_t j = 0; j < codes.cols; ++j) {
+            if (row[j] > maximum) {
+                throw std::invalid_argument(
+                    std::string(name) + " values must be below 2**" +
+                    std::to_string(nbits) + " = " + std::to_string(size_t{1} << nbits) +
+                    "; got " + std::to_string(row[j]) + " at (" + std::to_string(i) + ", " +
+                    std::to_string(j) + ")"
+                );
+            }
+        }
+    }
+}
+
+void check_record_rows(
+    const Records& records, size_t rows, const char* name, const char* of
+) {
+    if (records.rows != rows) {
+        throw std::invalid_argument(
+            std::string(name) + " must have one record per row of " + of + ", " +
+            std::to_string(rows) + "; got shape " + array_shape(records.owner)
+        );
+    }
+}
+
+// The query-side terms of the reference formula (docs/formats.md, core/estimator.hpp).
+struct QueryTerms {
+    float g_add = 0;
+    float g_error = 0;
+    float g_k1xsumq = 0;
+};
+
+QueryTerms compute_query_terms(
+    const float* query, const float* centroid, size_t d, MetricType metric
+) {
+    const float distance_sqr =
+        centroid == nullptr ? l2norm_sqr(query, d) : euclidean_sqr(query, centroid, d);
+    QueryTerms terms;
+    terms.g_add = metric == METRIC_L2
+                      ? distance_sqr
+                      : (centroid == nullptr ? 0.0F : -dot_product(query, centroid, d));
+    terms.g_error = std::sqrt(distance_sqr);
+    terms.g_k1xsumq = std::accumulate(query, query + d, 0.0F) * -0.5F;
+    if (!std::isfinite(terms.g_add) || !std::isfinite(terms.g_error) ||
+        !std::isfinite(terms.g_k1xsumq)) {
+        throw std::overflow_error("Query terms are not representable in float32");
+    }
+    return terms;
+}
+
+// One estimate record: distance, error, refine_input.
+inline void write_estimate(
+    float* out, float ip, size_t bits, const float* factors, const QueryTerms& terms
+) {
+    out[0] = quant::detail::full_est_dist_from_ip(
+        ip, bits, factors[0], factors[1], terms.g_add, terms.g_k1xsumq
+    );
+    out[1] = factors[2] * terms.g_error;
+    out[2] = ip;
+}
+
+// A rotated working-space vector: float32, shape (d,) with d a positive multiple of 32.
+std::vector<float> working_vector(py::handle value, const char* name) {
+    auto array = ensure_1d_array<float>(value, name);
+    const auto d = static_cast<size_t>(array.shape(0));
+    if (d == 0 || d % 32 != 0) {
+        throw std::invalid_argument(
+            std::string(name) +
+            " must have a length that is a positive multiple of 32; got shape " +
+            array_shape(array)
+        );
+    }
+    std::vector<float> vector(d);
+    std::memcpy(vector.data(), array.data(), d * sizeof(float));
+    check_coordinates(vector.data(), d, d, name);
+    return vector;
+}
+
+std::vector<float> centroid_vector(const py::object& centroid, size_t d) {
+    if (centroid.is_none()) {
+        return {};
+    }
+    auto array = ensure_vector(centroid, d, "centroid");
+    std::vector<float> vector(array.data(), array.data() + d);
+    check_coordinates(vector.data(), d, d, "centroid");
+    return vector;
+}
+
+py::object query_terms(
+    py::handle rotated_query, const std::string& metric, const py::object& centroid
+) {
+    const MetricType metric_type = metric_from_string(metric);
+    const auto query = working_vector(rotated_query, "rotated_query");
+    const auto center = centroid_vector(centroid, query.size());
+    const QueryTerms terms = compute_query_terms(
+        query.data(), center.empty() ? nullptr : center.data(), query.size(), metric_type
+    );
+    py::array result(query_terms_dtype(), std::vector<py::ssize_t>{1});
+    auto* data = static_cast<float*>(result.mutable_data());
+    data[0] = terms.g_add;
+    data[1] = terms.g_error;
+    data[2] = terms.g_k1xsumq;
+    return result.attr("__getitem__")(0);
+}
+
+py::array estimate_from_ip(
+    py::handle ip,
+    py::handle factors,
+    py::handle terms,
+    size_t nbits,
+    size_t num_threads,
+    const py::object& out
+) {
+    check_nbits(nbits, 1, kMaxTotalBits);
+    auto ips = ensure_1d_array<float>(ip, "ip");
+    const auto rows = static_cast<size_t>(ips.shape(0));
+    const Records records =
+        record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
+    check_record_rows(records, rows, "factors", "ip");
+    auto terms_array = py::array::ensure(terms);
+    if (!terms_array ||
+        !terms_array.dtype().attr("__eq__")(query_terms_dtype()).cast<bool>() ||
+        terms_array.size() != 1) {
+        throw std::invalid_argument(
+            "terms must be one record of dtype quant.QUERY_TERMS_DTYPE, as query_terms "
+            "returns; got " +
+            (terms_array ? "dtype " + py::str(terms_array.dtype()).cast<std::string>() +
+                               " and shape " + array_shape(terms_array)
+                         : array_input_type(terms))
+        );
+    }
+    std::array<float, kRecordFloats> values{};
+    std::memcpy(values.data(), terms_array.data(), sizeof(values));
+    if (!all_finite(values.data(), values.size())) {
+        throw std::invalid_argument("terms must contain only finite values");
+    }
+    const QueryTerms query{values[0], values[1], values[2]};
+    auto [result, estimates] = record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", rows);
+    const Selection all_rows = selection(py::none(), rows);
+    {
+        py::gil_scoped_release release;
+        if (!all_finite(ips.data(), rows)) {
+            throw std::invalid_argument("ip must contain only finite values");
+        }
+        check_finite_records(
+            records, all_rows, 0, kRecordFloats, "factors must contain only finite values"
+        );
+        index_detail::parallel_for(0, rows, num_threads, [&](size_t i, size_t /*thread*/) {
+            write_estimate(
+                estimates + (kRecordFloats * i),
+                ips.data()[i],
+                nbits,
+                records.record(i),
+                query
+            );
+        });
+    }
+    return result;
+}
+
+// A rotated query in the working space, with the terms of its current centroid. It owns
+// copies of the query and centroid, so copies and unpickled queries never share storage.
+class QuantQuery {
+   private:
+    std::vector<float> query_;
+    std::vector<float> centroid_;  // Empty means no centroid (zero).
+    MetricType metric_;
+    QueryTerms terms_;
+    IndexAccess access_;
+
+    [[nodiscard]] size_t d() const { return query_.size(); }
+
+    // The guard is taken before any input conversion, so conversion cannot race
+    // set_centroid.
+    template <typename Score>
+    py::array scored(Score&& score) {
+        const auto operation = access_.read();
+        return score();
+    }
+
+    void check_row_length(
+        const py::array& array,
+        size_t cols,
+        size_t expected,
+        const char* name,
+        const char* what
+    ) const {
+        if (cols != expected) {
+            throw std::invalid_argument(
+                std::string(name) + " must have " + what + " = " +
+                std::to_string(expected) + " columns for this query; got shape " +
+                array_shape(array)
+            );
+        }
+    }
+
+   public:
+    QuantQuery(std::vector<float> query, MetricType metric, std::vector<float> centroid)
+        : query_(std::move(query))
+        , centroid_(std::move(centroid))
+        , metric_(metric)
+        , terms_(compute_query_terms(
+              query_.data(), centroid_.empty() ? nullptr : centroid_.data(), d(), metric
+          )) {}
+
+    static QuantQuery create(
+        py::handle rotated_query, const std::string& metric, const py::object& centroid
+    ) {
+        const MetricType metric_type = metric_from_string(metric);
+        auto query = working_vector(rotated_query, "rotated_query");
+        auto center = centroid_vector(centroid, query.size());
+        return {std::move(query), metric_type, std::move(center)};
+    }
+
+    QuantQuery(const QuantQuery& other)
+        : query_(other.query_)
+        , centroid_(other.centroid_)
+        , metric_(other.metric_)
+        , terms_(other.terms_) {}
+    QuantQuery(QuantQuery&& other) noexcept
+        : query_(std::move(other.query_))
+        , centroid_(std::move(other.centroid_))
+        , metric_(other.metric_)
+        , terms_(other.terms_) {}
+    QuantQuery& operator=(const QuantQuery&) = delete;
+    QuantQuery& operator=(QuantQuery&&) = delete;
+    ~QuantQuery() = default;
+
+    [[nodiscard]] size_t dim() const { return d(); }
+    [[nodiscard]] std::string metric() const { return metric_to_string(metric_); }
+
+    void set_centroid(const py::object& centroid) {
+        const auto operation = access_.write();
+        auto center = centroid_vector(centroid, d());
+        const QueryTerms terms = compute_query_terms(
+            query_.data(), center.empty() ? nullptr : center.data(), d(), metric_
+        );
+        centroid_ = std::move(center);
+        terms_ = terms;
+    }
+
+    [[nodiscard]] QuantQuery copy() {
+        const auto operation = access_.read();
+        return QuantQuery(*this);
+    }
+
+    py::tuple state() {
+        const auto operation = access_.read();
+        py::array_t<float> query(static_cast<py::ssize_t>(d()));
+        std::memcpy(query.mutable_data(), query_.data(), d() * sizeof(float));
+        py::object centroid = py::none();
+        if (!centroid_.empty()) {
+            py::array_t<float> center(static_cast<py::ssize_t>(d()));
+            std::memcpy(center.mutable_data(), centroid_.data(), d() * sizeof(float));
+            centroid = std::move(center);
+        }
+        return py::make_tuple(query, metric(), centroid);
+    }
+
+    static QuantQuery from_state(const py::tuple& state) {
+        if (state.size() != 3) {
+            throw std::invalid_argument("Invalid Query pickle state");
+        }
+        return create(state[0], state[1].cast<std::string>(), state[2]);
+    }
+
+    [[nodiscard]] std::string repr() {
+        const auto operation = access_.read();
+        return "Query(dim=" + std::to_string(d()) + ", metric='" + metric() +
+               "', centroid=" + (centroid_.empty() ? "None" : "set") + ")";
+    }
+
+    py::array estimate_bitset(
+        py::handle bitsets,
+        py::handle factors,
+        const py::object& indices,
+        size_t num_threads,
+        const py::object& out
+    ) {
+        return scored([&] {
+            const auto codes = exact_dtype_rows<uint8_t>(bitsets, "bitsets");
+            check_row_length(codes.owner, codes.cols, d() / 8, "bitsets", "d // 8");
+            const Records records =
+                record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
+            check_record_rows(records, codes.rows, "factors", "bitsets");
+            const Selection selected = selection(indices, codes.rows);
+            auto [result, estimates] =
+                record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", selected.count);
+            const auto ip_func = select_excode_ipfunc(1);
+            {
+                py::gil_scoped_release release;
+                check_finite_records(
+                    records,
+                    selected,
+                    0,
+                    kRecordFloats,
+                    "factors must contain only finite values"
+                );
+                index_detail::parallel_for(
+                    0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
+                        const size_t i = selected.row(k);
+                        const float ip = ip_func(query_.data(), codes.row(i), d());
+                        write_estimate(
+                            estimates + (kRecordFloats * k),
+                            ip,
+                            1,
+                            records.record(i),
+                            terms_
+                        );
+                    }
+                );
+            }
+            return result;
+        });
+    }
+
+    py::array estimate_codes(
+        py::handle codes,
+        py::handle factors,
+        size_t nbits,
+        const py::object& indices,
+        size_t num_threads,
+        const py::object& out
+    ) {
+        check_nbits(nbits, 1, kMaxTotalBits);
+        return scored([&] {
+            const auto run = [&](const auto& view) {
+                check_row_length(view.owner, view.cols, d(), "codes", "d");
+                const Records records =
+                    record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
+                check_record_rows(records, view.rows, "factors", "codes");
+                const Selection selected = selection(indices, view.rows);
+                auto [result, estimates] =
+                    record_output(out, estimate_dtype(), "ESTIMATE_DTYPE", selected.count);
+                {
+                    py::gil_scoped_release release;
+                    check_selected_code_values(view, selected, nbits, "codes");
+                    check_finite_records(
+                        records,
+                        selected,
+                        0,
+                        kRecordFloats,
+                        "factors must contain only finite values"
+                    );
+                    index_detail::parallel_for(
+                        0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
+                            const size_t i = selected.row(k);
+                            const auto* code = view.row(i);
+                            float ip = 0;
+                            for (size_t j = 0; j < d(); ++j) {
+                                ip += query_[j] * static_cast<float>(code[j]);
+                            }
+                            write_estimate(
+                                estimates + (kRecordFloats * k),
+                                ip,
+                                nbits,
+                                records.record(i),
+                                terms_
+                            );
+                        }
+                    );
+                }
+                return result;
+            };
+            if (nbits == kMaxTotalBits) {
+                return run(exact_dtype_rows<uint16_t>(codes, "codes"));
+            }
+            return run(exact_dtype_rows<uint8_t>(codes, "codes"));
+        });
+    }
+
+    py::array refine(
+        py::handle ex,
+        py::handle factors,
+        py::handle first,
+        size_t ex_bits,
+        size_t prefix_bits,
+        const py::object& indices,
+        size_t num_threads,
+        const py::object& out,
+        bool packed
+    ) {
+        check_nbits(prefix_bits, 1, kMaxTotalBits - 1, "prefix_bits");
+        check_nbits(ex_bits, 1, kMaxTotalBits - prefix_bits, "ex_bits");
+        const size_t total_bits = prefix_bits + ex_bits;
+        const char* name = packed ? "packed" : "ex";
+        return scored([&] {
+            const auto codes = exact_dtype_rows<uint8_t>(ex, name);
+            if (packed) {
+                check_row_length(
+                    codes.owner, codes.cols, d() * ex_bits / 8, name, "d * ex_bits // 8"
+                );
+            } else {
+                check_row_length(codes.owner, codes.cols, d(), name, "d");
+            }
+            const Records records =
+                record_input(factors, factors_dtype(), "FACTORS_DTYPE", "factors");
+            check_record_rows(records, codes.rows, "factors", name);
+            const Selection selected = selection(indices, codes.rows);
+            const Records estimates =
+                record_input(first, estimate_dtype(), "ESTIMATE_DTYPE", "first");
+            if (estimates.rows != selected.count) {
+                throw std::invalid_argument(
+                    std::string("first must have one record per ") +
+                    (indices.is_none() ? "row of " + std::string(name)
+                                       : "entry of indices") +
+                    ", " + std::to_string(selected.count) + "; got shape " +
+                    array_shape(estimates.owner)
+                );
+            }
+            auto [result, distances] = float_output(out, selected.count);
+            const Selection all_estimates = selection(py::none(), selected.count);
+            const auto ip_func = select_excode_ipfunc(ex_bits);
+            const auto scale = static_cast<float>(1U << ex_bits);
+            {
+                py::gil_scoped_release release;
+                if (!packed) {
+                    check_selected_code_values(codes, selected, ex_bits, name);
+                }
+                check_finite_records(
+                    records,
+                    selected,
+                    0,
+                    kRecordFloats,
+                    "factors must contain only finite values"
+                );
+                check_finite_records(
+                    estimates,
+                    all_estimates,
+                    2,
+                    3,
+                    "first['refine_input'] must contain only finite values"
+                );
+                index_detail::parallel_for(
+                    0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
+                        const size_t i = selected.row(k);
+                        const uint8_t* code = codes.row(i);
+                        float ip_ex = 0;
+                        if (packed) {
+                            ip_ex = ip_func(query_.data(), code, d());
+                        } else {
+                            for (size_t j = 0; j < d(); ++j) {
+                                ip_ex += query_[j] * static_cast<float>(code[j]);
+                            }
+                        }
+                        const float* factor = records.record(i);
+                        distances[k] = quant::detail::full_est_dist_from_ip(
+                            (scale * estimates.record(k)[2]) + ip_ex,
+                            total_bits,
+                            factor[0],
+                            factor[1],
+                            terms_.g_add,
+                            terms_.g_k1xsumq
+                        );
+                    }
+                );
+            }
+            return result;
+        });
+    }
+};
 
 // --- Blob format (docs/formats.md) ------------------------------------------------
 
@@ -1059,6 +1675,307 @@ FormatError
             py::pickle(
                 [](const QuantRotator& self) { return self.to_bytes(); },
                 [](const py::bytes& state) { return QuantRotator::from_bytes(state); }
+            )
+        );
+    quant.def(
+        "query_terms",
+        &query_terms,
+        py::arg("rotated_query"),
+        py::kw_only(),
+        py::arg("metric"),
+        py::arg("centroid") = py::none(),
+        R"doc(Return the query-side terms of the reference estimator formula.
+
+g_add is |q - c|**2 for L2 and -<q, c> for IP, g_error is |q - c|, and
+g_k1xsumq is -0.5 * sum(q). The 1 of the IP distance 1 - <q, x> is folded
+into the factors' add, not into g_add.
+
+Parameters
+----------
+rotated_query : array_like of float32, shape (d,)
+    A rotated, padded query; d is a positive multiple of 32.
+metric : {'l2', 'ip', 'innerproduct'}
+    The metric the factors were computed for.
+centroid : array_like of float32, shape (d,), optional
+    The working-space centroid the factors were computed with; None is zero.
+
+Returns
+-------
+terms : numpy.void of QUERY_TERMS_DTYPE)doc"
+    );
+
+    quant.def(
+        "estimate_from_ip",
+        &estimate_from_ip,
+        py::arg("ip"),
+        py::arg("factors"),
+        py::arg("terms"),
+        py::kw_only(),
+        py::arg("nbits"),
+        py::arg("num_threads") = 1,
+        py::arg("out") = py::none(),
+        R"doc(Apply the reference estimator formula to the caller's inner products.
+
+distance = add + g_add + rescale * (ip + g_k1xsumq * (2**nbits - 1)),
+error = error_factor * g_error, and refine_input = ip.
+
+Parameters
+----------
+ip : array_like of float32, shape (n,)
+    Inner products <q, code> with the unsigned nbits-bit codes.
+factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
+    The factors of the same codes.
+terms : numpy.void of QUERY_TERMS_DTYPE
+    The query terms, as query_terms returns them.
+nbits : int
+    Bit width of the codes, 1 to 9.
+num_threads : int, optional
+    Worker threads; 1 by default, 0 uses every available CPU.
+out : numpy.ndarray of ESTIMATE_DTYPE, shape (n,), optional
+
+Returns
+-------
+estimates : numpy.ndarray of ESTIMATE_DTYPE, shape (n,))doc"
+    );
+
+    static constexpr const char* kQueryDoc =
+        R"doc(A rotated, padded query for scoring codes in the working space.
+
+The query and centroid are copied. set_centroid switches to another
+centroid's factors without preparing the query again. Scoring calls may run
+concurrently; set_centroid during one raises RuntimeError, so use copy() to
+get one query per thread.
+
+Parameters
+----------
+rotated_query : array_like of float32, shape (d,)
+    A rotated, padded query; d is a positive multiple of 32.
+metric : {'l2', 'ip', 'innerproduct'}
+    The metric the factors were computed for.
+centroid : array_like of float32, shape (d,), optional
+    The working-space centroid the factors were computed with; None is zero.
+
+Examples
+--------
+>>> import numpy as np
+>>> from rabitqlib import quant
+>>> x = np.random.default_rng(0).standard_normal((4, 64)).astype(np.float32)
+>>> codes = quant.quantize(x, nbits=1)
+>>> factors = quant.code_factors(x, codes, nbits=1, metric="l2")
+>>> q = quant.Query(x[0], metric="l2")
+>>> q.estimate_bitset(quant.pack_codes(codes, nbits=1), factors).shape
+(4,))doc";
+
+    static constexpr const char* kIndicesDoc = R"doc(
+indices : array_like of int, shape (m,), optional
+    Rows to score, read in place; the output lines up with indices. Must be
+    integers in [0, n).
+num_threads : int, optional
+    Worker threads; 1 by default, 0 uses every available CPU.)doc";
+
+    py::class_<QuantQuery>(quant, "Query", kQueryDoc)
+        .def(
+            py::init(&QuantQuery::create),
+            py::arg("rotated_query"),
+            py::kw_only(),
+            py::arg("metric"),
+            py::arg("centroid") = py::none(),
+            kQueryDoc
+        )
+        .def_property_readonly(
+            "dim", &QuantQuery::dim, R"doc(Working dimension d of the query.)doc"
+        )
+        .def_property_readonly(
+            "metric", &QuantQuery::metric, R"doc(The metric, 'l2' or 'ip'.)doc"
+        )
+        .def(
+            "set_centroid",
+            &QuantQuery::set_centroid,
+            py::arg("centroid"),
+            R"doc(Switch to the factors of another centroid; None is zero.
+
+Parameters
+----------
+centroid : array_like of float32, shape (d,) or None
+    The working-space centroid the next factors were computed with.)doc"
+        )
+        .def(
+            "estimate_bitset",
+            &QuantQuery::estimate_bitset,
+            py::arg("bitsets"),
+            py::arg("factors"),
+            py::kw_only(),
+            py::arg("indices") = py::none(),
+            py::arg("num_threads") = 1,
+            py::arg("out") = py::none(),
+            (std::string(
+                 R"doc(Estimate distances from packed 1-bit codes with the float query.
+
+Parameters
+----------
+bitsets : numpy.ndarray of uint8, shape (n, d // 8)
+    pack_codes(prefix, nbits=1) output.
+factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
+    The 1-bit (prefix) factors.)doc"
+             ) +
+             kIndicesDoc + R"doc(
+out : numpy.ndarray of ESTIMATE_DTYPE, optional
+
+Returns
+-------
+estimates : numpy.ndarray of ESTIMATE_DTYPE)doc")
+                .c_str()
+        )
+        .def(
+            "estimate_codes",
+            &QuantQuery::estimate_codes,
+            py::arg("codes"),
+            py::arg("factors"),
+            py::kw_only(),
+            py::arg("nbits"),
+            py::arg("indices") = py::none(),
+            py::arg("num_threads") = 1,
+            py::arg("out") = py::none(),
+            (std::string(R"doc(Estimate distances from unpacked codes of any width.
+
+Parameters
+----------
+codes : numpy.ndarray of uint8 (nbits 1 to 8) or uint16 (nbits 9), shape (n, d)
+factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
+    The factors of these nbits-bit codes.
+nbits : int
+    Bit width of the codes, 1 to 9.)doc") +
+             kIndicesDoc + R"doc(
+out : numpy.ndarray of ESTIMATE_DTYPE, optional
+
+Returns
+-------
+estimates : numpy.ndarray of ESTIMATE_DTYPE)doc")
+                .c_str()
+        )
+        .def(
+            "refine",
+            [](QuantQuery& self,
+               py::handle ex,
+               py::handle factors,
+               py::handle first,
+               size_t ex_bits,
+               size_t prefix_bits,
+               const py::object& indices,
+               size_t num_threads,
+               const py::object& out) {
+                return self.refine(
+                    ex,
+                    factors,
+                    first,
+                    ex_bits,
+                    prefix_bits,
+                    indices,
+                    num_threads,
+                    out,
+                    false
+                );
+            },
+            py::arg("ex"),
+            py::arg("factors"),
+            py::arg("first"),
+            py::kw_only(),
+            py::arg("ex_bits"),
+            py::arg("prefix_bits") = 1,
+            py::arg("indices") = py::none(),
+            py::arg("num_threads") = 1,
+            py::arg("out") = py::none(),
+            (std::string(R"doc(Refine prefix estimates with the unpacked extra bits.
+
+Parameters
+----------
+ex : numpy.ndarray of uint8, shape (n, d)
+    The low ex_bits bits of each code, from split.
+factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
+    The full-code factors (prefix_bits + ex_bits bits).
+first : numpy.ndarray of ESTIMATE_DTYPE
+    The prefix estimates of the scored rows; only refine_input is read.
+ex_bits : int
+    Width of the extra bits, 1 to 9 - prefix_bits.
+prefix_bits : int, optional
+    Width of the prefix the first estimates scored, 1 by default.)doc") +
+             kIndicesDoc + R"doc(
+out : numpy.ndarray of float32, optional
+
+Returns
+-------
+distances : numpy.ndarray of float32)doc")
+                .c_str()
+        )
+        .def(
+            "refine_packed",
+            [](QuantQuery& self,
+               py::handle packed,
+               py::handle factors,
+               py::handle first,
+               size_t ex_bits,
+               size_t prefix_bits,
+               const py::object& indices,
+               size_t num_threads,
+               const py::object& out) {
+                return self.refine(
+                    packed,
+                    factors,
+                    first,
+                    ex_bits,
+                    prefix_bits,
+                    indices,
+                    num_threads,
+                    out,
+                    true
+                );
+            },
+            py::arg("packed"),
+            py::arg("factors"),
+            py::arg("first"),
+            py::kw_only(),
+            py::arg("ex_bits"),
+            py::arg("prefix_bits") = 1,
+            py::arg("indices") = py::none(),
+            py::arg("num_threads") = 1,
+            py::arg("out") = py::none(),
+            (std::string(R"doc(Refine prefix estimates with packed extra bits.
+
+Uses the dispatched SIMD kernel; on one build it equals refine.
+
+Parameters
+----------
+packed : numpy.ndarray of uint8, shape (n, d * ex_bits // 8)
+    pack_codes(ex, nbits=ex_bits) output.
+factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
+    The full-code factors (prefix_bits + ex_bits bits).
+first : numpy.ndarray of ESTIMATE_DTYPE
+    The prefix estimates of the scored rows; only refine_input is read.
+ex_bits : int
+    Width of the extra bits, 1 to 9 - prefix_bits.
+prefix_bits : int, optional
+    Width of the prefix the first estimates scored, 1 by default.)doc") +
+             kIndicesDoc + R"doc(
+out : numpy.ndarray of float32, optional
+
+Returns
+-------
+distances : numpy.ndarray of float32)doc")
+                .c_str()
+        )
+        .def("copy", &QuantQuery::copy, "Return an independent copy of the query.")
+        .def("__copy__", &QuantQuery::copy, "Return an independent copy of the query.")
+        .def(
+            "__deepcopy__",
+            [](QuantQuery& self, const py::object& /*memo*/) { return self.copy(); },
+            py::arg("memo"),
+            "Return an independent copy of the query."
+        )
+        .def("__repr__", &QuantQuery::repr, "Return the query's parameters.")
+        .def(
+            py::pickle(
+                [](QuantQuery& self) { return self.state(); },
+                [](const py::tuple& state) { return QuantQuery::from_state(state); }
             )
         );
 }
