@@ -132,27 +132,35 @@ inline void ensure_dimension(const py::array& array, size_t expected, const char
     }
 }
 
-// A seed is an integer in [0, max_seed]; bool is rejected like other integer options.
-inline uint64_t checked_seed(py::handle value, uint64_t max_seed) {
-    const std::string range =
-        "seed must be an integer in [0, " + std::to_string(max_seed) + "]";
+// An integer option in [0, max_value]. bool is rejected; a non-integer raises TypeError
+// and an out-of-range value ValueError, both with message.
+inline uint64_t checked_integer(
+    py::handle value, uint64_t max_value, const std::string& message
+) {
     if (PyBool_Check(value.ptr())) {
-        throw py::type_error(range);
+        throw py::type_error(message);
     }
     auto integer = py::reinterpret_steal<py::object>(PyNumber_Index(value.ptr()));
     if (!integer) {
         PyErr_Clear();
-        throw py::type_error(range);
+        throw py::type_error(message);
     }
-    const unsigned long long seed = PyLong_AsUnsignedLongLong(integer.ptr());
+    const unsigned long long result = PyLong_AsUnsignedLongLong(integer.ptr());
     if (PyErr_Occurred() != nullptr) {
         PyErr_Clear();
-        throw std::invalid_argument(range);
+        throw std::invalid_argument(message);
     }
-    if (seed > max_seed) {
-        throw std::invalid_argument(range);
+    if (result > max_value) {
+        throw std::invalid_argument(message);
     }
-    return seed;
+    return result;
+}
+
+// A seed is an integer in [0, max_seed].
+inline uint64_t checked_seed(py::handle value, uint64_t max_seed) {
+    return checked_integer(
+        value, max_seed, "seed must be an integer in [0, " + std::to_string(max_seed) + "]"
+    );
 }
 
 // Call only after rank validation.

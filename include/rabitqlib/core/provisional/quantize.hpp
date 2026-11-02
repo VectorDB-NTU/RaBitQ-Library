@@ -11,7 +11,8 @@ namespace rabitqlib::quant::provisional {
 // Provisional quantization building blocks for rabitqlib.quant. Any minor release may
 // change or remove them; they are not part of the stable quant::v1 API. Vectors are in
 // the rotated, padded working space. Inputs are borrowed only for the call, outputs are
-// written only after every check passes, and the calls allocate temporaries.
+// written only after every check passes, and the calls allocate temporaries. If such an
+// allocation fails, combined_code's code contents are unspecified.
 
 /**
  * Unsigned total_bits-bit codes of one residual (vector minus centroid), the codes

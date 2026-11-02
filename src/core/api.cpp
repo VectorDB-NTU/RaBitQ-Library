@@ -16,28 +16,25 @@
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/pack_excode.hpp"
-#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
+#include "validation.hpp"
 
 namespace rabitqlib::quant::v1 {
 namespace {
+using validation::check_disjoint;
+
 constexpr size_t kWorkspaceAlignment = alignof(std::max_align_t);
 
 void validate(const Parameters& parameters) {
     if (parameters.dim < 2) {
         throw std::invalid_argument("dim must be at least 2");
     }
-    if (parameters.dim > static_cast<size_t>(std::numeric_limits<long>::max())) {
-        throw std::length_error("dim exceeds the supported index range");
-    }
+    validation::check_dim_range(parameters.dim);
     if (parameters.total_bits < 1 || parameters.total_bits > 9) {
         throw std::invalid_argument("total_bits must be in [1, 9]");
     }
     validate_metric_type(parameters.metric);
-    if (!std::isfinite(parameters.t_const) ||
-        parameters.t_const > std::numeric_limits<int>::max() / 2.0) {
-        throw std::invalid_argument("t_const must be finite and at most INT_MAX / 2");
-    }
+    validation::check_t_const(parameters.t_const);
 }
 
 size_t checked_multiply(size_t count, size_t width) {
@@ -74,29 +71,11 @@ void check_buffer(ConstBuffer buffer, size_t required) {
     }
 }
 
-void check_disjoint(
-    const void* first, size_t first_bytes, const void* second, size_t second_bytes
-) {
-    if (first_bytes == 0 || second_bytes == 0) {
-        return;
-    }
-    const auto first_address = reinterpret_cast<std::uintptr_t>(first);
-    const auto second_address = reinterpret_cast<std::uintptr_t>(second);
-    if (first_address < second_address + second_bytes &&
-        second_address < first_address + first_bytes) {
-        throw std::invalid_argument(
-            "Writable buffers must not overlap other buffers or inputs"
-        );
-    }
-}
-
 void check_input(const float* input, size_t dim) {
     check_buffer<alignof(float)>(
         {input, checked_multiply(dim, sizeof(float))}, checked_multiply(dim, sizeof(float))
     );
-    if (!all_finite(input, dim)) {
-        throw std::invalid_argument("Input vectors must contain only finite values");
-    }
+    validation::check_finite_input(input, dim);
 }
 
 // Parameters and arithmetic ranges were validated by requirements/prepare_query.
@@ -295,10 +274,7 @@ Factors encode(
             centroid, 1, static_cast<Eigen::Index>(parameters.dim)
         );
     const float residual_squared_norm =
-        l2norm_sqr(storage.scratch.residual, parameters.dim);
-    if (!std::isfinite(residual_squared_norm)) {
-        throw std::overflow_error("Residual squared norm is not representable in float32");
-    }
+        validation::checked_residual_squared_norm(storage.scratch.residual, parameters.dim);
     Factors factors;
     if (parameters.total_bits > 1) {
         rabitq_impl::ex_bits::code_with_factor_from_residual<true>(
@@ -330,10 +306,7 @@ Factors encode(
             &storage.scratch
         );
     }
-    if (!std::isfinite(factors.add) || !std::isfinite(factors.rescale) ||
-        !std::isfinite(factors.error)) {
-        throw std::overflow_error("Quantization factors are not representable in float32");
-    }
+    validation::check_factors_representable(factors);
     write_codes(parameters, output, storage);
     return factors;
 }

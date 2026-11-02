@@ -220,8 +220,13 @@ def test_rejected_arguments():
         quant.code_factors(r, codes, nbits=9, metric="l2")
     with pytest.raises(ValueError, match="codes must have the shape of residuals"):
         quant.code_factors(r, codes[:4], nbits=4, metric="l2")
-    with pytest.raises(ValueError, match=r"codes values must be below 2\*\*nbits = 8"):
+    with pytest.raises(
+        ValueError,
+        match="codes row 0 for residuals row 0: Unpacked code exceeds the configured",
+    ):
         quant.code_factors(r, codes, nbits=3, metric="l2")
+    with pytest.raises(ValueError, match=r"codes values must be below 2\*\*3 = 8"):
+        quant.pack_codes(codes, nbits=3)
     with pytest.raises(
         ValueError, match="codes row 0 for residuals row 0: code does not"
     ):
