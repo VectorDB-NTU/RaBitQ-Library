@@ -22,6 +22,7 @@
 
 #include "file_replacement.hpp"
 #include "ivf_search.hpp"
+#include "rabitqlib/clustering/detail/kmeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/data_layout.hpp"
@@ -56,6 +57,8 @@ constexpr size_t kHistoricalHnswMinClusters = 20000;
 // An index from the point-count constructor is built by construct, never trained.
 constexpr const char* kPointCountConstructOnly =
     "IVF index created with a point count must be built by construct";
+// Scratch for the rows that flat routing in add rotates at a time.
+constexpr size_t kRoutingBlockBytes = size_t{128} << 20;
 }  // namespace
 
 IVF::IVF() noexcept = default;
@@ -494,6 +497,39 @@ void IVF::add(
                 throw std::invalid_argument("IVF cluster ID is out of range");
             }
             assigned[i] = cluster_ids[i];
+        }
+    } else if (initializer_type_ == InitializerType::Flat) {
+        // Exact nearest centroids with k-means' blocked assignment, which reuses each
+        // centroid tile across a block of rotated rows; ties go to the lowest ID.
+        // FlatInitializer stores its centroids contiguously.
+        const float* centroids = initializer_->centroid(0);
+        const auto num_workers = static_cast<uint32_t>(resolve_num_threads(num_threads));
+        const size_t block_rows = std::min(
+            num_points,
+            std::max<size_t>(1, kRoutingBlockBytes / (sizeof(float) * padded_dim_))
+        );
+        std::vector<float> rotated(block_rows * padded_dim_);
+        std::vector<float> distances(block_rows);
+        for (size_t first = 0; first < num_points; first += block_rows) {
+            const size_t rows = std::min(block_rows, num_points - first);
+            index_detail::parallel_for(
+                0, rows, num_threads, [&](size_t row, size_t /*thread*/) {
+                    rotator_->rotate(
+                        data + ((first + row) * dim_), &rotated[row * padded_dim_]
+                    );
+                }
+            );
+            clustering::detail::exact_assign(
+                rotated.data(),
+                centroids,
+                rows,
+                padded_dim_,
+                num_clusters_,
+                metric_type_ == METRIC_IP,
+                num_workers,
+                assigned.data() + first,
+                distances.data()
+            );
         }
     } else {
         index_detail::parallel_for(

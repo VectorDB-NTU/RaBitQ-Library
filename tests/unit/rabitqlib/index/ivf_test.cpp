@@ -786,6 +786,65 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
     }
 }
 
+TEST(IvfAddTest, FlatRoutingSpansSeveralRoutingBlocks) {
+    // More rows than one flat routing block (128 MiB of rotated rows; kDynDim pads
+    // to 96), with a partial final block. Row i sits close to centroid i % 4, so
+    // its nearest centroid is unambiguous.
+    constexpr size_t kBlockRows = (size_t{128} << 20) / (sizeof(float) * 96);
+    constexpr size_t kCount = kBlockRows + 33;
+    auto centroids = random_rows(kDynNumClusters, 51);
+    for (auto& value : centroids) {
+        value *= 10.0F;
+    }
+    auto points = random_rows(kCount, 52);
+    for (size_t i = 0; i < kCount; ++i) {
+        for (size_t d = 0; d < kDynDim; ++d) {
+            points[i * kDynDim + d] = centroids[(i % kDynNumClusters) * kDynDim + d] +
+                                      0.1F * points[i * kDynDim + d];
+        }
+    }
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
+        IVF index(kDynDim, kDynNumClusters, 1, metric, 7U);
+        index.set_centroids(centroids.data(), 1);
+        index.add(points.data(), kCount, nullptr, false, 4);
+        size_t stored = 0;
+        for (size_t c = 0; c < kDynNumClusters; ++c) {
+            const Cluster cluster = IvfTestAccess::cluster_view(index, c);
+            stored += cluster.num();
+            for (size_t j = 0; j < cluster.num(); ++j) {
+                ASSERT_EQ(cluster.ids()[j] % kDynNumClusters, c) << cluster.ids()[j];
+            }
+        }
+        EXPECT_EQ(stored, kCount);
+    }
+}
+
+TEST(IvfAddTest, FlatRoutingBreaksTiesTowardTheLowestCentroid) {
+    // Centroids 2 and 3 repeat 0 and 1, so every point ties between two centroids.
+    auto centroids = random_rows(kDynNumClusters, 61);
+    std::copy_n(centroids.begin(), 2 * kDynDim, centroids.begin() + (2 * kDynDim));
+    constexpr size_t kCount = 50;
+    const auto points = random_rows(kCount, 62);
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
+        IVF index(kDynDim, kDynNumClusters, 4, metric, 7U);
+        index.set_centroids(centroids.data(), 1);
+        index.add(points.data(), kCount, nullptr, false, 2);
+        const auto expected = nearest_centroids(centroids, points.data(), kCount, metric);
+        std::array<size_t, kDynNumClusters> expected_sizes{};
+        for (PID cluster : expected) {
+            ASSERT_LT(cluster, 2U);
+            ++expected_sizes[cluster];
+        }
+        for (size_t c = 0; c < kDynNumClusters; ++c) {
+            EXPECT_EQ(IvfTestAccess::cluster_view(index, c).num(), expected_sizes[c]) << c;
+        }
+    }
+}
+
 TEST(IvfAddTest, AddingToOneClusterLeavesOtherClustersUntouched) {
     // Cluster sizes 0, 1, 32, 97 cover empty, single, full-batch and tail clusters.
     constexpr size_t kOld = 130;
