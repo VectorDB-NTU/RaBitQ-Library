@@ -55,15 +55,16 @@ def test_constructor_options_are_keyword_only():
         "num_clusters",
     ]
     assert [p for p in hnsw if hnsw[p].kind is not keyword] == ["self", "dim"]
-    assert ivf["nbits"].default is inspect.Parameter.empty
-    assert hnsw["nbits"].default is inspect.Parameter.empty
+    assert ivf["nbits"].default == 7
+    assert hnsw["nbits"].default == 7
+    assert IvfIndex(DIM, 4).nbits == HnswIndex(DIM).nbits == 7
     assert ivf["seed"].default is None
     assert hnsw["seed"].default == 100
     assert hnsw["num_clusters"].default == 16
     for cls in (IvfIndex, HnswIndex):
         add = inspect.signature(cls.add).parameters
         assert [p for p in add if add[p].kind is not keyword] == ["self", "data"]
-        assert add["num_threads"].default == 0
+        assert add["num_threads"].default is None
         # train is native; pybind11 documents its signature on the first line.
         assert ", x: object, *, num_threads:" in cls.train.__doc__.splitlines()[0]
         assert cls.train.__doc__.splitlines()[0].endswith("= None) -> None")
@@ -72,15 +73,6 @@ def test_constructor_options_are_keyword_only():
 @pytest.mark.parametrize(
     "make,message",
     [
-        # Python 3.11 omits "keyword-only" from inspect's message; 3.12+ includes it.
-        (
-            lambda: IvfIndex(DIM, 4),
-            r"^IvfIndex\(\) missing a required (keyword-only )?argument: 'nbits'$",
-        ),
-        (
-            lambda: HnswIndex(DIM),
-            r"^HnswIndex\(\) missing a required (keyword-only )?argument: 'nbits'$",
-        ),
         (
             lambda: IvfIndex(DIM, 4, nbits=4, max_degree=8),
             r"^IvfIndex\(\) got an unexpected keyword argument 'max_degree'$",
@@ -129,7 +121,7 @@ def test_cp_defaults_follow_metric_and_seed(metric):
     ivf = IvfIndex(DIM, 4, nbits=4, metric=metric, seed=11)
     hnsw = HnswIndex(DIM, nbits=4, metric=metric, seed=2**40 + 5)
     for index, seed in ((ivf, 11), (hnsw, 5)):
-        assert index.cp.niter == 25
+        assert index.cp.niter == 10
         assert index.cp.max_points_per_centroid == 256
         assert index.cp.spherical is (metric == "ip")
         assert index.cp.seed == seed
@@ -253,7 +245,8 @@ def test_operations_before_training_raise_and_change_nothing(kind, base_data, tm
     index = new_index(kind)
     name = type(index).__name__
     operations = {
-        "add": lambda: index.add(base_data),
+        # Without cluster_ids, add trains first instead.
+        "add": lambda: index.add(base_data, cluster_ids=np.zeros(N_VECTORS, np.uint32)),
         "search": lambda: search(index, base_data[:1], 1),
         "remove": lambda: index.remove([0]),
         "save": lambda: index.save(tmp_path / "untrained.index"),
@@ -267,9 +260,8 @@ def test_operations_before_training_raise_and_change_nothing(kind, base_data, tm
             call()
     assert not (tmp_path / "untrained.index").exists()
     assert not index.is_trained and len(index) == 0
-    index.train(base_data)
     index.add(base_data)
-    assert len(index) == N_VECTORS
+    assert index.is_trained and len(index) == N_VECTORS
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -289,18 +281,20 @@ def test_trained_index_without_points_cannot_be_saved(kind, base_data, tmp_path)
 
 
 @pytest.mark.parametrize("kind", KINDS)
-def test_search_k_is_bounded_by_stored_points(kind, base_data):
-    # Not by HNSW capacity, which grows geometrically.
+def test_search_pads_k_beyond_the_stored_points(kind, base_data):
     index = new_index(kind)
     index.train(base_data)
-    bound = "num_stored_points" if kind == "hnsw" else "max_elements"
-    with pytest.raises(ValueError, match=f"^k must be between 1 and {bound}$"):
-        search(index, base_data[:1], 1)
+    ids, distances = search(index, base_data[:1], 3)
+    np.testing.assert_array_equal(ids, np.full((1, 3), 2**32 - 1))
+    assert np.isinf(distances).all()
     index.add(base_data[:10])
     index.add(base_data[10:11])
-    assert search(index, base_data[:1], 11)[0].shape == (1, 11)
-    with pytest.raises(ValueError, match=f"^k must be between 1 and {bound}$"):
-        search(index, base_data[:1], 12)
+    ids, distances = search(index, base_data[:1], 13)
+    assert np.isfinite(distances).sum() == 11
+    np.testing.assert_array_equal(np.sort(ids[np.isfinite(distances)]), np.arange(11))
+    np.testing.assert_array_equal(ids[~np.isfinite(distances)], [2**32 - 1] * 2)
+    with pytest.raises(ValueError, match=r"^k must be between 1 and 2\*\*31$"):
+        search(index, base_data[:1], 0)
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -406,3 +400,144 @@ def test_add_without_cluster_ids_routes_to_trained_centroids(kind, base_data):
     index.add(base_data[250:])
     found, _ = search(index, base_data[:20], 1)
     assert np.mean(found[:, 0] == np.arange(20)) >= 0.9
+
+
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_first_add_trains_like_train_then_add(kind, metric, base_data, tmp_path):
+    explicit = new_index(kind, metric)
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    implicit = new_index(kind, metric)
+    np.testing.assert_array_equal(
+        implicit.add(base_data, num_threads=1), np.arange(N_VECTORS)
+    )
+    assert implicit.is_trained
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_failed_first_add_leaves_the_index_untrained(kind, base_data):
+    index = new_index(kind, num_clusters=8)
+    bad = base_data.copy()
+    bad[7, 1] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        index.add(bad)
+    if kind == "ivf":
+        with pytest.raises(ValueError, match="at least num_clusters rows"):
+            index.add(base_data[:7])
+    assert not index.is_trained
+    assert len(index) == index.num_stored_points == 0
+    assert index.num_clusters == 8
+    index.add(base_data)
+    assert index.is_trained and len(index) == N_VECTORS
+
+
+def test_ivf_nprobe_defaults_to_a_sixteenth_of_the_clusters(base_data):
+    index = IvfIndex(DIM, 40, nbits=4, seed=3)
+    index.add(base_data)
+    queries = base_data[:10]
+    expected = index.search(queries, 5, 3)  # round(40 / 16) = 2.5 -> 3
+    for found in (index.search(queries, 5), index.search(queries, 5, None)):
+        np.testing.assert_array_equal(found[0], expected[0])
+        np.testing.assert_array_equal(found[1], expected[1])
+    np.testing.assert_array_equal(index.search(queries, 5, 0)[0], expected[0])
+    small = IvfIndex(DIM, 4, nbits=4, seed=3)
+    small.add(base_data)
+    np.testing.assert_array_equal(
+        small.search(queries, 5)[0], small.search(queries, 5, 1)[0]
+    )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_num_threads_none_selects_the_defaults(kind, base_data):
+    index = new_index(kind)
+    index.add(base_data, num_threads=None)
+    found = (
+        index.search(base_data[:5], 3, None, num_threads=None)
+        if kind == "hnsw"
+        else index.search(base_data[:5], 3, None, None, None)
+    )
+    assert found[0].shape == (5, 3)
+
+
+def test_hnsw_reports_its_graph_settings():
+    index = HnswIndex(DIM, M=12, ef_construction=77)
+    assert (index.M, index.ef_construction) == (12, 77)
+
+
+def test_package_reports_its_version():
+    import importlib.metadata
+
+    import rabitqlib
+
+    assert rabitqlib.__version__ == importlib.metadata.version("rabitqlib")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"nbits": 32},
+        {"initializer": "flat_rabitq"},
+        {"initializer": "hnsw"},
+        {"niter": 3, "max_points_per_centroid": 64},
+    ],
+)
+def test_ivf_first_add_keeps_every_setting(options, base_data, tmp_path):
+    cp = {k: options[k] for k in ("niter", "max_points_per_centroid") if k in options}
+    settings = {k: v for k, v in options.items() if k not in cp}
+
+    def make():
+        index = IvfIndex(DIM, 8, metric="ip", seed=11, **settings)
+        for name, value in cp.items():
+            setattr(index.cp, name, value)
+        return index
+
+    implicit = make()
+    implicit.add(base_data, num_threads=1)
+    explicit = make()
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+def test_ivf_first_add_uses_the_drawn_seed(base_data, tmp_path):
+    implicit = IvfIndex(DIM, 8)
+    seed = implicit.seed
+    implicit.add(base_data, num_threads=1)
+    assert implicit.seed == implicit.cp.seed == seed
+    explicit = IvfIndex(DIM, 8, seed=seed)
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+def test_hnsw_first_add_keeps_a_preallocated_capacity(base_data, tmp_path):
+    implicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
+    implicit.resize(2 * N_VECTORS)
+    implicit.add(base_data, num_threads=1)
+    assert implicit.max_elements == 2 * N_VECTORS
+    explicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
+    explicit.resize(2 * N_VECTORS)
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_empty_first_add_requires_training(kind, base_data):
+    index = new_index(kind)
+    name = type(index).__name__
+    with pytest.raises(
+        RuntimeError, match=f"^{name} must be trained or loaded before add$"
+    ):
+        index.add(base_data[:0])
+    assert not index.is_trained

@@ -155,7 +155,7 @@ class HnswIndex {
                 check_coordinates(
                     centroids_ptr, num_clusters * dim, dim, "HNSW construction centroids"
                 );
-                grow_capacity(rows, data_ptr, "HNSW construction data");
+                grow_capacity(*index_, rows, data_ptr, "HNSW construction data");
             }
             if (empty && index_->is_trained()) {
                 index_->set_centroids(num_clusters, centroids_ptr);
@@ -180,12 +180,18 @@ class HnswIndex {
     py::array_t<PID> add(
         py::handle data,
         const py::object& cluster_ids,
-        size_t num_threads,
+        std::optional<size_t> num_threads,
         bool fast_quantization
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
-        check_trained("add");
+        // The first add on an untrained index trains it on the same data. Only a
+        // loaded file lacks the seed that recreates the rotation and graph levels.
+        const bool trains = !index_->is_trained() && cluster_ids.is_none() &&
+                            seed_.has_value() && data_array.shape(0) > 0;
+        if (!trains) {
+            check_trained("add");
+        }
         ensure_dimension(
             data_array, index_->dimension(), "data dimension does not match index dim"
         );
@@ -199,15 +205,41 @@ class HnswIndex {
         // Allocated before the index is touched.
         auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
         const auto* data_ptr = data_array.data();
+        const size_t threads = num_threads.value_or(0);
+        if (trains) {
+            // Train and fill a fresh index with the same seed, then swap it in, so
+            // that a failure leaves this index untrained and empty. Fewer rows than
+            // num_clusters train one centroid per row.
+            const size_t num_clusters = std::min(num_clusters_, rows);
+            const auto cp = training_parameters(cp_, num_threads);
+            auto staged = std::make_unique<hnsw::HierarchicalNSW>(
+                index_->max_elements(),
+                index_->dimension(),
+                index_->nbits(),
+                index_->M(),
+                index_->ef_construction(),
+                *seed_,
+                index_->metric_type()
+            );
+            const auto labels = [&] {
+                py::gil_scoped_release release;
+                staged->train(num_clusters, rows, data_ptr, cp);
+                grow_capacity(*staged, rows, data_ptr, "HNSW add data");
+                return staged->add(data_ptr, rows, nullptr, fast_quantization, threads);
+            }();
+            index_.swap(staged);
+            std::copy(labels.begin(), labels.end(), ids.mutable_data());
+            return ids;
+        }
         const auto labels = [&] {
             py::gil_scoped_release release;
-            grow_capacity(rows, data_ptr, "HNSW add data");
+            grow_capacity(*index_, rows, data_ptr, "HNSW add data");
             return index_->add(
                 data_ptr,
                 rows,
                 assigned.empty() ? nullptr : assigned.data(),
                 fast_quantization,
-                num_threads
+                threads
             );
         }();
         std::copy(labels.begin(), labels.end(), ids.mutable_data());
@@ -239,7 +271,10 @@ class HnswIndex {
     }
 
     py::tuple search(
-        py::handle queries, size_t k, std::optional<size_t> ef, size_t num_threads
+        py::handle queries,
+        size_t k,
+        std::optional<size_t> ef,
+        std::optional<size_t> num_threads
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
@@ -247,12 +282,9 @@ class HnswIndex {
         ensure_dimension(
             query_array, index_->dimension(), "query dimension does not match index dim"
         );
-        // None and 0 select max(k, 10), as SymqgIndex does.
-        const size_t ef_search = ef.value_or(0) == 0 ? std::max<size_t>(k, 10) : *ef;
-        // Capacity grows geometrically, so bound k by what is stored, as IVF does.
-        if (k == 0 || k > index_->num_stored_points()) {
-            throw std::invalid_argument("k must be between 1 and num_stored_points");
-        }
+        check_k(k);
+        // None and 0 select max(k, 64), as SymqgIndex does.
+        const size_t ef_search = ef.value_or(0) == 0 ? std::max<size_t>(k, 64) : *ef;
 
         auto output = unfilled_search_results(static_cast<size_t>(query_array.shape(0)), k);
         auto result_ids_view = output.ids.mutable_unchecked<2>();
@@ -263,7 +295,9 @@ class HnswIndex {
         std::vector<std::vector<std::pair<float, PID>>> results;
         {
             py::gil_scoped_release release;
-            results = index_->search(queries_data, num_queries, k, ef_search, num_threads);
+            results = index_->search(
+                queries_data, num_queries, k, ef_search, num_threads.value_or(1)
+            );
         }
 
         for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(results.size()); ++i) {
@@ -333,6 +367,14 @@ class HnswIndex {
         const auto operation = access_.read();
         return index_->nbits();
     }
+    [[nodiscard]] size_t M() const {
+        const auto operation = access_.read();
+        return index_->M();
+    }
+    [[nodiscard]] size_t ef_construction() const {
+        const auto operation = access_.read();
+        return index_->ef_construction();
+    }
     [[nodiscard]] bool is_trained() const {
         const auto operation = access_.read();
         return index_->is_trained();
@@ -384,19 +426,21 @@ class HnswIndex {
     // Grow capacity geometrically to fit `rows` more points from `data`, checked
     // first so that invalid input leaves the capacity unchanged. Leaves IDs beyond
     // the supported range for add to reject. Called without the GIL.
-    void grow_capacity(size_t rows, const float* data, const char* what) {
-        const size_t capacity = index_->max_elements();
-        const size_t stored = index_->num_stored_points();
+    static void grow_capacity(
+        hnsw::HierarchicalNSW& index, size_t rows, const float* data, const char* what
+    ) {
+        const size_t capacity = index.max_elements();
+        const size_t stored = index.num_stored_points();
         if (rows <= capacity - stored ||
             rows > buffer::kSearchBufferMaxPointCount - stored) {
             return;
         }
-        const size_t dim = index_->dimension();
+        const size_t dim = index.dimension();
         check_coordinates(data, rows * dim, dim, what);
         const size_t needed = stored + rows;
         const size_t doubled =
             std::min(capacity * 2, static_cast<size_t>(buffer::kSearchBufferMaxPointCount));
-        index_->resize(std::max(needed, doubled));
+        index.resize(std::max(needed, doubled));
     }
 
     mutable IndexAccess access_;
@@ -419,10 +463,11 @@ Parameters
 ----------
 dim : int
     Original vector dimension, from 64 through 65536.
-nbits : int
-    Keyword-only. Total quantization bits, 1 through 9.
+nbits : int, optional
+    Keyword-only. Total quantization bits, 1 through 9. Default is 7.
 num_clusters : int, optional
-    Keyword-only. Number of centroids train or set_centroids provides.
+    Keyword-only. Number of centroids train, set_centroids or the first add
+    provides; the first add caps it at its row count.
     Default is 16.
 M : int, optional
     Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
@@ -438,8 +483,10 @@ seed : int, optional
 
 Notes
 -----
-Train the index or set its centroids, then add vectors before searching or
-saving; loaded indexes are already trained. Capacity grows automatically
+The first add trains an untrained index on the added vectors. Call train
+on a sample, or set_centroids, first to choose the training data or the
+centroids. Loaded indexes are trained, except empty files saved untrained
+by 0.7. Capacity grows automatically
 on add; resize can preallocate it. Concurrent reads are supported; an
 overlapping mutation raises RuntimeError.
 Data, centroids and queries must be finite float32 values within the index
@@ -454,14 +501,13 @@ Examples
 >>> import numpy as np
 >>> from rabitqlib import HnswIndex
 >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
->>> index = HnswIndex(64, nbits=4, num_clusters=2)
->>> index.train(x)
->>> ids = index.add(x, num_threads=1)
+>>> index = HnswIndex(64, num_clusters=2)
+>>> ids = index.add(x, num_threads=1)  # trains on x first
 >>> ids, distances = index.search(x[:2], k=3)
 >>> ids.shape, distances.shape
 ((2, 3), (2, 3)))doc";
 
-    static constexpr char kAddDoc[] = R"doc(Add vectors using the trained centroids.
+    static constexpr char kAddDoc[] = R"doc(Add vectors, training the index first if needed.
 
 Parameters
 ----------
@@ -472,9 +518,9 @@ cluster_ids : array_like of int, shape (n,), optional
     Keyword-only. Existing centroid IDs. None assigns each vector to its
     nearest centroid. Centroids do not move.
 num_threads : int, optional
-    Keyword-only. Worker count. Default is 0, which selects the available
-    CPU count; more than one thread links nondeterministically, so pass 1
-    for a reproducible graph.
+    Keyword-only. Worker count. None (default) and 0 select the available
+    CPU count, capped by OMP_NUM_THREADS; more than one thread links
+    nondeterministically, so pass 1 for a reproducible graph.
 fast_quantization : bool, optional
     Keyword-only. Use faster quantizer configuration. Default is False.
 
@@ -485,10 +531,17 @@ ids : ndarray of uint32, shape (n,)
 
 Notes
 -----
-Requires a trained or loaded index. The first add into an empty index links
-vectors with their exact coordinates; later adds link through the stored
-codes. Capacity grows geometrically when needed. Removed IDs are not
-reused. Passing the options positionally is deprecated.)doc";
+On an untrained index, add first trains num_clusters centroids on data, as
+train(data) does; with fewer rows it trains one centroid per row, and
+num_clusters then reports the row count. An empty first add raises
+RuntimeError. With num_threads None, training
+uses cp.num_threads. Passing cluster_ids to an untrained index raises
+RuntimeError, as does add on an untrained index loaded from a 0.7 file;
+call train first. If the call fails, the index stays untrained and empty. The first
+add into an empty index links vectors with their exact coordinates; later adds
+link through the stored codes, so add most vectors in the first call. Capacity
+grows geometrically when needed. Removed IDs are not reused. Passing the options
+positionally is deprecated.)doc";
 
     py::class_<HnswIndex>(m, "HnswIndex", kIndexDoc)
         .def(
@@ -502,7 +555,7 @@ reused. Passing the options positionally is deprecated.)doc";
                 const py::object&>(),
             py::arg("dim"),
             py::kw_only(),
-            py::arg("nbits"),
+            py::arg("nbits") = 7,
             py::arg("num_clusters") = 16,
             py::arg("M") = 16,
             py::arg("ef_construction") = 200,
@@ -578,8 +631,8 @@ failed call leaves the index unchanged.)doc"
             &HnswIndex::search,
             py::arg("queries"),
             py::arg("k"),
-            py::arg("ef") = 0,
-            py::arg("num_threads") = 1,
+            py::arg("ef") = py::none(),
+            py::arg("num_threads") = py::none(),
             R"doc(Search a batch of query vectors.
 
 Parameters
@@ -588,13 +641,14 @@ queries : array_like of float, shape (n_queries, dim)
     Vectors in the original, unpadded coordinates. Converted to contiguous
     float32; a copy may be made.
 k : int
-    Number of neighbors requested, between 1 and num_stored_points.
+    Number of neighbors requested, at least 1. It may exceed the number of
+    points; slots without a neighbor are padded as described below.
 ef : int, optional
-    Search breadth. None or 0 (default) selects max(k, 10); values above the stored
+    Search breadth. None or 0 (default) selects max(k, 64); values above the stored
     point count are clamped.
 num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count,
-    capped by OMP_NUM_THREADS.
+    Worker count. None (default) selects 1; 0 selects the available CPU
+    count, capped by OMP_NUM_THREADS.
 
 Returns
 -------
@@ -607,7 +661,8 @@ distances : ndarray of float32, shape (n_queries, k)
 Notes
 -----
 Requires a trained or loaded index. Returns (ids, distances), in that
-order. Missing neighbors have ID 4294967295 and distance inf. Array shapes
+order. Missing neighbors have ID 4294967295 and distance inf; test
+np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
         )
         .def(
@@ -616,7 +671,7 @@ and value ranges are checked at runtime, not by static type checkers.)doc"
             py::arg("data"),
             py::kw_only(),
             py::arg("cluster_ids") = py::none(),
-            py::arg("num_threads") = 0,
+            py::arg("num_threads") = py::none(),
             py::arg("fast_quantization") = false,
             kAddDoc
         )
@@ -716,6 +771,16 @@ index : HnswIndex
             "nbits", &HnswIndex::nbits, R"doc(Total storage bits per coordinate.)doc"
         )
         .def_property_readonly(
+            "M",
+            &HnswIndex::M,
+            R"doc(Graph connectivity; the base layer keeps up to 2 * M edges.)doc"
+        )
+        .def_property_readonly(
+            "ef_construction",
+            &HnswIndex::ef_construction,
+            R"doc(Construction search breadth.)doc"
+        )
+        .def_property_readonly(
             "num_clusters",
             &HnswIndex::num_clusters,
             R"doc(Number of centroids: the configured count until centroids are set.)doc"
@@ -723,7 +788,7 @@ index : HnswIndex
         .def_property_readonly(
             "is_trained",
             &HnswIndex::is_trained,
-            R"doc(Whether centroids are set, by train, set_centroids, build or load.)doc"
+            R"doc(Whether centroids are set, by train, set_centroids, the first add, build or load.)doc"
         )
         .def_property_readonly(
             "seed",
@@ -735,7 +800,7 @@ index : HnswIndex
             &HnswIndex::cp,
             &HnswIndex::set_cp,
             py::return_value_policy::reference_internal,
-            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 25, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed.)doc"
+            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed.)doc"
         )
         .def_property_readonly(
             "metric", &HnswIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"

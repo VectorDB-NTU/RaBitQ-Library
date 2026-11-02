@@ -9,17 +9,17 @@
 namespace rabitqlib {
 
 /**
- * Centroid training parameters for IVF::train and HierarchicalNSW::train: 25
- * iterations on a sample of at most 256 points per centroid, spherical k-means for
- * inner product, and the given seed. The k-means classes keep their own defaults,
- * which train on all points.
+ * Centroid training parameters for IVF::train and HierarchicalNSW::train: 10
+ * iterations, as in Faiss IVF, on a sample of at most 256 points per centroid, spherical
+ * k-means for inner product, and the given seed. The k-means classes keep their own
+ * defaults, which train on all points.
  */
 inline rabitqkmeans::RaBitQKMeansParameters default_training_parameters(
     MetricType metric_type, uint32_t seed
 ) {
     validate_metric_type(metric_type);
     rabitqkmeans::RaBitQKMeansParameters cp;
-    cp.niter = 25;
+    cp.niter = 10;
     cp.max_points_per_centroid = 256;
     cp.spherical = metric_type == METRIC_IP;
     cp.seed = seed;

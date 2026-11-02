@@ -209,8 +209,11 @@ def test_search_releases_gil(kind):
 
 def test_native_exception_reacquires_gil_and_releases_access():
     index, data, build = make_index("qg")
-    with pytest.raises(ValueError, match="SearchBuffer capacity is too large"):
-        index.search(data[:2], 5, ef=int(np.iinfo(np.uintp).max))
+    queries = data[:2].copy()
+    queries[1, 0] = np.nan
+    # The native search checks coordinates after releasing the GIL.
+    with pytest.raises(ValueError, match="must contain only finite values"):
+        index.search(queries, 5, ef=64)
     build()
     ids, distances = index.search(data[:2], 5, ef=64)
     assert ids.shape == distances.shape == (2, 5)

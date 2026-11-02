@@ -16,6 +16,7 @@ void register_kmeans(py::module_& m);
 PYBIND11_MODULE(_rabitqlib, m) {
     m.doc() = "RabitQ Python bindings combined module";
 
+    m.attr("__version__") = RABITQ_VERSION;
     m.def("_available_cpu_count", &rabitqlib::total_threads);
     m.def("_default_thread_count", &rabitqlib::default_threads);
 

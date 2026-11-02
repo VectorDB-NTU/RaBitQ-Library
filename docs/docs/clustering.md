@@ -8,7 +8,7 @@ algorithms based on the cluster count.
 For installation, see [Quick start](quick_start.md#install).
 
 You do not need these classes to build an index: `IvfIndex.train` and
-`HnswIndex.train` run them for you (see
+`HnswIndex.train`, or the first `add`, run them for you (see
 [IVF-RaBitQ training](index/ivf.md#training-centroids-in-python)). Use them
 directly to inspect assignments, reuse one clustering across several indexes,
 or pass the result to `set_centroids` and `add(..., cluster_ids=...)`. The

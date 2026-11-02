@@ -78,7 +78,10 @@ class IVF {
     };
 
     InitializerType initializer_type_ = InitializerType::Auto;
-    std::unique_ptr<Initializer> initializer_;     // initializer for candidate clusters
+    std::unique_ptr<Initializer> initializer_;  // initializer for candidate clusters
+    // Flat centroid norms for routing in add; computed on first use, cleared with
+    // the initializer.
+    std::vector<double> flat_centroid_norms_;
     std::vector<ClusterStorage> cluster_storage_;  // one entry per cluster
     size_t max_elements_ = 0;  // Logical capacity; construct fills it, add grows it.
     size_t num_removed_ = 0;   // Recovered from removal markers when loading.
@@ -320,7 +323,8 @@ class IVF {
      * @param data New points (num_points * dim)
      * @param num_points Number of new points
      * @param cluster_ids Cluster of each new point, or nullptr to route each point to its
-     * nearest centroid the same way a query is routed
+     * nearest centroid under the index's initializer. Flat routing assigns exactly, so
+     * near-ties may resolve differently from a query's float scan
      * @param fast_quantization Use fixed-scale extra-bit quantization for speed at a
      * possible loss of accuracy; has no effect on one-bit or raw storage
      * @param num_threads Threads used for routing and quantization
@@ -369,6 +373,7 @@ class IVF {
 
     // Automatically use HACC for 4-9 quantized bits; use standard FastScan otherwise.
     // Distances estimate squared L2 or 1 - dot according to the index metric.
+    // k may exceed the point count; slots without a result get kPidMax and +inf.
     void search(
         const float* query,
         size_t k,

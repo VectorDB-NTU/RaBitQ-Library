@@ -116,10 +116,34 @@ def build_index(cfg, base, path):
         if hasattr(index, "k_factor"):
             index.k_factor = cfg["k_factor"]
         details = {"faiss_factory": spec}
-    elif method in ("rabitq-ivf", "rabitq-hnsw"):
-        from rabitqlib import FinalAssignmentMode, IvfIndex, RaBitQKMeans
+    elif method == "rabitq-ivf":
+        from rabitqlib import IvfIndex
 
-        cluster_count = cfg["nlist"] if method == "rabitq-ivf" else cfg["hnsw_clusters"]
+        # The library's default training: QGKMeans above 2,000 clusters, then add
+        # routes each vector with the index's centroid initializer.
+        index = IvfIndex(
+            dim, cfg["nlist"], nbits=cfg["bits"], metric=cfg["metric"], seed=42
+        )
+        cp = index.cp
+        cp.niter = 10
+        index.cp = cp
+        stage_start = time.perf_counter()
+        index.train(base, num_threads=cfg["threads"])
+        training_s = time.perf_counter() - stage_start
+        stage_start = time.perf_counter()
+        index.add(base, num_threads=cfg["threads"])
+        indexing_s = time.perf_counter() - stage_start
+        details = {
+            "clustering": "IvfIndex.train",
+            "clustering_seed": 42,
+            "clustering_niter": 10,
+            "cluster_count": cfg["nlist"],
+            "assignment": "add routing",
+        }
+    elif method == "rabitq-hnsw":
+        from rabitqlib import FinalAssignmentMode, HnswIndex, RaBitQKMeans
+
+        cluster_count = cfg["hnsw_clusters"]
         kmeans = RaBitQKMeans(
             dim,
             cluster_count,
@@ -134,23 +158,16 @@ def build_index(cfg, base, path):
         kmeans.train(base)
         training_s = time.perf_counter() - stage_start
         stage_start = time.perf_counter()
-        if method == "rabitq-ivf":
-            index = IvfIndex(
-                dim, cluster_count, nbits=cfg["bits"], metric=cfg["metric"]
-            )
-        else:
-            from rabitqlib import HnswIndex
-
-            index = HnswIndex(
-                dim,
-                nbits=cfg["bits"],
-                num_clusters=cluster_count,
-                M=cfg["m"],
-                ef_construction=cfg["ef_construction"],
-                metric=cfg["metric"],
-                seed=42,
-            )
-            index.resize(n)
+        index = HnswIndex(
+            dim,
+            nbits=cfg["bits"],
+            num_clusters=cluster_count,
+            M=cfg["m"],
+            ef_construction=cfg["ef_construction"],
+            metric=cfg["metric"],
+            seed=42,
+        )
+        index.resize(n)
         index.set_centroids(kmeans.centroids)
         index.add(base, cluster_ids=kmeans.assignments, num_threads=cfg["threads"])
         indexing_s = time.perf_counter() - stage_start
@@ -430,9 +447,7 @@ def main():
     if args.method == "rabitq-ivf" and args.metric == "ip":
         norms = np.linalg.norm(base, axis=1)
         if not np.allclose(norms, 1, atol=1e-4):
-            parser.error(
-                "RaBitQKMeans spherical training requires normalized base vectors"
-            )
+            parser.error("spherical IVF training requires normalized base vectors")
     if args.groundtruth:
         if len(base) != total_base:
             parser.error("supplied ground truth is invalid for a truncated base")

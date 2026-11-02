@@ -24,7 +24,7 @@ from rabitqlib import SymqgIndex
 
 # data and queries are float32 arrays with shape (count, dim).
 index = SymqgIndex(data.shape[1], max_degree=32, ef_construction=200, init="pipnn")
-index.add(data)  # builds the whole graph
+ids = index.add(data)  # builds the whole graph; ids are the row numbers
 index.save("qg_example.index")
 
 loaded = SymqgIndex.load("qg_example.index")
@@ -77,8 +77,8 @@ qg.save("qg_example.index");
 | `init` | Python keyword: `"pipnn"` (default) or `"random"`. |
 | `metric` | Python keyword: `"l2"` (default) or `"ip"`. |
 | `seed` | Python keyword: rotation and graph-construction seed in `[0, 2**32 - 1]`. The default `None` draws one at random; `index.seed` reports it, and passing it back with `num_threads=1` rebuilds the same graph from the same data. |
-| `k`, `ef` | Python requires `1 <= k <= num_points`. Omitted or zero `ef` uses `max(k, 10)`, and smaller values are raised to `k`, as for HNSW-RaBitQ. |
-| `num_threads` | Python `add` defaults to 0 (every available logical CPU) and `search` to 1. |
+| `k`, `ef` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `2**32 - 1` and distance `+inf`. Omitted or zero `ef` uses `max(k, 64)` in Python, and smaller values are raised to `k`, as for HNSW-RaBitQ. |
+| `num_threads` | Python `add` defaults to every available logical CPU, capped by `OMP_NUM_THREADS`, and `search` to 1; `None` selects these defaults. |
 
 Python search returns `(ids, distances)` arrays. Distances are squared
 L2 or `1 - dot`, ordered from smallest to largest; quantized storage returns
@@ -180,7 +180,7 @@ do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 `set_ef()` while searches are running.
 
-Python `search(queries, k, ef=None, num_threads=1)` accepts a two-dimensional
+Python `search(queries, k, ef=None, num_threads=None)` accepts a two-dimensional
 query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. It defaults to one worker; `num_threads=0` selects the
 available logical CPU count, capped by the number of queries. The 0.7 name

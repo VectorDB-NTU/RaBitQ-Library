@@ -11,6 +11,8 @@ import numpy as np
 import numpy.typing as npt
 from typing_extensions import deprecated
 
+__version__: str
+
 __all__ = [
     "FinalAssignmentMode",
     "HnswIndex",
@@ -79,10 +81,10 @@ class IvfIndex:
     dim : int
         Original vector dimension, from 64 through 65536.
     num_clusters : int
-        Number of centroids, from train or set_centroids.
-    nbits : int
+        Number of centroids, from train, set_centroids or the first add.
+    nbits : int, optional
         Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
-        float32 vectors with one-bit filtering and raw reranking.
+        float32 vectors with one-bit filtering and raw reranking. Default is 7.
     metric : {'l2', 'ip', 'innerproduct'}, optional
         Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
         automatically normalized for cosine similarity.
@@ -94,9 +96,10 @@ class IvfIndex:
 
     Notes
     -----
-    Train the index or set its centroids, then add vectors before searching or
-    saving; loaded indexes are already trained. Concurrent reads are supported;
-    an overlapping mutation raises RuntimeError.
+    The first add trains an untrained index on the added vectors. Call train
+    on a sample, or set_centroids, first to choose the training data or the
+    centroids. Loaded indexes are already trained. Concurrent reads are
+    supported; an overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
     coordinate range; other values raise ValueError.
     The 0.7 form IvfIndex(dim, max_elements, num_clusters, nbits, ...) and
@@ -108,10 +111,9 @@ class IvfIndex:
     >>> import numpy as np
     >>> from rabitqlib import IvfIndex
     >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-    >>> index = IvfIndex(64, 2, nbits=4, seed=7)
-    >>> index.train(x)
-    >>> ids = index.add(x)
-    >>> ids, distances = index.search(x[:2], k=3, nprobe=2)
+    >>> index = IvfIndex(64, 2, seed=7)
+    >>> ids = index.add(x)  # trains on x first
+    >>> ids, distances = index.search(x[:2], k=3)
     >>> ids.shape, distances.shape
     ((2, 3), (2, 3))
     """
@@ -122,7 +124,7 @@ class IvfIndex:
         dim: SupportsIndex,
         num_clusters: SupportsIndex,
         *,
-        nbits: SupportsIndex,
+        nbits: SupportsIndex = 7,
         metric: _Metric = "l2",
         initializer: _Initializer = "auto",
         seed: SupportsIndex | None = None,
@@ -134,10 +136,10 @@ class IvfIndex:
         dim : int
             Original vector dimension, from 64 through 65536.
         num_clusters : int
-            Number of centroids, from train or set_centroids.
-        nbits : int
+            Number of centroids, from train, set_centroids or the first add.
+        nbits : int, optional
             Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
-            float32 vectors with one-bit filtering and raw reranking.
+            float32 vectors with one-bit filtering and raw reranking. Default is 7.
         metric : {'l2', 'ip', 'innerproduct'}, optional
             Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
             automatically normalized for cosine similarity.
@@ -149,9 +151,10 @@ class IvfIndex:
 
         Notes
         -----
-        Train the index or set its centroids, then add vectors before searching or
-        saving; loaded indexes are already trained. Concurrent reads are supported;
-        an overlapping mutation raises RuntimeError.
+        The first add trains an untrained index on the added vectors. Call train
+        on a sample, or set_centroids, first to choose the training data or the
+        centroids. Loaded indexes are already trained. Concurrent reads are
+        supported; an overlapping mutation raises RuntimeError.
         Data, centroids and queries must be finite float32 values within the index
         coordinate range; other values raise ValueError.
         The 0.7 form IvfIndex(dim, max_elements, num_clusters, nbits, ...) and
@@ -161,7 +164,7 @@ class IvfIndex:
     @overload
     @deprecated(
         "IvfIndex(dim, max_elements, num_clusters, nbits, ...) is deprecated since "
-        "0.8; use IvfIndex(dim, num_clusters, nbits=...)"
+        "0.8; use IvfIndex(dim, num_clusters, nbits=...), whose first add() trains it"
     )
     def __init__(
         self,
@@ -196,7 +199,7 @@ class IvfIndex:
 
     @property
     def is_trained(self) -> bool:
-        """Whether centroids are set, by train, set_centroids, build or load."""
+        """Whether centroids are set, by train, set_centroids, the first add, build or load."""
 
     @property
     @deprecated("IvfIndex.is_built is deprecated since 0.8; use is_trained or len()")
@@ -209,7 +212,7 @@ class IvfIndex:
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
-        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 25, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed."""
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed."""
 
     @cp.setter
     def cp(self, value: RaBitQKMeansParameters) -> None: ...
@@ -307,10 +310,10 @@ class IvfIndex:
         data: npt.ArrayLike,
         *,
         cluster_ids: _IntegerIds | None = None,
-        num_threads: SupportsIndex = 0,
+        num_threads: SupportsIndex | None = None,
         fast_quantization: bool | np.bool_ = False,
     ) -> npt.NDArray[np.uint32]:
-        """Add vectors using the trained centroids.
+        """Add vectors, training the index first if needed.
 
         Parameters
         ----------
@@ -322,8 +325,8 @@ class IvfIndex:
             index's configured centroid initializer; routing may be approximate.
             Centroids do not move.
         num_threads : int, optional
-            Keyword-only. Worker count. Default is 0, which selects the available
-            CPU count.
+            Keyword-only. Worker count. None (default) and 0 select the available
+            CPU count, capped by OMP_NUM_THREADS.
         fast_quantization : bool, optional
             Keyword-only. Use faster quantizer configuration. Default is False.
 
@@ -334,9 +337,15 @@ class IvfIndex:
 
         Notes
         -----
-        Requires a trained or loaded index. Batch additions to reduce repeated
-        cluster copying; reserve can preallocate room. Passing the options
-        positionally is deprecated.
+        On an untrained index, add first trains num_clusters centroids on data,
+        as train(data) does, so data needs at least num_clusters rows, and an
+        empty first add raises RuntimeError; with
+        num_threads None, training uses cp.num_threads. Passing cluster_ids to an
+        untrained index raises RuntimeError, as does add on an index created with
+        max_elements, which build fills. If the call fails, the index stays
+        untrained and empty. Batch additions to reduce repeated cluster copying;
+        reserve can preallocate room. Passing the options positionally is
+        deprecated.
         """
     @overload
     @deprecated(
@@ -373,9 +382,9 @@ class IvfIndex:
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        nprobe: SupportsIndex,
+        nprobe: SupportsIndex | None = None,
         high_accuracy: bool | np.bool_ | None = None,
-        num_threads: SupportsIndex = 1,
+        num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
@@ -385,15 +394,17 @@ class IvfIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         k : int
-            Number of neighbors requested, between 1 and max_elements.
-        nprobe : int
-            Positive number of clusters to probe; capped at num_clusters.
+            Number of neighbors requested, at least 1. It may exceed the number of
+            points; slots without a neighbor are padded as described below.
+        nprobe : int, optional
+            Number of clusters to probe, capped at num_clusters. None (default) and
+            0 select num_clusters / 16, rounded to the nearest integer and at least 1.
         high_accuracy : bool, optional
             Enable HACC. None (default) selects it for 4-9 bits and standard
             FastScan otherwise. Raw storage uses standard FastScan.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count,
-            capped by OMP_NUM_THREADS.
+            Worker count. None (default) selects 1; 0 selects the available CPU
+            count, capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -406,7 +417,8 @@ class IvfIndex:
         Notes
         -----
         Requires a trained or loaded index. Returns (ids, distances), in that
-        order. Missing neighbors have ID 4294967295 and distance inf. Array shapes
+        order. Missing neighbors have ID 4294967295 and distance inf; test
+        np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
 
@@ -467,10 +479,11 @@ class HnswIndex:
     ----------
     dim : int
         Original vector dimension, from 64 through 65536.
-    nbits : int
-        Keyword-only. Total quantization bits, 1 through 9.
+    nbits : int, optional
+        Keyword-only. Total quantization bits, 1 through 9. Default is 7.
     num_clusters : int, optional
-        Keyword-only. Number of centroids train or set_centroids provides.
+        Keyword-only. Number of centroids train, set_centroids or the first add
+        provides; the first add caps it at its row count.
         Default is 16.
     M : int, optional
         Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
@@ -486,8 +499,10 @@ class HnswIndex:
 
     Notes
     -----
-    Train the index or set its centroids, then add vectors before searching or
-    saving; loaded indexes are already trained. Capacity grows automatically
+    The first add trains an untrained index on the added vectors. Call train
+    on a sample, or set_centroids, first to choose the training data or the
+    centroids. Loaded indexes are trained, except empty files saved untrained
+    by 0.7. Capacity grows automatically
     on add; resize can preallocate it. Concurrent reads are supported; an
     overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
@@ -502,9 +517,8 @@ class HnswIndex:
     >>> import numpy as np
     >>> from rabitqlib import HnswIndex
     >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-    >>> index = HnswIndex(64, nbits=4, num_clusters=2)
-    >>> index.train(x)
-    >>> ids = index.add(x, num_threads=1)
+    >>> index = HnswIndex(64, num_clusters=2)
+    >>> ids = index.add(x, num_threads=1)  # trains on x first
     >>> ids, distances = index.search(x[:2], k=3)
     >>> ids.shape, distances.shape
     ((2, 3), (2, 3))
@@ -515,7 +529,7 @@ class HnswIndex:
         self,
         dim: SupportsIndex,
         *,
-        nbits: SupportsIndex,
+        nbits: SupportsIndex = 7,
         num_clusters: SupportsIndex = 16,
         M: SupportsIndex = 16,
         ef_construction: SupportsIndex = 200,
@@ -528,10 +542,11 @@ class HnswIndex:
         ----------
         dim : int
             Original vector dimension, from 64 through 65536.
-        nbits : int
-            Keyword-only. Total quantization bits, 1 through 9.
+        nbits : int, optional
+            Keyword-only. Total quantization bits, 1 through 9. Default is 7.
         num_clusters : int, optional
-            Keyword-only. Number of centroids train or set_centroids provides.
+            Keyword-only. Number of centroids train, set_centroids or the first add
+            provides; the first add caps it at its row count.
             Default is 16.
         M : int, optional
             Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
@@ -547,8 +562,10 @@ class HnswIndex:
 
         Notes
         -----
-        Train the index or set its centroids, then add vectors before searching or
-        saving; loaded indexes are already trained. Capacity grows automatically
+        The first add trains an untrained index on the added vectors. Call train
+        on a sample, or set_centroids, first to choose the training data or the
+        centroids. Loaded indexes are trained, except empty files saved untrained
+        by 0.7. Capacity grows automatically
         on add; resize can preallocate it. Concurrent reads are supported; an
         overlapping mutation raises RuntimeError.
         Data, centroids and queries must be finite float32 values within the index
@@ -579,7 +596,7 @@ class HnswIndex:
         self,
         dim: SupportsIndex,
         *,
-        nbits: SupportsIndex,
+        nbits: SupportsIndex = 7,
         num_clusters: SupportsIndex = 16,
         M: SupportsIndex = 16,
         ef_construction: SupportsIndex = 200,
@@ -610,7 +627,7 @@ class HnswIndex:
 
     @property
     def is_trained(self) -> bool:
-        """Whether centroids are set, by train, set_centroids, build or load."""
+        """Whether centroids are set, by train, set_centroids, the first add, build or load."""
 
     @property
     @deprecated("HnswIndex.is_built is deprecated since 0.8; use is_trained or len()")
@@ -623,7 +640,7 @@ class HnswIndex:
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
-        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 25, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed."""
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed."""
 
     @cp.setter
     def cp(self, value: RaBitQKMeansParameters) -> None: ...
@@ -634,6 +651,14 @@ class HnswIndex:
     @property
     def nbits(self) -> int:
         """Total storage bits per coordinate."""
+
+    @property
+    def M(self) -> int:
+        """Graph connectivity; the base layer keeps up to 2 * M edges."""
+
+    @property
+    def ef_construction(self) -> int:
+        """Construction search breadth."""
 
     @property
     def num_clusters(self) -> int:
@@ -720,10 +745,10 @@ class HnswIndex:
         data: npt.ArrayLike,
         *,
         cluster_ids: _IntegerIds | None = None,
-        num_threads: SupportsIndex = 0,
+        num_threads: SupportsIndex | None = None,
         fast_quantization: bool | np.bool_ = False,
     ) -> npt.NDArray[np.uint32]:
-        """Add vectors using the trained centroids.
+        """Add vectors, training the index first if needed.
 
         Parameters
         ----------
@@ -734,9 +759,9 @@ class HnswIndex:
             Keyword-only. Existing centroid IDs. None assigns each vector to its
             nearest centroid. Centroids do not move.
         num_threads : int, optional
-            Keyword-only. Worker count. Default is 0, which selects the available
-            CPU count; more than one thread links nondeterministically, so pass 1
-            for a reproducible graph.
+            Keyword-only. Worker count. None (default) and 0 select the available
+            CPU count, capped by OMP_NUM_THREADS; more than one thread links
+            nondeterministically, so pass 1 for a reproducible graph.
         fast_quantization : bool, optional
             Keyword-only. Use faster quantizer configuration. Default is False.
 
@@ -747,10 +772,17 @@ class HnswIndex:
 
         Notes
         -----
-        Requires a trained or loaded index. The first add into an empty index links
-        vectors with their exact coordinates; later adds link through the stored
-        codes. Capacity grows geometrically when needed. Removed IDs are not
-        reused. Passing the options positionally is deprecated.
+        On an untrained index, add first trains num_clusters centroids on data, as
+        train(data) does; with fewer rows it trains one centroid per row, and
+        num_clusters then reports the row count. An empty first add raises
+        RuntimeError. With num_threads None, training
+        uses cp.num_threads. Passing cluster_ids to an untrained index raises
+        RuntimeError, as does add on an untrained index loaded from a 0.7 file;
+        call train first. If the call fails, the index stays
+        untrained and empty. The first add into an empty index links vectors with
+        their exact coordinates; later adds link through the stored codes, so add
+        most vectors in the first call. Capacity grows geometrically when needed.
+        Removed IDs are not reused. Passing the options positionally is deprecated.
         """
     @overload
     @deprecated(
@@ -787,8 +819,8 @@ class HnswIndex:
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex | None = 0,
-        num_threads: SupportsIndex = 1,
+        ef: SupportsIndex | None = None,
+        num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
@@ -798,13 +830,14 @@ class HnswIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         k : int
-            Number of neighbors requested, between 1 and num_stored_points.
+            Number of neighbors requested, at least 1. It may exceed the number of
+            points; slots without a neighbor are padded as described below.
         ef : int, optional
-            Search breadth. None or 0 (default) selects max(k, 10); values above the stored
+            Search breadth. None or 0 (default) selects max(k, 64); values above the stored
             point count are clamped.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count,
-            capped by OMP_NUM_THREADS.
+            Worker count. None (default) selects 1; 0 selects the available CPU
+            count, capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -817,7 +850,8 @@ class HnswIndex:
         Notes
         -----
         Requires a trained or loaded index. Returns (ids, distances), in that
-        order. Missing neighbors have ID 4294967295 and distance inf. Array shapes
+        order. Missing neighbors have ID 4294967295 and distance inf; test
+        np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
 
@@ -905,7 +939,7 @@ class SymqgIndex:
     >>> from rabitqlib import SymqgIndex
     >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
     >>> index = SymqgIndex(64, ef_construction=40, seed=7)
-    >>> index.add(x, num_threads=1)
+    >>> ids = index.add(x, num_threads=1)
     >>> ids, distances = index.search(x[:2], k=3)
     >>> ids.shape, distances.shape
     ((2, 3), (2, 3))
@@ -1072,7 +1106,9 @@ class SymqgIndex:
         searches.
         """
 
-    def add(self, data: npt.ArrayLike, *, num_threads: SupportsIndex = 0) -> None:
+    def add(
+        self, data: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
+    ) -> npt.NDArray[np.uint32]:
         """Build the graph from all vectors.
 
         Parameters
@@ -1081,8 +1117,13 @@ class SymqgIndex:
             Vectors in the original, unpadded coordinates, with n > max_degree.
             Converted to contiguous float32; a copy may be made.
         num_threads : int, optional
-            Keyword-only. Worker count. Default is 0, which selects the available
-            CPU count.
+            Keyword-only. Worker count. None (default) and 0 select the available
+            CPU count, capped by OMP_NUM_THREADS.
+
+        Returns
+        -------
+        ids : ndarray of uint32, shape (n,)
+            Point IDs, the row numbers of data.
 
         Notes
         -----
@@ -1128,7 +1169,7 @@ class SymqgIndex:
         queries: npt.ArrayLike,
         k: SupportsIndex,
         ef: SupportsIndex | None = None,
-        num_threads: SupportsIndex = 1,
+        num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
@@ -1138,13 +1179,14 @@ class SymqgIndex:
             Vectors in the original, unpadded coordinates. Converted to contiguous
             float32; a copy may be made.
         k : int
-            Number of neighbors requested, between 1 and num_points.
+            Number of neighbors requested, at least 1. It may exceed the number of
+            points; slots without a neighbor are padded as described below.
         ef : int, optional
-            Search breadth. None or 0 (default) selects max(k, 10); smaller values
+            Search breadth. None or 0 (default) selects max(k, 64); smaller values
             are raised to k.
         num_threads : int, optional
-            Worker count. Default is 1; 0 selects the available CPU count,
-            capped by OMP_NUM_THREADS.
+            Worker count. None (default) selects 1; 0 selects the available CPU
+            count, capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -1156,7 +1198,9 @@ class SymqgIndex:
 
         Notes
         -----
-        Returns (ids, distances), in that order. Array shapes and value ranges are
+        Returns (ids, distances), in that order. When the graph reaches fewer than k
+        points, the remaining neighbors have ID 4294967295 and distance inf; test
+        np.isfinite(distances) to find them. Array shapes and value ranges are
         checked at runtime, not by static type checkers.
         """
 

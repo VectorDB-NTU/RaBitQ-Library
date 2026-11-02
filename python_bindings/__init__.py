@@ -19,6 +19,9 @@ from ._rabitqlib import (
     _QGKMeans,
     _RaBitQKMeans,
 )
+from ._rabitqlib import (
+    __version__ as __version__,
+)
 
 # --- 0.8 compatibility layer; remove in 0.9 --------------------------------
 # The extension classes expose only the 0.8 API. As Faiss does for its SWIG
@@ -49,7 +52,7 @@ def _bind(signature, name, args, kwargs, hint=""):
 
 
 def _ivf_signature(
-    self, dim, num_clusters, *, nbits, metric="l2", initializer="auto", seed=None
+    self, dim, num_clusters, *, nbits=7, metric="l2", initializer="auto", seed=None
 ): ...
 
 
@@ -62,7 +65,7 @@ def _hnsw_signature(
     self,
     dim,
     *,
-    nbits,
+    nbits=7,
     num_clusters=16,
     M=16,
     ef_construction=200,
@@ -84,7 +87,7 @@ def _hnsw_legacy_signature(
 
 
 def _add_signature(
-    self, data, *, cluster_ids=None, num_threads=0, fast_quantization=False
+    self, data, *, cluster_ids=None, num_threads=None, fast_quantization=False
 ): ...
 
 
@@ -111,8 +114,7 @@ def _patch_ivf_init(cls):
             )
             _deprecated(
                 "IvfIndex(dim, max_elements, num_clusters, nbits, ...) is deprecated; "
-                "use IvfIndex(dim, num_clusters, nbits=...) and train() or "
-                "set_centroids() before add()"
+                "use IvfIndex(dim, num_clusters, nbits=...), whose first add() trains it"
             )
             native_init(
                 self,

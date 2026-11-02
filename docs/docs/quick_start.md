@@ -1,14 +1,14 @@
 # Quick start
 
 Build, search, save and reload a small IVF-RaBitQ index with Python. This guide describes
-**0.8.1** and uses synthetic data, so no dataset download is required. Coming from 0.7?
+**0.8.2** and uses synthetic data, so no dataset download is required. Coming from 0.7?
 See the [migration guide](python_migration.md).
 For C++, go directly to [C++ integration](cpp_integration.md).
 
 ## Install
 
 ```bash
-python -m pip install "rabitqlib>=0.8.1"
+python -m pip install "rabitqlib>=0.8.2"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64 and
@@ -34,22 +34,26 @@ rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-index = IvfIndex(64, 5, nbits=4, metric="l2", seed=42)
-index.train(data)  # learn 5 centroids
-index.add(data)  # quantize every vector into its nearest cluster
+index = IvfIndex(64, 5, metric="l2", seed=42)  # 5 clusters, 7 bits by default
+index.add(data)  # learn 5 centroids, then quantize every vector into its cluster
 
 ids, distances = index.search(queries, k=10, nprobe=5)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 print(ids[0])
 ```
 
-`train` clusters the data with the settings in `index.cp`: 25 k-means
-iterations on at most 256 sampled vectors per centroid, spherical k-means for
-`metric="ip"`, and the index `seed`. Change `index.cp` before training to tune
-them, or call `index.set_centroids(centroids)` to use centroids you computed
+The first `add` on an untrained index trains it on the added vectors, as
+`index.train(data)` would, then adds them. Training uses the settings in
+`index.cp`: 10 k-means iterations on at most 256 sampled vectors per centroid,
+spherical k-means for `metric="ip"`, and the index `seed`. Change `index.cp`
+before the first `add` to tune them, call `index.train(sample)` first to train on a
+sample, or call `index.set_centroids(centroids)` to use centroids you computed
 elsewhere. `train` and `add` use every available CPU by default, capped by
 `OMP_NUM_THREADS`; pass `num_threads=` to limit them. Without `seed`, each index
 draws a random rotation seed and reports it as `index.seed`.
+
+`nprobe` sets how many clusters a query searches. Omitted, it is
+`num_clusters / 16`, rounded and at least 1; this example probes all five.
 
 ## Read the results
 
@@ -60,10 +64,10 @@ squared Euclidean distance, while `metric="ip"` estimates `1 - dot(data, query)`
 Smaller values are better for both metrics. Quantized distances are estimates,
 not exact distances to the original vectors.
 
-IVF-RaBitQ and HNSW-RaBitQ may return fewer than `k` valid neighbors, for example after removals
-or when the probed IVF-RaBitQ clusters contain too few points. Unfilled slots contain
-ID `2**32 - 1` and distance `+inf`. Filter them with
-`valid = ids != np.iinfo(np.uint32).max` before using IDs to index your data.
+A search may return fewer than `k` valid neighbors, for example when `k` exceeds the
+number of points, after removals, or when the probed IVF-RaBitQ clusters contain too
+few points. Unfilled slots contain ID `2**32 - 1` and distance `+inf`. Filter them with
+`valid = np.isfinite(distances)` before using IDs to index your data.
 
 The `metric` argument accepts `"l2"` and `"ip"` (also `"innerproduct"`). For
 cosine search, normalize database and query vectors first and use `metric="ip"`.

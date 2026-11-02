@@ -112,9 +112,9 @@ def test_search_output_contract(built_hnsw, query_data, nq, k):
 
 @pytest.mark.parametrize("k", [1, 10, 17])
 def test_ef_default(built_hnsw, query_data, k):
-    """ef=0 should use the internal default (max(k, 10))."""
-    expected_ids, expected_distances = built_hnsw.search(query_data, k=k, ef=max(k, 10))
-    for kwargs in ({}, {"ef": 0}):
+    """None and 0 select the internal default, max(k, 64)."""
+    expected_ids, expected_distances = built_hnsw.search(query_data, k=k, ef=max(k, 64))
+    for kwargs in ({}, {"ef": None}, {"ef": 0}):
         ids, distances = built_hnsw.search(query_data, k=k, **kwargs)
         np.testing.assert_array_equal(ids, expected_ids)
         np.testing.assert_array_equal(distances, expected_distances)
@@ -310,10 +310,15 @@ def test_add_rejects_wrong_dimension(partial_hnsw):
         partial_hnsw.add(np.zeros((4, DIM + 1), dtype=np.float32))
 
 
-def test_add_before_build_raises(base_data):
+def test_add_before_build_trains_first(base_data):
     idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    np.testing.assert_array_equal(idx.add(base_data[:4]), np.arange(4))
+    assert idx.is_trained
+    assert idx.num_clusters == 4  # fewer rows than clusters: one centroid per row
     with pytest.raises(RuntimeError, match="trained or loaded"):
-        idx.add(base_data[:4])
+        HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4).add(
+            base_data[:4], cluster_ids=np.zeros(4, dtype=np.uint32)
+        )
 
 
 def test_resize_grows_capacity_and_allows_more(base_data, clusters):

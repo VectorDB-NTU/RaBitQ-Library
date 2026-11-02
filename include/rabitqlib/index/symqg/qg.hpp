@@ -299,7 +299,8 @@ class QuantizedGraph<float> {
     /**
      * Search contiguous row-major queries, using the window set by set_ef().
      * queries contains num_queries * dimension() floats; result_ids and distances
-     * each hold num_queries * k elements. Empty batches do no work.
+     * each hold num_queries * k elements. Empty batches do no work. When a query
+     * reaches fewer than k points, the remaining slots get kPidMax and +inf.
      * Scratch is reused within each worker. num_threads defaults to one;
      * zero selects the available logical CPU count, capped by the batch.
      * Input and output buffers must not overlap. Concurrent searches require
@@ -332,7 +333,8 @@ class QuantizedGraph<float> {
      * Reuses scratch and can use a previous result as a warm-start hint.
      * BatchQuery may allocate LUT storage on its first use or when its shape changes;
      * this is not the stable core v1 zero-allocation interface. Search and result
-     * buffers must be sized for ef_search and k respectively. rotated_query and
+     * buffers must be sized for ef_search and k respectively; a result pool whose
+     * capacity differs from k raises std::invalid_argument. rotated_query and
      * lookup_table need D and 4 * D floats, where D is the graph's stored padded
      * dimension; this advanced caller must already know D. dimension() is the original
      * input dimension. estimated_distances needs degree_bound() floats. The visited set

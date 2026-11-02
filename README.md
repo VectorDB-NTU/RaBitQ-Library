@@ -14,14 +14,26 @@
 RaBitQ-Library is a research-backed library for vector quantization and
 approximate nearest-neighbor search. See the [research papers](https://vectordb-ntu.github.io/RaBitQ-Library/papers/).
 
+## Why RaBitQ-Library
+
+- **Reference implementation.** Developed with the RaBitQ authors: 1–9-bit codes
+  with a theoretical error bound, plus indexes and clustering from the same research.
+- **Fast to build and search.** Optimized SIMD kernels and batch scoring keep both
+  indexing and queries fast; see the
+  [benchmarks](https://vectordb-ntu.github.io/RaBitQ-Library/benchmarks/bench/).
+- **Use an index or the quantizer.** Build ready-made indexes in Python or C++,
+  or link only the core and FastScan components into your own engine, as
+  [zvec](https://vectordb-ntu.github.io/RaBitQ-Library/integrations/zvec/) does.
+
 ## News
 
+- **v0.8.2:** three lines to an index: the first `add` trains, `nbits` defaults to 7
+  and search settings are optional; faster IVF-RaBitQ `add`
+  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.2/)).
 - **v0.8.1:** the default `num_threads=0` respects `OMP_NUM_THREADS`, fixing a macOS
   crash alongside Faiss and PyTorch ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.1/)).
 - **v0.8.0:** Faiss-style `train`, `add` and `search` for all Python indexes; 0.7 calls
   stay as deprecated forms until 0.9 ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.0/)).
-- **v0.7.2:** Python type hints, path-like inputs and clearer input errors
-  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.7.2/)).
 
 Earlier versions: [all releases](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
 
@@ -49,7 +61,7 @@ settings, and limitations.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.8.1"
+python -m pip install --upgrade "rabitqlib>=0.8.2"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
@@ -67,16 +79,17 @@ rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-index = IvfIndex(64, 5, nbits=4, metric="l2")
-index.train(data)
-index.add(data)
-ids, distances = index.search(queries, k=10, nprobe=5)
+index = IvfIndex(64, 5, metric="l2")
+index.add(data)  # the first add learns 5 centroids from data
+ids, distances = index.search(queries, k=10, nprobe=5)  # probe all 5 clusters
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 ```
 
-`train` learns the centroids, and `add` quantizes the vectors into their
-clusters. IDs identify added rows; distances here estimate squared L2 distance,
-with smaller values first. Quantization remains approximate even when all clusters are probed.
+The first `add` learns the centroids from the data, then quantizes the vectors
+into their clusters. IDs identify added rows; distances here estimate squared L2
+distance, with smaller values first. Without `nprobe`, search probes
+`num_clusters / 16` clusters (at least one); probe more for higher recall.
+Quantization remains approximate even when all clusters are probed.
 The [complete quick start](https://vectordb-ntu.github.io/RaBitQ-Library/quick_start/) explains result handling,
 measures recall while varying `nprobe`, and shows save/load. Code written for
 0.7 still runs in 0.8 with deprecation warnings; see the

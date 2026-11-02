@@ -206,16 +206,29 @@ class IvfIndex {
     py::array_t<PID> add(
         py::handle data,
         const py::object& cluster_ids,
-        size_t num_threads,
+        std::optional<size_t> num_threads,
         bool fast_quantization
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
-        check_trained("add");
+        // The first add on an untrained 0.8-form index trains it on the same data.
+        const bool trains = !index_->is_trained() && !builds_by_construct_ &&
+                            cluster_ids.is_none() && data_array.shape(0) > 0;
+        if (!trains) {
+            check_trained("add");
+        }
         ensure_dimension(
             data_array, index_->dimension(), "data dimension does not match index dim"
         );
         const auto rows = static_cast<size_t>(data_array.shape(0));
+        if (trains && rows < index_->num_clusters()) {
+            throw std::invalid_argument(
+                "the first add trains the index and needs at least num_clusters rows; "
+                "expected at least " +
+                std::to_string(index_->num_clusters()) + ", got shape " +
+                array_shape(data_array)
+            );
+        }
 
         std::vector<PID> assigned;
         if (!cluster_ids.is_none()) {
@@ -231,6 +244,28 @@ class IvfIndex {
         }
 
         const auto* data_ptr = data_array.data();
+        const size_t threads = num_threads.value_or(0);
+        if (trains) {
+            // Train and fill a fresh index with the same rotation, then swap it in,
+            // so that a failure leaves this index untrained and empty.
+            const auto cp = training_parameters(cp_, num_threads);
+            auto staged = std::make_unique<ivf::IVF>(
+                index_->dimension(),
+                index_->num_clusters(),
+                index_->nbits(),
+                index_->metric_type(),
+                *seed_,
+                RotatorType::FhtKacRotator,
+                index_->initializer_type()
+            );
+            {
+                py::gil_scoped_release release;
+                staged->train(rows, data_ptr, cp);
+                staged->add(data_ptr, rows, nullptr, fast_quantization, threads);
+            }
+            index_.swap(staged);
+            return ids;
+        }
         {
             py::gil_scoped_release release;
             index_->add(
@@ -238,7 +273,7 @@ class IvfIndex {
                 rows,
                 assigned.empty() ? nullptr : assigned.data(),
                 fast_quantization,
-                num_threads
+                threads
             );
         }
         return ids;
@@ -269,9 +304,9 @@ class IvfIndex {
     py::tuple search(
         py::handle queries,
         size_t k,
-        size_t nprobe,
+        std::optional<size_t> nprobe,
         std::optional<bool> high_accuracy,
-        size_t num_threads
+        std::optional<size_t> num_threads
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
@@ -279,12 +314,11 @@ class IvfIndex {
         ensure_dimension(
             query_array, index_->dimension(), "query dimension does not match index dim"
         );
-        if (k == 0 || k > index_->max_elements()) {
-            throw std::invalid_argument("k must be between 1 and max_elements");
-        }
-        if (nprobe == 0) {
-            throw std::invalid_argument("nprobe must be positive");
-        }
+        check_k(k);
+        // None and 0 probe num_clusters / 16 clusters, rounded, and at least one.
+        const size_t num_probes =
+            nprobe.value_or(0) == 0 ? std::max<size_t>(1, (index_->num_clusters() + 8) / 16)
+                                    : *nprobe;
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         auto output = unfilled_search_results(num_queries, k);
@@ -298,11 +332,11 @@ class IvfIndex {
                 queries_data,
                 num_queries,
                 k,
-                nprobe,
+                num_probes,
                 ids_data,
                 distances_data,
                 high_accuracy,
-                num_threads
+                num_threads.value_or(1)
             );
         }
 
@@ -446,10 +480,10 @@ Parameters
 dim : int
     Original vector dimension, from 64 through 65536.
 num_clusters : int
-    Number of centroids, from train or set_centroids.
-nbits : int
+    Number of centroids, from train, set_centroids or the first add.
+nbits : int, optional
     Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
-    float32 vectors with one-bit filtering and raw reranking.
+    float32 vectors with one-bit filtering and raw reranking. Default is 7.
 metric : {'l2', 'ip', 'innerproduct'}, optional
     Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
     automatically normalized for cosine similarity.
@@ -461,9 +495,10 @@ seed : int, optional
 
 Notes
 -----
-Train the index or set its centroids, then add vectors before searching or
-saving; loaded indexes are already trained. Concurrent reads are supported;
-an overlapping mutation raises RuntimeError.
+The first add trains an untrained index on the added vectors. Call train
+on a sample, or set_centroids, first to choose the training data or the
+centroids. Loaded indexes are already trained. Concurrent reads are
+supported; an overlapping mutation raises RuntimeError.
 Data, centroids and queries must be finite float32 values within the index
 coordinate range; other values raise ValueError.
 The 0.7 form IvfIndex(dim, max_elements, num_clusters, nbits, ...) and
@@ -475,14 +510,13 @@ Examples
 >>> import numpy as np
 >>> from rabitqlib import IvfIndex
 >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
->>> index = IvfIndex(64, 2, nbits=4, seed=7)
->>> index.train(x)
->>> ids = index.add(x)
->>> ids, distances = index.search(x[:2], k=3, nprobe=2)
+>>> index = IvfIndex(64, 2, seed=7)
+>>> ids = index.add(x)  # trains on x first
+>>> ids, distances = index.search(x[:2], k=3)
 >>> ids.shape, distances.shape
 ((2, 3), (2, 3)))doc";
 
-    static constexpr char kAddDoc[] = R"doc(Add vectors using the trained centroids.
+    static constexpr char kAddDoc[] = R"doc(Add vectors, training the index first if needed.
 
 Parameters
 ----------
@@ -494,8 +528,8 @@ cluster_ids : array_like of int, shape (n,), optional
     index's configured centroid initializer; routing may be approximate.
     Centroids do not move.
 num_threads : int, optional
-    Keyword-only. Worker count. Default is 0, which selects the available
-    CPU count.
+    Keyword-only. Worker count. None (default) and 0 select the available
+    CPU count, capped by OMP_NUM_THREADS.
 fast_quantization : bool, optional
     Keyword-only. Use faster quantizer configuration. Default is False.
 
@@ -506,9 +540,15 @@ ids : ndarray of uint32, shape (n,)
 
 Notes
 -----
-Requires a trained or loaded index. Batch additions to reduce repeated
-cluster copying; reserve can preallocate room. Passing the options
-positionally is deprecated.)doc";
+On an untrained index, add first trains num_clusters centroids on data,
+as train(data) does, so data needs at least num_clusters rows, and an
+empty first add raises RuntimeError; with
+num_threads None, training uses cp.num_threads. Passing cluster_ids to an
+untrained index raises RuntimeError, as does add on an index created with
+max_elements, which build fills. If the call fails, the index stays
+untrained and empty. Batch additions to reduce repeated cluster copying;
+reserve can preallocate room. Passing the options positionally is
+deprecated.)doc";
 
     py::class_<IvfIndex>(m, "IvfIndex", kIndexDoc)
         .def(
@@ -522,7 +562,7 @@ positionally is deprecated.)doc";
             py::arg("dim"),
             py::arg("num_clusters"),
             py::kw_only(),
-            py::arg("nbits"),
+            py::arg("nbits") = 7,
             py::arg("metric") = "l2",
             py::arg("initializer") = "auto",
             py::arg("seed") = py::none(),
@@ -606,7 +646,7 @@ failed call leaves the index unchanged.)doc"
             py::arg("data"),
             py::kw_only(),
             py::arg("cluster_ids") = py::none(),
-            py::arg("num_threads") = 0,
+            py::arg("num_threads") = py::none(),
             py::arg("fast_quantization") = false,
             kAddDoc
         )
@@ -654,9 +694,9 @@ Removal does not reclaim storage and cannot be undone.)doc"
             &IvfIndex::search,
             py::arg("queries"),
             py::arg("k"),
-            py::arg("nprobe"),
+            py::arg("nprobe") = py::none(),
             py::arg("high_accuracy") = py::none(),
-            py::arg("num_threads") = 1,
+            py::arg("num_threads") = py::none(),
             R"doc(Search a batch of query vectors.
 
 Parameters
@@ -665,15 +705,17 @@ queries : array_like of float, shape (n_queries, dim)
     Vectors in the original, unpadded coordinates. Converted to contiguous
     float32; a copy may be made.
 k : int
-    Number of neighbors requested, between 1 and max_elements.
-nprobe : int
-    Positive number of clusters to probe; capped at num_clusters.
+    Number of neighbors requested, at least 1. It may exceed the number of
+    points; slots without a neighbor are padded as described below.
+nprobe : int, optional
+    Number of clusters to probe, capped at num_clusters. None (default) and
+    0 select num_clusters / 16, rounded to the nearest integer and at least 1.
 high_accuracy : bool, optional
     Enable HACC. None (default) selects it for 4-9 bits and standard
     FastScan otherwise. Raw storage uses standard FastScan.
 num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count,
-    capped by OMP_NUM_THREADS.
+    Worker count. None (default) selects 1; 0 selects the available CPU
+    count, capped by OMP_NUM_THREADS.
 
 Returns
 -------
@@ -686,7 +728,8 @@ distances : ndarray of float32, shape (n_queries, k)
 Notes
 -----
 Requires a trained or loaded index. Returns (ids, distances), in that
-order. Missing neighbors have ID 4294967295 and distance inf. Array shapes
+order. Missing neighbors have ID 4294967295 and distance inf; test
+np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
         )
         .def(
@@ -760,7 +803,7 @@ index : IvfIndex
         .def_property_readonly(
             "is_trained",
             &IvfIndex::is_trained,
-            R"doc(Whether centroids are set, by train, set_centroids, build or load.)doc"
+            R"doc(Whether centroids are set, by train, set_centroids, the first add, build or load.)doc"
         )
         .def_property_readonly(
             "seed",
@@ -772,7 +815,7 @@ index : IvfIndex
             &IvfIndex::cp,
             &IvfIndex::set_cp,
             py::return_value_policy::reference_internal,
-            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 25, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed.)doc"
+            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed.)doc"
         )
         .def_property_readonly(
             "metric", &IvfIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"

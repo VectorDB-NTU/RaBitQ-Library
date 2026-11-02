@@ -316,7 +316,10 @@ TEST(IvfSearchTest, RejectsUnbuiltStateAndInvalidArguments) {
     index.construct(data.data(), centroid.data(), &cluster, false, 1);
 
     EXPECT_THROW(index.search(query.data(), 0, 1, &result), std::invalid_argument);
-    EXPECT_THROW(index.search(query.data(), 2, 1, &result), std::invalid_argument);
+    // k beyond the point count is padded, not rejected.
+    std::array<PID, 2> two{0, 0};
+    index.search(query.data(), two.size(), 1, two.data());
+    EXPECT_EQ(two, (std::array<PID, 2>{0, kPidMax}));
     EXPECT_THROW(
         index.search(query.data(), std::numeric_limits<size_t>::max(), 1, &result),
         std::invalid_argument
@@ -782,6 +785,108 @@ TEST(IvfAddTest, EveryWayOfAddingTheSamePointsGivesByteIdenticalIndexes) {
             threaded.load(base_path.c_str());
             threaded.add(extra, kNew, nullptr, false, 4);
             EXPECT_TRUE(saved_bytes(threaded, path) == expected) << "threaded";
+        }
+    }
+}
+
+TEST(IvfAddTest, FlatRoutingSpansSeveralRoutingBlocks) {
+    // More rows than one flat routing block (128 MiB of rotated rows; kDynDim pads
+    // to 96), with a partial final block. Row i sits close to centroid i % 4, so
+    // its nearest centroid is unambiguous.
+    constexpr size_t kBlockRows = (size_t{128} << 20) / (sizeof(float) * 96);
+    constexpr size_t kCount = kBlockRows + 33;
+    auto centroids = random_rows(kDynNumClusters, 51);
+    for (auto& value : centroids) {
+        value *= 10.0F;
+    }
+    auto points = random_rows(kCount, 52);
+    for (size_t i = 0; i < kCount; ++i) {
+        for (size_t d = 0; d < kDynDim; ++d) {
+            points[i * kDynDim + d] = centroids[(i % kDynNumClusters) * kDynDim + d] +
+                                      0.1F * points[i * kDynDim + d];
+        }
+    }
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
+        IVF index(kDynDim, kDynNumClusters, 1, metric, 7U);
+        index.set_centroids(centroids.data(), 1);
+        index.add(points.data(), kCount, nullptr, false, 4);
+        size_t stored = 0;
+        for (size_t c = 0; c < kDynNumClusters; ++c) {
+            const Cluster cluster = IvfTestAccess::cluster_view(index, c);
+            stored += cluster.num();
+            for (size_t j = 0; j < cluster.num(); ++j) {
+                ASSERT_EQ(cluster.ids()[j] % kDynNumClusters, c) << cluster.ids()[j];
+            }
+        }
+        EXPECT_EQ(stored, kCount);
+    }
+}
+
+TEST(IvfAddTest, FlatRoutingIsIndependentOfBatchingAndReloads) {
+    constexpr size_t kOld = 64;
+    constexpr size_t kNew = 100;
+    const auto points = random_rows(kOld + kNew, 81);
+    const auto first_centroids = random_rows(kDynNumClusters, 82);
+    const auto second_centroids = random_rows(kDynNumClusters, 83);
+    const float* extra = points.data() + (kOld * kDynDim);
+    const rabitq_test::TempFile first_file("rabitq_ivf_route_first.index");
+    const rabitq_test::TempFile second_file("rabitq_ivf_route_second.index");
+    const rabitq_test::TempFile path_file("rabitq_ivf_route_out.index");
+    const std::string& path = path_file.path();
+    for (const auto* file : {&first_file, &second_file}) {
+        const auto& centroids = file == &first_file ? first_centroids : second_centroids;
+        const auto assigned = nearest_centroids(centroids, points.data(), kOld, METRIC_L2);
+        IVF base(kOld, kDynDim, kDynNumClusters, 4, METRIC_L2);
+        base.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        base.save(file->path().c_str());
+    }
+
+    IVF whole;
+    whole.load(second_file.path().c_str());
+    whole.add(extra, kNew, nullptr, false, 1);
+    const std::string expected = saved_bytes(whole, path);
+
+    // Single rows and other splits route like one batch.
+    IVF parts;
+    parts.load(second_file.path().c_str());
+    size_t done = 0;
+    for (size_t chunk : std::array<size_t, 4>{1, 1, 7, kNew - 9}) {
+        parts.add(extra + (done * kDynDim), chunk, nullptr, false, 2);
+        done += chunk;
+    }
+    EXPECT_TRUE(saved_bytes(parts, path) == expected) << "batching";
+
+    // Loading other centroids into the same object discards cached routing state.
+    IVF reused;
+    reused.load(first_file.path().c_str());
+    reused.add(extra, 1, nullptr, false, 1);
+    reused.load(second_file.path().c_str());
+    reused.add(extra, kNew, nullptr, false, 1);
+    EXPECT_TRUE(saved_bytes(reused, path) == expected) << "reload";
+}
+
+TEST(IvfAddTest, FlatRoutingBreaksTiesTowardTheLowestCentroid) {
+    // Centroids 2 and 3 repeat 0 and 1, so every point ties between two centroids.
+    auto centroids = random_rows(kDynNumClusters, 61);
+    std::copy_n(centroids.begin(), 2 * kDynDim, centroids.begin() + (2 * kDynDim));
+    constexpr size_t kCount = 50;
+    const auto points = random_rows(kCount, 62);
+
+    for (auto metric : {METRIC_L2, METRIC_IP}) {
+        SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
+        IVF index(kDynDim, kDynNumClusters, 4, metric, 7U);
+        index.set_centroids(centroids.data(), 1);
+        index.add(points.data(), kCount, nullptr, false, 2);
+        const auto expected = nearest_centroids(centroids, points.data(), kCount, metric);
+        std::array<size_t, kDynNumClusters> expected_sizes{};
+        for (PID cluster : expected) {
+            ASSERT_LT(cluster, 2U);
+            ++expected_sizes[cluster];
+        }
+        for (size_t c = 0; c < kDynNumClusters; ++c) {
+            EXPECT_EQ(IvfTestAccess::cluster_view(index, c).num(), expected_sizes[c]) << c;
         }
     }
 }
@@ -1803,7 +1908,7 @@ TEST(IvfTrainTest, RejectsInvalidCentroidsAndTrainingDataWithoutChangingState) {
     EXPECT_THROW(unconfigured.train(kCount, points.data(), cp), std::logic_error);
 }
 
-TEST(IvfTrainTest, TrainedIndexSearchesAndSavesOnlyAfterAdd) {
+TEST(IvfTrainTest, TrainedIndexPadsSearchesAndSavesOnlyAfterAdd) {
     constexpr size_t kCount = 300;
     constexpr uint32_t kSeed = 21;
     const auto points = random_rows(kCount, 71);
@@ -1817,15 +1922,13 @@ TEST(IvfTrainTest, TrainedIndexSearchesAndSavesOnlyAfterAdd) {
         index.train(kCount, points.data(), default_training_parameters(metric, kSeed));
         EXPECT_TRUE(index.is_trained());
         EXPECT_EQ(index.num_points(), 0U);
-        PID id = 0;
-        try {
-            index.search(points.data(), 1, 1, &id);
-            FAIL() << "searching a trained index without points succeeded";
-        } catch (const std::invalid_argument& error) {
-            EXPECT_STREQ(
-                error.what(), "IVF search k must be between 1 and the point count"
-            );
-        }
+        // Without points, every result slot is padded.
+        std::array<PID, 2> ids{0, 0};
+        std::array<float, 2> distances{0.0F, 0.0F};
+        index.search(points.data(), ids.size(), 1, ids.data(), distances.data());
+        EXPECT_EQ(ids, (std::array<PID, 2>{kPidMax, kPidMax}));
+        EXPECT_TRUE(std::isinf(distances[0]) && std::isinf(distances[1]));
+        EXPECT_THROW(index.search(points.data(), 0, 1, ids.data()), std::invalid_argument);
         try {
             index.save(path.c_str());
             FAIL() << "saving a trained index without points succeeded";
@@ -1890,7 +1993,7 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
         const auto cp = default_training_parameters(metric, 5);
-        EXPECT_EQ(cp.niter, 25U);
+        EXPECT_EQ(cp.niter, 10U);
         EXPECT_EQ(cp.max_points_per_centroid, 256U);
         EXPECT_EQ(cp.seed, 5U);
         EXPECT_EQ(cp.spherical, metric == METRIC_IP);

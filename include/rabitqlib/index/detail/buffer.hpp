@@ -100,6 +100,7 @@ class SearchBuffer {
     }
 
     [[nodiscard]] size_t size() const { return size_; }
+    [[nodiscard]] size_t capacity() const { return capacity_; }
 
     void copy_results(PID* result_ids) const {
         for (size_t i = 0; i < size_; ++i) {
