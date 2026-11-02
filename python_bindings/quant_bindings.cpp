@@ -1596,7 +1596,8 @@ fast_quantization : bool, optional
     False. It has no effect at nbits=1, where no scale is searched, and is
     rejected for d above 65536 otherwise.
 num_threads : int, optional
-    Worker threads; 0 (the default) uses every available CPU. Results do not
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS. Results do not
     depend on the thread count.
 out : numpy.ndarray, optional
     Output of the exact dtype and shape, with contiguous rows.
@@ -1664,7 +1665,8 @@ metric : {'l2', 'ip'}
 centroid : array_like of float32, shape (d,), optional
     The centroid in working space; None means zero. It only affects add.
 num_threads : int, optional
-    Worker threads; 0 (the default) uses every available CPU.
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray, optional
     A C-contiguous FACTORS_DTYPE array of shape (n,).
 
@@ -1694,7 +1696,8 @@ codes : numpy.ndarray of uint8, shape (n, d)
 nbits : int
     Width of codes, 1 to 8. Split 9-bit codes first.
 num_threads : int, optional
-    Worker threads; 0 (the default) uses every available CPU.
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray, optional
     Output of the exact dtype and shape, with contiguous rows.
 
@@ -1721,7 +1724,8 @@ packed : numpy.ndarray of uint8, shape (n, d * nbits // 8)
 nbits : int
     Width of the packed codes, 1 to 8.
 num_threads : int, optional
-    Worker threads; 0 (the default) uses every available CPU.
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray, optional
     Output of the exact dtype and shape, with contiguous rows.
 
@@ -1798,7 +1802,8 @@ Parameters
 x : array_like of float32, shape (n, dim)
     Vectors in the original space. Converted to contiguous float32.
 num_threads : int, optional
-    Worker threads; 0 (the default) uses every available CPU.
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray, optional
     A float32 array of shape (n, padded_dim) with contiguous rows.
 
@@ -1898,7 +1903,8 @@ terms : numpy.void of QUERY_TERMS_DTYPE
 nbits : int
     Bit width of the codes, 1 to 9.
 num_threads : int, optional
-    Worker threads; 1 by default, 0 uses every available CPU.
+    Worker threads; 1 by default, 0 selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray of ESTIMATE_DTYPE, shape (n,), optional
 
 Returns
@@ -1926,7 +1932,8 @@ bitsets : numpy.ndarray of uint8, shape (n, d // 8)
 factors : numpy.ndarray of FACTORS_DTYPE, shape (n,)
     The 1-bit (prefix) factors.
 num_threads : int, optional
-    Worker threads; 0 (the default) uses every available CPU.
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray of uint8, optional
     Shape (ceil(n / 32), d * 4 + 384) with contiguous rows.
 
@@ -1968,7 +1975,8 @@ indices : array_like of int, shape (m,), optional
     Rows to score, read in place; the output lines up with indices. Must be
     integers in [0, n).
 num_threads : int, optional
-    Worker threads; 1 by default, 0 uses every available CPU.)doc";
+    Worker threads; 1 by default, 0 selects the available CPU count, capped by
+    OMP_NUM_THREADS.)doc";
 
     py::class_<QuantQuery>(quant, "Query", kQueryDoc)
         .def(
@@ -2141,7 +2149,8 @@ blocks : numpy.ndarray of uint8, shape (ceil(num_points / 32), d * 4 + 384)
 num_points : int
     Number of vectors in the blocks; padding lanes are not returned.
 num_threads : int, optional
-    Worker threads; 1 by default, 0 uses every available CPU.
+    Worker threads; 1 by default, 0 selects the available CPU count, capped by
+    OMP_NUM_THREADS.
 out : numpy.ndarray of ESTIMATE_DTYPE, shape (num_points,), optional
 
 Returns
