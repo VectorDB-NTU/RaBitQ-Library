@@ -14,6 +14,17 @@
 RaBitQ-Library is a research-backed library for vector quantization and
 approximate nearest-neighbor search. See the [research papers](https://vectordb-ntu.github.io/RaBitQ-Library/papers/).
 
+## Why RaBitQ-Library
+
+- **Reference implementation.** Developed with the RaBitQ authors: 1–9-bit codes
+  with a theoretical error bound, plus indexes and clustering from the same research.
+- **Fast to build and search.** Optimized SIMD kernels and batch scoring keep both
+  indexing and queries fast; see the
+  [benchmarks](https://vectordb-ntu.github.io/RaBitQ-Library/benchmarks/bench/).
+- **Use an index or the quantizer.** Build ready-made indexes in Python or C++,
+  or link only the core and FastScan components into your own engine, as
+  [zvec](https://vectordb-ntu.github.io/RaBitQ-Library/integrations/zvec/) does.
+
 ## News
 
 - **v0.8.1:** the default `num_threads=0` respects `OMP_NUM_THREADS`, fixing a macOS
