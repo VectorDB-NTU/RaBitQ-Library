@@ -56,8 +56,9 @@ Factors are structured arrays of `quant.FACTORS_DTYPE` (`add`, `rescale`, `error
 ```python
 qry = quant.Query(q, metric="l2", centroid=c)
 est = qry.estimate_bitset(bitsets, f_prefix)                    # ESTIMATE_DTYPE[1000]
-lower = est["distance"] - 2.0 * est["error"]
-candidates = np.flatnonzero(lower <= np.partition(est["distance"], 10)[10])
+lower = est["distance"] - est["error"]
+upper = est["distance"] + est["error"]
+candidates = np.flatnonzero(lower <= np.partition(upper, 9)[9])  # 10th-smallest upper bound
 dist = qry.refine_packed(packed_ex, f_full, est[candidates], indices=candidates, ex_bits=3)
 top = candidates[np.argsort(dist)[:10]]
 ```
@@ -72,7 +73,7 @@ top = candidates[np.argsort(dist)[:10]]
 | `refine_packed(packed, f_full, first, ex_bits=…)` | The same with `pack_codes(ex, nbits=ex_bits)` | `float32` |
 | `estimate_fastscan(blocks, num_points=…)` | `pack_fastscan_blocks` output | `ESTIMATE_DTYPE` |
 
-An estimate has three fields: `distance`, the `error` term, and `refine_input`, the prefix inner product that refinement reads. The probabilistic lower bound is `distance - m * error` for a multiplier `m` of your choice. `refine` and `refine_packed` take `prefix_bits=` (default 1) for the width the first stage scored, and agree with each other within float32 rounding: the packed path uses the dispatched SIMD kernel. The scoring calls accept `indices=` to read just those rows in place; `first` and the output then line up with `indices`. Indices must be integers in `[0, n)`.
+An estimate has three fields: `distance`, the `error` term, and `refine_input`, the prefix inner product that refinement reads. `distance ± m * error` is a probabilistic interval for the true distance. `error` already includes the encoder's confidence parameter ε₀ = 1.9, so `m = 1` is the interval the indexes use, and about 6% of true distances fall outside it; a larger `m` widens it, refining more candidates for fewer misses. To keep the top `k` within that confidence, refine every vector whose lower bound is at most the `k`-th smallest upper bound, as in the example above; comparing lower bounds with the `k`-th smallest estimate instead drops true neighbours. `refine` and `refine_packed` take `prefix_bits=` (default 1) for the width the first stage scored, and agree with each other within float32 rounding: the packed path uses the dispatched SIMD kernel. The scoring calls accept `indices=` to read just those rows in place; `first` and the output then line up with `indices`. Indices must be integers in `[0, n)`.
 
 Distances follow the indexes. L2 is the estimated squared distance; IP is `1 - <q, x>`. Lower is better.
 
