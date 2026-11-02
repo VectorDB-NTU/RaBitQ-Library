@@ -156,7 +156,8 @@ Use `--dry-run` to check prerequisites and print the installation commands
 without running them. The installer defaults to the historical GCC 13 toolchain
 and builds RaBitQ with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=ON`; it does not
 recreate the GCC 14.3.0, native-optimization-OFF wheel used for the 0.8.2
-measurements. That wheel was built and installed in the same environment with:
+measurements. From a v0.8.2 checkout, the equivalent build, installed in the same
+environment, is:
 
 ```bash
 python -m pip wheel . --no-build-isolation --no-deps -w build/benchmark-wheel \

@@ -480,7 +480,7 @@ Parameters
 dim : int
     Original vector dimension, from 64 through 65536.
 num_clusters : int
-    Number of centroids, from train or set_centroids.
+    Number of centroids, from train, set_centroids or the first add.
 nbits : int, optional
     Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
     float32 vectors with one-bit filtering and raw reranking. Default is 7.
@@ -541,7 +541,8 @@ ids : ndarray of uint32, shape (n,)
 Notes
 -----
 On an untrained index, add first trains num_clusters centroids on data,
-as train(data) does, so data needs at least num_clusters rows; with
+as train(data) does, so data needs at least num_clusters rows, and an
+empty first add raises RuntimeError; with
 num_threads None, training uses cp.num_threads. Passing cluster_ids to an
 untrained index raises RuntimeError, as does add on an index created with
 max_elements, which build fills. If the call fails, the index stays

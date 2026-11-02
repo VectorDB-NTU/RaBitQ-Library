@@ -28,7 +28,7 @@ loaded = HnswIndex.load("hnsw.index")
 The first `add` trains an untrained index on the added vectors, as for
 [IVF-RaBitQ](ivf.md#training-centroids-in-python); with fewer rows than
 `num_clusters`, it trains one centroid per row, and `num_clusters` then reports
-the row count.
+the row count. An empty first `add` raises `RuntimeError`.
 `train` and `set_centroids` work as for [IVF-RaBitQ](ivf.md#training-centroids-in-python),
 with `num_clusters` centroids (default 16) and always RaBitQKMeans; `index.cp`
 starts from the same defaults with `seed`'s low 32 bits. The first `add` into the
@@ -68,7 +68,7 @@ see [C++ integration](../cpp_integration.md).
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
-| `num_clusters` | Python keyword, default 16: centroids `train` learns or `set_centroids` supplies. |
+| `num_clusters` | Python keyword, default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
 | `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
 | `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
@@ -265,7 +265,7 @@ size_t HierarchicalNSW::remove(const PID* labels, size_t num_points);
 In Python:
 
 ```python
-removed = index.remove(ids)   # ids in [0, num_stored_points)
+removed = index.remove(new_ids[:10])   # IDs in [0, num_stored_points)
 ```
 
 A removed point keeps its codes, its links, and its place in the graph. Search

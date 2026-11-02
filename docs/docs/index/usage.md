@@ -146,7 +146,7 @@ worker threads in the same process; set `OMP_NUM_THREADS=1` before the first
 native call, or pass `num_threads=1`, in such processes.
 `train` and `add` on every index default to all CPUs (`None` or `0`); the
 clustering classes default to `0`. `search` defaults to one thread (`None` or `1`),
-as do the deprecated `build` and `search_batch`, which require an integer.
+as do the deprecated `build`, which requires an integer, and `search_batch`.
 Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, so pass
 `num_threads=1` when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding

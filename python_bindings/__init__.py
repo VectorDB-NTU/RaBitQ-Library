@@ -114,8 +114,7 @@ def _patch_ivf_init(cls):
             )
             _deprecated(
                 "IvfIndex(dim, max_elements, num_clusters, nbits, ...) is deprecated; "
-                "use IvfIndex(dim, num_clusters, nbits=...) and train() or "
-                "set_centroids() before add()"
+                "use IvfIndex(dim, num_clusters, nbits=...), whose first add() trains it"
             )
             native_init(
                 self,

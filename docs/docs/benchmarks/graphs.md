@@ -62,9 +62,9 @@ refinement iteration. Both HNSW implementations use `M=16` and
 
 | Method | Stored representation | Additional construction settings |
 | --- | --- | --- |
-| SymphonyQG raw | `quantization_bits=0`, raw vectors | Degree 32, PIPNN initialization |
-| SymphonyQG 4-bit | `quantization_bits=4` | Degree 32, PIPNN initialization |
-| SymphonyQG 8-bit | `quantization_bits=8` | Degree 32, PIPNN initialization |
+| SymphonyQG raw | `nbits=32`, raw vectors | Degree 32, PIPNN initialization |
+| SymphonyQG 4-bit | `nbits=4` | Degree 32, PIPNN initialization |
+| SymphonyQG 8-bit | `nbits=8` | Degree 32, PIPNN initialization |
 | HNSW-RaBitQ 1+4 | `nbits=5` | `M=16`, seed 42, 16 residual centroids |
 | HNSW-RaBitQ 1+8 | `nbits=9` | `M=16`, seed 42, 16 residual centroids |
 | Faiss HNSW Flat | `HNSW16` | Float32 vectors |

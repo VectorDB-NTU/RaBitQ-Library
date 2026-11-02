@@ -47,7 +47,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `num_clusters` | Number of centroids `train` learns or `set_centroids` supplies; every cluster ID must be in `[0, num_clusters)`. |
+| `num_clusters` | Number of centroids `train` or the first `add` learns, or `set_centroids` supplies; every cluster ID must be in `[0, num_clusters)`. |
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only `nbits` defaults to 7; C++ requires it. |
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
@@ -230,7 +230,8 @@ index.add(vectors)
 - Before training, `add` with `cluster_ids`, `search`, `remove`, `reserve` and
   `save` raise `RuntimeError`; `add` without `cluster_ids` trains first, except
   on an index created with `max_elements`, which `build` fills. If that
-  first `add` fails, the index stays untrained and empty. A trained index without
+  first `add` fails, the index stays untrained and empty; an empty first `add`
+  raises `RuntimeError`. A trained index without
   vectors cannot be saved, and its `search` returns only padded results; add
   vectors first. Loaded indexes are trained, and their `seed` is `None`.
 - `train` and `add` default to every available CPU; `search` defaults to one

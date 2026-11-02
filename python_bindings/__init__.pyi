@@ -81,7 +81,7 @@ class IvfIndex:
     dim : int
         Original vector dimension, from 64 through 65536.
     num_clusters : int
-        Number of centroids, from train or set_centroids.
+        Number of centroids, from train, set_centroids or the first add.
     nbits : int, optional
         Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
         float32 vectors with one-bit filtering and raw reranking. Default is 7.
@@ -136,7 +136,7 @@ class IvfIndex:
         dim : int
             Original vector dimension, from 64 through 65536.
         num_clusters : int
-            Number of centroids, from train or set_centroids.
+            Number of centroids, from train, set_centroids or the first add.
         nbits : int, optional
             Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
             float32 vectors with one-bit filtering and raw reranking. Default is 7.
@@ -164,7 +164,7 @@ class IvfIndex:
     @overload
     @deprecated(
         "IvfIndex(dim, max_elements, num_clusters, nbits, ...) is deprecated since "
-        "0.8; use IvfIndex(dim, num_clusters, nbits=...)"
+        "0.8; use IvfIndex(dim, num_clusters, nbits=...), whose first add() trains it"
     )
     def __init__(
         self,
@@ -338,7 +338,8 @@ class IvfIndex:
         Notes
         -----
         On an untrained index, add first trains num_clusters centroids on data,
-        as train(data) does, so data needs at least num_clusters rows; with
+        as train(data) does, so data needs at least num_clusters rows, and an
+        empty first add raises RuntimeError; with
         num_threads None, training uses cp.num_threads. Passing cluster_ids to an
         untrained index raises RuntimeError, as does add on an index created with
         max_elements, which build fills. If the call fails, the index stays
@@ -481,7 +482,8 @@ class HnswIndex:
     nbits : int, optional
         Keyword-only. Total quantization bits, 1 through 9. Default is 7.
     num_clusters : int, optional
-        Keyword-only. Number of centroids train or set_centroids provides.
+        Keyword-only. Number of centroids train, set_centroids or the first add
+        provides; the first add caps it at its row count.
         Default is 16.
     M : int, optional
         Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
@@ -543,7 +545,8 @@ class HnswIndex:
         nbits : int, optional
             Keyword-only. Total quantization bits, 1 through 9. Default is 7.
         num_clusters : int, optional
-            Keyword-only. Number of centroids train or set_centroids provides.
+            Keyword-only. Number of centroids train, set_centroids or the first add
+            provides; the first add caps it at its row count.
             Default is 16.
         M : int, optional
             Keyword-only. Graph connectivity, at least 2; the base layer keeps up to
@@ -771,7 +774,8 @@ class HnswIndex:
         -----
         On an untrained index, add first trains num_clusters centroids on data, as
         train(data) does; with fewer rows it trains one centroid per row, and
-        num_clusters then reports the row count. With num_threads None, training
+        num_clusters then reports the row count. An empty first add raises
+        RuntimeError. With num_threads None, training
         uses cp.num_threads. Passing cluster_ids to an untrained index raises
         RuntimeError, as does add on an untrained index loaded from a 0.7 file;
         call train first. If the call fails, the index stays

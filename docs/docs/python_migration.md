@@ -109,5 +109,7 @@ load as trained indexes, except empty, untrained HNSW-RaBitQ files, which need
 For C++, the existing constructors and `construct` are unchanged; see
 [IVF-RaBitQ](index/ivf.md#training-centroids-in-c) and
 [HNSW-RaBitQ](index/hnsw.md#training-centroids-in-c) for the new training entry
-points. The one C++ behavior change is that saving an index without stored
-points now throws `std::logic_error`.
+points. C++ behavior changes: since 0.8.0, saving an index without stored points
+throws `std::logic_error`; since 0.8.2, IVF and SymphonyQG searches pad `k` above
+the point count instead of throwing, and `default_training_parameters` runs 10
+iterations. See the [0.8.2 notes](releases/0.8.2.md#c-changes).

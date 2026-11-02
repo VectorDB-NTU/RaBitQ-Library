@@ -295,7 +295,7 @@ z
    <text style="font-weight: 700; font-size: 20px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #0f172a" x="46.8" y="21.531313" transform="rotate(-0 46.8 21.531313)">GIST1M</text>
   </g>
   <g id="text_26">
-   <text style="font-size: 12px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #475569" x="46.8" y="38.016" transform="rotate(-0 46.8 38.016)">Fastest measured QPS at Recall@10 ≥ 90% · RaBitQ-Library 0.7.1</text>
+   <text style="font-size: 12px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #475569" x="46.8" y="38.016" transform="rotate(-0 46.8 38.016)">Fastest measured QPS at Recall@10 ≥ 90% · RaBitQ-Library 0.8.2</text>
   </g>
   <g id="text_27">
    <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start; fill: #64748b" x="46.8" y="305.712" transform="rotate(-0 46.8 305.712)">1 search thread · 1 query/call · Index size is serialized storage, not RAM</text>
