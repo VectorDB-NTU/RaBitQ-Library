@@ -333,7 +333,8 @@ class QuantizedGraph<float> {
      * Reuses scratch and can use a previous result as a warm-start hint.
      * BatchQuery may allocate LUT storage on its first use or when its shape changes;
      * this is not the stable core v1 zero-allocation interface. Search and result
-     * buffers must be sized for ef_search and k respectively. rotated_query and
+     * buffers must be sized for ef_search and k respectively; a result pool whose
+     * capacity differs from k raises std::invalid_argument. rotated_query and
      * lookup_table need D and 4 * D floats, where D is the graph's stored padded
      * dimension; this advanced caller must already know D. dimension() is the original
      * input dimension. estimated_distances needs degree_bound() floats. The visited set

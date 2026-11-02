@@ -212,8 +212,8 @@ class IvfIndex {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
         // The first add on an untrained 0.8-form index trains it on the same data.
-        const bool trains =
-            !index_->is_trained() && !builds_by_construct_ && cluster_ids.is_none();
+        const bool trains = !index_->is_trained() && !builds_by_construct_ &&
+                            cluster_ids.is_none() && data_array.shape(0) > 0;
         if (!trains) {
             check_trained("add");
         }
@@ -541,8 +541,10 @@ ids : ndarray of uint32, shape (n,)
 Notes
 -----
 On an untrained index, add first trains num_clusters centroids on data,
-as train(data) does, so data needs at least num_clusters rows; passing
-cluster_ids then raises RuntimeError. If the call fails, the index stays
+as train(data) does, so data needs at least num_clusters rows; with
+num_threads None, training uses cp.num_threads. Passing cluster_ids to an
+untrained index raises RuntimeError, as does add on an index created with
+max_elements, which build fills. If the call fails, the index stays
 untrained and empty. Batch additions to reduce repeated cluster copying;
 reserve can preallocate room. Passing the options positionally is
 deprecated.)doc";
@@ -800,7 +802,7 @@ index : IvfIndex
         .def_property_readonly(
             "is_trained",
             &IvfIndex::is_trained,
-            R"doc(Whether centroids are set, by train, set_centroids, build or load.)doc"
+            R"doc(Whether centroids are set, by train, set_centroids, the first add, build or load.)doc"
         )
         .def_property_readonly(
             "seed",

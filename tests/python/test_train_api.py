@@ -474,3 +474,70 @@ def test_package_reports_its_version():
     import rabitqlib
 
     assert rabitqlib.__version__ == importlib.metadata.version("rabitqlib")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"nbits": 32},
+        {"initializer": "flat_rabitq"},
+        {"initializer": "hnsw"},
+        {"niter": 3, "max_points_per_centroid": 64},
+    ],
+)
+def test_ivf_first_add_keeps_every_setting(options, base_data, tmp_path):
+    cp = {k: options[k] for k in ("niter", "max_points_per_centroid") if k in options}
+    settings = {k: v for k, v in options.items() if k not in cp}
+
+    def make():
+        index = IvfIndex(DIM, 8, metric="ip", seed=11, **settings)
+        for name, value in cp.items():
+            setattr(index.cp, name, value)
+        return index
+
+    implicit = make()
+    implicit.add(base_data, num_threads=1)
+    explicit = make()
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+def test_ivf_first_add_uses_the_drawn_seed(base_data, tmp_path):
+    implicit = IvfIndex(DIM, 8)
+    seed = implicit.seed
+    implicit.add(base_data, num_threads=1)
+    assert implicit.seed == implicit.cp.seed == seed
+    explicit = IvfIndex(DIM, 8, seed=seed)
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+def test_hnsw_first_add_keeps_a_preallocated_capacity(base_data, tmp_path):
+    implicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
+    implicit.resize(2 * N_VECTORS)
+    implicit.add(base_data, num_threads=1)
+    assert implicit.max_elements == 2 * N_VECTORS
+    explicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
+    explicit.resize(2 * N_VECTORS)
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_empty_first_add_requires_training(kind, base_data):
+    index = new_index(kind)
+    name = type(index).__name__
+    with pytest.raises(
+        RuntimeError, match=f"^{name} must be trained or loaded before add$"
+    ):
+        index.add(base_data[:0])
+    assert not index.is_trained

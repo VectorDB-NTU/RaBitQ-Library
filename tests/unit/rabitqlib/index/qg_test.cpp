@@ -1963,6 +1963,45 @@ TEST(QgSearchTest, ConcurrentBatchCallsMatchIndividualQueries) {
 }  // namespace rabitqlib::symqg
 
 namespace rabitqlib::symqg {
+TEST(QgSearchTest, ScratchSearchRequiresAResultPoolOfCapacityK) {
+    QuantizedGraph<float> graph(66, 64, 32, METRIC_L2, RotatorType::FhtKacRotator, 0, 42);
+    std::vector<float> data(66 * 64, 0.0F);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = std::sin(static_cast<float>(i) * 0.37F);
+    }
+    QGBuilder builder(graph, 66, data.data(), 1, 42);
+    builder.build(2);
+    graph.set_ef(64);
+    std::vector<PID> ids(10, 0);
+    std::vector<float> distances(10, -1.0F), rotated(64), estimates(32), lut(256);
+    BatchQuery<float> query;
+    buffer::SearchBuffer<float> search(64);
+    VisitedSet visited(66, 66);
+    for (size_t capacity : {4U, 64U}) {
+        SCOPED_TRACE(capacity);
+        buffer::SearchBuffer<float> result(capacity);
+        try {
+            graph.search_with_scratch(
+                data.data(),
+                10,
+                ids.data(),
+                distances.data(),
+                rotated.data(),
+                estimates.data(),
+                lut.data(),
+                query,
+                search,
+                result,
+                visited
+            );
+            FAIL() << "a result pool of the wrong capacity was accepted";
+        } catch (const std::invalid_argument& error) {
+            EXPECT_STREQ(error.what(), "QuantizedGraph result pool capacity must equal k");
+        }
+        EXPECT_TRUE(std::all_of(ids.begin(), ids.end(), [](PID id) { return id == 0; }));
+    }
+}
+
 TEST(QgSearchTest, SearchPadsIncompleteResults) {
     // Two disconnected halves: a search reaches only the 33 points of one half.
     QuantizedGraph<float> graph(66, 64, 32, METRIC_L2, RotatorType::FhtKacRotator, 0, 42);

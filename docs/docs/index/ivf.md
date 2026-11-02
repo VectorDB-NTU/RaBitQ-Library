@@ -52,7 +52,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
+| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`2**32 - 1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
@@ -228,7 +228,8 @@ index.add(vectors)
   vectors; once it stores any (including removed ones), both raise
   `RuntimeError`. A failed call leaves the index unchanged.
 - Before training, `add` with `cluster_ids`, `search`, `remove`, `reserve` and
-  `save` raise `RuntimeError`; `add` without `cluster_ids` trains first. If that
+  `save` raise `RuntimeError`; `add` without `cluster_ids` trains first, except
+  on an index created with `max_elements`, which `build` fills. If that
   first `add` fails, the index stays untrained and empty. A trained index without
   vectors cannot be saved, and its `search` returns only padded results; add
   vectors first. Loaded indexes are trained, and their `seed` is `None`.
@@ -372,8 +373,10 @@ void IVF::reserve(PID cluster_id, size_t num_points);
   receives the PID `num_stored_points() + i`, using the count before the call. Existing
   IDs stay unchanged, and removed IDs are never reused.
 - **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When
-  it is `nullptr`, vectors use the same centroid routing as queries. Routing uses
-  the initializer selected at construction or restored from the index file.
+  it is `nullptr`, each vector goes to its nearest centroid under the index's
+  routing type, the initializer selected at construction or restored from the
+  index file. With Flat routing, `add` assigns exactly and queries scan in float,
+  so near-ties may resolve differently.
 - **fast_quantization**, **num_threads**: Same as in `construct`.
 - **ids_to_remove**: `num_points` PIDs to remove. Every PID must be below `num_stored_points()`; nothing is
   removed if one is not. `remove` returns how many were newly removed and can be
@@ -397,7 +400,7 @@ Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float
 one-dimensional integer array or sequence with one valid cluster ID per vector;
 `remove()` likewise accepts a one-dimensional integer array or sequence of point
 IDs and returns the number newly removed. Duplicate IDs count once. Python
-`num_threads` defaults to 0 (every available CPU) and `fast_quantization` to
+`num_threads` defaults to `None` (every available CPU) and `fast_quantization` to
 `False`; pass both by keyword.
 
 After appending, rebuilding with C++ `construct` requires `num_stored_points`
@@ -427,7 +430,7 @@ size; serialized file size alone does not determine peak process memory.
 
 ### Recall after `add`
 
-The centroids and the rotation are fixed when the index is constructed, so
+The centroids and the rotation are fixed once the index is trained, so
 `add` never retrains them. If the added vectors come from a different distribution,
 or the index grows many times beyond its original size, recall at a given
 `nprobe` can drop. Rebuild from the original data with new centroids when

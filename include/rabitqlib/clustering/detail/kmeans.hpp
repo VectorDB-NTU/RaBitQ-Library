@@ -79,6 +79,8 @@ namespace detail {
 // final distances and tie breaking retain the scalar double-precision arithmetic.
 // Optional previous assignments contain n valid centroid IDs and may alias the
 // output. Recompute their distances against the current, updated centroids.
+// Optional centroid_norms holds l2norm_sqr_f64 of each of the k centroids, so
+// callers assigning repeatedly to fixed centroids compute them once.
 inline void exact_assign(
     const float* x,
     const float* centroids,
@@ -89,7 +91,8 @@ inline void exact_assign(
     uint32_t num_workers,
     PID* assignments,
     float* distances,
-    const PID* previous_assignments = nullptr
+    const PID* previous_assignments = nullptr,
+    const double* centroid_norms = nullptr
 ) {
     constexpr size_t kMaxPointBlock = 128;
     // Larger row blocks amortize packing on the AVX-512 Eigen backend. Retain
@@ -102,7 +105,9 @@ inline void exact_assign(
     constexpr size_t kCentroidBlock = 256;
     const size_t blocks = 1 + (n - 1) / point_block;
     const auto team_size = static_cast<uint32_t>(std::min<size_t>(num_workers, blocks));
-    std::vector<double> centroid_norms(k);
+    std::vector<double> computed_norms(centroid_norms == nullptr ? k : 0);
+    const double* norms =
+        centroid_norms != nullptr ? centroid_norms : computed_norms.data();
     std::vector<std::vector<float>> products(
         team_size, std::vector<float>(point_block * std::min(k, kCentroidBlock))
     );
@@ -139,12 +144,15 @@ inline void exact_assign(
         std::array<double, kMaxPointBlock> point_norms{};
         std::array<double, kMaxPointBlock> best_distances{};
         // Reuse this worker team for norms and assignment. The implicit barrier
-        // publishes all centroid norms before any matrix tile is screened.
+        // publishes all centroid norms before any matrix tile is screened. Every
+        // thread takes the same branch.
+        if (centroid_norms == nullptr) {
 #pragma omp for schedule(static)
-        for (std::ptrdiff_t cluster = 0; cluster < static_cast<std::ptrdiff_t>(k);
-             ++cluster) {
-            centroid_norms[static_cast<size_t>(cluster)] =
-                l2norm_sqr_f64(centroids + static_cast<size_t>(cluster) * d, d);
+            for (std::ptrdiff_t cluster = 0; cluster < static_cast<std::ptrdiff_t>(k);
+                 ++cluster) {
+                computed_norms[static_cast<size_t>(cluster)] =
+                    l2norm_sqr_f64(centroids + static_cast<size_t>(cluster) * d, d);
+            }
         }
 #pragma omp for schedule(static)
         for (std::ptrdiff_t block = 0; block < static_cast<std::ptrdiff_t>(blocks);
@@ -184,8 +192,7 @@ inline void exact_assign(
                         const float* vector = x + point * d;
                         for (size_t col = 0; col < cols; ++col) {
                             const size_t cluster = first_cluster + col;
-                            const double norm_sum =
-                                point_norms[row] + centroid_norms[cluster];
+                            const double norm_sum = point_norms[row] + norms[cluster];
                             const double dot = dots[row * cols + col];
                             const double estimate =
                                 spherical ? 1.0 - dot : norm_sum - 2.0 * dot;

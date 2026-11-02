@@ -130,6 +130,7 @@ bool IVF::has_capacity(const ClusterStorage& cs, size_t num_points) const {
 
 void IVF::free_storage() {
     initializer_.reset();
+    std::vector<double>().swap(flat_centroid_norms_);
     std::vector<ClusterStorage>().swap(cluster_storage_);
 }
 
@@ -137,6 +138,7 @@ void IVF::swap(IVF& other) noexcept {
     using std::swap;
     swap(initializer_type_, other.initializer_type_);
     swap(initializer_, other.initializer_);
+    swap(flat_centroid_norms_, other.flat_centroid_norms_);
     swap(cluster_storage_, other.cluster_storage_);
     swap(max_elements_, other.max_elements_);
     swap(num_removed_, other.num_removed_);
@@ -278,6 +280,7 @@ void IVF::set_centroids(const float* centroids, size_t num_threads) {
 
     // Commit. Moving the vectors keeps the empty views' storage, and nothing throws.
     initializer_ = std::move(initializer);
+    flat_centroid_norms_.clear();
     cluster_storage_ = std::move(cluster_storage);
     clusters_ = std::move(clusters);
     ip_func_ = ip_func;
@@ -504,6 +507,17 @@ void IVF::add(
         // FlatInitializer stores its centroids contiguously.
         const float* centroids = initializer_->centroid(0);
         const auto num_workers = static_cast<uint32_t>(resolve_num_threads(num_threads));
+        if (flat_centroid_norms_.size() != num_clusters_) {
+            std::vector<double> norms(num_clusters_);
+            index_detail::parallel_for(
+                0, num_clusters_, num_threads, [&](size_t i, size_t /*thread*/) {
+                    norms[i] = clustering::detail::l2norm_sqr_f64(
+                        centroids + (i * padded_dim_), padded_dim_
+                    );
+                }
+            );
+            flat_centroid_norms_ = std::move(norms);
+        }
         const size_t block_rows = std::min(
             num_points,
             std::max<size_t>(1, kRoutingBlockBytes / (sizeof(float) * padded_dim_))
@@ -528,7 +542,9 @@ void IVF::add(
                 metric_type_ == METRIC_IP,
                 num_workers,
                 assigned.data() + first,
-                distances.data()
+                distances.data(),
+                nullptr,
+                flat_centroid_norms_.data()
             );
         }
     } else {
@@ -1161,7 +1177,8 @@ void IVF::search(
     std::vector<AnnCandidate<float>> centroid_candidates(nprobe);
     initializer_->centroids_distances(rotated_query.data(), nprobe, centroid_candidates);
 
-    buffer::SearchBuffer result_pool(k);
+    // The pool never needs more slots than points; the rest of k is padded.
+    buffer::SearchBuffer result_pool(std::min(k, max_elements_));
 
     SplitBatchQuery<float> query_wrapper(
         rotated_query.data(), padded_dim_, ex_bits_, metric_type_, use_hacc

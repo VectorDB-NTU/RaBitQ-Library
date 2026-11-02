@@ -25,6 +25,8 @@ target_include_directories(_rabitqlib PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 rabitq_configure_target(_rabitqlib)
+# Release preparation keeps this in sync with the Python package version.
+target_compile_definitions(_rabitqlib PRIVATE RABITQ_VERSION="${PROJECT_VERSION}")
 
 # 4. Imported targets provide the matching Python, NumPy, and OpenMP settings.
 target_link_libraries(_rabitqlib PRIVATE

@@ -484,7 +484,8 @@ Notes
 -----
 The first add trains an untrained index on the added vectors. Call train
 on a sample, or set_centroids, first to choose the training data or the
-centroids. Loaded indexes are already trained. Capacity grows automatically
+centroids. Loaded indexes are trained, except empty files saved untrained
+by 0.7. Capacity grows automatically
 on add; resize can preallocate it. Concurrent reads are supported; an
 overlapping mutation raises RuntimeError.
 Data, centroids and queries must be finite float32 values within the index
@@ -530,9 +531,11 @@ ids : ndarray of uint32, shape (n,)
 Notes
 -----
 On an untrained index, add first trains num_clusters centroids on data, as
-train(data) does; with fewer rows it trains one centroid per row. An untrained
-index loaded from a 0.7 file needs train first. Passing cluster_ids then raises
-RuntimeError. If the call fails, the index stays untrained and empty. The first
+train(data) does; with fewer rows it trains one centroid per row, and
+num_clusters then reports the row count. With num_threads None, training
+uses cp.num_threads. Passing cluster_ids to an untrained index raises
+RuntimeError, as does add on an untrained index loaded from a 0.7 file;
+call train first. If the call fails, the index stays untrained and empty. The first
 add into an empty index links vectors with their exact coordinates; later adds
 link through the stored codes, so add most vectors in the first call. Capacity
 grows geometrically when needed. Removed IDs are not reused. Passing the options
@@ -783,7 +786,7 @@ index : HnswIndex
         .def_property_readonly(
             "is_trained",
             &HnswIndex::is_trained,
-            R"doc(Whether centroids are set, by train, set_centroids, build or load.)doc"
+            R"doc(Whether centroids are set, by train, set_centroids, the first add, build or load.)doc"
         )
         .def_property_readonly(
             "seed",

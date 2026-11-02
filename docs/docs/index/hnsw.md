@@ -27,7 +27,8 @@ loaded = HnswIndex.load("hnsw.index")
 
 The first `add` trains an untrained index on the added vectors, as for
 [IVF-RaBitQ](ivf.md#training-centroids-in-python); with fewer rows than
-`num_clusters`, it trains one centroid per row.
+`num_clusters`, it trains one centroid per row, and `num_clusters` then reports
+the row count.
 `train` and `set_centroids` work as for [IVF-RaBitQ](ivf.md#training-centroids-in-python),
 with `num_clusters` centroids (default 16) and always RaBitQKMeans; `index.cp`
 starts from the same defaults with `seed`'s low 32 bits. The first `add` into the
@@ -71,7 +72,7 @@ see [C++ integration](../cpp_integration.md).
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
 | `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
 | `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
-| `k`, `ef` | Positive result count and search window. `k` may exceed the stored point count; missing results are padded. Omitted, `None` or zero `ef` uses `max(k, 64)` in Python, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
+| `k`, `ef` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. Omitted, `None` or zero `ef` uses `max(k, 64)` in Python, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
 `seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
@@ -244,7 +245,7 @@ not copied, only their pointer table.
 
 ### Recall after `add`
 
-The centroids and the rotation are fixed when the index is constructed, so `add`
+The centroids and the rotation are fixed once the index is trained, so `add`
 never retrains them. If the added vectors come from a different distribution, or
 the index grows many times beyond its original size, recall can drop. Rebuild
 from the original data with new centroids when recall matters more than the cost

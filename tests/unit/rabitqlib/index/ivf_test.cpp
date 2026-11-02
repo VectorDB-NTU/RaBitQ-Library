@@ -824,6 +824,49 @@ TEST(IvfAddTest, FlatRoutingSpansSeveralRoutingBlocks) {
     }
 }
 
+TEST(IvfAddTest, FlatRoutingIsIndependentOfBatchingAndReloads) {
+    constexpr size_t kOld = 64;
+    constexpr size_t kNew = 100;
+    const auto points = random_rows(kOld + kNew, 81);
+    const auto first_centroids = random_rows(kDynNumClusters, 82);
+    const auto second_centroids = random_rows(kDynNumClusters, 83);
+    const float* extra = points.data() + (kOld * kDynDim);
+    const rabitq_test::TempFile first_file("rabitq_ivf_route_first.index");
+    const rabitq_test::TempFile second_file("rabitq_ivf_route_second.index");
+    const rabitq_test::TempFile path_file("rabitq_ivf_route_out.index");
+    const std::string& path = path_file.path();
+    for (const auto* file : {&first_file, &second_file}) {
+        const auto& centroids = file == &first_file ? first_centroids : second_centroids;
+        const auto assigned = nearest_centroids(centroids, points.data(), kOld, METRIC_L2);
+        IVF base(kOld, kDynDim, kDynNumClusters, 4, METRIC_L2);
+        base.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+        base.save(file->path().c_str());
+    }
+
+    IVF whole;
+    whole.load(second_file.path().c_str());
+    whole.add(extra, kNew, nullptr, false, 1);
+    const std::string expected = saved_bytes(whole, path);
+
+    // Single rows and other splits route like one batch.
+    IVF parts;
+    parts.load(second_file.path().c_str());
+    size_t done = 0;
+    for (size_t chunk : std::array<size_t, 4>{1, 1, 7, kNew - 9}) {
+        parts.add(extra + (done * kDynDim), chunk, nullptr, false, 2);
+        done += chunk;
+    }
+    EXPECT_TRUE(saved_bytes(parts, path) == expected) << "batching";
+
+    // Loading other centroids into the same object discards cached routing state.
+    IVF reused;
+    reused.load(first_file.path().c_str());
+    reused.add(extra, 1, nullptr, false, 1);
+    reused.load(second_file.path().c_str());
+    reused.add(extra, kNew, nullptr, false, 1);
+    EXPECT_TRUE(saved_bytes(reused, path) == expected) << "reload";
+}
+
 TEST(IvfAddTest, FlatRoutingBreaksTiesTowardTheLowestCentroid) {
     // Centroids 2 and 3 repeat 0 and 1, so every point ties between two centroids.
     auto centroids = random_rows(kDynNumClusters, 61);

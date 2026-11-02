@@ -180,7 +180,7 @@ do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 `set_ef()` while searches are running.
 
-Python `search(queries, k, ef=None, num_threads=1)` accepts a two-dimensional
+Python `search(queries, k, ef=None, num_threads=None)` accepts a two-dimensional
 query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. It defaults to one worker; `num_threads=0` selects the
 available logical CPU count, capped by the number of queries. The 0.7 name

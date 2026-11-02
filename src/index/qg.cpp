@@ -456,7 +456,13 @@ void QuantizedGraph<float>::search_impl(
 ) {
     validate_search(query, k, result_ids, distances, ef_search);
     check_coordinates(query, dim_, dim_, "QuantizedGraph search query");
-    detail::SearchScratch scratch(padded_dim_, max_degree_, ef_search, k);
+    // Pools never need more slots than points; search pads the rest of k.
+    detail::SearchScratch scratch(
+        padded_dim_,
+        max_degree_,
+        std::min(ef_search, max_elements_),
+        std::min<size_t>(k, max_elements_)
+    );
     thread_local VisitedSet visited;
     thread_local size_t visited_size = 0;
     if (visited_size != max_elements_) {
@@ -512,7 +518,12 @@ void QuantizedGraph<float>::search_batch_with_ef(
         std::optional<detail::SearchScratch> scratch;
         VisitedSet visited;
         try {
-            scratch.emplace(padded_dim_, max_degree_, ef_search, k);
+            scratch.emplace(
+                padded_dim_,
+                max_degree_,
+                std::min(ef_search, max_elements_),
+                std::min<size_t>(k, max_elements_)
+            );
             visited.initialize(max_elements_, max_elements_ / 10);
         } catch (...) { failure.capture(); }
 #pragma omp for schedule(dynamic)
@@ -814,6 +825,9 @@ void detail::search_with_workspace(
     const float* g_k1xsumq
 ) {
     graph.validate_search(query, k, result_ids, distances, graph.default_ef_search_);
+    if (scratch.result_pool.capacity() != k) {
+        throw std::invalid_argument("QuantizedGraph result pool capacity must equal k");
+    }
     check_coordinates(query, graph.dim_, graph.dim_, "QuantizedGraph search query");
     graph.search_with_scratch_impl(
         query, k, result_ids, distances, scratch, hint, g_k1xsumq
@@ -881,7 +895,7 @@ void QuantizedGraph<float>::search_with_scratch_impl(
     }
 
     update_results(scratch.result_pool, scratch.visited, query, quantized);
-    // Pad when the graph reaches fewer than k points.
+    // Pad when the graph reaches fewer than k points. The pool holds at most k.
     const size_t found = scratch.result_pool.size();
     scratch.result_pool.copy_results(result_ids, distances);
     std::fill(result_ids + found, result_ids + k, kPidMax);

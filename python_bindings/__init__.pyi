@@ -199,7 +199,7 @@ class IvfIndex:
 
     @property
     def is_trained(self) -> bool:
-        """Whether centroids are set, by train, set_centroids, build or load."""
+        """Whether centroids are set, by train, set_centroids, the first add, build or load."""
 
     @property
     @deprecated("IvfIndex.is_built is deprecated since 0.8; use is_trained or len()")
@@ -338,8 +338,10 @@ class IvfIndex:
         Notes
         -----
         On an untrained index, add first trains num_clusters centroids on data,
-        as train(data) does, so data needs at least num_clusters rows; passing
-        cluster_ids then raises RuntimeError. If the call fails, the index stays
+        as train(data) does, so data needs at least num_clusters rows; with
+        num_threads None, training uses cp.num_threads. Passing cluster_ids to an
+        untrained index raises RuntimeError, as does add on an index created with
+        max_elements, which build fills. If the call fails, the index stays
         untrained and empty. Batch additions to reduce repeated cluster copying;
         reserve can preallocate room. Passing the options positionally is
         deprecated.
@@ -497,7 +499,8 @@ class HnswIndex:
     -----
     The first add trains an untrained index on the added vectors. Call train
     on a sample, or set_centroids, first to choose the training data or the
-    centroids. Loaded indexes are already trained. Capacity grows automatically
+    centroids. Loaded indexes are trained, except empty files saved untrained
+    by 0.7. Capacity grows automatically
     on add; resize can preallocate it. Concurrent reads are supported; an
     overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
@@ -558,7 +561,8 @@ class HnswIndex:
         -----
         The first add trains an untrained index on the added vectors. Call train
         on a sample, or set_centroids, first to choose the training data or the
-        centroids. Loaded indexes are already trained. Capacity grows automatically
+        centroids. Loaded indexes are trained, except empty files saved untrained
+        by 0.7. Capacity grows automatically
         on add; resize can preallocate it. Concurrent reads are supported; an
         overlapping mutation raises RuntimeError.
         Data, centroids and queries must be finite float32 values within the index
@@ -620,7 +624,7 @@ class HnswIndex:
 
     @property
     def is_trained(self) -> bool:
-        """Whether centroids are set, by train, set_centroids, build or load."""
+        """Whether centroids are set, by train, set_centroids, the first add, build or load."""
 
     @property
     @deprecated("HnswIndex.is_built is deprecated since 0.8; use is_trained or len()")
@@ -766,9 +770,11 @@ class HnswIndex:
         Notes
         -----
         On an untrained index, add first trains num_clusters centroids on data, as
-        train(data) does; with fewer rows it trains one centroid per row. An
-        untrained index loaded from a 0.7 file needs train first. Passing
-        cluster_ids then raises RuntimeError. If the call fails, the index stays
+        train(data) does; with fewer rows it trains one centroid per row, and
+        num_clusters then reports the row count. With num_threads None, training
+        uses cp.num_threads. Passing cluster_ids to an untrained index raises
+        RuntimeError, as does add on an untrained index loaded from a 0.7 file;
+        call train first. If the call fails, the index stays
         untrained and empty. The first add into an empty index links vectors with
         their exact coordinates; later adds link through the stored codes, so add
         most vectors in the first call. Capacity grows geometrically when needed.

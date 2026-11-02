@@ -6,7 +6,6 @@ and adds the clustering wrappers. Import public classes from ``rabitqlib``.
 
 import inspect
 import warnings
-from importlib.metadata import version as _version
 
 from ._rabitqlib import (
     FinalAssignmentMode,
@@ -19,6 +18,9 @@ from ._rabitqlib import (
     SymqgIndex,
     _QGKMeans,
     _RaBitQKMeans,
+)
+from ._rabitqlib import (
+    __version__ as __version__,
 )
 
 # --- 0.8 compatibility layer; remove in 0.9 --------------------------------
@@ -623,8 +625,6 @@ class RaBitQKMeans(_KMeans):
     _parameters_type = RaBitQKMeansParameters
     _implementation_type = _RaBitQKMeans
 
-
-__version__ = _version("rabitqlib")
 
 __all__ = [
     "FinalAssignmentMode",
