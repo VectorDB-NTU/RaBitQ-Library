@@ -151,8 +151,10 @@ run broader checks than your focused local tests. Core library and binding chang
 require the full [static analysis check](../docs/development.md#static-analysis) before merging.
 Tests and examples are intentionally excluded from CI clang-tidy; use focused
 local analysis for substantial logic changes.
-If a tool or supported CPU is unavailable, explain that in the PR so the
-maintainer can help arrange validation. See [CI routing](../docs/maintaining.md#checks-selected-by-changed-files)
+For a first contribution, the formatting check and the affected tests are
+enough to open a PR. If a check needs a tool, compiler or CPU you do not have
+(for example clang-tidy 23 or a particular SIMD instruction set), say so in the
+PR and a maintainer will run it. See [CI routing](../docs/maintaining.md#checks-selected-by-changed-files)
 for details.
 
 ## If setup fails
@@ -176,13 +178,13 @@ and include the command, error output, operating system, and relevant tool versi
 
 ## Starter tasks
 
-These are small contribution ideas, not reserved or assigned issues. Check
-the current files and open PRs first; if a task is already complete, choose
-another. Each task can be a separate PR.
-
-| Task | Where to start | Done when |
-| --- | --- | --- |
-| Automate the documentation quick-start check | [Quick start](../docs/docs/quick_start.md), [documentation workflow](../.github/workflows/docs.yml), and [Python tests](../tests/python/) | A check executes the documented Python example blocks in order against the current package, verifies the save/load assertions, and cleans up temporary files without keeping a second copy of the example. |
+Open issues labeled
+[good first issue](https://github.com/VectorDB-NTU/RaBitQ-Library/labels/good%20first%20issue)
+are small, self-contained tasks that say where to start and when they are done;
+[help wanted](https://github.com/VectorDB-NTU/RaBitQ-Library/labels/help%20wanted)
+issues are larger. The [roadmap issue](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/220)
+lists the goals for the next releases. Comment on an issue before starting so work
+is not duplicated.
 
 ## Feedback and further reading
 
