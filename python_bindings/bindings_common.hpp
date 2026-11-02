@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/packed.hpp"
 
@@ -256,6 +257,13 @@ struct SearchResults {
 };
 
 // (num_queries, k) outputs. Slots without a neighbor keep kPidMax and +inf.
+// Searches pad slots without a result, so k may exceed the number of points.
+inline void check_k(size_t k) {
+    if (k == 0 || k > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("k must be between 1 and 2**31");
+    }
+}
+
 inline SearchResults unfilled_search_results(size_t num_queries, size_t k) {
     const auto shape = std::vector<py::ssize_t>{
         static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};

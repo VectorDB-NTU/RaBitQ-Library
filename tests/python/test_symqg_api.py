@@ -123,7 +123,9 @@ def test_train_only_checks_its_input(base_data):
 @pytest.mark.parametrize("nbits", [4, 8, 32])
 def test_add_builds_once_and_search_finds_the_vectors(nbits, base_data, tmp_path):
     index = SymqgIndex(DIM, nbits=nbits, ef_construction=60, seed=5)
-    assert index.add(base_data) is None
+    ids = index.add(base_data)
+    assert ids.dtype == np.uint32
+    np.testing.assert_array_equal(ids, np.arange(N_VECTORS))
     assert len(index) == index.num_points == N_VECTORS
     ids, distances = index.search(base_data[:20], 1)
     assert np.mean(ids[:, 0] == np.arange(20)) >= 0.9
@@ -153,11 +155,11 @@ def test_add_uses_the_constructor_settings(base_data, tmp_path):
         )
 
 
-def test_search_ef_defaults_to_max_of_k_and_10_and_is_raised_to_k(base_data):
+def test_search_ef_defaults_to_max_of_k_and_64_and_is_raised_to_k(base_data):
     index = SymqgIndex(DIM, ef_construction=60, seed=5)
     index.add(base_data)
     queries = base_data[:10]
-    for k, implied_ef in ((3, 10), (20, 20)):
+    for k, implied_ef in ((3, 64), (80, 80)):
         expected = index.search(queries, k, implied_ef)
         for ef in (None, 0):
             actual = index.search(queries, k, ef)
@@ -186,3 +188,13 @@ def test_type_errors_list_only_the_public_constructor():
     with pytest.raises(TypeError) as error:
         SymqgIndex(DIM, nbits="four")
     assert "_quantization_bits" not in str(error.value)
+
+
+def test_search_pads_k_beyond_the_points(base_data):
+    index = SymqgIndex(DIM, ef_construction=60, seed=5)
+    index.add(base_data[:40])
+    ids, distances = index.search(base_data[:2], 45)
+    assert np.isfinite(distances).sum(axis=1).tolist() == [40, 40]
+    np.testing.assert_array_equal(np.sort(ids[0, :40]), np.arange(40))
+    np.testing.assert_array_equal(ids[:, 40:], np.full((2, 5), 2**32 - 1))
+    assert np.isinf(distances[:, 40:]).all()

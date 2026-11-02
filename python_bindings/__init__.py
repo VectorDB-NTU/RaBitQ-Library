@@ -6,6 +6,7 @@ and adds the clustering wrappers. Import public classes from ``rabitqlib``.
 
 import inspect
 import warnings
+from importlib.metadata import version as _version
 
 from ._rabitqlib import (
     FinalAssignmentMode,
@@ -49,7 +50,7 @@ def _bind(signature, name, args, kwargs, hint=""):
 
 
 def _ivf_signature(
-    self, dim, num_clusters, *, nbits, metric="l2", initializer="auto", seed=None
+    self, dim, num_clusters, *, nbits=7, metric="l2", initializer="auto", seed=None
 ): ...
 
 
@@ -62,7 +63,7 @@ def _hnsw_signature(
     self,
     dim,
     *,
-    nbits,
+    nbits=7,
     num_clusters=16,
     M=16,
     ef_construction=200,
@@ -84,7 +85,7 @@ def _hnsw_legacy_signature(
 
 
 def _add_signature(
-    self, data, *, cluster_ids=None, num_threads=0, fast_quantization=False
+    self, data, *, cluster_ids=None, num_threads=None, fast_quantization=False
 ): ...
 
 
@@ -622,6 +623,8 @@ class RaBitQKMeans(_KMeans):
     _parameters_type = RaBitQKMeansParameters
     _implementation_type = _RaBitQKMeans
 
+
+__version__ = _version("rabitqlib")
 
 __all__ = [
     "FinalAssignmentMode",

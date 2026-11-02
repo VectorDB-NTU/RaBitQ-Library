@@ -369,6 +369,7 @@ class IVF {
 
     // Automatically use HACC for 4-9 quantized bits; use standard FastScan otherwise.
     // Distances estimate squared L2 or 1 - dot according to the index metric.
+    // k may exceed the point count; slots without a result get kPidMax and +inf.
     void search(
         const float* query,
         size_t k,

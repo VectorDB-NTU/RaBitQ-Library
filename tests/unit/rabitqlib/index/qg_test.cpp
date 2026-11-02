@@ -1680,7 +1680,7 @@ TEST(QgQuantTest, SearchesAndRoundTripsFourAndEightBitIndexes) {
     }
 }
 
-TEST(QgSearchTest, RejectsInvalidKAndEfInsteadOfReturningPartialResults) {
+TEST(QgSearchTest, RejectsInvalidKAndEfAndPadsPartialResults) {
     constexpr size_t kCount = 33, kDim = 64, kDegree = 32;
     std::vector<float> data(kCount * kDim);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -1726,16 +1726,25 @@ TEST(QgSearchTest, RejectsInvalidKAndEfInsteadOfReturningPartialResults) {
             QGConstructionTestAccess::set_encoded_neighbor(graph, source, lane, 0);
         }
     }
+    // Every edge now leads to point 0, so a search reaches fewer than k points and
+    // pads the remaining slots.
     graph.set_ef(3);
-    ids.fill(kPidMax);
+    ids.fill(0);
     distances.fill(-123.0F);
-    EXPECT_THROW(
-        graph.search(data.data(), 3, ids.data(), distances.data()), std::runtime_error
-    );
-    EXPECT_TRUE(std::all_of(ids.begin(), ids.end(), [](PID id) { return id == kPidMax; }));
-    EXPECT_TRUE(std::all_of(distances.begin(), distances.end(), [](float distance) {
-        return distance == -123.0F;
-    }));
+    graph.search(data.data(), 3, ids.data(), distances.data());
+    const auto found = static_cast<size_t>(std::count_if(
+        distances.begin(), distances.begin() + 3, [](float d) { return std::isfinite(d); }
+    ));
+    ASSERT_LT(found, 3U);
+    for (size_t i = 0; i < 3; ++i) {
+        if (i < found) {
+            EXPECT_LT(ids[i], kCount);
+        } else {
+            EXPECT_EQ(ids[i], kPidMax);
+            EXPECT_TRUE(std::isinf(distances[i]));
+        }
+    }
+    EXPECT_EQ(distances[3], -123.0F);  // Slots beyond k are untouched.
 }
 
 TEST(QgSearchTest, BatchAndParallelQueriesMatchSerialAcrossIndexesAndSettings) {
@@ -1876,16 +1885,14 @@ TEST(QgSearchTest, BatchSearchValidatesBuffersSizesAndState) {
         nullptr,
         "QuantizedGraph search buffers must not be null"
     );
-    for (uint32_t k : {0U, 98U}) {
-        reject(
-            data.data(),
-            2,
-            k,
-            ids.data(),
-            distances.data(),
-            "QuantizedGraph k must be between 1 and num_points"
-        );
-    }
+    reject(
+        data.data(),
+        2,
+        0,
+        ids.data(),
+        distances.data(),
+        "QuantizedGraph k must be between 1 and 2^31"
+    );
     graph.set_ef(1);
     reject(
         data.data(),
@@ -1956,53 +1963,61 @@ TEST(QgSearchTest, ConcurrentBatchCallsMatchIndividualQueries) {
 }  // namespace rabitqlib::symqg
 
 namespace rabitqlib::symqg {
-TEST(QgSearchTest, ScratchSearchRejectsIncompleteResults) {
+TEST(QgSearchTest, SearchPadsIncompleteResults) {
+    // Two disconnected halves: a search reaches only the 33 points of one half.
     QuantizedGraph<float> graph(66, 64, 32, METRIC_L2, RotatorType::FhtKacRotator, 0, 42);
     std::vector<float> data(66 * 64, 0.0F);
     QGBuilder builder(graph, 66, data.data(), 1, 42);
     builder.build(2);
     QGConstructionTestAccess::disconnect(graph);
     graph.set_ef(66);
-    std::vector<PID> ids(66, kPidMax);
+    const auto expect_padded = [](const PID* ids, const float* distances) {
+        for (size_t i = 0; i < 66; ++i) {
+            SCOPED_TRACE(i);
+            if (i < 33) {
+                EXPECT_LT(ids[i], 66U);
+                EXPECT_TRUE(std::isfinite(distances[i]));
+            } else {
+                EXPECT_EQ(ids[i], kPidMax);
+                EXPECT_TRUE(std::isinf(distances[i]));
+            }
+        }
+    };
+    std::vector<PID> ids(66, 0);
     std::vector<float> distances(66, -1.0F), rotated(64), estimates(32), lut(256);
+    graph.search(data.data(), 66, ids.data(), distances.data());
+    expect_padded(ids.data(), distances.data());
+
+    std::fill(ids.begin(), ids.end(), 0);
+    std::fill(distances.begin(), distances.end(), -1.0F);
     BatchQuery<float> query;
     buffer::SearchBuffer<float> search(66), result(66);
     VisitedSet visited(66, 66);
-    EXPECT_THROW(
-        graph.search(data.data(), 66, ids.data(), distances.data()), std::runtime_error
+    graph.search_with_scratch(
+        data.data(),
+        66,
+        ids.data(),
+        distances.data(),
+        rotated.data(),
+        estimates.data(),
+        lut.data(),
+        query,
+        search,
+        result,
+        visited
     );
-    EXPECT_THROW(
-        graph.search_with_scratch(
-            data.data(),
-            66,
-            ids.data(),
-            distances.data(),
-            rotated.data(),
-            estimates.data(),
-            lut.data(),
-            query,
-            search,
-            result,
-            visited
-        ),
-        std::runtime_error
-    );
-    std::vector<PID> batch_ids(2 * 66, kPidMax);
-    std::vector<float> batch_distances(2 * 66, -1.0F);
+    expect_padded(ids.data(), distances.data());
+
     for (size_t threads : {1U, 4U}) {
-        try {
-            graph.search_batch(
-                data.data(), 2, 66, batch_ids.data(), batch_distances.data(), threads
-            );
-            FAIL() << "Incomplete batch results accepted";
-        } catch (const std::runtime_error& error) {
-            EXPECT_STREQ(error.what(), "QuantizedGraph search could not produce k results");
-        }
+        SCOPED_TRACE(threads);
+        std::vector<PID> batch_ids(2 * 66, 0);
+        std::vector<float> batch_distances(2 * 66, -1.0F);
+        graph.search_batch(
+            data.data(), 2, 66, batch_ids.data(), batch_distances.data(), threads
+        );
+        expect_padded(batch_ids.data(), batch_distances.data());
+        expect_padded(batch_ids.data() + 66, batch_distances.data() + 66);
     }
-    EXPECT_TRUE(std::all_of(ids.begin(), ids.end(), [](PID id) { return id == kPidMax; }));
-    EXPECT_TRUE(std::all_of(distances.begin(), distances.end(), [](float d) {
-        return d == -1.0F;
-    }));
 }
 }  // namespace rabitqlib::symqg
 

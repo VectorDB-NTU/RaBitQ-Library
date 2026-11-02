@@ -18,19 +18,22 @@ Run the [Quick start](../quick_start.md#build-and-search-an-ivf-index) to prepar
 ```python
 from rabitqlib import HnswIndex
 
-index = HnswIndex(data.shape[1], nbits=4, M=16, ef_construction=100)
-index.train(data)  # 16 RaBitQKMeans centroids by default
-index.add(data, num_threads=1)  # one thread gives a reproducible graph
-ids, distances = index.search(queries, k=10, ef=100)
+index = HnswIndex(data.shape[1], M=16, ef_construction=100)  # nbits=7 by default
+index.add(data, num_threads=1)  # trains 16 centroids, then links; 1 thread is reproducible
+ids, distances = index.search(queries, k=10)  # ef defaults to max(k, 64)
 index.save("hnsw.index")
 loaded = HnswIndex.load("hnsw.index")
 ```
 
+The first `add` trains an untrained index on the added vectors, as for
+[IVF-RaBitQ](ivf.md#training-centroids-in-python); with fewer rows than
+`num_clusters`, it trains one centroid per row.
 `train` and `set_centroids` work as for [IVF-RaBitQ](ivf.md#training-centroids-in-python),
 with `num_clusters` centroids (default 16) and always RaBitQKMeans; `index.cp`
 starts from the same defaults with `seed`'s low 32 bits. The first `add` into the
 empty index links vectors with their exact coordinates, like the 0.7 `build`;
-later adds link through the stored codes (see [Recall after `add`](#recall-after-add)).
+later adds link through the stored codes (see [Recall after `add`](#recall-after-add)),
+so add most vectors in the first call.
 
 ### C++
 
@@ -63,12 +66,12 @@ see [C++ integration](../cpp_integration.md).
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `nbits` / C++ `total_bits` | Required and, in Python, keyword-only: 1–9 total bits including the sign bit. Raw-vector storage is not supported. |
+| `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
 | `num_clusters` | Python keyword, default 16: centroids `train` learns or `set_centroids` supplies. |
-| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
+| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
 | `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
 | `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
-| `k`, `ef` | Positive result count and search window. Python requires `k <= num_stored_points`, so a trained index without points rejects every `k`; omitted, `None` or zero `ef` uses `max(k, 10)`, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
+| `k`, `ef` | Positive result count and search window. `k` may exceed the stored point count; missing results are padded. Omitted, `None` or zero `ef` uses `max(k, 64)` in Python, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
 `seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
@@ -276,7 +279,7 @@ exclusive access as other updates.
 
 Removed points still take slots in the `ef_search` candidate set, so a search with
 `ef_search` close to `k` finds fewer live points as removals accumulate. C++ search
-uses `max(ef_search, k)`, clamped to `num_stored_points()`. Python uses `max(k, 10)`
+uses `max(ef_search, k)`, clamped to `num_stored_points()`. Python uses `max(k, 64)`
 when `ef` is omitted or zero; an explicit positive `ef` is also raised to at least `k`,
 and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale

@@ -67,16 +67,16 @@ rng = np.random.default_rng(42)
 data = rng.standard_normal((500, 64)).astype(np.float32)
 queries = rng.standard_normal((5, 64)).astype(np.float32)
 
-index = IvfIndex(64, 5, nbits=4, metric="l2")
-index.train(data)
-index.add(data)
-ids, distances = index.search(queries, k=10, nprobe=5)
+index = IvfIndex(64, 5, metric="l2")
+index.add(data)  # the first add learns 5 centroids from data
+ids, distances = index.search(queries, k=10)
 print(ids.shape, distances.shape)  # (5, 10) (5, 10)
 ```
 
-`train` learns the centroids, and `add` quantizes the vectors into their
-clusters. IDs identify added rows; distances here estimate squared L2 distance,
-with smaller values first. Quantization remains approximate even when all clusters are probed.
+The first `add` learns the centroids from the data, then quantizes the vectors
+into their clusters. IDs identify added rows; distances here estimate squared L2
+distance, with smaller values first. Quantization remains approximate even when
+all clusters are probed.
 The [complete quick start](https://vectordb-ntu.github.io/RaBitQ-Library/quick_start/) explains result handling,
 measures recall while varying `nprobe`, and shows save/load. Code written for
 0.7 still runs in 0.8 with deprecation warnings; see the

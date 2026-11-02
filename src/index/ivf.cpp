@@ -1262,8 +1262,9 @@ inline void IVF::validate_search(
     if (result_ids == nullptr) {
         throw std::invalid_argument("IVF search results must not be null");
     }
-    if (k == 0 || k > max_elements_ || k > buffer::kSearchBufferMaxPointCount) {
-        throw std::invalid_argument("IVF search k must be between 1 and the point count");
+    // Fewer than k results are padded, so k may exceed the point count.
+    if (k == 0 || k > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("IVF search k must be between 1 and 2^31");
     }
     if (nprobe == 0) {
         throw std::invalid_argument("IVF search nprobe must be positive");

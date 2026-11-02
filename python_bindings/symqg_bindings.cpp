@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -76,7 +77,7 @@ class SymqgIndex {
         check_coordinates(x_ptr, count, dim_, "x");
     }
 
-    void add(py::handle data, size_t num_threads) {
+    py::array_t<PID> add(py::handle data, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         if (built()) {
             throw std::runtime_error(
@@ -85,7 +86,12 @@ class SymqgIndex {
             );
         }
         // Only a loaded index lacks these settings, and it is already built.
-        build_graph(data, *ef_construction_, num_threads, *init_, *seed_);
+        build_graph(data, *ef_construction_, num_threads.value_or(0), *init_, *seed_);
+        // Point IDs are the row numbers of data.
+        const size_t rows = index_->num_points();
+        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
+        std::iota(ids.mutable_data(), ids.mutable_data() + rows, PID{0});
+        return ids;
     }
 
     // Deprecated: the 0.7 build, which replaces any existing graph. Without a
@@ -103,17 +109,18 @@ class SymqgIndex {
     }
 
     py::tuple search(
-        py::handle queries, size_t k, std::optional<size_t> ef, size_t num_threads
+        py::handle queries,
+        size_t k,
+        std::optional<size_t> ef,
+        std::optional<size_t> num_threads
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
         check_built("search");
-        if (k == 0 || k > index_->num_points()) {
-            throw std::invalid_argument("k must be between 1 and num_points");
-        }
-        // As in HnswIndex: no or zero ef selects max(k, 10), and ef is at least k.
+        check_k(k);
+        // As in HnswIndex: no or zero ef selects max(k, 64), and ef is at least k.
         const size_t ef_search =
-            std::max(ef.value_or(0) == 0 ? std::max<size_t>(k, 10) : *ef, k);
+            std::max(ef.value_or(0) == 0 ? std::max<size_t>(k, 64) : *ef, k);
         ensure_dimension(query_array, dim_, "query dimension does not match index dim");
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
@@ -133,7 +140,7 @@ class SymqgIndex {
                 ids_data,
                 distances_data,
                 ef_search,
-                num_threads
+                num_threads.value_or(1)
             );
         }
 
@@ -363,7 +370,7 @@ Examples
 >>> from rabitqlib import SymqgIndex
 >>> x = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
 >>> index = SymqgIndex(64, ef_construction=40, seed=7)
->>> index.add(x, num_threads=1)
+>>> ids = index.add(x, num_threads=1)
 >>> ids, distances = index.search(x[:2], k=3)
 >>> ids.shape, distances.shape
 ((2, 3), (2, 3)))doc";
@@ -376,13 +383,14 @@ queries : array_like of float, shape (n_queries, dim)
     Vectors in the original, unpadded coordinates. Converted to contiguous
     float32; a copy may be made.
 k : int
-    Number of neighbors requested, between 1 and num_points.
+    Number of neighbors requested, at least 1. It may exceed the number of
+    points; slots without a neighbor are padded as described below.
 ef : int, optional
-    Search breadth. None or 0 (default) selects max(k, 10); smaller values
+    Search breadth. None or 0 (default) selects max(k, 64); smaller values
     are raised to k.
 num_threads : int, optional
-    Worker count. Default is 1; 0 selects the available CPU count,
-    capped by OMP_NUM_THREADS.
+    Worker count. None (default) selects 1; 0 selects the available CPU
+    count, capped by OMP_NUM_THREADS.
 
 Returns
 -------
@@ -394,7 +402,9 @@ distances : ndarray of float32, shape (n_queries, k)
 
 Notes
 -----
-Returns (ids, distances), in that order. Array shapes and value ranges are
+Returns (ids, distances), in that order. When the graph reaches fewer than k
+points, the remaining neighbors have ID 4294967295 and distance inf; test
+np.isfinite(distances) to find them. Array shapes and value ranges are
 checked at runtime, not by static type checkers.)doc";
 
     py::class_<SymqgIndex>(m, "SymqgIndex", kIndexDoc)
@@ -445,7 +455,7 @@ searches.)doc"
             &SymqgIndex::add,
             py::arg("data"),
             py::kw_only(),
-            py::arg("num_threads") = 0,
+            py::arg("num_threads") = py::none(),
             R"doc(Build the graph from all vectors.
 
 Parameters
@@ -454,8 +464,13 @@ data : array_like of float, shape (n, dim)
     Vectors in the original, unpadded coordinates, with n > max_degree.
     Converted to contiguous float32; a copy may be made.
 num_threads : int, optional
-    Keyword-only. Worker count. Default is 0, which selects the available
-    CPU count.
+    Keyword-only. Worker count. None (default) and 0 select the available
+    CPU count, capped by OMP_NUM_THREADS.
+
+Returns
+-------
+ids : ndarray of uint32, shape (n,)
+    Point IDs, the row numbers of data.
 
 Notes
 -----
@@ -478,7 +493,7 @@ data. Input arrays need not be retained after this synchronous call.)doc"
             py::arg("queries"),
             py::arg("k"),
             py::arg("ef") = py::none(),
-            py::arg("num_threads") = 1,
+            py::arg("num_threads") = py::none(),
             kSearchDoc
         )
         .def(

@@ -100,9 +100,8 @@ def test_search_batch_validates_inputs(built_symqg, query_data):
         built_symqg.search_batch(query_data[0], k=1, ef=_EF)
     with pytest.raises(ValueError, match="query dimension does not match index dim"):
         built_symqg.search_batch(query_data[:, :-1], k=1, ef=_EF)
-    for k in [0, N_VECTORS + 1]:
-        with pytest.raises(ValueError, match="k must be between 1 and num_points"):
-            built_symqg.search_batch(query_data, k=k, ef=_EF)
+    with pytest.raises(ValueError, match=r"k must be between 1 and 2\*\*31"):
+        built_symqg.search_batch(query_data, k=0, ef=_EF)
     unbuilt = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     with pytest.raises(RuntimeError, match="add them or load an index before search"):
         unbuilt.search_batch(query_data, k=1, ef=_EF)
@@ -178,12 +177,12 @@ def test_search_before_build_raises():
 
 
 def test_search_raises_ef_to_k_and_defaults_it(built_symqg, query_data):
-    # As in HnswIndex: no or zero ef selects max(k, 10), and ef is at least k.
+    # As in HnswIndex: no or zero ef selects max(k, 64), and ef is at least k.
     at_k = built_symqg.search(query_data, k=10, ef=10)
     for ef in (9, 1):
         raised = built_symqg.search(query_data, k=10, ef=ef)
         np.testing.assert_array_equal(raised[0], at_k[0])
-    default = built_symqg.search(query_data, k=3, ef=10)
+    default = built_symqg.search(query_data, k=3, ef=64)
     for ef in (None, 0):
         np.testing.assert_array_equal(
             built_symqg.search(query_data, 3, ef)[0], default[0]

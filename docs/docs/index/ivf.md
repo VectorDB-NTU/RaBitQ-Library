@@ -14,9 +14,9 @@ width, number of clusters, and `nprobe`.
 ### Python
 
 The [complete Quick Start](../quick_start.md) is the runnable IVF-RaBitQ example:
-create an index, `train` its centroids, `add` the vectors, search, then save and
-reload it. [Training](#training-centroids-in-python) describes the clustering
-options, and the update examples below reuse the Quick Start's `index`.
+create an index, `add` the vectors (the first `add` trains the centroids), search,
+then save and reload it. [Training](#training-centroids-in-python) describes the
+clustering options, and the update examples below reuse the Quick Start's `index`.
 
 ### C++
 
@@ -48,11 +48,11 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
 | `num_clusters` | Number of centroids `train` learns or `set_centroids` supplies; every cluster ID must be in `[0, num_clusters)`. |
-| `nbits` / C++ `total_bits` | Required and, in Python, keyword-only: 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. |
+| `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only `nbits` defaults to 7; C++ requires it. |
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count; C++ and Python both require `k` not to exceed the stored point count (`max_elements`), which `add` increases. |
+| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
@@ -203,15 +203,17 @@ ivf.construct(data.data(), centroids.data(), cluster_ids.data(), true);
 
 `train(x)` learns `num_clusters` centroids from the rows of `x`, which must have
 at least `num_clusters` rows, and stores them in the index; `add` then assigns
-and quantizes vectors. Training uses the settings in `index.cp`, a
+and quantizes vectors. On an untrained index, the first `add` without
+`cluster_ids` calls `train` on the added vectors first, so `train` is needed only
+to train on a different sample. Training uses the settings in `index.cp`, a
 [`RaBitQKMeansParameters`](../clustering.md#rabitqkmeans) whose defaults differ
-from the k-means classes: 25 iterations, at most 256 sampled vectors per
+from the k-means classes: 10 iterations, at most 256 sampled vectors per
 centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"`, and
 `seed` equal to the index seed. Change fields before training:
 
 ```python
 index = IvfIndex(dim, 1024, nbits=4, metric="ip")
-index.cp.niter = 10
+index.cp.niter = 20
 index.train(sample)  # num_threads=None uses index.cp.num_threads (0: all CPUs)
 index.add(vectors)
 ```
@@ -225,10 +227,11 @@ index.add(vectors)
 - Training or setting centroids again replaces them while the index stores no
   vectors; once it stores any (including removed ones), both raise
   `RuntimeError`. A failed call leaves the index unchanged.
-- Before training, `add`, `search`, `remove`, `reserve` and `save` raise
-  `RuntimeError`. A trained index without vectors cannot be saved, and its
-  `search` rejects every `k` with `ValueError`; add vectors first. Loaded
-  indexes are trained, and their `seed` is `None`.
+- Before training, `add` with `cluster_ids`, `search`, `remove`, `reserve` and
+  `save` raise `RuntimeError`; `add` without `cluster_ids` trains first. If that
+  first `add` fails, the index stays untrained and empty. A trained index without
+  vectors cannot be saved, and its `search` returns only padded results; add
+  vectors first. Loaded indexes are trained, and their `seed` is `None`.
 - `train` and `add` default to every available CPU; `search` defaults to one
   thread.
 
@@ -265,17 +268,16 @@ index.add(data.data(), num_points);
   threshold is provisional and has not been measured. Only centroids are
   trained; `add` assigns the points. `cp.num_threads` also limits building the
   centroid routing.
-- `default_training_parameters(metric, seed)` runs 25 iterations on at most
+- `default_training_parameters(metric, seed)` runs 10 iterations on at most
   256 sampled points per centroid and selects spherical k-means for inner
   product. The k-means classes keep their own defaults, which train on every point.
 - `train` and `set_centroids` replace the centroids only while the index stores
   no points, removed ones included; otherwise they throw `std::logic_error`.
   A failed call leaves the index unchanged.
 - `is_trained()` reports whether centroids are set. Before that, `add` and
-  `search` throw `std::logic_error`. A trained index without points rejects
-  every `k` in `search` with `std::invalid_argument`, because `k` may not exceed
-  the stored point count; `save` throws `std::logic_error` until the index stores
-  at least one point.
+  `search` throw `std::logic_error`. A trained index without points pads every
+  `search` result slot with `kPidMax` and `+inf`; `save` throws
+  `std::logic_error` until the index stores at least one point.
 
 ## Querying
 

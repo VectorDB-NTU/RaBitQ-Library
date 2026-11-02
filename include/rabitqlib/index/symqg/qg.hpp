@@ -299,7 +299,8 @@ class QuantizedGraph<float> {
     /**
      * Search contiguous row-major queries, using the window set by set_ef().
      * queries contains num_queries * dimension() floats; result_ids and distances
-     * each hold num_queries * k elements. Empty batches do no work.
+     * each hold num_queries * k elements. Empty batches do no work. When a query
+     * reaches fewer than k points, the remaining slots get kPidMax and +inf.
      * Scratch is reused within each worker. num_threads defaults to one;
      * zero selects the available logical CPU count, capped by the batch.
      * Input and output buffers must not overlap. Concurrent searches require

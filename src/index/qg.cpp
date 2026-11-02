@@ -553,8 +553,9 @@ void QuantizedGraph<float>::validate_search(
     if (query == nullptr || result_ids == nullptr || distances == nullptr) {
         throw std::invalid_argument("QuantizedGraph search buffers must not be null");
     }
-    if (k == 0 || k > max_elements_) {
-        throw std::invalid_argument("QuantizedGraph k must be between 1 and num_points");
+    // Fewer than k results are padded, so k may exceed the point count.
+    if (k == 0 || k > buffer::kSearchBufferMaxPointCount) {
+        throw std::invalid_argument("QuantizedGraph k must be between 1 and 2^31");
     }
     if (ef_search < k) {
         throw std::invalid_argument("QuantizedGraph ef must be at least k");
@@ -880,10 +881,11 @@ void QuantizedGraph<float>::search_with_scratch_impl(
     }
 
     update_results(scratch.result_pool, scratch.visited, query, quantized);
-    if (scratch.result_pool.size() != k) {
-        throw std::runtime_error("QuantizedGraph search could not produce k results");
-    }
+    // Pad when the graph reaches fewer than k points.
+    const size_t found = scratch.result_pool.size();
     scratch.result_pool.copy_results(result_ids, distances);
+    std::fill(result_ids + found, result_ids + k, kPidMax);
+    std::fill(distances + found, distances + k, std::numeric_limits<float>::infinity());
 }
 
 }  // namespace rabitqlib::symqg

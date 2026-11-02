@@ -22,16 +22,16 @@ warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 | `IvfIndex(dim=..., max_elements=..., num_clusters=..., nbits=...)` | the same, without `max_elements` |
 | `HnswIndex(dim, max_elements, M=16, ef_construction=200, nbits=8, metric="l2", random_seed=100)` | `HnswIndex(dim, nbits=..., num_clusters=16, M=16, ef_construction=200, metric="l2", seed=100)`; capacity grows on `add`, and `resize(n)` preallocates it |
 | `HnswIndex(..., random_seed=s)` | `HnswIndex(..., seed=s)` |
-| `kmeans = RaBitQKMeans(dim, k)`<br>`kmeans.train(x)`<br>`index.build(x, kmeans.centroids, kmeans.assignments)` | `index.train(x)`<br>`index.add(x)` |
+| `kmeans = RaBitQKMeans(dim, k)`<br>`kmeans.train(x)`<br>`index.build(x, kmeans.centroids, kmeans.assignments)` | `index.add(x)`, which trains on `x` first (since 0.8.2; in 0.8.0 and 0.8.1, call `index.train(x)` first) |
 | `index.build(x, centroids, cluster_ids)` | `index.set_centroids(centroids)`<br>`index.add(x, cluster_ids=cluster_ids)` |
 | `index.add(x, cluster_ids, num_threads, fast_quantization)` | `index.add(x, cluster_ids=..., num_threads=..., fast_quantization=...)` |
 | `index.is_built` | `index.is_trained`, or `len(index) > 0` for "holds vectors" |
 
 Except for `dim` and IVF-RaBitQ's `num_clusters`, constructor arguments are
-keyword-only in 0.8, and `nbits` has no default. HNSW-RaBitQ used to default to
-`nbits=8`; the old form keeps that default.
+keyword-only in 0.8. Since 0.8.2, `nbits` defaults to 7 (0.8.0 and 0.8.1 required
+it). HNSW-RaBitQ used to default to `nbits=8`; the old form keeps that default.
 
-`train` uses the settings in `index.cp`: 25 iterations, at most 256 sampled
+`train` uses the settings in `index.cp`: 10 iterations (25 before 0.8.2), at most 256 sampled
 vectors per centroid, spherical k-means for `metric="ip"`, and the index seed.
 See [IVF-RaBitQ training](index/ivf.md#training-centroids-in-python) for the
 details and for `set_centroids`. The [clustering classes](clustering.md) still
@@ -89,7 +89,7 @@ NSG index does. The deprecated `build` keeps its 0.7 behavior: it replaces any
 existing graph and, unless you passed `seed`, draws a new random seed each time.
 
 `search` now treats `ef` like HNSW-RaBitQ: an omitted or zero `ef` uses
-`max(k, 10)`, and a smaller one is raised to `k`. In 0.7, both raised
+`max(k, 64)` (`max(k, 10)` before 0.8.2), and a smaller one is raised to `k`. In 0.7, both raised
 `ValueError`. `add` uses every CPU by default, while the deprecated `build`
 keeps one thread. The seed now also drives graph construction: without `seed`,
 each index draws one random seed and reports it as `index.seed`; 0.7 drew

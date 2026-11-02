@@ -316,7 +316,10 @@ TEST(IvfSearchTest, RejectsUnbuiltStateAndInvalidArguments) {
     index.construct(data.data(), centroid.data(), &cluster, false, 1);
 
     EXPECT_THROW(index.search(query.data(), 0, 1, &result), std::invalid_argument);
-    EXPECT_THROW(index.search(query.data(), 2, 1, &result), std::invalid_argument);
+    // k beyond the point count is padded, not rejected.
+    std::array<PID, 2> two{0, 0};
+    index.search(query.data(), two.size(), 1, two.data());
+    EXPECT_EQ(two, (std::array<PID, 2>{0, kPidMax}));
     EXPECT_THROW(
         index.search(query.data(), std::numeric_limits<size_t>::max(), 1, &result),
         std::invalid_argument
@@ -1862,7 +1865,7 @@ TEST(IvfTrainTest, RejectsInvalidCentroidsAndTrainingDataWithoutChangingState) {
     EXPECT_THROW(unconfigured.train(kCount, points.data(), cp), std::logic_error);
 }
 
-TEST(IvfTrainTest, TrainedIndexSearchesAndSavesOnlyAfterAdd) {
+TEST(IvfTrainTest, TrainedIndexPadsSearchesAndSavesOnlyAfterAdd) {
     constexpr size_t kCount = 300;
     constexpr uint32_t kSeed = 21;
     const auto points = random_rows(kCount, 71);
@@ -1876,15 +1879,13 @@ TEST(IvfTrainTest, TrainedIndexSearchesAndSavesOnlyAfterAdd) {
         index.train(kCount, points.data(), default_training_parameters(metric, kSeed));
         EXPECT_TRUE(index.is_trained());
         EXPECT_EQ(index.num_points(), 0U);
-        PID id = 0;
-        try {
-            index.search(points.data(), 1, 1, &id);
-            FAIL() << "searching a trained index without points succeeded";
-        } catch (const std::invalid_argument& error) {
-            EXPECT_STREQ(
-                error.what(), "IVF search k must be between 1 and the point count"
-            );
-        }
+        // Without points, every result slot is padded.
+        std::array<PID, 2> ids{0, 0};
+        std::array<float, 2> distances{0.0F, 0.0F};
+        index.search(points.data(), ids.size(), 1, ids.data(), distances.data());
+        EXPECT_EQ(ids, (std::array<PID, 2>{kPidMax, kPidMax}));
+        EXPECT_TRUE(std::isinf(distances[0]) && std::isinf(distances[1]));
+        EXPECT_THROW(index.search(points.data(), 0, 1, ids.data()), std::invalid_argument);
         try {
             index.save(path.c_str());
             FAIL() << "saving a trained index without points succeeded";
@@ -1949,7 +1950,7 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
         const auto cp = default_training_parameters(metric, 5);
-        EXPECT_EQ(cp.niter, 25U);
+        EXPECT_EQ(cp.niter, 10U);
         EXPECT_EQ(cp.max_points_per_centroid, 256U);
         EXPECT_EQ(cp.seed, 5U);
         EXPECT_EQ(cp.spherical, metric == METRIC_IP);
