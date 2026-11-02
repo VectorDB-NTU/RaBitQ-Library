@@ -457,6 +457,8 @@
       
         
       
+        
+      
     
     
     
@@ -498,6 +500,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2001,7 +2031,7 @@ HNSW-RaBitQ's <code>num_points</code> now excludes removed records; see the
 added, both point counts are zero; configured capacity may be nonzero. For
 all three indexes, <code>len(index)</code> equals <code>num_points</code>. <code>is_trained</code> reports
 whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by <code>train</code>, <code>set_centroids</code>,
-or <code>load</code>), and is always <code>True</code> for SymphonyQG.</p>
+the first <code>add</code>, or <code>load</code>), and is always <code>True</code> for SymphonyQG.</p>
 <p>Removal decreases only <code>num_points</code>; slots and IDs remain occupied. Append IDs
 start at the previous <code>num_stored_points</code>. Use this stored count for ID bounds,
 and <code>num_points</code> for a live count. Counts survive save/load.</p>
@@ -2118,8 +2148,9 @@ fewer workers. On macOS, OpenMP runtimes bundled by different packages (for
 example Faiss or PyTorch wheels) can crash when more than one of them starts
 worker threads in the same process; set <code>OMP_NUM_THREADS=1</code> before the first
 native call, or pass <code>num_threads=1</code>, in such processes.
-<code>train</code> and <code>add</code> on every index default to <code>0</code>, as does clustering; <code>search</code>
-and the deprecated <code>build</code> default to one thread.
+<code>train</code> and <code>add</code> on every index default to all CPUs (<code>None</code> or <code>0</code>); the
+clustering classes default to <code>0</code>. <code>search</code> defaults to one thread (<code>None</code> or <code>1</code>),
+as do the deprecated <code>build</code>, which requires an integer, and <code>search_batch</code>.
 Multithreaded HNSW-RaBitQ <code>add</code> links points in a nondeterministic order, so pass
 <code>num_threads=1</code> when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding

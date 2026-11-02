@@ -565,6 +565,8 @@
       
         
       
+        
+      
     
     
     
@@ -606,6 +608,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.8.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1959,10 +1989,11 @@
 
 <h1 id="migrating-python-code-from-07-to-08">Migrating Python code from 0.7 to 0.8<a class="headerlink" href="#migrating-python-code-from-07-to-08" title="Permanent link">&para;</a></h1>
 <p>In 0.8, <code>IvfIndex</code>, <code>HnswIndex</code> and <code>SymqgIndex</code> follow a <code>train</code> → <code>add</code> →
-<code>search</code> workflow, as Faiss indexes do. IVF-RaBitQ and HNSW-RaBitQ learn their
-own centroids, so you no longer run k-means and pass the centroids and
-assignments to <code>build</code>; SymphonyQG has nothing to train and builds its graph in
-<code>add</code>. Code written for 0.7
+<code>search</code> workflow, as Faiss indexes do; since 0.8.2 the first <code>add</code> trains, so
+construct → <code>add</code> → <code>search</code> is enough, and <code>train</code> remains for training on a
+sample. IVF-RaBitQ and HNSW-RaBitQ learn their own centroids, so you no longer
+run k-means and pass the centroids and assignments to <code>build</code>; SymphonyQG has
+nothing to train and builds its graph in <code>add</code>. Code written for 0.7
 still runs in 0.8. Each old form raises a <code>DeprecationWarning</code> at your call site
 and will be removed in <strong>0.9</strong>.</p>
 <p>Unless an item below says otherwise, a 0.7 call that raises a deprecation
@@ -1996,7 +2027,7 @@ warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 </tr>
 <tr>
 <td><code>kmeans = RaBitQKMeans(dim, k)</code><br><code>kmeans.train(x)</code><br><code>index.build(x, kmeans.centroids, kmeans.assignments)</code></td>
-<td><code>index.train(x)</code><br><code>index.add(x)</code></td>
+<td><code>index.add(x)</code>, which trains on <code>x</code> first (since 0.8.2; in 0.8.0 and 0.8.1, call <code>index.train(x)</code> first)</td>
 </tr>
 <tr>
 <td><code>index.build(x, centroids, cluster_ids)</code></td>
@@ -2013,9 +2044,9 @@ warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 </tbody>
 </table>
 <p>Except for <code>dim</code> and IVF-RaBitQ's <code>num_clusters</code>, constructor arguments are
-keyword-only in 0.8, and <code>nbits</code> has no default. HNSW-RaBitQ used to default to
-<code>nbits=8</code>; the old form keeps that default.</p>
-<p><code>train</code> uses the settings in <code>index.cp</code>: 25 iterations, at most 256 sampled
+keyword-only in 0.8. Since 0.8.2, <code>nbits</code> defaults to 7 (0.8.0 and 0.8.1 required
+it). HNSW-RaBitQ used to default to <code>nbits=8</code>; the old form keeps that default.</p>
+<p><code>train</code> uses the settings in <code>index.cp</code>: 10 iterations (25 before 0.8.2), at most 256 sampled
 vectors per centroid, spherical k-means for <code>metric="ip"</code>, and the index seed.
 See <a href="../index/ivf/#training-centroids-in-python">IVF-RaBitQ training</a> for the
 details and for <code>set_centroids</code>. The <a href="../clustering/">clustering classes</a> still
@@ -2023,7 +2054,7 @@ work if you want to run k-means yourself.</p>
 <h3 id="behavior-changes">Behavior changes<a class="headerlink" href="#behavior-changes" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Thread defaults.</strong> <code>train</code> and <code>add</code> now default to every available CPU
-  (<code>num_threads=0</code>), capped by <code>OMP_NUM_THREADS</code> since 0.8.1; 0.7 <code>build</code> and
+  (<code>num_threads=None</code>, the same as <code>0</code>), capped by <code>OMP_NUM_THREADS</code> since 0.8.1; 0.7 <code>build</code> and
   <code>add</code> defaulted to one thread. This applies to every <code>add</code> call that does not
   pass <code>num_threads</code>, including 0.7 code such as <code>index.add(x)</code>, without a
   warning. <code>search</code> still defaults to one thread, and the deprecated <code>build</code>
@@ -2033,17 +2064,18 @@ work if you want to run k-means yourself.</p>
   to <code>add</code> for the same graph on every run. With one thread and the same seed,
   <code>set_centroids</code> followed by <code>add</code> produces exactly the index that 0.7 <code>build</code>
   produced from the same centroids and cluster IDs.</li>
-<li><strong>HNSW-RaBitQ <code>search</code> limits <code>k</code> to the stored point count</strong>
-  (<code>num_stored_points</code>) instead of the capacity, since capacity now grows
-  geometrically. A <code>k</code> between the two used to return padding rows and now
-  raises <code>ValueError</code>, as it already did for IVF-RaBitQ.</li>
+<li><strong><code>k</code> above the point count.</strong> 0.8.0 and 0.8.1 raised <code>ValueError</code> when <code>k</code>
+  exceeded <code>num_stored_points</code> (HNSW-RaBitQ) or the point count (IVF-RaBitQ,
+  SymphonyQG). Since 0.8.2, every index accepts any <code>k &gt;= 1</code> and fills missing
+  slots with ID <code>2**32 - 1</code> and distance <code>inf</code>; test <code>np.isfinite(distances)</code>.</li>
 <li><strong>HNSW-RaBitQ capacity grows.</strong> <code>add</code> resizes the index, at least doubling it,
   instead of raising <code>ValueError</code> when the batch does not fit. This also applies
   to <code>add</code> on indexes created in the old form, and to the deprecated <code>build</code>,
   which no longer rejects more rows than <code>max_elements</code>.</li>
-<li><strong>State errors.</strong> Calling <code>add</code>, <code>search</code>, <code>remove</code>, <code>reserve</code> or <code>save</code>
-  before training raises <code>RuntimeError("IvfIndex must be trained or loaded
-  before ...")</code>; the 0.7 message said "built". A trained index without vectors
+<li><strong>State errors.</strong> Calling <code>add</code> with <code>cluster_ids</code>, <code>search</code>, <code>remove</code>,
+  <code>reserve</code> or <code>save</code> before training raises <code>RuntimeError("IvfIndex must be
+  trained or loaded before ...")</code>; the 0.7 message said "built". Since 0.8.2,
+  <code>add</code> without <code>cluster_ids</code> trains first. A trained index without vectors
   cannot be saved. <code>repr</code> shows <code>is_trained</code> instead of <code>is_built</code>.</li>
 <li><strong>Seeds.</strong> <code>IvfIndex</code> still draws a random rotation seed by default, and now
   reports it as <code>index.seed</code>; pass it back as <code>seed=</code> to reproduce an index.
@@ -2095,20 +2127,25 @@ a second <code>add</code>, or <code>add</code> on a loaded index, raises <code>R
 NSG index does. The deprecated <code>build</code> keeps its 0.7 behavior: it replaces any
 existing graph and, unless you passed <code>seed</code>, draws a new random seed each time.</p>
 <p><code>search</code> now treats <code>ef</code> like HNSW-RaBitQ: an omitted or zero <code>ef</code> uses
-<code>max(k, 10)</code>, and a smaller one is raised to <code>k</code>. In 0.7, both raised
+<code>max(k, 64)</code> (<code>max(k, 10)</code> before 0.8.2), and a smaller one is raised to <code>k</code>. In 0.7, both raised
 <code>ValueError</code>. <code>add</code> uses every CPU by default, while the deprecated <code>build</code>
 keeps one thread. The seed now also drives graph construction: without <code>seed</code>,
 each index draws one random seed and reports it as <code>index.seed</code>; 0.7 drew
 separate random seeds for the rotation and the graph. Before vectors are added,
 <code>search</code> and <code>save</code> raise <code>RuntimeError("SymqgIndex has no vectors; ...")</code>.</p>
 <h2 id="files-and-c">Files and C++<a class="headerlink" href="#files-and-c" title="Permanent link">&para;</a></h2>
-<p>Saved files, the <code>max_elements</code> property, and <code>search</code> results for the same
-index are unchanged. Files written by 0.7 load as trained indexes.</p>
+<p>Saved files and the <code>max_elements</code> property are unchanged. <code>HnswIndex.search</code>
+without <code>ef</code> uses <code>max(k, 64)</code> since 0.8.2 (<code>max(k, 10)</code> before), which changes
+its results and latency; pass <code>ef=</code> to keep the old window. Files written by 0.7
+load as trained indexes, except empty, untrained HNSW-RaBitQ files, which need
+<code>train</code> before <code>add</code>.</p>
 <p>For C++, the existing constructors and <code>construct</code> are unchanged; see
 <a href="../index/ivf/#training-centroids-in-c">IVF-RaBitQ</a> and
 <a href="../index/hnsw/#training-centroids-in-c">HNSW-RaBitQ</a> for the new training entry
-points. The one C++ behavior change is that saving an index without stored
-points now throws <code>std::logic_error</code>.</p>
+points. C++ behavior changes: since 0.8.0, saving an index without stored points
+throws <code>std::logic_error</code>; since 0.8.2, IVF and SymphonyQG searches pad <code>k</code> above
+the point count instead of throwing, and <code>default_training_parameters</code> runs 10
+iterations. See the <a href="../releases/0.8.2/#c-changes">0.8.2 notes</a>.</p>
 
 
 

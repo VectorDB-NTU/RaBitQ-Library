@@ -457,6 +457,8 @@
       
         
       
+        
+      
     
     
     
@@ -498,6 +500,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2156,7 +2186,7 @@ step. The degree-32 example requires at least 33 data points.</p>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># data and queries are float32 arrays with shape (count, dim).</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">index</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">max_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="s2">"pipnn"</span><span class="p">)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># builds the whole graph</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># builds the whole graph; ids are the row numbers</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
@@ -2231,11 +2261,11 @@ See <a href="../../cpp_integration/">C++ integration</a> for build setup.</p>
 </tr>
 <tr>
 <td><code>k</code>, <code>ef</code></td>
-<td>Python requires <code>1 &lt;= k &lt;= num_points</code>. Omitted or zero <code>ef</code> uses <code>max(k, 10)</code>, and smaller values are raised to <code>k</code>, as for HNSW-RaBitQ.</td>
+<td><code>k</code> is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID <code>2**32 - 1</code> and distance <code>+inf</code>. Omitted or zero <code>ef</code> uses <code>max(k, 64)</code> in Python, and smaller values are raised to <code>k</code>, as for HNSW-RaBitQ.</td>
 </tr>
 <tr>
 <td><code>num_threads</code></td>
-<td>Python <code>add</code> defaults to 0 (every available logical CPU) and <code>search</code> to 1.</td>
+<td>Python <code>add</code> defaults to every available logical CPU, capped by <code>OMP_NUM_THREADS</code>, and <code>search</code> to 1; <code>None</code> selects these defaults.</td>
 </tr>
 </tbody>
 </table>
@@ -2316,7 +2346,7 @@ buffers are required and contain <code>num_queries * k</code> elements. Empty C+
 do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 <code>set_ef()</code> while searches are running.</p>
-<p>Python <code>search(queries, k, ef=None, num_threads=1)</code> accepts a two-dimensional
+<p>Python <code>search(queries, k, ef=None, num_threads=None)</code> accepts a two-dimensional
 query array and returns <code>(ids, distances)</code> arrays of shape <code>(num_queries, k)</code>,
 including empty batches. It defaults to one worker; <code>num_threads=0</code> selects the
 available logical CPU count, capped by the number of queries. The 0.7 name

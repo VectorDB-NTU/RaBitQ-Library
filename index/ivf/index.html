@@ -457,6 +457,8 @@
       
         
       
+        
+      
     
     
     
@@ -498,6 +500,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2292,9 +2322,9 @@ width, number of clusters, and <code>nprobe</code>.</p>
 <h2 id="minimal-workflow">Minimal workflow<a class="headerlink" href="#minimal-workflow" title="Permanent link">&para;</a></h2>
 <h3 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h3>
 <p>The <a href="../../quick_start/">complete Quick Start</a> is the runnable IVF-RaBitQ example:
-create an index, <code>train</code> its centroids, <code>add</code> the vectors, search, then save and
-reload it. <a href="#training-centroids-in-python">Training</a> describes the clustering
-options, and the update examples below reuse the Quick Start's <code>index</code>.</p>
+create an index, <code>add</code> the vectors (the first <code>add</code> trains the centroids), search,
+then save and reload it. <a href="#training-centroids-in-python">Training</a> describes the
+clustering options, and the update examples below reuse the Quick Start's <code>index</code>.</p>
 <h3 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h3>
 <p>Link <code>rabitqlib::index</code>. In this snippet, <code>data</code>, <code>centroids</code> and <code>queries</code> are
 row-major <code>std::vector&lt;float&gt;</code> buffers with original dimension <code>dim</code>;
@@ -2329,11 +2359,11 @@ points and five centroids.</p>
 </tr>
 <tr>
 <td><code>num_clusters</code></td>
-<td>Number of centroids <code>train</code> learns or <code>set_centroids</code> supplies; every cluster ID must be in <code>[0, num_clusters)</code>.</td>
+<td>Number of centroids <code>train</code> or the first <code>add</code> learns, or <code>set_centroids</code> supplies; every cluster ID must be in <code>[0, num_clusters)</code>.</td>
 </tr>
 <tr>
 <td><code>nbits</code> / C++ <code>total_bits</code></td>
-<td>Required and, in Python, keyword-only: 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking.</td>
+<td>1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only <code>nbits</code> defaults to 7; C++ requires it.</td>
 </tr>
 <tr>
 <td><code>seed</code></td>
@@ -2349,7 +2379,7 @@ points and five centroids.</p>
 </tr>
 <tr>
 <td><code>k</code>, <code>nprobe</code></td>
-<td>Positive result count and cluster probe count; C++ and Python both require <code>k</code> not to exceed the stored point count (<code>max_elements</code>), which <code>add</code> increases.</td>
+<td>Positive result count and cluster probe count. <code>k</code> may exceed the stored point count; missing results are padded with <code>kPidMax</code> (<code>2**32 - 1</code> in Python) and <code>+inf</code>. Python's <code>nprobe</code> defaults to <code>num_clusters / 16</code>, rounded and at least 1, when omitted, <code>None</code> or 0; C++ requires a positive <code>nprobe</code>.</td>
 </tr>
 <tr>
 <td><code>high_accuracy</code></td>
@@ -2476,13 +2506,15 @@ new-format file.</p>
 <h3 id="training-centroids-in-python">Training centroids in Python<a class="headerlink" href="#training-centroids-in-python" title="Permanent link">&para;</a></h3>
 <p><code>train(x)</code> learns <code>num_clusters</code> centroids from the rows of <code>x</code>, which must have
 at least <code>num_clusters</code> rows, and stores them in the index; <code>add</code> then assigns
-and quantizes vectors. Training uses the settings in <code>index.cp</code>, a
+and quantizes vectors. On an untrained index, the first <code>add</code> without
+<code>cluster_ids</code> calls <code>train</code> on the added vectors first, so <code>train</code> is needed only
+to train on a different sample. Training uses the settings in <code>index.cp</code>, a
 <a href="../../clustering/#rabitqkmeans"><code>RaBitQKMeansParameters</code></a> whose defaults differ
-from the k-means classes: 25 iterations, at most 256 sampled vectors per
+from the k-means classes: 10 iterations, at most 256 sampled vectors per
 centroid (<code>max_points_per_centroid</code>), spherical k-means for <code>metric="ip"</code>, and
 <code>seed</code> equal to the index seed. Change fields before training:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">index</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">"ip"</span><span class="p">)</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">index</span><span class="o">.</span><span class="n">cp</span><span class="o">.</span><span class="n">niter</span> <span class="o">=</span> <span class="mi">10</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">index</span><span class="o">.</span><span class="n">cp</span><span class="o">.</span><span class="n">niter</span> <span class="o">=</span> <span class="mi">20</span>
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">index</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>  <span class="c1"># num_threads=None uses index.cp.num_threads (0: all CPUs)</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>
 </code></pre></div>
@@ -2496,10 +2528,13 @@ centroid (<code>max_points_per_centroid</code>), spherical k-means for <code>met
 <li>Training or setting centroids again replaces them while the index stores no
   vectors; once it stores any (including removed ones), both raise
   <code>RuntimeError</code>. A failed call leaves the index unchanged.</li>
-<li>Before training, <code>add</code>, <code>search</code>, <code>remove</code>, <code>reserve</code> and <code>save</code> raise
-  <code>RuntimeError</code>. A trained index without vectors cannot be saved, and its
-  <code>search</code> rejects every <code>k</code> with <code>ValueError</code>; add vectors first. Loaded
-  indexes are trained, and their <code>seed</code> is <code>None</code>.</li>
+<li>Before training, <code>add</code> with <code>cluster_ids</code>, <code>search</code>, <code>remove</code>, <code>reserve</code> and
+  <code>save</code> raise <code>RuntimeError</code>; <code>add</code> without <code>cluster_ids</code> trains first, except
+  on an index created with <code>max_elements</code>, which <code>build</code> fills. If that
+  first <code>add</code> fails, the index stays untrained and empty; an empty first <code>add</code>
+  raises <code>RuntimeError</code>. A trained index without
+  vectors cannot be saved, and its <code>search</code> returns only padded results; add
+  vectors first. Loaded indexes are trained, and their <code>seed</code> is <code>None</code>.</li>
 <li><code>train</code> and <code>add</code> default to every available CPU; <code>search</code> defaults to one
   thread.</li>
 </ul>
@@ -2533,17 +2568,16 @@ count, train or set its centroids, then add the points:</p>
   threshold is provisional and has not been measured. Only centroids are
   trained; <code>add</code> assigns the points. <code>cp.num_threads</code> also limits building the
   centroid routing.</li>
-<li><code>default_training_parameters(metric, seed)</code> runs 25 iterations on at most
+<li><code>default_training_parameters(metric, seed)</code> runs 10 iterations on at most
   256 sampled points per centroid and selects spherical k-means for inner
   product. The k-means classes keep their own defaults, which train on every point.</li>
 <li><code>train</code> and <code>set_centroids</code> replace the centroids only while the index stores
   no points, removed ones included; otherwise they throw <code>std::logic_error</code>.
   A failed call leaves the index unchanged.</li>
 <li><code>is_trained()</code> reports whether centroids are set. Before that, <code>add</code> and
-  <code>search</code> throw <code>std::logic_error</code>. A trained index without points rejects
-  every <code>k</code> in <code>search</code> with <code>std::invalid_argument</code>, because <code>k</code> may not exceed
-  the stored point count; <code>save</code> throws <code>std::logic_error</code> until the index stores
-  at least one point.</li>
+  <code>search</code> throw <code>std::logic_error</code>. A trained index without points pads every
+  <code>search</code> result slot with <code>kPidMax</code> and <code>+inf</code>; <code>save</code> throws
+  <code>std::logic_error</code> until the index stores at least one point.</li>
 </ul>
 <h2 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h2>
 <p>To search a saved index, load it first:</p>
@@ -2621,8 +2655,10 @@ or loaded index without the original dataset; C++ also adds to a
   receives the PID <code>num_stored_points() + i</code>, using the count before the call. Existing
   IDs stay unchanged, and removed IDs are never reused.</li>
 <li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, num_clusters)</code>. When
-  it is <code>nullptr</code>, vectors use the same centroid routing as queries. Routing uses
-  the initializer selected at construction or restored from the index file.</li>
+  it is <code>nullptr</code>, each vector goes to its nearest centroid under the index's
+  routing type, the initializer selected at construction or restored from the
+  index file. With Flat routing, <code>add</code> assigns exactly and queries scan in float,
+  so near-ties may resolve differently.</li>
 <li><strong>fast_quantization</strong>, <strong>num_threads</strong>: Same as in <code>construct</code>.</li>
 <li><strong>ids_to_remove</strong>: <code>num_points</code> PIDs to remove. Every PID must be below <code>num_stored_points()</code>; nothing is
   removed if one is not. <code>remove</code> returns how many were newly removed and can be
@@ -2643,7 +2679,7 @@ or loaded index without the original dataset; C++ also adds to a
 one-dimensional integer array or sequence with one valid cluster ID per vector;
 <code>remove()</code> likewise accepts a one-dimensional integer array or sequence of point
 IDs and returns the number newly removed. Duplicate IDs count once. Python
-<code>num_threads</code> defaults to 0 (every available CPU) and <code>fast_quantization</code> to
+<code>num_threads</code> defaults to <code>None</code> (every available CPU) and <code>fast_quantization</code> to
 <code>False</code>; pass both by keyword.</p>
 <p>After appending, rebuilding with C++ <code>construct</code> requires <code>num_stored_points</code>
 rows, including removed records. Updates require exclusive
@@ -2667,7 +2703,7 @@ holds but does not use yet. It is not saved, so a loaded index has none.</p>
 <p>Measure update latency and peak memory with your index size, bit width and batch
 size; serialized file size alone does not determine peak process memory.</p>
 <h3 id="recall-after-add">Recall after <code>add</code><a class="headerlink" href="#recall-after-add" title="Permanent link">&para;</a></h3>
-<p>The centroids and the rotation are fixed when the index is constructed, so
+<p>The centroids and the rotation are fixed once the index is trained, so
 <code>add</code> never retrains them. If the added vectors come from a different distribution,
 or the index grows many times beyond its original size, recall at a given
 <code>nprobe</code> can drop. Rebuild from the original data with new centroids when

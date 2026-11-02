@@ -457,6 +457,8 @@
       
         
       
+        
+      
     
     
     
@@ -498,6 +500,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2016,7 +2046,7 @@
 
 
 <h1 id="ivf-rabitq-benchmark">IVF-RaBitQ benchmark<a class="headerlink" href="#ivf-rabitq-benchmark" title="Permanent link">&para;</a></h1>
-<p>RaBitQ-Library results were measured with <strong>0.8.0 on 2026-11-01 (Asia/Singapore)</strong>.
+<p>RaBitQ-Library results were measured with <strong>0.8.2 on 2026-11-02 (Asia/Singapore)</strong>.
 Each baseline retains its latest measurement and was not rerun.
 See the <a href="../bench/#package-installation">source revisions, environments and comparison limits</a>.</p>
 <p>Settings and results for eight configurations. See the <a href="../bench/">overview</a> for
@@ -2046,26 +2076,26 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <tbody>
 <tr>
 <td>IVF-RaBitQ raw</td>
-<td style="text-align: right;">14.83</td>
-<td style="text-align: right;">2.15</td>
-<td style="text-align: right;">16.98</td>
-<td style="text-align: right;">1.58</td>
+<td style="text-align: right;">4.32</td>
+<td style="text-align: right;">6.32</td>
+<td style="text-align: right;">10.63</td>
+<td style="text-align: right;">1.60</td>
 <td style="text-align: right;">3.73</td>
 </tr>
 <tr>
 <td>IVF-RaBitQ 1+4</td>
-<td style="text-align: right;">14.71</td>
-<td style="text-align: right;">2.54</td>
-<td style="text-align: right;">17.24</td>
-<td style="text-align: right;">0.28</td>
+<td style="text-align: right;">4.29</td>
+<td style="text-align: right;">6.68</td>
+<td style="text-align: right;">10.97</td>
+<td style="text-align: right;">0.26</td>
 <td style="text-align: right;">0.60</td>
 </tr>
 <tr>
 <td>IVF-RaBitQ 1+8</td>
-<td style="text-align: right;">14.57</td>
-<td style="text-align: right;">7.73</td>
-<td style="text-align: right;">22.30</td>
-<td style="text-align: right;">0.46</td>
+<td style="text-align: right;">4.31</td>
+<td style="text-align: right;">11.88</td>
+<td style="text-align: right;">16.19</td>
+<td style="text-align: right;">0.44</td>
 <td style="text-align: right;">1.05</td>
 </tr>
 <tr>
@@ -2130,26 +2160,26 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <tbody>
 <tr>
 <td>IVF-RaBitQ raw</td>
-<td style="text-align: right;">23.67</td>
-<td style="text-align: right;">3.66</td>
-<td style="text-align: right;">27.32</td>
-<td style="text-align: right;">2.64</td>
+<td style="text-align: right;">6.79</td>
+<td style="text-align: right;">11.70</td>
+<td style="text-align: right;">18.50</td>
+<td style="text-align: right;">2.59</td>
 <td style="text-align: right;">5.95</td>
 </tr>
 <tr>
 <td>IVF-RaBitQ 1+4</td>
-<td style="text-align: right;">23.87</td>
-<td style="text-align: right;">4.13</td>
-<td style="text-align: right;">28.00</td>
-<td style="text-align: right;">0.41</td>
+<td style="text-align: right;">6.81</td>
+<td style="text-align: right;">10.76</td>
+<td style="text-align: right;">17.57</td>
+<td style="text-align: right;">0.40</td>
 <td style="text-align: right;">0.95</td>
 </tr>
 <tr>
 <td>IVF-RaBitQ 1+8</td>
-<td style="text-align: right;">23.81</td>
-<td style="text-align: right;">13.50</td>
-<td style="text-align: right;">37.31</td>
-<td style="text-align: right;">0.70</td>
+<td style="text-align: right;">6.77</td>
+<td style="text-align: right;">20.29</td>
+<td style="text-align: right;">27.05</td>
+<td style="text-align: right;">0.69</td>
 <td style="text-align: right;">1.67</td>
 </tr>
 <tr>
@@ -2199,9 +2229,12 @@ See <a href="../bench/#reading-the-figures">figure definitions</a> and
 <h2 id="index-configurations">Index configurations<a class="headerlink" href="#index-configurations" title="Permanent link">&para;</a></h2>
 <p>Every IVF index uses <strong>4,096 clusters</strong>. <code>d</code> is the dataset dimension and
 <code>m=d/2</code> for PQ: 480 on GIST1M and 768 on DBpedia. PQ subquantizers
-use four bits. RaBitQ clustering uses up to 10 iterations, seed 42, exact final
-assignment, and spherical training for DBpedia's inner-product metric. Faiss uses its
-factory training defaults. Training is reported separately and included in total
+use four bits. IVF-RaBitQ builds as the library does by default: <code>IvfIndex.train</code>
+(QGKMeans above 2,000 clusters, up to 10 iterations on at most 256 sampled points
+per centroid, seed 42, spherical training for DBpedia's inner-product metric), then
+<code>add</code>, which assigns every vector to its nearest centroid, so assignment counts as
+construction. Faiss uses its factory training defaults (10 iterations, at most 256
+points per centroid). Training is reported separately and included in total
 construction time.</p>
 <table>
 <thead>

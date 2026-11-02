@@ -598,6 +598,8 @@
       
         
       
+        
+      
     
     
     
@@ -639,6 +641,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="releases/0.8.2/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.2
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2040,7 +2070,7 @@ estimation into your own <span class="nowrap">C++</span> search engine.</p>
 <p><a class="md-button md-button--primary" href="quick_start/">Python quick start</a>
 <a class="md-button" href="cpp_integration/">C++ integration</a></p>
 </div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.8.1"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"rabitqlib&gt;=0.8.2"</span>
 </code></pre></div>
 <p><a href="installation/">Installation and supported platforms</a> ·
 <a href="rabitq/rabitq/">How RaBitQ works</a></p>
@@ -2054,21 +2084,21 @@ Start with IVF-RaBitQ for the complete introductory example, then compare on you
 <p>Search selected clusters of compressed vectors. Tune the bit width and number
 of clusters probed to balance storage, recall, and query time.</p>
 <p><strong>Updates:</strong> append and remove vectors.</p>
-<p><strong>GIST1M, 5-bit:</strong> 1,025 QPS at 92.8% Recall@10; 0.60 GiB index.</p>
+<p><strong>GIST1M, 5-bit:</strong> 976 QPS at 93.3% Recall@10; 0.60 GiB index.</p>
 </div>
 <div class="feature-card">
 <h3 id="hnsw-rabitq"><a href="index/hnsw/">HNSW-RaBitQ</a><a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h3>
 <p>Traverse a graph over compressed vectors. Graph links add storage; tune the
 search window and graph degree alongside the code precision.</p>
 <p><strong>Updates:</strong> append and remove vectors.</p>
-<p><strong>GIST1M, 5-bit:</strong> 2,042 QPS at 92.8% Recall@10; 0.72 GiB index.</p>
+<p><strong>GIST1M, 5-bit:</strong> 2,027 QPS at 92.7% Recall@10; 0.72 GiB index.</p>
 </div>
 <div class="feature-card">
 <h3 id="symphonyqg"><a href="index/qg/">SymphonyQG</a><a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h3>
 <p>Build a graph directly from vectors, without a separate clustering step.
 Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
 <p><strong>Updates:</strong> rebuild to change the dataset.</p>
-<p><strong>GIST1M, 4-bit:</strong> 3,062 QPS at 90.7% Recall@10; 4.39 GiB index.</p>
+<p><strong>GIST1M, 4-bit:</strong> 3,070 QPS at 90.5% Recall@10; 4.39 GiB index.</p>
 </div>
 </div>
 <p>For input shapes, distance conventions, memory estimates, and threading, see
@@ -2083,7 +2113,7 @@ Combine batched neighbor scoring with raw or 4/8-bit vector storage.</p>
 </ul>
 <h2 id="compare-measured-performance">Compare measured performance<a class="headerlink" href="#compare-measured-performance" title="Permanent link">&para;</a></h2>
 <p>The GIST1M numbers above are the fastest measured setting with Recall@10 ≥ 90%,
-using one search thread and one query per call with RaBitQ-Library 0.8.0; index
+using one search thread and one query per call with RaBitQ-Library 0.8.2; index
 size is serialized storage. See the <a href="benchmarks/bench/#key-results">benchmark results</a>
 for datasets, baselines, settings, and limitations. Evaluate recall and query time
 on your own dataset when choosing an index.</p>
@@ -2098,7 +2128,7 @@ on your own dataset when choosing an index.</p>
 <h2 id="explore-further">Explore further<a class="headerlink" href="#explore-further" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="rabitq/rabitq/">Algorithm overview</a> for the rotation, encoding, and scoring workflow.</li>
-<li><a href="releases/0.8.1/">RaBitQ Library 0.8.1 release notes</a> for the latest changes and upgrade guidance.</li>
+<li><a href="releases/0.8.2/">RaBitQ Library 0.8.2 release notes</a> for the latest changes and upgrade guidance.</li>
 <li><a href="papers/">Papers and citations</a> for the original RaBitQ method, its multi-bit extension, and SymphonyQG.</li>
 </ul>
 

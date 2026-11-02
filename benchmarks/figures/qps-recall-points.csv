@@ -1,34 +1,34 @@
 dataset,method,setting,recall_at_10,qps
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 1}",0.1475,2363.467957170425
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 2}",0.23820000000000002,2296.748658911562
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 4}",0.3503,2224.191011577242
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 8}",0.4853,2119.714393183531
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 16}",0.627,1948.816102875993
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 32}",0.766,1731.013183817204
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 64}",0.8729000000000001,1434.3722679874045
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 128}",0.9492,1093.395382120919
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 256}",0.9820999999999999,745.8723776053278
-gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 512}",0.9952000000000001,446.66946608009715
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 1}",0.1475,2251.9814668599197
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 2}",0.23810000000000003,2270.156506013795
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 4}",0.34979999999999994,2213.6338452894934
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 8}",0.4845,2093.6472284059164
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 16}",0.6255,1922.0770695611034
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 32}",0.7608,1714.7751548236663
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 64}",0.8607,1397.1580678966634
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 128}",0.9282,1025.2847333707268
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 256}",0.9546000000000001,670.8393274904145
-gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 512}",0.9640000000000001,396.2568660357085
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 1}",0.1474,2252.3654589028743
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 2}",0.238,2200.437189878581
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 4}",0.3499,2214.3974863803787
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 8}",0.4848,2115.6526114440862
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 16}",0.6267999999999999,1926.5786914759558
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 32}",0.7652,1705.38105949127
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 64}",0.8715000000000002,1385.0532359842227
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 128}",0.9475000000000001,1014.8520244680006
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 256}",0.9799000000000001,672.6753513485095
-gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 512}",0.993,395.8348867724481
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 1}",0.15860000000000002,2292.2429862395725
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 2}",0.24330000000000002,2231.323444180764
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 4}",0.3633,2158.181425281544
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 8}",0.4953,1964.9085369171164
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 16}",0.6357,1885.6212397171867
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 32}",0.7728,1670.759467634159
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 64}",0.8834000000000001,1378.6308888998242
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 128}",0.9538000000000002,1045.2020166959253
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 256}",0.9849000000000001,703.0290056277265
+gist1m,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 512}",0.996,422.43771092072865
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 1}",0.15860000000000002,2341.4021952794346
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 2}",0.24320000000000003,2274.073058472549
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 4}",0.36290000000000006,2180.1175352493983
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 8}",0.4937,2050.2572967669735
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 16}",0.6327,1893.5086422319062
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 32}",0.7649000000000001,1677.7477119148773
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 64}",0.8701,1315.8095467491191
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 128}",0.9328000000000002,976.4674175693566
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 256}",0.9583000000000002,632.5197877719577
+gist1m,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 512}",0.9667,371.71353216931766
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 1}",0.15860000000000002,2307.9455730316467
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 2}",0.24330000000000002,2239.5970612683604
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 4}",0.3633,2170.702843387501
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 8}",0.4953,1983.3470998680796
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 16}",0.6356,1859.406351840207
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 32}",0.7723,1647.471509406164
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 64}",0.8827,1317.2271645004357
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 128}",0.9521000000000001,950.1874249896673
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 256}",0.983,632.0628591526427
+gist1m,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 512}",0.9939000000000001,376.6421880426241
 gist1m,faiss-rabitqfs-raw,"{""k_factor"": 1, ""nprobe"": 1}",0.16110000000000002,2014.0927239452988
 gist1m,faiss-rabitqfs-raw,"{""k_factor"": 2, ""nprobe"": 1}",0.1637,1997.9254110236252
 gist1m,faiss-rabitqfs-raw,"{""k_factor"": 5, ""nprobe"": 1}",0.16390000000000002,1918.577262395092
@@ -199,41 +199,41 @@ gist1m,faiss-opq-pqfs,"{""k_factor"": 2, ""nprobe"": 512}",0.9036000000000002,26
 gist1m,faiss-opq-pqfs,"{""k_factor"": 5, ""nprobe"": 512}",0.9863,254.4628404248078
 gist1m,faiss-opq-pqfs,"{""k_factor"": 10, ""nprobe"": 512}",0.9944,253.25533247918946
 gist1m,faiss-opq-pqfs,"{""k_factor"": 20, ""nprobe"": 512}",0.996,250.83951174852962
-gist1m,rabitq-symqg-raw,"{""ef_search"": 16}",0.5328999999999999,40839.64181602291
-gist1m,rabitq-symqg-raw,"{""ef_search"": 32}",0.6789000000000001,27395.892684642644
-gist1m,rabitq-symqg-raw,"{""ef_search"": 64}",0.806,17228.442227049716
-gist1m,rabitq-symqg-raw,"{""ef_search"": 128}",0.8967,9787.42848312
-gist1m,rabitq-symqg-raw,"{""ef_search"": 256}",0.9537,5353.942324672757
-gist1m,rabitq-symqg-raw,"{""ef_search"": 512}",0.9821000000000001,2843.446779262826
-gist1m,rabitq-symqg-raw,"{""ef_search"": 1024}",0.9952000000000001,1479.227603264583
-gist1m,rabitq-symqg-4,"{""ef_search"": 16}",0.4578,44722.44100461175
-gist1m,rabitq-symqg-4,"{""ef_search"": 32}",0.6016,29958.13046310635
-gist1m,rabitq-symqg-4,"{""ef_search"": 64}",0.7280999999999999,19465.878495780573
-gist1m,rabitq-symqg-4,"{""ef_search"": 128}",0.818,11015.565764393998
-gist1m,rabitq-symqg-4,"{""ef_search"": 256}",0.8780000000000001,5870.563710390287
-gist1m,rabitq-symqg-4,"{""ef_search"": 512}",0.9071000000000001,3061.571818805918
-gist1m,rabitq-symqg-4,"{""ef_search"": 1024}",0.9174000000000001,1563.3706214067597
-gist1m,rabitq-symqg-8,"{""ef_search"": 16}",0.5334,44202.14607324287
-gist1m,rabitq-symqg-8,"{""ef_search"": 32}",0.681,31326.4560237357
-gist1m,rabitq-symqg-8,"{""ef_search"": 64}",0.8011,19784.74319258463
-gist1m,rabitq-symqg-8,"{""ef_search"": 128}",0.8942,11228.406269838173
-gist1m,rabitq-symqg-8,"{""ef_search"": 256}",0.949,6225.351852101211
-gist1m,rabitq-symqg-8,"{""ef_search"": 512}",0.976,3252.2333337759283
-gist1m,rabitq-symqg-8,"{""ef_search"": 1024}",0.9867999999999999,1682.0374782030074
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 16}",0.4845,15680.92281023948
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 32}",0.6147,13133.889957842093
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 64}",0.7353000000000001,9411.210996872773
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 128}",0.8265,6964.0594381340115
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 256}",0.8904000000000001,3913.5044741765328
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 512}",0.9280000000000002,2042.3317326299784
-gist1m,rabitq-hnsw-1p4,"{""ef_search"": 1024}",0.9434000000000001,1025.5947843087315
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 16}",0.4827,18824.829138501234
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 32}",0.6145,15074.727029801039
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 64}",0.7423,10543.05227423568
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 128}",0.8388000000000001,6713.0929831743615
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 256}",0.9112,3842.558835937474
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 512}",0.951,2022.7785294028427
-gist1m,rabitq-hnsw-1p8,"{""ef_search"": 1024}",0.9708000000000001,1012.7580995440545
+gist1m,rabitq-symqg-raw,"{""ef_search"": 16}",0.5324,40618.235396316275
+gist1m,rabitq-symqg-raw,"{""ef_search"": 32}",0.6827000000000001,26923.441585992474
+gist1m,rabitq-symqg-raw,"{""ef_search"": 64}",0.8067000000000001,17346.141035200297
+gist1m,rabitq-symqg-raw,"{""ef_search"": 128}",0.9009000000000001,9833.280949058817
+gist1m,rabitq-symqg-raw,"{""ef_search"": 256}",0.9575,5273.038736961992
+gist1m,rabitq-symqg-raw,"{""ef_search"": 512}",0.9839000000000001,2845.3627151951205
+gist1m,rabitq-symqg-raw,"{""ef_search"": 1024}",0.9944000000000001,1504.3435928042888
+gist1m,rabitq-symqg-4,"{""ef_search"": 16}",0.45370000000000005,40609.94364592269
+gist1m,rabitq-symqg-4,"{""ef_search"": 32}",0.6038,29284.744007012192
+gist1m,rabitq-symqg-4,"{""ef_search"": 64}",0.737,17569.185108196223
+gist1m,rabitq-symqg-4,"{""ef_search"": 128}",0.8298000000000002,10493.611839935398
+gist1m,rabitq-symqg-4,"{""ef_search"": 256}",0.8813000000000002,5891.696617152718
+gist1m,rabitq-symqg-4,"{""ef_search"": 512}",0.9045000000000002,3069.774979184891
+gist1m,rabitq-symqg-4,"{""ef_search"": 1024}",0.9169,1534.339014942515
+gist1m,rabitq-symqg-8,"{""ef_search"": 16}",0.5284000000000001,44393.06095307739
+gist1m,rabitq-symqg-8,"{""ef_search"": 32}",0.6803,31036.4084195256
+gist1m,rabitq-symqg-8,"{""ef_search"": 64}",0.804,19598.187713719977
+gist1m,rabitq-symqg-8,"{""ef_search"": 128}",0.8965000000000001,11370.334793546055
+gist1m,rabitq-symqg-8,"{""ef_search"": 256}",0.9499000000000001,6152.043126841109
+gist1m,rabitq-symqg-8,"{""ef_search"": 512}",0.9778,3134.1512113640306
+gist1m,rabitq-symqg-8,"{""ef_search"": 1024}",0.9875,1697.2576105741166
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 16}",0.4832,19886.294607729273
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 32}",0.6141,15477.880797542963
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 64}",0.7361,11288.851811759258
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 128}",0.8253,7003.648721674192
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 256}",0.8916000000000001,3867.774823419696
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 512}",0.9267000000000002,2027.1367734618577
+gist1m,rabitq-hnsw-1p4,"{""ef_search"": 1024}",0.9425,1015.2571380621886
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 16}",0.48319999999999996,18912.277031362668
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 32}",0.6167999999999999,15000.6263673616
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 64}",0.7432000000000001,10388.713890067307
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 128}",0.8412000000000001,6699.231182264583
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 256}",0.9106000000000002,3804.73735131126
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 512}",0.9504000000000001,1949.2034838809832
+gist1m,rabitq-hnsw-1p8,"{""ef_search"": 1024}",0.9699000000000001,992.3758670511446
 gist1m,faiss-hnsw-flat,"{""ef_search"": 16}",0.49739999999999995,6294.544088577019
 gist1m,faiss-hnsw-flat,"{""ef_search"": 32}",0.6306999999999999,3912.743611640825
 gist1m,faiss-hnsw-flat,"{""ef_search"": 64}",0.7554,2388.2965969556044
@@ -255,36 +255,36 @@ gist1m,faiss-hnsw-sq8,"{""ef_search"": 128}",0.8434,1275.5174278302363
 gist1m,faiss-hnsw-sq8,"{""ef_search"": 256}",0.9039,698.224703435659
 gist1m,faiss-hnsw-sq8,"{""ef_search"": 512}",0.9374000000000001,385.09922727219015
 gist1m,faiss-hnsw-sq8,"{""ef_search"": 1024}",0.9548000000000001,210.04956181553456
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 1}",0.4968,1438.4280760261988
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 2}",0.6108000000000001,1395.339944681715
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 4}",0.6994000000000001,1387.8428601699286
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 8}",0.777,1334.634041009959
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 16}",0.8332,1273.658060120864
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 32}",0.8846000000000002,1150.3806863129582
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 64}",0.9252999999999999,958.4259576601994
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 128}",0.9566000000000001,722.8973634559267
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 256}",0.9771,487.395520696361
-dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 512}",0.9903,294.7878071621595
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 1}",0.4956,1488.2183238989835
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 2}",0.6092000000000001,1421.937752166503
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 4}",0.6969000000000001,1408.6048198523677
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 8}",0.773,1383.1617884483671
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 16}",0.828,1296.2401865703118
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 32}",0.8778000000000001,1146.7737342721082
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 64}",0.9167000000000001,947.3185998989695
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 128}",0.9454000000000001,695.585739783037
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 256}",0.9642000000000001,452.3847584405979
-dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 512}",0.976,270.4286967498806
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 1}",0.4968,1508.1111565362878
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 2}",0.6107,1466.818072951789
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 4}",0.6992999999999999,1418.1933166187682
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 8}",0.777,1385.2016434793438
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 16}",0.8330000000000001,1304.8506529028696
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 32}",0.8843000000000001,1158.3713318972784
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 64}",0.925,944.2616038005859
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 128}",0.9563000000000001,703.5140776097971
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 256}",0.9766,459.3803327099362
-dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 512}",0.9896000000000001,272.92524047265425
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 1}",0.49160000000000004,1449.7841524665141
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 2}",0.6106,1389.192525776793
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 4}",0.7011000000000001,1379.1664722037838
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 8}",0.7739000000000001,1325.9268436666073
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 16}",0.8336,1268.0697303822276
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 32}",0.8828,1144.4085596013995
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 64}",0.9231,944.1578278570655
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 128}",0.9563,706.748699343516
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 256}",0.9763000000000001,479.73141193221363
+dbpedia,rabitq-ivf-raw,"{""k_factor"": 1, ""nprobe"": 512}",0.9905,291.9782402287662
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 1}",0.4902,1457.9659446733103
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 2}",0.6085,1393.3672506246883
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 4}",0.6984000000000001,1387.578105395565
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 8}",0.7702,1339.0200210117628
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 16}",0.8282999999999999,1190.2406460829059
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 32}",0.8762000000000001,1118.9651021215254
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 64}",0.9151000000000001,913.0076354995437
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 128}",0.9458000000000001,674.381254526796
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 256}",0.964,442.3758851884881
+dbpedia,rabitq-ivf-1p4,"{""k_factor"": 1, ""nprobe"": 512}",0.9767,264.48558962273864
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 1}",0.49160000000000004,1488.026397022922
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 2}",0.6105,1458.9227682940354
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 4}",0.701,1442.5262062187999
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 8}",0.7737999999999999,1382.7434774478588
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 16}",0.8335,1309.6175356782728
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 32}",0.8825,1169.4055419405008
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 64}",0.9228000000000001,953.6070558013462
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 128}",0.9556,695.5234568843545
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 256}",0.9753,460.3457619765794
+dbpedia,rabitq-ivf-1p8,"{""k_factor"": 1, ""nprobe"": 512}",0.9893000000000001,271.2884940017891
 dbpedia,faiss-rabitqfs-raw,"{""k_factor"": 1, ""nprobe"": 1}",0.4696,968.0227209640274
 dbpedia,faiss-rabitqfs-raw,"{""k_factor"": 2, ""nprobe"": 1}",0.4868,964.4443231982366
 dbpedia,faiss-rabitqfs-raw,"{""k_factor"": 5, ""nprobe"": 1}",0.48760000000000003,923.9652572942317
@@ -455,41 +455,41 @@ dbpedia,faiss-opq-pqfs,"{""k_factor"": 2, ""nprobe"": 512}",0.9873000000000001,1
 dbpedia,faiss-opq-pqfs,"{""k_factor"": 5, ""nprobe"": 512}",0.9903,190.42143321970212
 dbpedia,faiss-opq-pqfs,"{""k_factor"": 10, ""nprobe"": 512}",0.9903,191.85913955260074
 dbpedia,faiss-opq-pqfs,"{""k_factor"": 20, ""nprobe"": 512}",0.9903,186.93282549390355
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 16}",0.8248000000000001,29104.75909194195
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 32}",0.9114000000000001,20297.26353753667
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 64}",0.9524000000000001,13560.175365501209
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 128}",0.9741000000000001,8125.614596039694
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 256}",0.9866000000000001,4682.066391350128
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 512}",0.9933,2596.460594279065
-dbpedia,rabitq-symqg-raw,"{""ef_search"": 1024}",0.9971,1389.257975960993
-dbpedia,rabitq-symqg-4,"{""ef_search"": 16}",0.6617999999999999,30534.41821039647
-dbpedia,rabitq-symqg-4,"{""ef_search"": 32}",0.8227000000000002,21517.6414164816
-dbpedia,rabitq-symqg-4,"{""ef_search"": 64}",0.9015,13991.070143700688
-dbpedia,rabitq-symqg-4,"{""ef_search"": 128}",0.9377000000000002,8185.104636973314
-dbpedia,rabitq-symqg-4,"{""ef_search"": 256}",0.9523,4632.76015198188
-dbpedia,rabitq-symqg-4,"{""ef_search"": 512}",0.9602,2478.380929212675
-dbpedia,rabitq-symqg-4,"{""ef_search"": 1024}",0.9651000000000002,1291.7495788737988
-dbpedia,rabitq-symqg-8,"{""ef_search"": 16}",0.8265,31777.972107044385
-dbpedia,rabitq-symqg-8,"{""ef_search"": 32}",0.9114000000000001,22951.66540716551
-dbpedia,rabitq-symqg-8,"{""ef_search"": 64}",0.9537,15442.510081447115
-dbpedia,rabitq-symqg-8,"{""ef_search"": 128}",0.9724,9553.595531842548
-dbpedia,rabitq-symqg-8,"{""ef_search"": 256}",0.982,5446.867577781903
-dbpedia,rabitq-symqg-8,"{""ef_search"": 512}",0.9889,3012.020640225311
-dbpedia,rabitq-symqg-8,"{""ef_search"": 1024}",0.992,1609.2073462297726
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 16}",0.8309000000000001,16064.10009987645
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 32}",0.8971,13366.87812264088
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 64}",0.9376000000000001,9839.721077270764
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 128}",0.9565,6466.948543751877
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 256}",0.9666000000000001,3806.4249418528934
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 512}",0.9718000000000001,2067.0556575149285
-dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 1024}",0.9748000000000001,1024.4188245530174
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 16}",0.8349000000000001,14687.245065997886
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 32}",0.9069,12034.520119590024
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 64}",0.9508000000000001,9209.502036439037
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 128}",0.9737,6182.312717735209
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 256}",0.9843,3664.2163863694113
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 512}",0.9909,1996.5110056050491
-dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 1024}",0.9939000000000001,1005.2213901924908
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 16}",0.8076000000000001,28757.86000146663
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 32}",0.9105,20670.834253020003
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 64}",0.9506,13713.59541047072
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 128}",0.9737,8156.417107648283
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 256}",0.9869,4644.548284117831
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 512}",0.9926,2473.9266627028856
+dbpedia,rabitq-symqg-raw,"{""ef_search"": 1024}",0.9967,1380.4110028061675
+dbpedia,rabitq-symqg-4,"{""ef_search"": 16}",0.6545,30619.35903790233
+dbpedia,rabitq-symqg-4,"{""ef_search"": 32}",0.8246000000000001,21206.44296636798
+dbpedia,rabitq-symqg-4,"{""ef_search"": 64}",0.9044000000000001,13845.910420126613
+dbpedia,rabitq-symqg-4,"{""ef_search"": 128}",0.9406000000000001,8178.721744910037
+dbpedia,rabitq-symqg-4,"{""ef_search"": 256}",0.9553,4581.138175198925
+dbpedia,rabitq-symqg-4,"{""ef_search"": 512}",0.964,2470.964872161067
+dbpedia,rabitq-symqg-4,"{""ef_search"": 1024}",0.9675,1268.1530945867482
+dbpedia,rabitq-symqg-8,"{""ef_search"": 16}",0.8233000000000001,31877.350163475272
+dbpedia,rabitq-symqg-8,"{""ef_search"": 32}",0.9079,23584.28549136094
+dbpedia,rabitq-symqg-8,"{""ef_search"": 64}",0.951,15608.435044230717
+dbpedia,rabitq-symqg-8,"{""ef_search"": 128}",0.9712000000000001,9538.135545106787
+dbpedia,rabitq-symqg-8,"{""ef_search"": 256}",0.9816,5359.94019084852
+dbpedia,rabitq-symqg-8,"{""ef_search"": 512}",0.9906,3020.020911023084
+dbpedia,rabitq-symqg-8,"{""ef_search"": 1024}",0.9945,1611.8173992577324
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 16}",0.8284000000000001,16139.861324504
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 32}",0.8991000000000001,12965.028343201626
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 64}",0.9377000000000001,9041.654683488374
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 128}",0.9568000000000001,5923.270574072943
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 256}",0.967,3529.172666186052
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 512}",0.9718000000000001,2018.2844505111545
+dbpedia,rabitq-hnsw-1p4,"{""ef_search"": 1024}",0.9748000000000001,968.2597595101961
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 16}",0.8346,14617.225255222185
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 32}",0.9037000000000001,12121.988834826634
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 64}",0.9507000000000001,8722.251407519614
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 128}",0.9725,6151.49624433614
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 256}",0.9843,3644.3910506684606
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 512}",0.9909,1991.4170172509994
+dbpedia,rabitq-hnsw-1p8,"{""ef_search"": 1024}",0.9939000000000001,983.8506969675918
 dbpedia,faiss-hnsw-flat,"{""ef_search"": 16}",0.848,4172.367906120071
 dbpedia,faiss-hnsw-flat,"{""ef_search"": 32}",0.9243000000000001,2742.54484463088
 dbpedia,faiss-hnsw-flat,"{""ef_search"": 64}",0.9645,1649.1643632445584
