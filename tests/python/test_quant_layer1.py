@@ -318,3 +318,24 @@ def test_code_factors_names_the_lowest_rejected_row_across_threads():
             ValueError, match="^codes row 300 for residuals row 300: code does not"
         ):
             quant.code_factors(x, codes, nbits=4, metric="l2", num_threads=threads)
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_code_factors_reports_the_overflowing_row(metric):
+    # With every code 1, <residual, centered code> is half the residual's sum. The
+    # +-2**25 at coordinates 0 and 64 share an accumulator slot in every dot-product
+    # backend and cancel exactly, and coordinate 65 keeps its tiny value apart, so the
+    # sum is a positive 1e-30 and the rescale factor overflows float32.
+    x = residuals(6, seed=9)
+    codes = quant.quantize(x, nbits=1)
+    for row in (3, 5):
+        x[row] = 0
+        x[row, [0, 64, 65]] = [2.0**25, -(2.0**25), 1e-30]
+        codes[row] = 1
+    out = np.zeros(6, quant.FACTORS_DTYPE)
+    with pytest.raises(
+        OverflowError,
+        match="^codes row 3 for residuals row 3: Quantization factors are not "
+        "representable in float32$",
+    ):
+        quant.code_factors(x, codes, nbits=1, metric=metric, num_threads=4, out=out)

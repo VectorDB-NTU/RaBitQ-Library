@@ -414,6 +414,64 @@ def test_out_overlapping_an_input_is_rejected():
         )
 
 
+@pytest.mark.parametrize(
+    "field,message",
+    [
+        ("rescale", "Estimated distance is not representable in float32"),
+        ("error", "Estimated error is not representable in float32"),
+    ],
+)
+def test_estimates_that_overflow_are_rejected(field, message):
+    # With q all ones and every code 1, each centered inner product is 48 and |q| is
+    # sqrt(96), so a factor of 3e38 overflows that row's distance or error.
+    n, d = 300, 96
+    q = np.ones(d, np.float32)
+    query = quant.Query(q, metric="l2")
+    codes = np.ones((n, d), np.uint8)
+    bitsets = quant.pack_codes(codes, nbits=1)
+    factors = np.zeros(n, quant.FACTORS_DTYPE)
+    factors[field][[250, 120]] = 3e38
+    terms = quant.query_terms(q, metric="l2")
+    blocks = quant.pack_fastscan_blocks(bitsets, factors)
+    calls = [
+        lambda out: query.estimate_bitset(bitsets, factors, num_threads=4, out=out),
+        lambda out: query.estimate_codes(
+            codes, factors, nbits=1, num_threads=4, out=out
+        ),
+        lambda out: quant.estimate_from_ip(
+            np.full(n, d, np.float32), factors, terms, nbits=1, num_threads=4, out=out
+        ),
+        lambda out: query.estimate_fastscan(
+            blocks, num_points=n, num_threads=4, out=out
+        ),
+    ]
+    for call in calls:
+        # After OverflowError the contents of out= are unspecified.
+        with pytest.raises(OverflowError, match=f"^{message}$"):
+            call(np.zeros(n, quant.ESTIMATE_DTYPE))
+
+
+@pytest.mark.parametrize("packed", [False, True])
+def test_refined_distances_that_overflow_are_rejected(packed):
+    # Prefix and extra bits all 1 give total codes 3, centered at 1.5: the inner product
+    # with q all ones is 144, so a rescale of 3e38 overflows the distance.
+    n, d = 300, 96
+    query = quant.Query(np.ones(d, np.float32), metric="l2")
+    ex = np.ones((n, d), np.uint8)
+    factors = np.zeros(n, quant.FACTORS_DTYPE)
+    factors["rescale"][[250, 120]] = 3e38
+    first = np.zeros(n, quant.ESTIMATE_DTYPE)
+    first["refine_input"] = d
+    refine = query.refine_packed if packed else query.refine
+    codes = quant.pack_codes(ex, nbits=1) if packed else ex
+    with pytest.raises(
+        OverflowError, match="^Estimated distance is not representable in float32$"
+    ):
+        refine(
+            codes, factors, first, ex_bits=1, num_threads=4, out=np.zeros(n, np.float32)
+        )
+
+
 def test_rejections_name_the_lowest_failing_row_across_threads():
     _, c, residuals, codes, factors, q = setup("l2", 4, n=1000)
     query = quant.Query(q, metric="l2", centroid=c)

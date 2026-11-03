@@ -530,6 +530,10 @@ void check_code_values(
 }
 
 // Whether every float of records [begin, end) is finite.
+bool all_finite_records(const float* values, size_t begin, size_t end) {
+    return all_finite(values + begin, end - begin);
+}
+
 template <typename T>
 bool all_finite_records(const T* records, size_t begin, size_t end) {
     static_assert(sizeof(T) == 3 * sizeof(float));
@@ -547,14 +551,40 @@ bool finite_factor_range(
     return selected.indices == nullptr && all_finite_records(factors.data, begin, end);
 }
 
-// Writes value_at(k) to out[k] for k in [0, count), for rows already validated.
+// quant::v1::compute rejects the distances that are not finite; so do the scoring calls.
+float checked(float distance) {
+    if (!std::isfinite(distance)) {
+        throw std::overflow_error("Estimated distance is not representable in float32");
+    }
+    return distance;
+}
+
+Estimate checked(const Estimate& estimate) {
+    (void)checked(estimate.distance);
+    if (!std::isfinite(estimate.error)) {
+        throw std::overflow_error("Estimated error is not representable in float32");
+    }
+    return estimate;
+}
+
+// Writes value_at(k) to out[k] for k in [0, count), for rows already validated, and
+// raises OverflowError for the lowest row whose value is not finite. Ranges are
+// written without per-row checks and tested at once; only a failing range is
+// recomputed row by row. out may then be partly written.
 template <typename T, typename ValueAt>
 void write_rows(T* out, size_t count, size_t num_threads, ValueAt value_at) {
-    parallel_rows(count, num_threads, kCheapRows, [&](size_t begin, size_t end) {
-        for (size_t k = begin; k < end; ++k) {
-            out[k] = value_at(k);
-        }
-    });
+    for_each_range(
+        count,
+        num_threads,
+        kCheapRows,
+        [&](size_t begin, size_t end) {
+            for (size_t k = begin; k < end; ++k) {
+                out[k] = value_at(k);
+            }
+            return all_finite_records(out, begin, end);
+        },
+        [&](size_t k) { out[k] = checked(value_at(k)); }
+    );
 }
 
 // --- Layer 1 --------------------------------------------------------------------
@@ -679,7 +709,8 @@ py::array code_factors_rows(
         quant::v1::Factors* factors = caller_out ? staged.data() : data;
         for_each_row(rows, num_threads, kCostlyRows, [&](size_t i) {
             // code_factors checks the row's code values and that the code quantizes the
-            // residual; the binding adds the row number to its message.
+            // residual, and rejects factors that overflow float32; the binding adds the
+            // row number to its message.
             const auto row = [i] {
                 return "codes row " + std::to_string(i) + " for residuals row " +
                        std::to_string(i) + ": ";
@@ -695,6 +726,8 @@ py::array code_factors_rows(
                 );
             } catch (const std::invalid_argument& error) {
                 throw std::invalid_argument(row() + error.what());
+            } catch (const std::overflow_error& error) {
+                throw std::overflow_error(row() + error.what());
             }
         });
         std::copy(staged.begin(), staged.end(), data);
@@ -820,6 +853,7 @@ QueryTerms compute_query_terms(
 // quant::detail::unpacked_ip, the inner product of quant::v1::compute. The arithmetic
 // is v1's, but this file is compiled without FP contraction and api.cpp is not, so
 // distances agree with v1's within float32 rounding rather than bitwise.
+// It is not checked here: write_rows rejects an estimate that is not finite.
 inline Estimate estimate_of(
     float ip, size_t bits, const quant::v1::Factors& f, const QueryTerms& terms
 ) {
@@ -1355,7 +1389,7 @@ class QuantQuery {
                         );
                     }
                 });
-                // Writes the estimates of block b.
+                // Whether block b writes finite estimates.
                 const auto score_block = [&](size_t b) {
                     const auto* block = reinterpret_cast<const char*>(view.row(b));
                     std::array<float, fastscan::kBatchSize> distances{};
@@ -1380,11 +1414,27 @@ class QuantQuery {
                         estimates[begin + lane] = {
                             distances[lane], errors[lane] * terms_.g_error, ips[lane]};
                     }
+                    return all_finite_records(estimates, begin, begin + lanes);
                 };
-                parallel_rows(
-                    num_blocks, num_threads, kCheapRows, [&](size_t first, size_t last) {
+                for_each_range(
+                    num_blocks,
+                    num_threads,
+                    kCheapRows,
+                    [&](size_t first, size_t last) {
                         for (size_t b = first; b < last; ++b) {
-                            score_block(b);
+                            if (!score_block(b)) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    },
+                    [&](size_t b) {
+                        if (score_block(b)) {
+                            return;
+                        }
+                        const size_t begin = b * fastscan::kBatchSize;
+                        for (size_t lane = 0; lane < lanes_of(b); ++lane) {
+                            (void)checked(estimates[begin + lane]);
                         }
                     }
                 );
