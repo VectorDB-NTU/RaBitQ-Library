@@ -18,7 +18,6 @@
 #include <initializer_list>
 #include <limits>
 #include <memory>
-#include <numeric>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -191,6 +190,21 @@ void check_code_values(
             }
         }
     }
+}
+
+// <query, code> of row i for unpacked codes already checked against their bit width.
+template <typename TP>
+float unpacked_row_ip(const float* query, const RowView<TP>& codes, size_t i) {
+    const TP* row = codes.row(i);
+    float ip = 0;
+    (void)quant::detail::unpacked_ip(
+        query,
+        codes.cols,
+        std::numeric_limits<uint32_t>::max(),
+        [row](size_t at) { return row[at]; },
+        ip
+    );
+    return ip;
 }
 
 // A float32 vector copied into owned storage and checked like index inputs. Its length
@@ -644,18 +658,19 @@ struct QueryTerms {
     float g_k1xsumq = 0;
 };
 
+// g_add and g_k1xsumq are quant::v1::prepare_query's; g_error is |q - c|.
 QueryTerms compute_query_terms(
     const float* query, const float* centroid, size_t d, MetricType metric
 ) {
+    const auto corrections = quant::detail::query_corrections(query, centroid, d, metric);
     const float distance_sqr =
-        centroid == nullptr ? l2norm_sqr(query, d) : euclidean_sqr(query, centroid, d);
+        metric == METRIC_L2 ? corrections.g_add
+                            : (centroid == nullptr ? l2norm_sqr(query, d)
+                                                   : euclidean_sqr(query, centroid, d));
     QueryTerms terms;
-    terms.g_add = metric == METRIC_L2
-                      ? distance_sqr
-                      : (centroid == nullptr ? 0.0F : -dot_product(query, centroid, d));
+    terms.g_add = corrections.g_add;
     terms.g_error = std::sqrt(distance_sqr);
-    terms.g_k1xsumq =
-        std::accumulate(query, query + d, 0.0F) * fastscan::detail::code_center(1);
+    terms.g_k1xsumq = corrections.g_k1xsumq;
     if (!std::isfinite(terms.g_add) || !std::isfinite(terms.g_error) ||
         !std::isfinite(terms.g_k1xsumq)) {
         throw std::overflow_error("Query terms are not representable in float32");
@@ -663,6 +678,10 @@ QueryTerms compute_query_terms(
     return terms;
 }
 
+// The estimate of one row by the reference formula. Unpacked codes reach ip through
+// quant::detail::unpacked_ip, the inner product of quant::v1::compute. The arithmetic
+// is v1's, but this file is compiled without FP contraction and api.cpp is not, so
+// distances agree with v1's within float32 rounding rather than bitwise.
 inline Estimate estimate_of(
     float ip, size_t bits, const quant::v1::Factors& f, const QueryTerms& terms
 ) {
@@ -672,17 +691,6 @@ inline Estimate estimate_of(
         ),
         f.error * terms.g_error,
         ip};
-}
-
-// <q, code> for unpacked codes, summed in order as quant::v1::compute does. This is
-// the portable reference path, not a SIMD kernel.
-template <typename TP>
-inline float unpacked_ip(const float* query, const TP* code, size_t d) {
-    float ip = 0;
-    for (size_t j = 0; j < d; ++j) {
-        ip += query[j] * static_cast<float>(code[j]);
-    }
-    return ip;
 }
 
 py::object query_terms(
@@ -1037,7 +1045,7 @@ class QuantQuery {
                         0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
                             const size_t i = selected.row(k);
                             estimates[k] = estimate_of(
-                                unpacked_ip(query_.data(), view.row(i), d()),
+                                unpacked_row_ip(query_.data(), view, i),
                                 nbits,
                                 records[i],
                                 terms_
@@ -1121,9 +1129,9 @@ class QuantQuery {
                 index_detail::parallel_for(
                     0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
                         const size_t i = selected.row(k);
-                        const float ip_ex =
-                            Packed ? ip_func(query_.data(), codes.row(i), d())
-                                   : unpacked_ip(query_.data(), codes.row(i), d());
+                        const float ip_ex = Packed
+                                                ? ip_func(query_.data(), codes.row(i), d())
+                                                : unpacked_row_ip(query_.data(), codes, i);
                         const quant::v1::Factors& f = records[i];
                         distances[k] = quant::detail::full_est_dist_from_ip(
                             (scale * estimates[k].refine_input) + ip_ex,

@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <limits>
 #include <memory_resource>
-#include <numeric>
 #include <stdexcept>
 #include <utility>
 
@@ -165,11 +164,15 @@ uint16_t read_u16(const uint8_t* bytes) {
     return static_cast<uint16_t>(bytes[0] | (uint16_t{bytes[1]} << 8U));
 }
 
+[[noreturn]] void reject_unpacked_code() {
+    throw std::invalid_argument("Unpacked code exceeds the configured bit width");
+}
+
 // The i-th UnpackedU16 code, rejected if it does not fit the configured bit width.
 uint16_t checked_unpacked_code(const uint8_t* bytes, size_t i, uint16_t maximum) {
     const uint16_t value = read_u16(bytes + 2 * i);
     if (value > maximum) {
-        throw std::invalid_argument("Unpacked code exceeds the configured bit width");
+        reject_unpacked_code();
     }
     return value;
 }
@@ -362,12 +365,11 @@ QueryState prepare_query(
     state.total_bits_ = parameters.total_bits;
     state.metric_ = parameters.metric;
     state.extra_ip_ = select_excode_ipfunc(parameters.total_bits - 1);
-    state.g_k1xsumq_ = std::accumulate(query, query + parameters.dim, 0.0F) * -0.5F;
-    state.g_add_ =
-        parameters.metric == METRIC_L2
-            ? (centroid == nullptr ? l2norm_sqr(query, parameters.dim)
-                                   : euclidean_sqr(query, centroid, parameters.dim))
-            : (centroid == nullptr ? 0.0F : -dot_product(query, centroid, parameters.dim));
+    const auto corrections = quant::detail::query_corrections(
+        query, centroid, parameters.dim, parameters.metric
+    );
+    state.g_k1xsumq_ = corrections.g_k1xsumq;
+    state.g_add_ = corrections.g_add;
     if (!std::isfinite(state.g_add_) || !std::isfinite(state.g_k1xsumq_)) {
         throw std::overflow_error("Query factors are not representable in float32");
     }
@@ -392,10 +394,12 @@ float QueryState::compute_checked(
     float ip = 0;
     if (code.layout == CodeLayout::UnpackedU16) {
         const auto* bytes = static_cast<const uint8_t*>(code.codes.data);
-        const auto maximum = static_cast<uint16_t>((1U << parameters.total_bits) - 1);
-        for (size_t i = 0; i < parameters.dim; ++i) {
-            ip += query_wrapper.query_[i] *
-                  static_cast<float>(checked_unpacked_code(bytes, i, maximum));
+        const auto maximum = static_cast<uint32_t>((1U << parameters.total_bits) - 1);
+        const auto code_at = [bytes](size_t i) { return read_u16(bytes + (2 * i)); };
+        if (quant::detail::unpacked_ip(
+                query_wrapper.query_, parameters.dim, maximum, code_at, ip
+            ) != parameters.dim) {
+            reject_unpacked_code();
         }
     } else {
         const size_t ex_bits = parameters.total_bits - 1;
