@@ -86,27 +86,20 @@ v1::Factors code_factors_impl(
     if (code == nullptr) {
         throw std::invalid_argument("code must not be null");
     }
-    const float squared_norm = validation::checked_residual_squared_norm(residual, dim);
+    (void)validation::checked_residual_squared_norm(residual, dim);
 
     // The detail function takes int codes and their offset-binary constant.
     const auto maximum = static_cast<int>((1U << total_bits) - 1);
     const float cb = -static_cast<float>(maximum) / 2.0F;
     std::vector<int> widened(dim);
-    float centered_ip = 0;
     for (size_t i = 0; i < dim; ++i) {
         widened[i] = static_cast<int>(code[i]);
         if (widened[i] > maximum) {
             throw std::invalid_argument("Unpacked code exceeds the configured bit width");
         }
-        centered_ip += residual[i] * (static_cast<float>(widened[i]) + cb);
     }
-    // The factor derivation divides by this inner product; only a code that quantizes
-    // this residual (its own code or a prefix of it) makes it positive.
-    if (squared_norm != 0 && !(centered_ip > 0)) {
-        throw std::invalid_argument(
-            "code does not quantize residual: <residual, centered code> must be positive"
-        );
-    }
+    // The factor derivation rejects a code that does not quantize this residual (its
+    // own code or a prefix of it), testing the inner product it divides by.
 
     std::vector<float> zero;
     if (centroid == nullptr) {

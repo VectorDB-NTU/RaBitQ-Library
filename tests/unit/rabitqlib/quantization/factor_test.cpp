@@ -89,6 +89,74 @@ TEST(RabitqFactorTest, CollinearMetricFactorsFloat) { check_collinear_factors<fl
 
 TEST(RabitqFactorTest, CollinearMetricFactorsDouble) { check_collinear_factors<double>(); }
 
+template <typename T>
+void check_rejected_foreign_code() {
+    constexpr size_t kDim = 64;
+    std::vector<T> residual(kDim), centroid(kDim, T{0});
+    std::vector<int> codes(kDim);
+    T add, rescale, error;
+    for (const auto metric : {METRIC_L2, METRIC_IP}) {
+        // A code of the opposite signs, then one orthogonal to the residual: the
+        // factor derivation divides by <residual, centered code>, which must be > 0.
+        for (const bool orthogonal : {false, true}) {
+            for (size_t i = 0; i < kDim; ++i) {
+                residual[i] = orthogonal && i % 2 == 1 ? T{-1} : T{1};
+                codes[i] = orthogonal ? 1 : 0;
+            }
+            try {
+                rabitq_impl::xy_bits::code_factors(
+                    residual.data(),
+                    centroid.data(),
+                    kDim,
+                    codes.data(),
+                    -0.5F,
+                    add,
+                    rescale,
+                    error,
+                    metric
+                );
+                FAIL() << "Expected rejection of a code that does not quantize residual";
+            } catch (const std::invalid_argument& exception) {
+                EXPECT_STREQ(
+                    exception.what(),
+                    "code does not quantize residual: <residual, centered code> must be "
+                    "positive"
+                );
+            }
+        }
+    }
+}
+
+TEST(RabitqFactorTest, NanInputIsNotCheckedByTheEncoders) {
+    // The per-vector encoders do not check that inputs are finite (quantizer.md); the
+    // rejection of a nonpositive divisor must not turn a NaN into an exception.
+    constexpr size_t kDim = 64;
+    std::vector<float> data(kDim, 0.5F), centroid(kDim, 0), residual(kDim), centered(kDim);
+    data[7] = std::numeric_limits<float>::quiet_NaN();
+    std::vector<int> codes(kDim);
+    float add, rescale, error;
+    rabitq_impl::one_bit::one_bit_code_with_factor_into(
+        data.data(),
+        centroid.data(),
+        kDim,
+        codes.data(),
+        add,
+        rescale,
+        error,
+        METRIC_L2,
+        residual.data(),
+        centered.data()
+    );
+    EXPECT_TRUE(std::isnan(add));
+    EXPECT_TRUE(std::isnan(rescale));
+}
+
+TEST(RabitqFactorTest, ForeignCodeIsRejectedFloat) { check_rejected_foreign_code<float>(); }
+
+TEST(RabitqFactorTest, ForeignCodeIsRejectedDouble) {
+    check_rejected_foreign_code<double>();
+}
+
 TEST(RabitqFactorTest, InvalidMetricMessagesArePreserved) {
     constexpr size_t kDim = 64;
     const auto invalid_metric = static_cast<MetricType>(2);
