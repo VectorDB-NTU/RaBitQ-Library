@@ -414,6 +414,109 @@ def test_out_overlapping_an_input_is_rejected():
         )
 
 
+def test_rejections_name_the_lowest_failing_row_across_threads():
+    _, c, residuals, codes, factors, q = setup("l2", 4, n=1000)
+    query = quant.Query(q, metric="l2", centroid=c)
+    bad = codes.copy()
+    bad[700, 5] = 16
+    bad[300, 9] = 16
+    prefix, _ = quant.split(codes, nbits=4, prefix_bits=1)
+    bitsets = quant.pack_codes(prefix, nbits=1)
+    broken = quant.code_factors(residuals, prefix, nbits=1, metric="l2", centroid=c)
+    broken["error"][[800, 500]] = np.nan
+    out = np.zeros(1000, quant.ESTIMATE_DTYPE)
+    for threads in (1, 4):
+        with pytest.raises(
+            ValueError,
+            match=r"^codes values must be below 2\*\*4 = 16; got 16 at \(300, 9\)$",
+        ):
+            query.estimate_codes(bad, factors, nbits=4, num_threads=threads, out=out)
+        # The vectorized range check fails and the row checks name the cause.
+        with pytest.raises(
+            ValueError, match="^factors must contain only finite values$"
+        ):
+            query.estimate_bitset(bitsets, broken, num_threads=threads, out=out)
+        # A rejected input leaves out= unchanged.
+        assert not out.view(np.float32).any()
+    # With indices=, the first failing entry is reported, not the lowest row.
+    with pytest.raises(ValueError, match=r"got 16 at \(700, 5\)$"):
+        query.estimate_codes(bad, factors, nbits=4, indices=[700, 300])
+
+
+def test_rejected_inputs_leave_out_unchanged():
+    # Inputs are checked in a pass of their own, before out= is written; the failing
+    # rows lie past the first parallel range.
+    _, c, _, codes, factors, q = setup("l2", 4, n=300)
+    query = quant.Query(q, metric="l2", centroid=c)
+    _, ex = quant.split(codes, nbits=4, prefix_bits=1)
+    first = query.estimate_codes(codes, factors, nbits=4)
+    terms = quant.query_terms(q, metric="l2", centroid=c)
+    broken = factors.copy()
+    broken["add"][200] = np.nan
+    bad_ex = ex.copy()
+    bad_ex[100, 3] = 8
+    bad_first = first.copy()
+    bad_first["refine_input"][50] = np.nan
+    bad_ip = first["refine_input"].copy()
+    bad_ip[150] = np.inf
+    distances = np.zeros(300, np.float32)
+    estimates = np.zeros(300, quant.ESTIMATE_DTYPE)
+    finite = "factors must contain only finite values"
+    cases = [
+        (
+            lambda: query.refine(
+                bad_ex, factors, first, ex_bits=3, num_threads=4, out=distances
+            ),
+            r"ex values must be below 2\*\*3 = 8; got 8 at \(100, 3\)",
+        ),
+        (
+            lambda: query.refine(
+                ex, broken, first, ex_bits=3, num_threads=4, out=distances
+            ),
+            finite,
+        ),
+        (
+            lambda: query.refine(
+                ex, factors, bad_first, ex_bits=3, num_threads=4, out=distances
+            ),
+            r"first\['refine_input'\] must contain only finite values",
+        ),
+        (
+            lambda: query.refine_packed(
+                quant.pack_codes(ex, nbits=3),
+                broken,
+                first,
+                ex_bits=3,
+                num_threads=4,
+                out=distances,
+            ),
+            finite,
+        ),
+        (
+            lambda: quant.estimate_from_ip(
+                bad_ip, factors, terms, nbits=4, num_threads=4, out=estimates
+            ),
+            "ip must contain only finite values",
+        ),
+        (
+            lambda: quant.estimate_from_ip(
+                first["refine_input"],
+                broken,
+                terms,
+                nbits=4,
+                num_threads=4,
+                out=estimates,
+            ),
+            finite,
+        ),
+    ]
+    for call, message in cases:
+        with pytest.raises(ValueError, match=message):
+            call()
+        assert not distances.any()
+        assert not estimates.view(np.float32).any()
+
+
 def test_corrupt_pickle_state_is_rejected():
     query = quant.Query.__new__(quant.Query)
     with pytest.raises(ValueError, match="Invalid Query pickle state"):

@@ -190,6 +190,25 @@ def test_hand_built_blocks_with_non_finite_factors_are_rejected():
     query.estimate_fastscan(blocks, num_points=40)
 
 
+def test_rejected_inputs_leave_out_unchanged():
+    # Inputs are checked in a pass of their own, before out= is written.
+    c, bitsets, factors, q = setup("l2", 300)
+    query = quant.Query(q, metric="l2", centroid=c)
+    broken = factors.copy()
+    broken["rescale"][250] = np.nan
+    packed = np.zeros((10, 768), np.uint8)
+    with pytest.raises(ValueError, match="factors must contain only finite values"):
+        quant.pack_fastscan_blocks(bitsets, broken, num_threads=4, out=packed)
+    assert not packed.any()
+    blocks = quant.pack_fastscan_blocks(bitsets, factors)
+    add = 96 * 4  # Lane 0 of the add factors.
+    blocks[7, add : add + 4] = np.frombuffer(np.float32(np.nan).tobytes(), np.uint8)
+    estimates = np.zeros(300, quant.ESTIMATE_DTYPE)
+    with pytest.raises(ValueError, match="block 7 does not"):
+        query.estimate_fastscan(blocks, num_points=300, num_threads=4, out=estimates)
+    assert not estimates.view(np.float32).any()
+
+
 def test_out_overlapping_an_input_is_rejected():
     _, bitsets, factors, _ = setup("l2", 40)
     shared = np.zeros(2 * 768, np.uint8)

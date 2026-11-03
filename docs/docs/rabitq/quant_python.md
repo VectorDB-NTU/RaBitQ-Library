@@ -115,7 +115,7 @@ If your `ip` is itself approximate, `error` covers only the code's quantization 
 - The GIL is released during computation. `Rotator` is immutable and safe to share. Scoring calls on one `Query` may run concurrently; a `set_centroid` during one raises `RuntimeError`. Use `qry.copy()` for one query per thread.
 - `Query` supports `copy.copy`, `copy.deepcopy` and pickling of its query vector, metric and centroid; a copy never shares storage with the original. Queries have no `to_bytes`, because they are not a stored format.
 - Every call that returns an array accepts `out=` with the exact dtype and shape. It must not share memory with any input, or the call raises `ValueError`. If a call raises, a caller's `out=` is left unchanged.
-- Inputs are validated: wrong shapes, dtypes or values raise `ValueError`, and non-finite or oversized coordinates are rejected as the indexes reject them.
+- Inputs are validated: wrong shapes, dtypes or values raise `ValueError`, and non-finite or oversized coordinates are rejected as the indexes reject them. Inputs are checked before anything is computed; within each check, the error reported is that of the first failing row in call order (the lowest row, or the earliest entry of `indices=`), whatever the thread count.
 
 ## Byte formats
 

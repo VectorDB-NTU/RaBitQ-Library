@@ -15,9 +15,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <initializer_list>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <stdexcept>
@@ -172,23 +174,38 @@ Selection selection(const py::object& indices, size_t rows) {
 }
 
 template <typename TP>
-void check_code_values(
-    const RowView<TP>& codes, const Selection& selected, size_t nbits, const char* name
+[[noreturn]] void reject_code_value(
+    const RowView<TP>& codes, size_t i, size_t j, size_t nbits, const char* name
 ) {
+    throw std::invalid_argument(
+        std::string(name) + " values must be below 2**" + std::to_string(nbits) + " = " +
+        std::to_string(size_t{1} << nbits) + "; got " + std::to_string(codes.row(i)[j]) +
+        " at (" + std::to_string(i) + ", " + std::to_string(j) + ")"
+    );
+}
+
+template <typename TP>
+void check_code_row(const RowView<TP>& codes, size_t i, size_t nbits, const char* name) {
     const auto maximum = static_cast<TP>((1U << nbits) - 1);
-    for (size_t k = 0; k < selected.count; ++k) {
-        const size_t i = selected.row(k);
-        const TP* row = codes.row(i);
-        for (size_t j = 0; j < codes.cols; ++j) {
-            if (row[j] > maximum) {
-                throw std::invalid_argument(
-                    std::string(name) + " values must be below 2**" +
-                    std::to_string(nbits) + " = " + std::to_string(size_t{1} << nbits) +
-                    "; got " + std::to_string(row[j]) + " at (" + std::to_string(i) + ", " +
-                    std::to_string(j) + ")"
-                );
-            }
-        }
+    const TP* row = codes.row(i);
+    // A vectorizable maximum first; the position is searched only for a rejected row.
+    TP largest = 0;
+    for (size_t j = 0; j < codes.cols; ++j) {
+        largest = std::max(largest, row[j]);
+    }
+    if (largest > maximum) {
+        reject_code_value(
+            codes,
+            i,
+            static_cast<size_t>(
+                std::find_if(
+                    row, row + codes.cols, [&](TP value) { return value > maximum; }
+                ) -
+                row
+            ),
+            nbits,
+            name
+        );
     }
 }
 
@@ -205,6 +222,12 @@ float unpacked_row_ip(const float* query, const RowView<TP>& codes, size_t i) {
         ip
     );
     return ip;
+}
+
+void check_finite_factor(const quant::v1::Factors& f) {
+    if (!std::isfinite(f.add) || !std::isfinite(f.rescale) || !std::isfinite(f.error)) {
+        throw std::invalid_argument("factors must contain only finite values");
+    }
 }
 
 // A float32 vector copied into owned storage and checked like index inputs. Its length
@@ -401,16 +424,137 @@ Records<quant::v1::Factors> factors_input(py::handle value, size_t rows, const c
     return records;
 }
 
-// Factors are read only for the selected rows; call with the GIL released.
-void check_finite_factors(
-    const Records<quant::v1::Factors>& factors, const Selection& selected
-) {
-    for (size_t k = 0; k < selected.count; ++k) {
-        const quant::v1::Factors& f = factors[selected.row(k)];
-        if (!std::isfinite(f.add) || !std::isfinite(f.rescale) || !std::isfinite(f.error)) {
-            throw std::invalid_argument("factors must contain only finite values");
+// --- Parallel rows ----------------------------------------------------------------
+
+// parallel_for hands out one index at a time from a shared counter, which costs more
+// than a cheap row. Rows go out in ranges instead, about eight per worker and at least
+// min_rows long: kCheapRows for rows of up to a few hundred nanoseconds, such as
+// scoring, packing and checks, and kCostlyRows for rotate, quantize and code_factors,
+// whose rows cost enough that a small batch should still use every worker.
+constexpr size_t kCheapRows = 64;
+constexpr size_t kCostlyRows = 1;
+
+// Runs task(begin, end) on consecutive ranges covering [0, rows). Call with the GIL
+// released.
+template <typename Task>
+void parallel_rows(size_t rows, size_t num_threads, size_t min_rows, Task task) {
+    if (rows == 0) {
+        return;
+    }
+    const size_t workers = resolve_num_threads(num_threads);
+    const size_t task_rows = std::max(min_rows, div_round_up(rows, workers * 8));
+    index_detail::parallel_for(
+        0, div_round_up(rows, task_rows), workers, [&](size_t t, size_t /*worker*/) {
+            const size_t begin = t * task_rows;
+            task(begin, std::min(rows, begin + task_rows));
+        }
+    );
+}
+
+// The exception of the lowest failing row of a parallel loop, so the error a call
+// raises does not depend on the thread schedule. Rows after a recorded failure are
+// skipped.
+class FirstFailure {
+   public:
+    explicit FirstFailure(size_t rows) : row_(rows) {}
+
+    // A stale value only delays the skip; record() decides under the lock.
+    [[nodiscard]] bool after(size_t row) const {
+        return row > row_.load(std::memory_order_relaxed);
+    }
+
+    // Call from the catch block of the failing row.
+    void record(size_t row) {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (row < row_.load()) {
+            row_.store(row);
+            error_ = std::current_exception();
         }
     }
+
+    void rethrow() const {
+        if (error_) {
+            std::rethrow_exception(error_);
+        }
+    }
+
+   private:
+    std::atomic<size_t> row_;
+    std::mutex mutex_;
+    std::exception_ptr error_;
+};
+
+// Runs row(i) for every i in [0, rows) and rethrows the lowest failing row's exception.
+// range(begin, end) first handles a whole range without per-row checks, so its loops
+// can vectorize, and returns false if any row in it fails; only such a range runs
+// through row(i), whose checks find that row. range must not throw.
+template <typename Range, typename Row>
+void for_each_range(
+    size_t rows, size_t num_threads, size_t min_rows, Range range, Row row
+) {
+    FirstFailure failure(rows);
+    parallel_rows(rows, num_threads, min_rows, [&](size_t begin, size_t end) {
+        if (failure.after(begin) || range(begin, end)) {
+            return;
+        }
+        for (size_t i = begin; i < end && !failure.after(i); ++i) {
+            try {
+                row(i);
+            } catch (...) {
+                failure.record(i);
+                return;
+            }
+        }
+    });
+    failure.rethrow();
+}
+
+template <typename Row>
+void for_each_row(size_t rows, size_t num_threads, size_t min_rows, Row row) {
+    for_each_range(
+        rows,
+        num_threads,
+        min_rows,
+        [](size_t /*begin*/, size_t /*end*/) { return false; },
+        row
+    );
+}
+
+template <typename TP>
+void check_code_values(
+    const RowView<TP>& codes, size_t nbits, const char* name, size_t num_threads
+) {
+    for_each_row(codes.rows, num_threads, kCheapRows, [&](size_t i) {
+        check_code_row(codes, i, nbits, name);
+    });
+}
+
+// Whether every float of records [begin, end) is finite.
+template <typename T>
+bool all_finite_records(const T* records, size_t begin, size_t end) {
+    static_assert(sizeof(T) == 3 * sizeof(float));
+    return all_finite(reinterpret_cast<const float*>(records + begin), 3 * (end - begin));
+}
+
+// A vectorized test that the selected rows [begin, end) have finite factors, for every
+// row selected; false means only that the rows must be checked one by one.
+bool finite_factor_range(
+    const Records<quant::v1::Factors>& factors,
+    const Selection& selected,
+    size_t begin,
+    size_t end
+) {
+    return selected.indices == nullptr && all_finite_records(factors.data, begin, end);
+}
+
+// Writes value_at(k) to out[k] for k in [0, count), for rows already validated.
+template <typename T, typename ValueAt>
+void write_rows(T* out, size_t count, size_t num_threads, ValueAt value_at) {
+    parallel_rows(count, num_threads, kCheapRows, [&](size_t begin, size_t end) {
+        for (size_t k = begin; k < end; ++k) {
+            out[k] = value_at(k);
+        }
+    });
 }
 
 // --- Layer 1 --------------------------------------------------------------------
@@ -455,13 +599,13 @@ py::array quantize(
         {
             py::gil_scoped_release release;
             check_coordinates(input.data(), rows * d, d, "residuals");
-            index_detail::parallel_for(
-                0, rows, num_threads, [&](size_t i, size_t /*thread*/) {
+            parallel_rows(rows, num_threads, kCostlyRows, [&](size_t begin, size_t end) {
+                for (size_t i = begin; i < end; ++i) {
                     quant::provisional::combined_code(
                         input.data() + (i * d), d, nbits, view.row(i), t_const
                     );
                 }
-            );
+            });
         }
         return view.owner;
     };
@@ -479,10 +623,9 @@ py::tuple split_rows(const RowView<TP>& codes, size_t nbits, size_t prefix_bits)
     auto ex = new_rows<uint8_t>(codes.rows, codes.cols);
     uint8_t* prefix_data = prefix.mutable_data();
     uint8_t* ex_data = ex.mutable_data();
-    const Selection every_row = all_rows(codes.rows);
     {
         py::gil_scoped_release release;
-        check_code_values(codes, every_row, nbits, "codes");
+        check_code_values(codes, nbits, "codes", 1);
         for (size_t i = 0; i < codes.rows; ++i) {
             const TP* row = codes.row(i);
             for (size_t j = 0; j < codes.cols; ++j) {
@@ -526,39 +669,34 @@ py::array code_factors_rows(
         rows,
         {{"residuals", residuals}, {"codes", codes.owner}}
     );
+    const bool caller_out = !out.is_none();
     {
         py::gil_scoped_release release;
         check_coordinates(residuals.data(), rows * d, d, "residuals");
-        // A caller's out= is written only after every row succeeds.
-        std::vector<quant::v1::Factors> staged(out.is_none() ? 0 : rows);
-        quant::v1::Factors* factors = out.is_none() ? data : staged.data();
-        // code_factors checks each row's code values and that the code quantizes the
-        // residual; the binding adds the row number to its message.
-        const auto factors_of = [&](size_t i) {
-            return quant::provisional::code_factors(
-                residuals.data() + (i * d), centroid.data(), d, codes.row(i), nbits, metric
-            );
-        };
-        // Report the lowest rejected row, whatever the thread schedule.
-        std::atomic<size_t> first_rejected{rows};
-        index_detail::parallel_for(0, rows, num_threads, [&](size_t i, size_t /*thread*/) {
+        // code_factors checks while it computes, so a caller's out= is written only after
+        // every row succeeds.
+        std::vector<quant::v1::Factors> staged(caller_out ? rows : 0);
+        quant::v1::Factors* factors = caller_out ? staged.data() : data;
+        for_each_row(rows, num_threads, kCostlyRows, [&](size_t i) {
+            // code_factors checks the row's code values and that the code quantizes the
+            // residual; the binding adds the row number to its message.
+            const auto row = [i] {
+                return "codes row " + std::to_string(i) + " for residuals row " +
+                       std::to_string(i) + ": ";
+            };
             try {
-                factors[i] = factors_of(i);
-            } catch (const std::invalid_argument&) {
-                size_t current = first_rejected.load();
-                while (i < current && !first_rejected.compare_exchange_weak(current, i)) {}
+                factors[i] = quant::provisional::code_factors(
+                    residuals.data() + (i * d),
+                    centroid.data(),
+                    d,
+                    codes.row(i),
+                    nbits,
+                    metric
+                );
+            } catch (const std::invalid_argument& error) {
+                throw std::invalid_argument(row() + error.what());
             }
         });
-        if (const size_t i = first_rejected.load(); i < rows) {
-            try {
-                (void)factors_of(i);
-            } catch (const std::invalid_argument& error) {
-                throw std::invalid_argument(
-                    "codes row " + std::to_string(i) + " for residuals row " +
-                    std::to_string(i) + ": " + error.what()
-                );
-            }
-        }
         std::copy(staged.begin(), staged.end(), data);
     }
     return result;
@@ -606,17 +744,17 @@ py::array pack_codes(
     const size_t d = checked_working_dim(view.cols, view.owner, "codes");
     const auto packed =
         output_rows<uint8_t>(out, view.rows, d * nbits / 8, {{"codes", view.owner}});
-    const Selection every_row = all_rows(view.rows);
     {
         py::gil_scoped_release release;
-        check_code_values(view, every_row, nbits, "codes");
-        index_detail::parallel_for(
-            0, view.rows, num_threads, [&](size_t i, size_t /*thread*/) {
+        // Checked in a pass of its own, so a rejected call leaves out= unchanged.
+        check_code_values(view, nbits, "codes", num_threads);
+        parallel_rows(view.rows, num_threads, kCheapRows, [&](size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i) {
                 quant::rabitq_impl::ex_bits::packing_rabitqplus_code(
                     view.row(i), packed.row(i), d, nbits
                 );
             }
-        );
+        });
     }
     return packed.owner;
 }
@@ -638,13 +776,13 @@ py::array unpack_codes(
     const auto codes = output_rows<uint8_t>(out, view.rows, d, {{"packed", view.owner}});
     {
         py::gil_scoped_release release;
-        index_detail::parallel_for(
-            0, view.rows, num_threads, [&](size_t i, size_t /*thread*/) {
+        parallel_rows(view.rows, num_threads, kCheapRows, [&](size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i) {
                 quant::rabitq_impl::ex_bits::unpacking_rabitqplus_code(
                     view.row(i), codes.row(i), d, nbits
                 );
             }
-        );
+        });
     }
     return codes.owner;
 }
@@ -745,12 +883,23 @@ py::array estimate_from_ip(
     const Selection every_row = all_rows(rows);
     {
         py::gil_scoped_release release;
-        if (!all_finite(ips.data(), rows)) {
-            throw std::invalid_argument("ip must contain only finite values");
-        }
-        check_finite_factors(records, every_row);
-        index_detail::parallel_for(0, rows, num_threads, [&](size_t i, size_t /*thread*/) {
-            estimates[i] = estimate_of(ips.data()[i], nbits, records[i], query);
+        for_each_range(
+            rows,
+            num_threads,
+            kCheapRows,
+            [&](size_t begin, size_t end) {
+                return all_finite(ips.data() + begin, end - begin) &&
+                       finite_factor_range(records, every_row, begin, end);
+            },
+            [&](size_t i) {
+                if (!std::isfinite(ips.data()[i])) {
+                    throw std::invalid_argument("ip must contain only finite values");
+                }
+                check_finite_factor(records[i]);
+            }
+        );
+        write_rows(estimates, rows, num_threads, [&](size_t i) {
+            return estimate_of(ips.data()[i], nbits, records[i], query);
         });
     }
     return result;
@@ -797,18 +946,23 @@ py::array pack_fastscan_blocks(
     const Selection every_row = all_rows(n);
     {
         py::gil_scoped_release release;
-        check_finite_factors(records, every_row);
-        // One block of sign bytes per worker, in the order the FastScan packer reads:
-        // the first coordinate of each byte in its highest bit.
-        const size_t workers =
-            std::max<size_t>(1, std::min(resolve_num_threads(num_threads), num_blocks));
-        std::vector<uint8_t> scratch(workers * fastscan::kBatchSize * codes.cols);
-        index_detail::parallel_for(
-            0, num_blocks, num_threads, [&](size_t b, size_t thread) {
+        // Checked in a pass of its own, so a rejected call leaves out= unchanged.
+        for_each_range(
+            n,
+            num_threads,
+            kCheapRows,
+            [&](size_t begin, size_t end) {
+                return finite_factor_range(records, every_row, begin, end);
+            },
+            [&](size_t i) { check_finite_factor(records[i]); }
+        );
+        parallel_rows(num_blocks, num_threads, kCheapRows, [&](size_t first, size_t last) {
+            // One block of sign bytes in the order the FastScan packer reads: the first
+            // coordinate of each byte in its highest bit.
+            std::vector<uint8_t> msb_first(fastscan::kBatchSize * codes.cols);
+            for (size_t b = first; b < last; ++b) {
                 const size_t begin = b * fastscan::kBatchSize;
                 const size_t lanes = std::min(fastscan::kBatchSize, n - begin);
-                uint8_t* msb_first =
-                    scratch.data() + (thread * fastscan::kBatchSize * codes.cols);
                 for (size_t lane = 0; lane < lanes; ++lane) {
                     const uint8_t* row = codes.row(begin + lane);
                     for (size_t byte = 0; byte < codes.cols; ++byte) {
@@ -816,7 +970,7 @@ py::array pack_fastscan_blocks(
                     }
                 }
                 uint8_t* block = blocks.row(b);
-                fastscan::pack_codes(d, msb_first, lanes, block);
+                fastscan::pack_codes(d, msb_first.data(), lanes, block);
                 BatchDataMap<float> map(reinterpret_cast<char*>(block), d);
                 for (size_t lane = 0; lane < fastscan::kBatchSize; ++lane) {
                     const quant::v1::Factors f =
@@ -826,7 +980,7 @@ py::array pack_fastscan_blocks(
                     map.f_error()[lane] = f.error;
                 }
             }
-        );
+        });
     }
     return blocks.owner;
 }
@@ -1002,15 +1156,21 @@ class QuantQuery {
             const auto ip_func = select_excode_ipfunc(1);
             {
                 py::gil_scoped_release release;
-                check_finite_factors(records, selected);
-                index_detail::parallel_for(
-                    0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
-                        const size_t i = selected.row(k);
-                        estimates[k] = estimate_of(
-                            ip_func(query_.data(), codes.row(i), d()), 1, records[i], terms_
-                        );
-                    }
+                for_each_range(
+                    selected.count,
+                    num_threads,
+                    kCheapRows,
+                    [&](size_t begin, size_t end) {
+                        return finite_factor_range(records, selected, begin, end);
+                    },
+                    [&](size_t k) { check_finite_factor(records[selected.row(k)]); }
                 );
+                write_rows(estimates, selected.count, num_threads, [&](size_t k) {
+                    const size_t i = selected.row(k);
+                    return estimate_of(
+                        ip_func(query_.data(), codes.row(i), d()), 1, records[i], terms_
+                    );
+                });
             }
             return result;
         });
@@ -1039,19 +1199,20 @@ class QuantQuery {
                 );
                 {
                     py::gil_scoped_release release;
-                    check_code_values(view, selected, nbits, "codes");
-                    check_finite_factors(records, selected);
-                    index_detail::parallel_for(
-                        0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
-                            const size_t i = selected.row(k);
-                            estimates[k] = estimate_of(
-                                unpacked_row_ip(query_.data(), view, i),
-                                nbits,
-                                records[i],
-                                terms_
-                            );
-                        }
-                    );
+                    for_each_row(selected.count, num_threads, kCheapRows, [&](size_t k) {
+                        const size_t i = selected.row(k);
+                        check_code_row(view, i, nbits, "codes");
+                        check_finite_factor(records[i]);
+                    });
+                    write_rows(estimates, selected.count, num_threads, [&](size_t k) {
+                        const size_t i = selected.row(k);
+                        return estimate_of(
+                            unpacked_row_ip(query_.data(), view, i),
+                            nbits,
+                            records[i],
+                            terms_
+                        );
+                    });
                 }
                 return result;
             };
@@ -1115,34 +1276,32 @@ class QuantQuery {
             const auto scale = static_cast<float>(1U << ex_bits);
             {
                 py::gil_scoped_release release;
-                if constexpr (!Packed) {
-                    check_code_values(codes, selected, ex_bits, name);
-                }
-                check_finite_factors(records, selected);
-                for (size_t k = 0; k < estimates.rows; ++k) {
+                for_each_row(selected.count, num_threads, kCheapRows, [&](size_t k) {
+                    const size_t i = selected.row(k);
+                    if constexpr (!Packed) {
+                        check_code_row(codes, i, ex_bits, name);
+                    }
+                    check_finite_factor(records[i]);
                     if (!std::isfinite(estimates[k].refine_input)) {
                         throw std::invalid_argument(
                             "first['refine_input'] must contain only finite values"
                         );
                     }
-                }
-                index_detail::parallel_for(
-                    0, selected.count, num_threads, [&](size_t k, size_t /*thread*/) {
-                        const size_t i = selected.row(k);
-                        const float ip_ex = Packed
-                                                ? ip_func(query_.data(), codes.row(i), d())
-                                                : unpacked_row_ip(query_.data(), codes, i);
-                        const quant::v1::Factors& f = records[i];
-                        distances[k] = quant::detail::full_est_dist_from_ip(
-                            (scale * estimates[k].refine_input) + ip_ex,
-                            total_bits,
-                            f.add,
-                            f.rescale,
-                            terms_.g_add,
-                            terms_.g_k1xsumq
-                        );
-                    }
-                );
+                });
+                write_rows(distances, selected.count, num_threads, [&](size_t k) {
+                    const size_t i = selected.row(k);
+                    const float ip_ex = Packed ? ip_func(query_.data(), codes.row(i), d())
+                                               : unpacked_row_ip(query_.data(), codes, i);
+                    const quant::v1::Factors& f = records[i];
+                    return quant::detail::full_est_dist_from_ip(
+                        (scale * estimates[k].refine_input) + ip_ex,
+                        total_bits,
+                        f.add,
+                        f.rescale,
+                        terms_.g_add,
+                        terms_.g_k1xsumq
+                    );
+                });
             }
             return result;
         });
@@ -1168,51 +1327,64 @@ class QuantQuery {
             const SplitBatchQuery<float>& query = batch_query();
             {
                 py::gil_scoped_release release;
+                const auto lanes_of = [&](size_t b) {
+                    return std::min(
+                        fastscan::kBatchSize, num_points - (b * fastscan::kBatchSize)
+                    );
+                };
                 // Hand-built blocks get the finite-factor check of the other calls.
-                for (size_t b = 0; b < num_blocks; ++b) {
+                const auto finite_factors = [&](size_t b) {
                     const ConstBatchDataMap<float> map(
                         reinterpret_cast<const char*>(view.row(b)), d()
                     );
                     std::array<float, fastscan::kBatchSize> values{};
-                    const size_t lanes = std::min(
-                        fastscan::kBatchSize, num_points - (b * fastscan::kBatchSize)
-                    );
                     for (const auto& field :
                          {map.f_add(), map.f_rescale(), map.f_error()}) {
                         field.copy_to(values.data(), values.size());
-                        if (!all_finite(values.data(), lanes)) {
-                            throw std::invalid_argument(
-                                "blocks must contain only finite factors; block " +
-                                std::to_string(b) + " does not"
-                            );
+                        if (!all_finite(values.data(), lanes_of(b))) {
+                            return false;
                         }
                     }
-                }
-                index_detail::parallel_for(
-                    0, num_blocks, num_threads, [&](size_t b, size_t /*thread*/) {
-                        std::array<float, fastscan::kBatchSize> distances{};
-                        std::array<float, fastscan::kBatchSize> lower_bounds{};
-                        std::array<float, fastscan::kBatchSize> ips{};
-                        std::array<float, fastscan::kBatchSize> errors{};
-                        const auto* block = reinterpret_cast<const char*>(view.row(b));
-                        split_batch_estdist(
-                            block,
-                            query,
-                            d(),
-                            distances.data(),
-                            lower_bounds.data(),
-                            ips.data(),
-                            true
+                    return true;
+                };
+                for_each_row(num_blocks, num_threads, kCheapRows, [&](size_t b) {
+                    if (!finite_factors(b)) {
+                        throw std::invalid_argument(
+                            "blocks must contain only finite factors; block " +
+                            std::to_string(b) + " does not"
                         );
-                        ConstBatchDataMap<float>(block, d())
-                            .f_error()
-                            .copy_to(errors.data(), errors.size());
-                        const size_t begin = b * fastscan::kBatchSize;
-                        const size_t lanes =
-                            std::min(fastscan::kBatchSize, num_points - begin);
-                        for (size_t lane = 0; lane < lanes; ++lane) {
-                            estimates[begin + lane] = {
-                                distances[lane], errors[lane] * terms_.g_error, ips[lane]};
+                    }
+                });
+                // Writes the estimates of block b.
+                const auto score_block = [&](size_t b) {
+                    const auto* block = reinterpret_cast<const char*>(view.row(b));
+                    std::array<float, fastscan::kBatchSize> distances{};
+                    std::array<float, fastscan::kBatchSize> lower_bounds{};
+                    std::array<float, fastscan::kBatchSize> ips{};
+                    std::array<float, fastscan::kBatchSize> errors{};
+                    ConstBatchDataMap<float>(block, d())
+                        .f_error()
+                        .copy_to(errors.data(), errors.size());
+                    split_batch_estdist(
+                        block,
+                        query,
+                        d(),
+                        distances.data(),
+                        lower_bounds.data(),
+                        ips.data(),
+                        true
+                    );
+                    const size_t begin = b * fastscan::kBatchSize;
+                    const size_t lanes = lanes_of(b);
+                    for (size_t lane = 0; lane < lanes; ++lane) {
+                        estimates[begin + lane] = {
+                            distances[lane], errors[lane] * terms_.g_error, ips[lane]};
+                    }
+                };
+                parallel_rows(
+                    num_blocks, num_threads, kCheapRows, [&](size_t first, size_t last) {
+                        for (size_t b = first; b < last; ++b) {
+                            score_block(b);
                         }
                     }
                 );
@@ -1412,11 +1584,11 @@ class QuantRotator {
         {
             py::gil_scoped_release release;
             check_coordinates(input.data(), rows * dim_, dim_, "x");
-            index_detail::parallel_for(
-                0, rows, num_threads, [&](size_t i, size_t /*thread*/) {
+            parallel_rows(rows, num_threads, kCostlyRows, [&](size_t begin, size_t end) {
+                for (size_t i = begin; i < end; ++i) {
                     rotator_->rotate(input.data() + (i * dim_), view.row(i));
                 }
-            );
+            });
         }
         return view.owner;
     }

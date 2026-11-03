@@ -296,3 +296,25 @@ def test_code_factors_leaves_out_unchanged_on_rejection():
     with pytest.raises(ValueError, match="codes row 4 for residuals row 4"):
         quant.code_factors(x, codes, nbits=4, metric="l2", out=out)
     assert not out.view(np.float32).any()
+
+
+def test_rejected_codes_leave_pack_out_unchanged():
+    # The codes are checked in a pass of their own, before out= is written.
+    codes = quant.quantize(residuals(300, seed=11), nbits=4)
+    codes[200, 7] = 16
+    out = np.zeros((300, D * 4 // 8), np.uint8)
+    with pytest.raises(ValueError, match=r"got 16 at \(200, 7\)$"):
+        quant.pack_codes(codes, nbits=4, num_threads=4, out=out)
+    assert not out.any()
+
+
+def test_code_factors_names_the_lowest_rejected_row_across_threads():
+    # 1000 rows span several parallel ranges; the lowest rejected row is reported.
+    x = residuals(1000, seed=10)
+    codes = quant.quantize(x, nbits=4)
+    codes[[700, 300]] = 15 - codes[[700, 300]]
+    for threads in (1, 4):
+        with pytest.raises(
+            ValueError, match="^codes row 300 for residuals row 300: code does not"
+        ):
+            quant.code_factors(x, codes, nbits=4, metric="l2", num_threads=threads)
