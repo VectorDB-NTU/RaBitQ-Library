@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <numeric>
 #include <optional>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "rabitqlib/core/detail/rabitq_impl.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/types.hpp"  // IWYU pragma: export
+#include "rabitqlib/utils/space.hpp"
 
 namespace rabitqlib::quant {
 
@@ -310,6 +312,50 @@ inline T full_est_dist_from_ip(
 ) {
     return f_add + g_add +
            (f_rescale * (ip + g_k1xsumq * static_cast<float>((1 << bits) - 1)));
+}
+
+// query_corrections and unpacked_ip back the stable quant::v1 prepare_query and compute
+// as well as rabitqlib.quant. A change to either changes v1 results: validate v1
+// output against a saved pre-change build ("Stable core API changes" in
+// docs/development.md), not only the provisional layer's tests.
+
+// The query terms of full_est_dist_from_ip for a rotated query and a centroid (nullptr
+// means zero): g_add is |q - c|^2 for L2 and -<q, c> for IP; g_k1xsumq is
+// -0.5 * sum(q). Callers check that both are finite.
+struct QueryCorrections {
+    float g_add;
+    float g_k1xsumq;
+};
+
+inline QueryCorrections query_corrections(
+    const float* query, const float* centroid, size_t dim, MetricType metric
+) {
+    QueryCorrections corrections{};
+    corrections.g_k1xsumq = std::accumulate(query, query + dim, 0.0F) * -0.5F;
+    corrections.g_add =
+        metric == METRIC_L2
+            ? (centroid == nullptr ? l2norm_sqr(query, dim)
+                                   : euclidean_sqr(query, centroid, dim))
+            : (centroid == nullptr ? 0.0F : -dot_product(query, centroid, dim));
+    return corrections;
+}
+
+// <query, code> for unpacked codes, summed in order: the reference inner product of
+// quant::v1::compute. code_at(i) returns the i-th code value. Returns dim, or the index
+// of the first code above maximum, in which case ip is incomplete.
+template <typename CodeAt>
+inline size_t unpacked_ip(
+    const float* query, size_t dim, uint32_t maximum, CodeAt code_at, float& ip
+) {
+    ip = 0;
+    for (size_t i = 0; i < dim; ++i) {
+        const uint32_t value = code_at(i);
+        if (value > maximum) {
+            return i;
+        }
+        ip += query[i] * static_cast<float>(value);
+    }
+    return dim;
 }
 }  // namespace detail
 

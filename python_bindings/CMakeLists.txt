@@ -17,6 +17,7 @@ pybind11_add_module(_rabitqlib
     ivf_bindings.cpp
     symqg_bindings.cpp
     kmeans_bindings.cpp
+    quant_bindings.cpp
 )
 
 add_library(rabitqlib::python ALIAS _rabitqlib)
@@ -27,6 +28,13 @@ target_include_directories(_rabitqlib PRIVATE
 rabitq_configure_target(_rabitqlib)
 # Release preparation keeps this in sync with the Python package version.
 target_compile_definitions(_rabitqlib PRIVATE RABITQ_VERSION="${PROJECT_VERSION}")
+# rabitqlib.quant results must not depend on the thread count or call site. GCC
+# contracts a * b + c into FMA per compiled loop (the default -ffp-contract=fast on
+# aarch64 or with -mfma), so the serial and OpenMP loops could round the inlined
+# estimator differently. MSVC does not contract by default.
+set_source_files_properties(quant_bindings.cpp PROPERTIES COMPILE_OPTIONS
+    "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-ffp-contract=off>"
+)
 
 # 4. Imported targets provide the matching Python, NumPy, and OpenMP settings.
 target_link_libraries(_rabitqlib PRIVATE
@@ -60,7 +68,7 @@ endif()
 # 5. Map files to a 'rabitqlib' directory
 # inside the target wheel, completely bypassing your local layout.
 install(TARGETS _rabitqlib DESTINATION rabitqlib)
-install(FILES __init__.py __init__.pyi py.typed DESTINATION rabitqlib)
+install(FILES __init__.py __init__.pyi py.typed quant.py quant.pyi DESTINATION rabitqlib)
 
 if(RABITQ_BUILD_BENCHMARKS)
     # Benchmark the production conversion helper without importing or replacing

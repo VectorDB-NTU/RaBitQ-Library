@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -69,7 +68,14 @@ inline CodeFactorTerms<T> code_factor_terms(
     const T l2_norm = std::sqrt(l2_sqr);
     const T ip_resi_xucb = dot_product<T>(residual, centered, dim);
     const T ip_cent_xucb = dot_product<T>(centroid, centered, dim);
-    assert(ip_resi_xucb > 0);
+    // The library's own codes match the residual's signs, so every term is
+    // nonnegative; only a caller-supplied code can make the divisor nonpositive. A NaN
+    // passes: the per-vector encoders do not check that inputs are finite.
+    if (ip_resi_xucb <= 0) {
+        throw std::invalid_argument(
+            "code does not quantize residual: <residual, centered code> must be positive"
+        );
+    }
 
     // Cauchy-Schwarz makes this nonnegative; collinear vectors can round below zero.
     const T normalized_error =

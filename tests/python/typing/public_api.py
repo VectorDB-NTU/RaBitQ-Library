@@ -18,6 +18,7 @@ from rabitqlib import (
     RaBitQKMeansIterationStats,
     RaBitQKMeansParameters,
     SymqgIndex,
+    quant,
 )
 
 
@@ -273,3 +274,65 @@ def check_paths(
         assert_type(SymqgIndex.load(filename), SymqgIndex)
     ivf.save(42)  # type: ignore[arg-type]
     HnswIndex.load(object())  # type: ignore[arg-type]
+
+
+def check_quant(x: npt.NDArray[np.float32]) -> None:
+    rotator = quant.Rotator(64, method="fht_kac", seed=0)
+    assert_type(rotator.padded_dim, int)
+    assert_type(rotator.seed, int | None)
+    assert_type(rotator.method, Literal["fht_kac", "matrix"])
+    residuals = rotator.rotate(x, num_threads=1)
+    assert_type(residuals, npt.NDArray[np.float32])
+    assert_type(quant.Rotator.from_bytes(rotator.to_bytes()), quant.Rotator)
+    codes = quant.quantize(residuals, nbits=4)
+    assert_type(codes, npt.NDArray[np.uint8])
+    assert_type(quant.quantize(residuals, nbits=9), npt.NDArray[np.uint16])
+    prefix, ex = quant.split(codes, nbits=4, prefix_bits=1)
+    assert_type(prefix, npt.NDArray[np.uint8])
+    assert_type(
+        quant.split(codes, nbits=4, prefix_bits=1, num_threads=2, out=(prefix, ex)),
+        tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]],
+    )
+    factors = quant.code_factors(residuals, codes, nbits=4, metric="l2")
+    assert_type(factors, npt.NDArray[np.void])
+    assert_type(quant.pack_codes(ex, nbits=3), npt.NDArray[np.uint8])
+    assert_type(
+        quant.unpack_codes(quant.pack_codes(ex, nbits=3), nbits=3),
+        npt.NDArray[np.uint8],
+    )
+    assert_type(quant.padded_dim(100), int)
+    assert_type(quant.FACTORS_DTYPE, np.dtype[np.void])
+    assert issubclass(quant.FormatError, ValueError)
+    f_prefix = quant.code_factors(residuals, prefix, nbits=1, metric="l2")
+    query = quant.Query(residuals[0], metric="l2", centroid=None)
+    assert_type(query.metric, Literal["l2", "ip"])
+    bitsets = quant.pack_codes(prefix, nbits=1)
+    first = query.estimate_bitset(bitsets, f_prefix, indices=[0], num_threads=1)
+    assert_type(first, npt.NDArray[np.void])
+    assert_type(query.estimate_codes(codes, factors, nbits=4), npt.NDArray[np.void])
+    assert_type(
+        query.refine(ex, factors, first, ex_bits=3, indices=[0]),
+        npt.NDArray[np.float32],
+    )
+    assert_type(
+        query.refine_packed(quant.pack_codes(ex, nbits=3), factors, first, ex_bits=3),
+        npt.NDArray[np.float32],
+    )
+    query.set_centroid(None)
+    assert_type(query.copy(), quant.Query)
+    terms = quant.query_terms(residuals[0], metric="ip")
+    assert_type(terms, np.void)
+    assert_type(
+        quant.estimate_from_ip(first["refine_input"], f_prefix, terms, nbits=1),
+        npt.NDArray[np.void],
+    )
+    blocks = quant.pack_fastscan_blocks(bitsets, f_prefix, num_threads=0)
+    assert_type(blocks, npt.NDArray[np.uint8])
+    assert_type(
+        query.estimate_fastscan(blocks, num_points=len(bitsets)), npt.NDArray[np.void]
+    )
+    assert_type(quant.FASTSCAN_BLOCKS_VERSION, int)
+    quant.Query(residuals[0], metric="cosine")  # type: ignore[arg-type]
+    quant.code_factors(residuals, codes, nbits=4, metric="cosine")  # type: ignore[arg-type]
+    quant.quantize(residuals, 4)  # type: ignore[call-overload]
+    quant.Rotator(64, method="hadamard")  # type: ignore[arg-type]

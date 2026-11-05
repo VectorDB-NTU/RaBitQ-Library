@@ -41,6 +41,7 @@ factors estimate L2 distance or inner product.
 | Path | Responsibility |
 | --- | --- |
 | `include/rabitqlib/core/api.hpp` | Stable float32 v1 API; code/factors separate, caller workspace, source compatibility |
+| `include/rabitqlib/core/provisional/` | Provisional quantization API (`quant::provisional`) behind `rabitqlib.quant`; may change in any minor release and is not part of v1 |
 | `include/rabitqlib/core/` | Per-vector encoding, query/estimation, rotation and per-vector byte layouts |
 | `include/rabitqlib/fastscan/` | All 32-vector batch layouts, encoding adapters, packing, LUT/estimation and FastScan/HACC |
 | `include/rabitqlib/core/types.hpp`, `core/detail/eigen.hpp` | Numerical configuration/types and internal Eigen aliases, respectively |
@@ -48,13 +49,14 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
-| `src/core/` | Compiled stable core v1 API implementation and the frozen `faster_config` scale table |
+| `src/core/` | Compiled stable core v1 API and provisional API implementations, and the frozen `faster_config` scale table |
+| `docs/formats.md` | Versioned byte formats of `rabitqlib.quant`: raw arrays and self-describing blobs |
 | `src/simd/` | Core kernels, dispatch, and the private shared resolver |
 | `src/fastscan/` | FastScan kernels, batch estimators, and paired backend selection |
 | `src/index/` | Compiled IVF/HNSW/SymphonyQG operations and private search kernels |
 | `src/utils/cpu_features.cpp` | Generic CPU feature detection |
 | `include/rabitqlib/utils/` | Shared allocation, I/O and numerical helpers; index buffers live in `index/detail/` |
-| `python_bindings/` | pybind11 extension and index wrappers |
+| `python_bindings/` | pybind11 extension, index wrappers and the provisional `rabitqlib.quant` module (`quant_bindings.cpp`, `quant.py`) |
 | `sample/cpp/`, `sample/python/` | Usage examples |
 | `tests/unit/`, `tests/python/` | C++ reference/unit tests and Python boundary/integration tests |
 | `docs/docs/` | MkDocs site sources |

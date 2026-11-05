@@ -7,12 +7,14 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
@@ -32,6 +34,7 @@ class IndexAccess {
    private:
     size_t readers_ = 0;
     bool writing_ = false;
+    const char* busy_message_ = "Index is busy: conflicting operation in progress";
 
    public:
     class Guard {
@@ -42,9 +45,7 @@ class IndexAccess {
        public:
         Guard(IndexAccess& access, bool writing) : access_(access), writing_(writing) {
             if (access.writing_ || (writing && access.readers_ != 0)) {
-                throw std::runtime_error(
-                    "Index is busy: conflicting operation in progress"
-                );
+                throw std::runtime_error(access.busy_message_);
             }
             if (writing) {
                 access.writing_ = true;
@@ -62,6 +63,10 @@ class IndexAccess {
             }
         }
     };
+
+    IndexAccess() = default;
+    // busy_message must outlive the object, as a string literal does.
+    explicit IndexAccess(const char* busy_message) : busy_message_(busy_message) {}
 
     [[nodiscard]] Guard read() { return Guard(*this, false); }
     [[nodiscard]] Guard write() { return Guard(*this, true); }
@@ -127,27 +132,35 @@ inline void ensure_dimension(const py::array& array, size_t expected, const char
     }
 }
 
-// A seed is an integer in [0, max_seed]; bool is rejected like other integer options.
-inline uint64_t checked_seed(py::handle value, uint64_t max_seed) {
-    const std::string range =
-        "seed must be an integer in [0, " + std::to_string(max_seed) + "]";
+// An integer option in [0, max_value]. bool is rejected; a non-integer raises TypeError
+// and an out-of-range value ValueError, both with message.
+inline uint64_t checked_integer(
+    py::handle value, uint64_t max_value, const std::string& message
+) {
     if (PyBool_Check(value.ptr())) {
-        throw py::type_error(range);
+        throw py::type_error(message);
     }
     auto integer = py::reinterpret_steal<py::object>(PyNumber_Index(value.ptr()));
     if (!integer) {
         PyErr_Clear();
-        throw py::type_error(range);
+        throw py::type_error(message);
     }
-    const unsigned long long seed = PyLong_AsUnsignedLongLong(integer.ptr());
+    const unsigned long long result = PyLong_AsUnsignedLongLong(integer.ptr());
     if (PyErr_Occurred() != nullptr) {
         PyErr_Clear();
-        throw std::invalid_argument(range);
+        throw std::invalid_argument(message);
     }
-    if (seed > max_seed) {
-        throw std::invalid_argument(range);
+    if (result > max_value) {
+        throw std::invalid_argument(message);
     }
-    return seed;
+    return result;
+}
+
+// A seed is an integer in [0, max_seed].
+inline uint64_t checked_seed(py::handle value, uint64_t max_seed) {
+    return checked_integer(
+        value, max_seed, "seed must be an integer in [0, " + std::to_string(max_seed) + "]"
+    );
 }
 
 // Call only after rank validation.
@@ -249,6 +262,95 @@ inline py::array_t<T, py::array::c_style | py::array::forcecast> ensure_1d_array
     py::handle value, const char* name
 ) {
     return ensure_array_rank<T>(value, name, 1);
+}
+
+// A (rows, cols) view whose rows are contiguous but whose row stride is free, such as
+// a column slice of a record buffer. owner keeps the NumPy storage alive across GIL
+// release. Element alignment is guaranteed, so typed reads are valid.
+template <typename T>
+struct RowView {
+    py::array owner;
+    char* data = nullptr;
+    py::ssize_t row_stride = 0;
+    size_t rows = 0;
+    size_t cols = 0;
+
+    [[nodiscard]] T* row(size_t i) const {
+        return reinterpret_cast<T*>(data + (static_cast<py::ssize_t>(i) * row_stride));
+    }
+};
+
+template <typename T>
+bool rows_are_usable(const py::array& array) {
+    const bool contiguous_rows = array.shape(1) <= 1 || array.strides(1) == sizeof(T);
+    const bool aligned = reinterpret_cast<std::uintptr_t>(array.data()) % alignof(T) == 0 &&
+                         array.strides(0) % static_cast<py::ssize_t>(alignof(T)) == 0;
+    return contiguous_rows && aligned;
+}
+
+template <typename T>
+RowView<T> make_row_view(py::array array) {
+    RowView<T> view;
+    view.rows = static_cast<size_t>(array.shape(0));
+    view.cols = static_cast<size_t>(array.shape(1));
+    view.row_stride = array.strides(0);
+    view.data = static_cast<char*>(const_cast<void*>(array.data()));
+    view.owner = std::move(array);
+    return view;
+}
+
+// A 2D input of exactly dtype T, never cast. Rows with a free stride are read in place;
+// rows that are not contiguous, or misaligned storage, are copied.
+template <typename T>
+RowView<T> exact_dtype_rows(py::handle value, const char* name) {
+    auto array = py::array::ensure(value);
+    if (!array) {
+        throw std::invalid_argument(
+            std::string(name) + " must be convertible to a NumPy array; got " +
+            array_input_type(value)
+        );
+    }
+    if (!py::isinstance<py::array_t<T>>(array)) {
+        throw std::invalid_argument(
+            std::string(name) + " must have dtype " +
+            py::str(py::dtype::of<T>()).cast<std::string>() + "; got dtype " +
+            py::str(array.dtype()).cast<std::string>()
+        );
+    }
+    if (array.ndim() != 2) {
+        throw std::invalid_argument(
+            std::string(name) + " must be a 2D NumPy array; got shape " + array_shape(array)
+        );
+    }
+    if (!rows_are_usable<T>(array)) {
+        array = py::array(array.attr("copy")(py::arg("order") = "C"));
+    }
+    return make_row_view<T>(std::move(array));
+}
+
+// A caller-supplied output: exactly dtype T and shape (rows, cols), writable, with
+// contiguous, aligned and non-overlapping rows. It is never converted or copied. name
+// is how messages refer to it.
+template <typename T>
+RowView<T> checked_output_rows(
+    py::handle value, size_t rows, size_t cols, const std::string& name = "out"
+) {
+    const std::string expected = name + " must be a writable NumPy array of dtype " +
+                                 py::str(py::dtype::of<T>()).cast<std::string>() +
+                                 " and shape (" + std::to_string(rows) + ", " +
+                                 std::to_string(cols) + ") with contiguous, aligned rows";
+    if (!py::isinstance<py::array_t<T>>(value)) {
+        throw std::invalid_argument(expected + "; got " + array_input_type(value));
+    }
+    auto array = py::reinterpret_borrow<py::array>(value);
+    const auto row_bytes = static_cast<py::ssize_t>(cols * sizeof(T));
+    if (array.ndim() != 2 || static_cast<size_t>(array.shape(0)) != rows ||
+        static_cast<size_t>(array.shape(1)) != cols || !array.writeable() ||
+        !rows_are_usable<T>(array) ||
+        (rows > 1 && std::abs(array.strides(0)) < row_bytes)) {
+        throw std::invalid_argument(expected + "; got shape " + array_shape(array));
+    }
+    return make_row_view<T>(std::move(array));
 }
 
 struct SearchResults {

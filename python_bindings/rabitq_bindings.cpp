@@ -12,6 +12,7 @@ void register_hnsw(py::module_& m);
 void register_ivf(py::module_& m);
 void register_symqg(py::module_& m);
 void register_kmeans(py::module_& m);
+void register_quant(py::module_& m);
 
 PYBIND11_MODULE(_rabitqlib, m) {
     m.doc() = "RabitQ Python bindings combined module";
@@ -36,4 +37,5 @@ PYBIND11_MODULE(_rabitqlib, m) {
     register_ivf(m);
     register_symqg(m);
     register_kmeans(m);
+    register_quant(m);
 }
