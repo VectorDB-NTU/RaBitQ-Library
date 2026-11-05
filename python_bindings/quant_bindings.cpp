@@ -666,7 +666,9 @@ py::tuple split_rows(
     py::object prefix_out = py::none();
     py::object ex_out = py::none();
     if (!out.is_none()) {
-        if (!py::isinstance<py::tuple>(out) || py::len(out) != 2) {
+        // A None part would otherwise get a new array, as if out= were partial.
+        if (!py::isinstance<py::tuple>(out) || py::len(out) != 2 ||
+            out[py::int_(0)].is_none() || out[py::int_(1)].is_none()) {
             throw std::invalid_argument(
                 "out must be a (prefix, ex) tuple of two arrays; got " +
                 array_input_type(out)

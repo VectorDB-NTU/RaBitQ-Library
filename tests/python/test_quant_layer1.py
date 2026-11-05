@@ -127,6 +127,8 @@ def test_split_rejects_bad_out_and_leaves_out_unchanged():
         (np.zeros((300, D), np.uint8), r"out must be a \(prefix, ex\) tuple"),
         ((good,), r"out must be a \(prefix, ex\) tuple"),
         ([good, good.copy()], r"out must be a \(prefix, ex\) tuple"),
+        ((good, None), r"out must be a \(prefix, ex\) tuple"),
+        ((None, good), r"out must be a \(prefix, ex\) tuple"),
         (
             (np.zeros((300, D), np.int8), good),
             r"out\[0\] must be a writable NumPy array of dtype uint8 and shape \(300, 96\)",
