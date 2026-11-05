@@ -207,6 +207,8 @@ def split(
     *,
     nbits: int,
     prefix_bits: int,
+    num_threads: int = 0,
+    out: tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]] | None = None,
 ) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
     """Split nbits-bit codes into a prefix and extra bits."""
 

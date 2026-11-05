@@ -289,6 +289,10 @@ def check_quant(x: npt.NDArray[np.float32]) -> None:
     assert_type(quant.quantize(residuals, nbits=9), npt.NDArray[np.uint16])
     prefix, ex = quant.split(codes, nbits=4, prefix_bits=1)
     assert_type(prefix, npt.NDArray[np.uint8])
+    assert_type(
+        quant.split(codes, nbits=4, prefix_bits=1, num_threads=2, out=(prefix, ex)),
+        tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8]],
+    )
     factors = quant.code_factors(residuals, codes, nbits=4, metric="l2")
     assert_type(factors, npt.NDArray[np.void])
     assert_type(quant.pack_codes(ex, nbits=3), npt.NDArray[np.uint8])

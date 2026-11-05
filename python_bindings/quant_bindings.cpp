@@ -296,7 +296,9 @@ std::pair<std::uintptr_t, std::uintptr_t> byte_extent(const py::array& array) {
 // Reject an out= that shares memory with an input, as the C++ API rejects overlapping
 // buffers: rows written first would change rows read later. Exact aliasing is rejected
 // too, so the rule does not depend on how a call orders its reads and writes.
-void check_output_disjoint(const py::array& out, Inputs inputs) {
+void check_output_disjoint(
+    const py::array& out, Inputs inputs, const std::string& name = "out"
+) {
     const auto [out_low, out_high] = byte_extent(out);
     if (out_low == out_high) {
         return;
@@ -308,7 +310,7 @@ void check_output_disjoint(const py::array& out, Inputs inputs) {
         const auto [low, high] =
             byte_extent(py::reinterpret_borrow<py::array>(input.array));
         if (low < out_high && out_low < high) {
-            throw std::invalid_argument(std::string("out must not overlap ") + input.name);
+            throw std::invalid_argument(name + " must not overlap " + input.name);
         }
     }
 }
@@ -316,12 +318,18 @@ void check_output_disjoint(const py::array& out, Inputs inputs) {
 // The output rows: a new array, or the caller's out= after its exact checks. The
 // view's owner is the array to return.
 template <typename T>
-RowView<T> output_rows(const py::object& out, size_t rows, size_t cols, Inputs inputs) {
+RowView<T> output_rows(
+    const py::object& out,
+    size_t rows,
+    size_t cols,
+    Inputs inputs,
+    const std::string& name = "out"
+) {
     if (out.is_none()) {
         return make_row_view<T>(new_rows<T>(rows, cols));
     }
-    auto view = checked_output_rows<T>(out, rows, cols);
-    check_output_disjoint(view.owner, inputs);
+    auto view = checked_output_rows<T>(out, rows, cols, name);
+    check_output_disjoint(view.owner, inputs, name);
     return view;
 }
 
@@ -646,38 +654,75 @@ py::array quantize(
 }
 
 template <typename TP>
-py::tuple split_rows(const RowView<TP>& codes, size_t nbits, size_t prefix_bits) {
+py::tuple split_rows(
+    const RowView<TP>& codes,
+    size_t nbits,
+    size_t prefix_bits,
+    size_t num_threads,
+    const py::object& out
+) {
+    // out= is a (prefix, ex) pair: each part is checked like any out=, and the two
+    // must not overlap each other.
+    py::object prefix_out = py::none();
+    py::object ex_out = py::none();
+    if (!out.is_none()) {
+        if (!py::isinstance<py::tuple>(out) || py::len(out) != 2) {
+            throw std::invalid_argument(
+                "out must be a (prefix, ex) tuple of two arrays; got " +
+                array_input_type(out)
+            );
+        }
+        prefix_out = out[py::int_(0)];
+        ex_out = out[py::int_(1)];
+    }
+    const auto prefix = output_rows<uint8_t>(
+        prefix_out, codes.rows, codes.cols, {{"codes", codes.owner}}, "out[0]"
+    );
+    const auto ex = output_rows<uint8_t>(
+        ex_out,
+        codes.rows,
+        codes.cols,
+        {{"codes", codes.owner}, {"out[0]", prefix.owner}},
+        "out[1]"
+    );
     const size_t ex_bits = nbits - prefix_bits;
     const auto mask = static_cast<TP>((1U << ex_bits) - 1);
-    auto prefix = new_rows<uint8_t>(codes.rows, codes.cols);
-    auto ex = new_rows<uint8_t>(codes.rows, codes.cols);
-    uint8_t* prefix_data = prefix.mutable_data();
-    uint8_t* ex_data = ex.mutable_data();
     {
         py::gil_scoped_release release;
-        check_code_values(codes, nbits, "codes", 1);
-        for (size_t i = 0; i < codes.rows; ++i) {
-            const TP* row = codes.row(i);
-            for (size_t j = 0; j < codes.cols; ++j) {
-                prefix_data[(i * codes.cols) + j] = static_cast<uint8_t>(row[j] >> ex_bits);
-                ex_data[(i * codes.cols) + j] = static_cast<uint8_t>(row[j] & mask);
+        // Checked in a pass of its own, so a rejected call leaves out= unchanged.
+        check_code_values(codes, nbits, "codes", num_threads);
+        parallel_rows(codes.rows, num_threads, kCheapRows, [&](size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i) {
+                const TP* row = codes.row(i);
+                uint8_t* prefix_row = prefix.row(i);
+                uint8_t* ex_row = ex.row(i);
+                for (size_t j = 0; j < codes.cols; ++j) {
+                    prefix_row[j] = static_cast<uint8_t>(row[j] >> ex_bits);
+                    ex_row[j] = static_cast<uint8_t>(row[j] & mask);
+                }
             }
-        }
+        });
     }
-    return py::make_tuple(prefix, ex);
+    return py::make_tuple(prefix.owner, ex.owner);
 }
 
-py::tuple split(py::handle codes, size_t nbits, size_t prefix_bits) {
+py::tuple split(
+    py::handle codes,
+    size_t nbits,
+    size_t prefix_bits,
+    size_t num_threads,
+    const py::object& out
+) {
     check_nbits(nbits, 2, kMaxTotalBits);
     check_nbits(prefix_bits, 1, nbits - 1, "prefix_bits");
     if (nbits == kMaxTotalBits) {
         const auto view = exact_dtype_rows<uint16_t>(codes, "codes");
         checked_working_dim(view.cols, view.owner, "codes");
-        return split_rows(view, nbits, prefix_bits);
+        return split_rows(view, nbits, prefix_bits, num_threads, out);
     }
     const auto view = exact_dtype_rows<uint8_t>(codes, "codes");
     checked_working_dim(view.cols, view.owner, "codes");
-    return split_rows(view, nbits, prefix_bits);
+    return split_rows(view, nbits, prefix_bits, num_threads, out);
 }
 
 template <typename TP>
@@ -1845,6 +1890,8 @@ codes : numpy.ndarray, shape (n, d)
         py::kw_only(),
         py::arg("nbits"),
         py::arg("prefix_bits"),
+        py::arg("num_threads") = 0,
+        py::arg("out") = py::none(),
         R"doc(Split nbits-bit codes into a prefix and extra bits.
 
 Parameters
@@ -1856,12 +1903,18 @@ nbits : int
     Width of codes, 2 to 9.
 prefix_bits : int
     Width of the prefix, 1 to nbits - 1.
+num_threads : int, optional
+    Worker threads; 0 (the default) selects the available CPU count, capped by
+    OMP_NUM_THREADS.
+out : tuple of two numpy.ndarray, optional
+    (prefix, ex) outputs, each of dtype uint8 and shape (n, d) with contiguous
+    rows. They must not overlap codes or each other.
 
 Returns
 -------
 prefix, ex : tuple of numpy.ndarray of uint8, shape (n, d)
     prefix = codes >> ex_bits and ex = codes & (2**ex_bits - 1), where
-    ex_bits = nbits - prefix_bits.)doc"
+    ex_bits = nbits - prefix_bits. With out=, the two arrays of out.)doc"
     );
 
     quant.def(

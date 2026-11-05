@@ -97,6 +97,66 @@ def test_split_prefix_factors(nbits):
         quant.code_factors(r, prefix, nbits=prefix_bits, metric="l2")
 
 
+@pytest.mark.parametrize("nbits", [4, 9])
+def test_split_threads_and_out(nbits):
+    # 300 rows span several parallel ranges.
+    codes = quant.quantize(residuals(300, seed=12), nbits=nbits)
+    prefix, ex = quant.split(codes, nbits=nbits, prefix_bits=2, num_threads=1)
+    for threads in (0, 4):
+        parts = quant.split(codes, nbits=nbits, prefix_bits=2, num_threads=threads)
+        np.testing.assert_array_equal(parts[0], prefix)
+        np.testing.assert_array_equal(parts[1], ex)
+    out = (np.empty((300, D), np.uint8), np.empty((300, D), np.uint8))
+    result = quant.split(codes, nbits=nbits, prefix_bits=2, num_threads=4, out=out)
+    assert result[0] is out[0] and result[1] is out[1]
+    np.testing.assert_array_equal(out[0], prefix)
+    np.testing.assert_array_equal(out[1], ex)
+    # Strided output rows are accepted, as for the other out= arguments. Overlap is
+    # judged by byte extent, so the two parts come from separate buffers.
+    wide = (np.zeros((300, 2 * D), np.uint8), np.zeros((300, 2 * D), np.uint8))
+    quant.split(codes, nbits=nbits, prefix_bits=2, out=(wide[0][:, :D], wide[1][:, D:]))
+    np.testing.assert_array_equal(wide[0][:, :D], prefix)
+    np.testing.assert_array_equal(wide[1][:, D:], ex)
+    assert not wide[0][:, D:].any() and not wide[1][:, :D].any()
+
+
+def test_split_rejects_bad_out_and_leaves_out_unchanged():
+    codes = quant.quantize(residuals(300, seed=13), nbits=4)
+    good = np.zeros((300, D), np.uint8)
+    cases = [
+        (np.zeros((300, D), np.uint8), r"out must be a \(prefix, ex\) tuple"),
+        ((good,), r"out must be a \(prefix, ex\) tuple"),
+        ([good, good.copy()], r"out must be a \(prefix, ex\) tuple"),
+        (
+            (np.zeros((300, D), np.int8), good),
+            r"out\[0\] must be a writable NumPy array of dtype uint8 and shape \(300, 96\)",
+        ),
+        (
+            (good, np.zeros((299, D), np.uint8)),
+            r"out\[1\] must be a writable NumPy array of dtype uint8",
+        ),
+        ((good, good), r"out\[1\] must not overlap out\[0\]"),
+        ((good, good[:, ::-1]), r"out\[1\] must be a writable NumPy array"),
+    ]
+    for out, message in cases:
+        with pytest.raises(ValueError, match=message):
+            quant.split(codes, nbits=4, prefix_bits=1, out=out)
+    shared = np.zeros((300, 2 * D), np.uint8)
+    view = shared[:, :D]
+    view[:] = codes
+    with pytest.raises(ValueError, match=r"out\[0\] must not overlap codes"):
+        quant.split(
+            view, nbits=4, prefix_bits=1, out=(shared[:, D // 2 : D + D // 2], good)
+        )
+    # Codes are checked in a pass of their own, before out= is written.
+    bad = codes.copy()
+    bad[250, 3] = 16
+    out = (np.zeros((300, D), np.uint8), np.zeros((300, D), np.uint8))
+    with pytest.raises(ValueError, match=r"got 16 at \(250, 3\)$"):
+        quant.split(bad, nbits=4, prefix_bits=1, num_threads=4, out=out)
+    assert not out[0].any() and not out[1].any()
+
+
 @pytest.mark.parametrize("nbits", range(1, 9))
 def test_pack_round_trip(nbits):
     codes = np.random.default_rng(nbits).integers(0, 2**nbits, (5, D), dtype=np.uint8)

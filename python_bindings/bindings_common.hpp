@@ -329,10 +329,13 @@ RowView<T> exact_dtype_rows(py::handle value, const char* name) {
 }
 
 // A caller-supplied output: exactly dtype T and shape (rows, cols), writable, with
-// contiguous, aligned and non-overlapping rows. It is never converted or copied.
+// contiguous, aligned and non-overlapping rows. It is never converted or copied. name
+// is how messages refer to it.
 template <typename T>
-RowView<T> checked_output_rows(py::handle value, size_t rows, size_t cols) {
-    const std::string expected = "out must be a writable NumPy array of dtype " +
+RowView<T> checked_output_rows(
+    py::handle value, size_t rows, size_t cols, const std::string& name = "out"
+) {
+    const std::string expected = name + " must be a writable NumPy array of dtype " +
                                  py::str(py::dtype::of<T>()).cast<std::string>() +
                                  " and shape (" + std::to_string(rows) + ", " +
                                  std::to_string(cols) + ") with contiguous, aligned rows";
