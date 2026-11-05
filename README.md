@@ -27,13 +27,14 @@ approximate nearest-neighbor search. See the [research papers](https://vectordb-
 
 ## News
 
+- **v0.8.3:** provisional `rabitqlib.quant` module: rotate, quantize, pack and score
+  RaBitQ codes stored outside an index
+  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.3/)).
 - **v0.8.2:** three lines to an index: the first `add` trains, `nbits` defaults to 7
   and search settings are optional; faster IVF-RaBitQ `add`
   ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.2/)).
 - **v0.8.1:** the default `num_threads=0` respects `OMP_NUM_THREADS`, fixing a macOS
   crash alongside Faiss and PyTorch ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.1/)).
-- **v0.8.0:** Faiss-style `train`, `add` and `search` for all Python indexes; 0.7 calls
-  stay as deprecated forms until 0.9 ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.0/)).
 
 Earlier versions: [all releases](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
 
@@ -61,7 +62,7 @@ settings, and limitations.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.8.2"
+python -m pip install --upgrade "rabitqlib>=0.8.3"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
