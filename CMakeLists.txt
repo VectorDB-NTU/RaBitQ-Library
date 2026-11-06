@@ -247,6 +247,7 @@ if(RABITQ_BUILD_FASTSCAN)
 endif()
 if(RABITQ_BUILD_INDEX)
     add_library(rabitq_index STATIC
+        src/index/format2.cpp
         src/index/hnsw.cpp
         src/index/ivf.cpp
         src/index/ivf_initializer.cpp

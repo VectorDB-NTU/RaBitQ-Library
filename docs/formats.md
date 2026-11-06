@@ -95,7 +95,7 @@ The body defines the rotation; `seed` only records where it came from. A seeded 
 
 ## Index files, format 2 (draft)
 
-> **Status: draft for 0.9 (#211, #212).** Nothing below is implemented. Field numbers, section kinds and the open questions at the end may still change; until the format ships, no file in this layout exists.
+> **Status: draft for 0.9 (#211, #212).** The container layer (header, section table, checksums) is implemented in `src/index/format2.*`, but no index reads or writes format 2 yet. Field numbers, section kinds and the open questions at the end may still change; until the format ships, no file in this layout exists.
 
 Format 2 is one container for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG, and later for the SSD-resident IVF index from RaBitQ-SSD. It replaces the per-index layouts: IVF-RaBitQ `RABQIDX1` versions 1 and 2, the unversioned HNSW-RaBitQ layout, SymphonyQG's quantized version 1 and its raw layout, and the unversioned hnswlib sidecar `<file>.hnsw` of IVF-RaBitQ. Every released layout stays readable (see [Earlier layouts](#earlier-layouts)); `save` always writes format 2.
 
@@ -120,7 +120,7 @@ Unlike the provisional `rabitqlib.quant` formats above, index files carry the li
 | Section table | `section_table_offset`, `section_count` entries of 32 bytes |
 | Sections | Anywhere after the header, each at a multiple of 64 |
 
-Sections do not overlap the header, the table or each other, and the file ends exactly at the end of the last section. The table is sorted by offset.
+Every section starts at or after `header_bytes`. Non-empty sections do not overlap the table or each other; empty sections take no bytes and may share an offset. Table entries are in non-decreasing offset order. The file ends exactly where the table or the last section ends, whichever is later; an empty section still has an aligned offset, so writers pad up to it.
 
 ### Header
 
@@ -137,7 +137,7 @@ Sections do not overlap the header, the table or each other, and the file ends e
 | 40 | 4 | u32 | `index_kind` | 1 = IVF-RaBitQ, 2 = HNSW-RaBitQ, 3 = SymphonyQG; 4 = IVF-SSD (reserved). Unknown values are rejected |
 | 44 | 4 | u32 | `metric` | 1 = L2, 2 = inner product, 3 = cosine. See [Metrics](#metrics) |
 | 48 | 8 | u64 | `dim` | Original dimension, at least 1 |
-| 56 | 8 | u64 | `padded_dim` | Working dimension; a multiple of 32, at least `dim`. Readers use the stored value and never recompute it |
+| 56 | 8 | u64 | `padded_dim` | Working dimension; a multiple of 32, at least `dim` and at most 65,536 (the rotator's limit). Readers use the stored value and never recompute it |
 | 64 | 4 | u32 | `code_bits` | Bits per coordinate of the stored quantized code, 1–9; 0 when the index stores no quantized code of its points |
 | 68 | 4 | u32 | `raw_type` | Element type of stored raw vectors: 0 = none, 1 = float32, 2 = uint8 |
 | 72 | 4 | u32 | `id_bits` | Width of the point IDs stored in the file: 32 or 64 |
@@ -147,7 +147,7 @@ Sections do not overlap the header, the table or each other, and the file ends e
 | 96 | 8 | u64 | `section_table_offset` | A multiple of 8, at least `header_bytes` |
 | 104 | 4 | u32 | `section_count` | At least 1 |
 | 108 | 4 | u32 | `header_crc32` | Over the header with this field taken as zero, followed by the section table |
-| 112 | 16 | ASCII | `writer_version` | Library version that wrote the file, NUL-padded. For error messages only; readers never branch on it |
+| 112 | 16 | ASCII | `writer_version` | Library version that wrote the file, printable ASCII, NUL-padded. For error messages only; readers never branch on it |
 
 The Python `nbits` maps to these fields as follows. IVF-RaBitQ `nbits` 1–9 is `code_bits`. IVF-RaBitQ `nbits = 32` is `code_bits = 1` with `raw_type = float32`, because it keeps 1-bit FastScan codes and reranks with raw vectors. SymphonyQG `nbits = 32` is `code_bits = 0` with `raw_type = float32`.
 
@@ -162,9 +162,9 @@ The Python `nbits` maps to these fields as follows. IVF-RaBitQ `nbits` 1–9 is 
 | 24 | 4 | u32 | `crc32` | Over the section's bytes when `checksummed` is set; zero otherwise |
 | 28 | 4 | — | reserved | |
 
-A kind appears at most once. Writers checksum the header-like sections (parameters, cluster sizes, companions), whose values size later allocations, and leave bulk data unchecksummed, so that loading a large index does not read it twice.
+Kind 0 is reserved, and a kind appears at most once. Section flags other than the two above are rejected; a later version cannot add a section flag without a new `version`. Writers checksum the header-like sections (parameters, cluster sizes, companions), whose values size later allocations, and leave bulk data unchecksummed, so that loading a large index does not read it twice.
 
-A section the reader does not know is handled by its `required` bit: a required one rejects the file, and an optional one is skipped. A writer marks a section optional only if dropping it leaves a correct index, for example a cache that can be recomputed. `save` drops optional sections it does not know.
+A section the reader does not know is handled by its `required` bit: a required one rejects the file, and an optional one is skipped without reading it, so its checksum is not verified. A writer marks a section optional only if dropping it leaves a correct index, for example a cache that can be recomputed. `save` drops optional sections it does not know.
 
 ### Feature flags
 
@@ -174,9 +174,11 @@ The three masks follow the ext4 superblock: they say what an older reader may do
 | --- | --- |
 | `incompat_features` | Rejects the file; reading it would give wrong results |
 | `ro_compat_features` | May load and search; `add`, `remove` and `save` raise, because they would leave the unknown data stale |
-| `compat_features` | Ignores the bit |
+| `compat_features` | Ignores the bit; `save` clears it |
 
-The error names the unknown bits and `writer_version`, such as "index uses features 0x4 unknown to rabitqlib 0.9.1; written by 0.10.0".
+The error names the unknown bits and `writer_version`, such as "index file uses incompatible features 0x4 that this release does not know; written by rabitqlib 0.10.0".
+
+A writer sets only the bits it knows. Resaving a file therefore drops the unknown `compat` bits, together with the unknown optional sections and header fields past the writer's `header_bytes`. A `compat` bit may describe only data whose loss on such a resave is harmless.
 
 No bit is defined in version 2. Bits are assigned when a feature needs one. Examples:
 
@@ -292,21 +294,24 @@ RaBitQ-SSD's swappable coarse quantizer is not a companion: the base does not pi
 
 ### Reading
 
-A reader checks, in order, and validates every size before allocating:
+A reader checks, in order, and validates every size before allocating. The loader of each index knows the index kind it expects, so a file of another kind is reported as such before any section is checked:
 
 1. The file is at least 128 bytes long, and the magic, `version` and `header_bytes` are valid.
-2. The section table lies within the file, and `header_crc32` matches.
+2. The section table is non-empty and lies within the file, and `header_crc32` matches.
 3. Feature flags, as in the table above.
-4. The header fields are valid for `index_kind`.
-5. Each section lies within the file, is aligned, and does not overlap another; each checksummed section matches its `crc32`.
-6. Required sections are present and unknown required sections are absent.
-7. Each section's size equals what the header and parameter sections imply, before its content is read.
+4. `index_kind` is the expected one; the fields that every kind shares are valid; then the expecting index's own header rules hold.
+5. Each table entry, in order: its flags and reserved field, alignment, bounds, order, overlap and repetition, then its kind. An unknown required kind rejects the file here.
+6. The file ends where the table or the last section ends.
+7. Each known checksummed section matches its `crc32`.
+8. The index's required sections are present, and each section's size equals what the header and parameter sections imply, before its content is read.
+
+Steps 1–7 belong to the container; step 8 and the index's header rules in step 4 belong to each index. Readers read through the stream buffer, so the stream's exception mask does not matter, and need seekable input.
 
 Index files remain trusted input (see [Index file compatibility](docs/index/usage.md#index-file-compatibility)). These checks report truncated, corrupt or mismatched files; they do not make crafted files safe.
 
 ### Writing
 
-`save` writes to a temporary file and renames it into place, as today. With the routing graph inside the main file, IVF-RaBitQ no longer has a second rename that can leave a new sidecar beside an old index. Resaving a file loaded from an earlier layout writes format 2. IVF-SSD companion files are written before the main file, so a failed save never leaves a main file that points to a missing companion.
+A writer writes the file once, front to back, so it does not need seekable output (`save` writes devices and FIFOs in place): it buffers the checksummed sections, which are small, to know their checksums before the table. `save` writes to a temporary file and renames it into place, as today. With the routing graph inside the main file, IVF-RaBitQ no longer has a second rename that can leave a new sidecar beside an old index. Resaving a file loaded from an earlier layout writes format 2. IVF-SSD companion files are written before the main file, so a failed save never leaves a main file that points to a missing companion.
 
 ### Earlier layouts
 
