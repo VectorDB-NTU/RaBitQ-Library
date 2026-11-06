@@ -49,15 +49,17 @@ static inline float max_coordinate_magnitude(size_t dim) {
 static inline void check_coordinates(
     const float* values, size_t count, size_t dim, const char* what
 ) {
-    if (!all_finite(values, count)) {
-        throw std::invalid_argument(std::string(what) + " must contain only finite values");
-    }
     const float bound = max_coordinate_magnitude(dim);
     size_t out_of_range = 0;
     for (size_t i = 0; i < count; ++i) {
         out_of_range += static_cast<size_t>(!(std::fabs(values[i]) <= bound));
     }
     if (out_of_range != 0) {
+        if (!all_finite(values, count)) {
+            throw std::invalid_argument(
+                std::string(what) + " must contain only finite values"
+            );
+        }
         throw std::invalid_argument(
             std::string(what) + " exceeds the safe float32 coordinate range"
         );
