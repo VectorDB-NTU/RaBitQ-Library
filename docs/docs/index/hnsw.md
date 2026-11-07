@@ -82,7 +82,7 @@ available CPU, so **default builds are not reproducible**: pass `num_threads=1` 
 still change results. Loading restores the saved rotation.
 
 Results use squared L2 or `1 - dot` estimates, ordered from smallest to largest.
-Python fills missing results with ID `2**32 - 1` and distance `+inf`; C++ returns
+Python returns `int64` IDs and fills missing results with ID `-1` and distance `+inf`; C++ returns
 only the available pairs. See [result handling](../quick_start.md#read-the-results)
 and the shared [input, count and concurrency contracts](usage.md).
 
@@ -271,8 +271,8 @@ removed = index.remove(new_ids[:10])   # IDs in [0, num_stored_points)
 A removed point keeps its codes, its links, and its place in the graph. Search
 still walks through it and `add` may link new points to it, which keeps the graph
 connected, as in hnswlib. Search never returns it, so a query can get fewer than
-`k` results once points are removed: in Python the missing slots hold `kPidMax`
-(`2**32 - 1`) with an infinite distance. Removed points still count in
+`k` results once points are removed: in Python the missing slots hold ID `-1`
+with an infinite distance. Removed points still count in
 `num_stored_points()` and cannot be restored. Removal requires the same
 exclusive access as other updates.
 

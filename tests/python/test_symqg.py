@@ -45,7 +45,7 @@ def test_properties(built_symqg):
 def test_search_output_contract(built_symqg, query_data, nq, k):
     ids, dists = built_symqg.search(query_data[:nq], k=k, ef=_EF)
     assert ids.shape == dists.shape == (nq, k)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
     assert np.isfinite(dists).all()

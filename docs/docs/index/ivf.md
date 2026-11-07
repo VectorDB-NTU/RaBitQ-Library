@@ -56,7 +56,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
-to largest. Quantized distances are estimates. Unfilled slots use ID `2**32 - 1`
+to largest. Quantized distances are estimates. IDs are `int64` in Python. Unfilled slots use ID `-1`
 and distance `+inf`; see [result handling](../quick_start.md#read-the-results).
 See the shared [input and concurrency contracts](usage.md).
 
@@ -450,7 +450,7 @@ enters the result buffer and never triggers reranking. Any code that estimates
 IVF-RaBitQ distances must keep this behavior and must never turn `+inf` into NaN.
 
 Search may return fewer than `k` results once points are removed: the missing slots
-hold `kPidMax` (`2**32 - 1` in Python) with an infinite distance, as when the probed
+hold `kPidMax` (`-1` in Python) with an infinite distance, as when the probed
 clusters hold fewer than `k` points.
 
 The removal marker lives in the ordinary batch data and needs no additional

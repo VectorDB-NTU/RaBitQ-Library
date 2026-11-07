@@ -46,7 +46,7 @@ def test_properties(built_ivf):
 def test_search_output_contract(built_ivf, query_data, nq, k, nprobe):
     ids, dists = built_ivf.search(query_data[:nq], k=k, nprobe=nprobe)
     assert ids.shape == dists.shape == (nq, k)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
     assert np.isfinite(dists).all()
@@ -86,7 +86,7 @@ def test_batch_search_matches_individual_queries(bits, metric):
                 assert empty_ids.shape == empty_distances.shape == (0, 7)
     index.remove(np.arange(len(data)))
     ids, distances = index.search(queries, k=7, nprobe=4, num_threads=4)
-    assert np.all(ids == np.iinfo(np.uint32).max)
+    assert np.all(ids == -1)
     assert np.all(np.isinf(distances))
 
 
@@ -100,7 +100,7 @@ def test_unfilled_results_use_sentinels():
 
     ids, dists = idx.search(data[:1], k=3, nprobe=1)
     assert ids[0, 0] == 0
-    np.testing.assert_array_equal(ids[0, 1:], np.iinfo(np.uint32).max)
+    np.testing.assert_array_equal(ids[0, 1:], -1)
     assert np.all(np.isinf(dists[0, 1:]))
 
 
@@ -575,7 +575,7 @@ def _dynamic_index(nbits=4, metric="l2", count=120, dim=65, clusters=3, seed=61)
 def test_add_returns_ids_and_makes_points_searchable():
     idx, old, new, _ = _dynamic_index(nbits=32)
     added = idx.add(new)
-    assert added.dtype == np.uint32
+    assert added.dtype == np.int64
     np.testing.assert_array_equal(added, np.arange(len(old), len(old) + len(new)))
     assert idx.max_elements == len(old) + len(new)
     # k may now exceed the original point count; raw storage makes the ranking exact.
@@ -716,7 +716,7 @@ def test_remove_excludes_points_and_survives_reload(
             keep = ~np.isin(before_ids[q], removed)
             np.testing.assert_array_equal(ids[q, :alive], before_ids[q][keep])
             np.testing.assert_array_equal(dists[q, :alive], before_dists[q][keep])
-            assert np.all(ids[q, alive:] == np.iinfo(np.uint32).max)
+            assert np.all(ids[q, alive:] == -1)
             assert np.all(np.isinf(dists[q, alive:]))
         top, top_dists = index.search(
             queries, k=10, nprobe=3, high_accuracy=high_accuracy
@@ -738,7 +738,7 @@ def test_remove_excludes_points_and_survives_reload(
         queries, k=count + len(new), nprobe=3, high_accuracy=high_accuracy
     )
     assert not np.isin(ids, removed).any()
-    assert np.count_nonzero(ids[0] != np.iinfo(np.uint32).max) == count + len(new) - 4
+    assert np.count_nonzero(ids[0] != -1) == count + len(new) - 4
 
     # A reloaded index grows exactly like the original.
     expected_ids, expected_dists = idx.search(
@@ -771,7 +771,7 @@ def test_removing_every_point_leaves_a_searchable_index():
     idx, old, new, _ = _dynamic_index()
     assert idx.remove(np.arange(len(old))) == len(old)
     ids, dists = idx.search(new[:2], k=5, nprobe=3)
-    assert np.all(ids == np.iinfo(np.uint32).max)
+    assert np.all(ids == -1)
     assert np.all(np.isinf(dists))
 
 

@@ -12,6 +12,12 @@
 
 ## Python changes
 
+- Point IDs are `int64` at the Python boundary (#211):
+  - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
+  - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
+  - IDs remain the row numbers the index assigns, and C++ point IDs remain 32-bit `PID` values with `kPidMax` for a missing result.
+  - txtai 9.14.0 and earlier filter results with `uid != 0xFFFFFFFF`, so with this release they return padded slots as ID `-1`; see #213 for the first compatible txtai release.
+
 - Loading a format-2 file keeps the `seed` of every index, and `ef_construction` and `init` of SymphonyQG. They were `None` after `load`, and still are for files from releases up to 0.8.
 - With a recorded seed, `cp.seed` after `load` follows it as for a new index: the seed for IVF-RaBitQ, its low 32 bits for HNSW-RaBitQ. It was the k-means default.
 - A new exception, `rabitqlib.FormatError`, subclasses both `ValueError` and `RuntimeError`:

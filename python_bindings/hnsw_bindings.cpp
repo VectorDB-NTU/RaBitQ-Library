@@ -177,7 +177,7 @@ class HnswIndex {
         num_clusters_ = num_clusters;
     }
 
-    py::array_t<PID> add(
+    py::array_t<int64_t> add(
         py::handle data,
         const py::object& cluster_ids,
         std::optional<size_t> num_threads,
@@ -203,7 +203,7 @@ class HnswIndex {
         }
 
         // Allocated before the index is touched.
-        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
+        auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
         const auto* data_ptr = data_array.data();
         const size_t threads = num_threads.value_or(0);
         if (trains) {
@@ -287,7 +287,6 @@ class HnswIndex {
         const size_t ef_search = ef.value_or(0) == 0 ? std::max<size_t>(k, 64) : *ef;
 
         auto output = unfilled_search_results(static_cast<size_t>(query_array.shape(0)), k);
-        auto result_ids_view = output.ids.mutable_unchecked<2>();
         auto distances_view = output.distances.mutable_unchecked<2>();
 
         const auto* queries_data = query_array.data();
@@ -305,13 +304,13 @@ class HnswIndex {
                                             k, results[static_cast<size_t>(i)].size()
                                         ));
                  ++j) {
-                result_ids_view(i, j) =
+                output.ids[(static_cast<size_t>(i) * k) + static_cast<size_t>(j)] =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].second;
                 distances_view(i, j) =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].first;
             }
         }
-        return py::make_tuple(output.ids, output.distances);
+        return output.to_python();
     }
 
     void save(py::handle path) const {
@@ -533,7 +532,7 @@ fast_quantization : bool, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n,)
+ids : ndarray of int64, shape (n,)
     Assigned point IDs.
 
 Notes
@@ -659,7 +658,7 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n_queries, k)
+ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
     Lower values are better; squared L2 estimates for l2 and inner-product
@@ -668,7 +667,7 @@ distances : ndarray of float32, shape (n_queries, k)
 Notes
 -----
 Requires a trained or loaded index. Returns (ids, distances), in that
-order. Missing neighbors have ID 4294967295 and distance inf; test
+order. Missing neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
         )

@@ -287,16 +287,32 @@ def test_search_pads_k_beyond_the_stored_points(kind, base_data):
     index = new_index(kind)
     index.train(base_data)
     ids, distances = search(index, base_data[:1], 3)
-    np.testing.assert_array_equal(ids, np.full((1, 3), 2**32 - 1))
+    np.testing.assert_array_equal(ids, np.full((1, 3), -1))
     assert np.isinf(distances).all()
     index.add(base_data[:10])
     index.add(base_data[10:11])
     ids, distances = search(index, base_data[:1], 13)
     assert np.isfinite(distances).sum() == 11
     np.testing.assert_array_equal(np.sort(ids[np.isfinite(distances)]), np.arange(11))
-    np.testing.assert_array_equal(ids[~np.isfinite(distances)], [2**32 - 1] * 2)
+    np.testing.assert_array_equal(ids[~np.isfinite(distances)], [-1] * 2)
     with pytest.raises(ValueError, match=r"^k must be between 1 and 2\*\*31$"):
         search(index, base_data[:1], 0)
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_int64_ids_round_trip_from_add_and_search_to_remove(kind, base_data):
+    index = new_index(kind)
+    added = index.add(base_data[:10])
+    assert added.dtype == np.int64
+    ids, _ = search(index, base_data[:1], 12)
+    assert ids.dtype == np.int64
+    assert (ids == -1).sum() == 2
+    # The missing marker is not a point, so passing it to remove changes nothing.
+    with pytest.raises(ValueError, match=r"^ids must be in \[0, num_stored_points\)$"):
+        index.remove(ids[0])
+    assert len(index) == 10
+    assert index.remove(ids[0][ids[0] >= 0][:3]) == 3
+    assert len(index) == 7
 
 
 @pytest.mark.parametrize("kind", KINDS)

@@ -316,7 +316,7 @@ class IvfIndex:
         cluster_ids: _IntegerIds | None = None,
         num_threads: SupportsIndex | None = None,
         fast_quantization: bool | np.bool_ = False,
-    ) -> npt.NDArray[np.uint32]:
+    ) -> npt.NDArray[np.int64]:
         """Add vectors, training the index first if needed.
 
         Parameters
@@ -336,7 +336,7 @@ class IvfIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n,)
+        ids : ndarray of int64, shape (n,)
             Assigned point IDs.
 
         Notes
@@ -362,7 +362,7 @@ class IvfIndex:
         cluster_ids: _IntegerIds | None,
         num_threads: SupportsIndex = ...,
         fast_quantization: bool | np.bool_ = ...,
-    ) -> npt.NDArray[np.uint32]: ...
+    ) -> npt.NDArray[np.int64]: ...
     def remove(self, ids: _IntegerIds) -> int:
         """Exclude point IDs from subsequent search results.
 
@@ -389,7 +389,7 @@ class IvfIndex:
         nprobe: SupportsIndex | None = None,
         high_accuracy: bool | np.bool_ | None = None,
         num_threads: SupportsIndex | None = None,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
         Parameters
@@ -412,7 +412,7 @@ class IvfIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n_queries, k)
+        ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
             Lower values are better; squared L2 estimates for l2 and inner-product
@@ -421,7 +421,7 @@ class IvfIndex:
         Notes
         -----
         Requires a trained or loaded index. Returns (ids, distances), in that
-        order. Missing neighbors have ID 4294967295 and distance inf; test
+        order. Missing neighbors have ID -1 and distance inf; test
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
@@ -756,7 +756,7 @@ class HnswIndex:
         cluster_ids: _IntegerIds | None = None,
         num_threads: SupportsIndex | None = None,
         fast_quantization: bool | np.bool_ = False,
-    ) -> npt.NDArray[np.uint32]:
+    ) -> npt.NDArray[np.int64]:
         """Add vectors, training the index first if needed.
 
         Parameters
@@ -776,7 +776,7 @@ class HnswIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n,)
+        ids : ndarray of int64, shape (n,)
             Assigned point IDs.
 
         Notes
@@ -804,7 +804,7 @@ class HnswIndex:
         cluster_ids: _IntegerIds | None,
         num_threads: SupportsIndex = ...,
         fast_quantization: bool | np.bool_ = ...,
-    ) -> npt.NDArray[np.uint32]: ...
+    ) -> npt.NDArray[np.int64]: ...
     def remove(self, ids: _IntegerIds) -> int:
         """Exclude point IDs from subsequent search results.
 
@@ -830,7 +830,7 @@ class HnswIndex:
         k: SupportsIndex,
         ef: SupportsIndex | None = None,
         num_threads: SupportsIndex | None = None,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
         Parameters
@@ -850,7 +850,7 @@ class HnswIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n_queries, k)
+        ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
             Lower values are better; squared L2 estimates for l2 and inner-product
@@ -859,7 +859,7 @@ class HnswIndex:
         Notes
         -----
         Requires a trained or loaded index. Returns (ids, distances), in that
-        order. Missing neighbors have ID 4294967295 and distance inf; test
+        order. Missing neighbors have ID -1 and distance inf; test
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
@@ -1118,7 +1118,7 @@ class SymqgIndex:
 
     def add(
         self, data: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
-    ) -> npt.NDArray[np.uint32]:
+    ) -> npt.NDArray[np.int64]:
         """Build the graph from all vectors.
 
         Parameters
@@ -1132,7 +1132,7 @@ class SymqgIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n,)
+        ids : ndarray of int64, shape (n,)
             Point IDs, the row numbers of data.
 
         Notes
@@ -1180,7 +1180,7 @@ class SymqgIndex:
         k: SupportsIndex,
         ef: SupportsIndex | None = None,
         num_threads: SupportsIndex | None = None,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
         Parameters
@@ -1200,7 +1200,7 @@ class SymqgIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n_queries, k)
+        ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
             Lower values are better; squared L2 estimates for l2 and inner-product
@@ -1209,7 +1209,7 @@ class SymqgIndex:
         Notes
         -----
         Returns (ids, distances), in that order. When the graph reaches fewer than k
-        points, the remaining neighbors have ID 4294967295 and distance inf; test
+        points, the remaining neighbors have ID -1 and distance inf; test
         np.isfinite(distances) to find them. Array shapes and value ranges are
         checked at runtime, not by static type checkers.
         """
@@ -1221,7 +1221,7 @@ class SymqgIndex:
         k: SupportsIndex,
         ef: SupportsIndex,
         num_threads: SupportsIndex = 1,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Deprecated since 0.8: the same as search(); use search()."""
 
     def save(self, path: _Path) -> None:

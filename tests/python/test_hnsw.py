@@ -104,7 +104,7 @@ def test_parallel_build_preserves_self_retrieval(base_data, clusters):
 def test_search_output_contract(built_hnsw, query_data, nq, k):
     ids, dists = built_hnsw.search(query_data[:nq], k=k, ef=_EF)
     assert ids.shape == dists.shape == (nq, k)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
     assert np.isfinite(dists).all()
@@ -401,7 +401,7 @@ def test_added_points_survive_save_and_load(
 
 # ── remove ────────────────────────────────────────────────────────────────────
 
-_NO_ID = np.iinfo(np.uint32).max
+_NO_ID = -1
 
 
 def _removable(nbits=4, metric="l2", count=120, dim=64, seed=61):

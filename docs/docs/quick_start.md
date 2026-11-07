@@ -66,7 +66,7 @@ not exact distances to the original vectors.
 
 A search may return fewer than `k` valid neighbors, for example when `k` exceeds the
 number of points, after removals, or when the probed IVF-RaBitQ clusters contain too
-few points. Unfilled slots contain ID `2**32 - 1` and distance `+inf`. Filter them with
+few points. IDs are `int64`; unfilled slots contain ID `-1` and distance `+inf`. Filter them with
 `valid = np.isfinite(distances)` before using IDs to index your data.
 
 The `metric` argument accepts `"l2"` and `"ip"` (also `"innerproduct"`). For

@@ -77,7 +77,7 @@ class SymqgIndex {
         check_coordinates(x_ptr, count, dim_, "x");
     }
 
-    py::array_t<PID> add(py::handle data, std::optional<size_t> num_threads) {
+    py::array_t<int64_t> add(py::handle data, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         if (built()) {
             throw std::runtime_error(
@@ -89,8 +89,8 @@ class SymqgIndex {
         build_graph(data, *ef_construction_, num_threads.value_or(0), *init_, *seed_);
         // Point IDs are the row numbers of data.
         const size_t rows = index_->num_points();
-        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
-        std::iota(ids.mutable_data(), ids.mutable_data() + rows, PID{0});
+        auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
+        std::iota(ids.mutable_data(), ids.mutable_data() + rows, int64_t{0});
         return ids;
     }
 
@@ -124,12 +124,9 @@ class SymqgIndex {
         ensure_dimension(query_array, dim_, "query dimension does not match index dim");
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
-        const auto shape = std::vector<py::ssize_t>{
-            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
-        auto result_ids = py::array_t<PID>(shape);
-        auto distances = py::array_t<float>(shape);
-        auto* ids_data = result_ids.mutable_data();
-        auto* distances_data = distances.mutable_data();
+        auto output = unfilled_search_results(num_queries, k);
+        auto* ids_data = output.ids.data();
+        auto* distances_data = output.distances.mutable_data();
         const auto* queries_data = query_array.data();
         {
             py::gil_scoped_release release;
@@ -144,7 +141,7 @@ class SymqgIndex {
             );
         }
 
-        return py::make_tuple(result_ids, distances);
+        return output.to_python();
     }
 
     void save(py::handle path) const {
@@ -399,7 +396,7 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n_queries, k)
+ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
     Lower values are better; squared L2 estimates for l2 and inner-product
@@ -408,7 +405,7 @@ distances : ndarray of float32, shape (n_queries, k)
 Notes
 -----
 Returns (ids, distances), in that order. When the graph reaches fewer than k
-points, the remaining neighbors have ID 4294967295 and distance inf; test
+points, the remaining neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes and value ranges are
 checked at runtime, not by static type checkers.)doc";
 
@@ -474,7 +471,7 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n,)
+ids : ndarray of int64, shape (n,)
     Point IDs, the row numbers of data.
 
 Notes

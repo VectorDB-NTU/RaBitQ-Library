@@ -203,7 +203,7 @@ class IvfIndex {
         }
     }
 
-    py::array_t<PID> add(
+    py::array_t<int64_t> add(
         py::handle data,
         const py::object& cluster_ids,
         std::optional<size_t> num_threads,
@@ -237,10 +237,10 @@ class IvfIndex {
 
         const size_t first = index_->num_stored_points();
         // Allocate the returned IDs before committing any changes to the index.
-        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
+        auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
         auto* ids_data = ids.mutable_data();
         for (size_t i = 0; i < rows; ++i) {
-            ids_data[i] = static_cast<PID>(first + i);
+            ids_data[i] = static_cast<int64_t>(first + i);
         }
 
         const auto* data_ptr = data_array.data();
@@ -322,7 +322,7 @@ class IvfIndex {
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         auto output = unfilled_search_results(num_queries, k);
-        auto* ids_data = output.ids.mutable_data();
+        auto* ids_data = output.ids.data();
         auto* distances_data = output.distances.mutable_data();
 
         const auto* queries_data = query_array.data();
@@ -340,7 +340,7 @@ class IvfIndex {
             );
         }
 
-        return py::make_tuple(output.ids, output.distances);
+        return output.to_python();
     }
 
     void save(py::handle path) const {
@@ -539,7 +539,7 @@ fast_quantization : bool, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n,)
+ids : ndarray of int64, shape (n,)
     Assigned point IDs.
 
 Notes
@@ -723,7 +723,7 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n_queries, k)
+ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
     Lower values are better; squared L2 estimates for l2 and inner-product
@@ -732,7 +732,7 @@ distances : ndarray of float32, shape (n_queries, k)
 Notes
 -----
 Requires a trained or loaded index. Returns (ids, distances), in that
-order. Missing neighbors have ID 4294967295 and distance inf; test
+order. Missing neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
         )

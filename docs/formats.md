@@ -196,7 +196,7 @@ L2 and inner product are as in [Distance conventions](development.md#distance-co
 
 ### Point IDs
 
-Search results expose IDs as `int64`, and a missing result is `-1` (#211). `id_bits` records what the file stores. The in-memory indexes keep 32-bit row numbers internally and write `id_bits = 32`; their upper limit stays below 2^31 points (the search-buffer marker bit). IVF-SSD writes `id_bits = 64`. A reader rejects an `id_bits` its index kind does not support.
+Python `search`, `add` and `remove` use `int64` IDs, and a missing search result is `-1` (#211). `id_bits` records what the file stores. The in-memory indexes keep 32-bit row numbers internally and write `id_bits = 32`; their upper limit stays below 2^31 points (the search-buffer marker bit). IVF-SSD writes `id_bits = 64`. A reader rejects an `id_bits` its index kind does not support.
 
 ### Section kinds
 

@@ -54,7 +54,8 @@ work if you want to run k-means yourself.
 - **`k` above the point count.** 0.8.0 and 0.8.1 raised `ValueError` when `k`
   exceeded `num_stored_points` (HNSW-RaBitQ) or the point count (IVF-RaBitQ,
   SymphonyQG). Since 0.8.2, every index accepts any `k >= 1` and fills missing
-  slots with ID `2**32 - 1` and distance `inf`; test `np.isfinite(distances)`.
+  slots with ID `2**32 - 1` (`-1` since 0.9) and distance `inf`; test
+  `np.isfinite(distances)`, which works in both.
 - **HNSW-RaBitQ capacity grows.** `add` resizes the index, at least doubling it,
   instead of raising `ValueError` when the batch does not fit. This also applies
   to `add` on indexes created in the old form, and to the deprecated `build`,

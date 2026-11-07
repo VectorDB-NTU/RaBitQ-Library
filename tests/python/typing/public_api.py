@@ -36,16 +36,16 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
         index.set_centroids(x[:2])
         assert_type(index.is_trained, bool)
         assert_type(index.seed, int | None)
-        assert_type(index.add(x, cluster_ids=labels), npt.NDArray[np.uint32])
+        assert_type(index.add(x, cluster_ids=labels), npt.NDArray[np.int64])
         assert_type(index.remove([0, 1]), int)
         assert_type(index.dim, int)
         assert_type(len(index), int)
         index.save("index.bin")
     ids, distances = ivf.search(x, k=5, nprobe=2)
-    assert_type(ids, npt.NDArray[np.uint32])
+    assert_type(ids, npt.NDArray[np.int64])
     assert_type(distances, npt.NDArray[np.float32])
     assert_type(
-        hnsw.search(x, 5), tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]
+        hnsw.search(x, 5), tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]
     )
     graph.train(x)
     graph.add(x, num_threads=1)
@@ -54,7 +54,7 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(len(graph), int)
     assert_type(
         graph.search(x, 5),
-        tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]],
+        tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]],
     )
     assert_type(IvfIndex.load("index.bin"), IvfIndex)
     assert_type(HnswIndex.load("index.bin"), HnswIndex)
@@ -135,7 +135,7 @@ def check_numpy_scalars() -> None:
     ids, distances = ivf.search(
         x[:2], k=np.int64(3), nprobe=np.int64(1), high_accuracy=np.bool_(True)
     )
-    assert_type(ids, npt.NDArray[np.uint32])
+    assert_type(ids, npt.NDArray[np.int64])
     assert_type(distances, npt.NDArray[np.float32])
     hnsw.resize(np.int64(100))
     hnsw.search(x[:2], np.int64(3), ef=np.int64(10))
