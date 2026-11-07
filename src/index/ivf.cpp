@@ -40,6 +40,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/ivf/cluster.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/training.hpp"
@@ -231,10 +232,10 @@ IVF::IVF(
     , padded_dim_(dim)
     , num_clusters_(num_clusters)
     , raw_reranking_(total_bits == 32)
+    , seed_(seed)
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
-    , metric_type_(metric_type)
-    , seed_(seed) {
+    , metric_type_(metric_type) {
     configure(total_bits);
     rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_, seed));
 }
@@ -1037,181 +1038,191 @@ void IVF::load(const char* filename) {
         return;
     }
 
-    // An earlier layout: RABQIDX1, the raw-vector v1 layout or the unversioned one.
-    IVF loaded;
-    input.exceptions(std::ios::failbit | std::ios::badbit);
-    input.seekg(0, std::ios::end);
-    const auto file_bytes = static_cast<size_t>(input.tellg());
-    input.seekg(0);
-    uint64_t magic = 0;
-    input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    const bool explicit_padding = magic == kFormatMagic;
-    if (explicit_padding) {
-        uint32_t version = 0, flags = 0;
-        uint64_t stored_padded_dim = 0;
-        input.read(reinterpret_cast<char*>(&version), sizeof(version));
-        input.read(reinterpret_cast<char*>(&flags), sizeof(flags));
-        input.read(reinterpret_cast<char*>(&stored_padded_dim), sizeof(stored_padded_dim));
-        if (version != 1 && version != kFormatVersion) {
-            throw std::runtime_error("Unsupported IVF index version");
-        }
-        if (flags > 1 || stored_padded_dim > std::numeric_limits<size_t>::max()) {
-            throw std::runtime_error("Invalid IVF index metadata");
-        }
-        loaded.raw_reranking_ = flags == 1;
-        loaded.padded_dim_ = static_cast<size_t>(stored_padded_dim);
-        if (version >= 2) {
-            uint32_t initializer = 0;
-            input.read(reinterpret_cast<char*>(&initializer), sizeof(initializer));
-            if (initializer < static_cast<uint32_t>(InitializerType::Flat) ||
-                initializer > static_cast<uint32_t>(InitializerType::HNSW)) {
-                throw std::runtime_error("Invalid IVF initializer type in index file");
-            }
-            loaded.initializer_type_ = static_cast<InitializerType>(initializer);
-        }
-    } else if (magic == kRawFormatMagic) {
-        loaded.raw_reranking_ = true;
-        uint32_t version = 0;
-        input.read(reinterpret_cast<char*>(&version), sizeof(version));
-        if (version != kRawFormatVersion) {
-            throw std::runtime_error("Unsupported raw IVF index version");
-        }
-    } else {
+    // An earlier layout. Its reader lets the stream report truncation.
+    try {
+        // An earlier layout: RABQIDX1, the raw-vector v1 layout or the unversioned one.
+        IVF loaded;
+        input.exceptions(std::ios::failbit | std::ios::badbit);
+        input.seekg(0, std::ios::end);
+        const auto file_bytes = static_cast<size_t>(input.tellg());
         input.seekg(0);
-    }
-
-    // Load metadata
-    input.read(reinterpret_cast<char*>(&loaded.max_elements_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&loaded.dim_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&loaded.num_clusters_), sizeof(size_t));
-    input.read(reinterpret_cast<char*>(&loaded.ex_bits_), sizeof(size_t));
-    input.read(
-        reinterpret_cast<char*>(&loaded.rotator_type_), sizeof(loaded.rotator_type_)
-    );
-    input.read(reinterpret_cast<char*>(&loaded.metric_type_), sizeof(loaded.metric_type_));
-    validate_metric_type(loaded.metric_type_);
-    // Missing routing metadata means a historical file. Its payload layout must
-    // follow the original threshold, independently of the current Auto policy.
-    if (loaded.initializer_type_ == InitializerType::Auto) {
-        loaded.initializer_type_ = loaded.num_clusters_ < kHistoricalHnswMinClusters
-                                       ? InitializerType::Flat
-                                       : InitializerType::HNSW;
-    }
-    if (loaded.max_elements_ == 0 ||
-        loaded.max_elements_ > buffer::kSearchBufferMaxPointCount || loaded.dim_ == 0 ||
-        loaded.num_clusters_ == 0 ||
-        loaded.num_clusters_ > buffer::kSearchBufferMaxPointCount || loaded.ex_bits_ > 8 ||
-        (loaded.raw_reranking_ && loaded.ex_bits_ != 0) ||
-        loaded.dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
-        throw std::runtime_error("Invalid IVF index metadata");
-    }
-    if (!explicit_padding) {
-        // Both historical formats omit padded_dim and always used 64-coordinate blocks.
-        loaded.padded_dim_ = round_up_to_multiple(loaded.dim_, 64);
-    }
-    if (loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
-        loaded.padded_dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
-        throw std::runtime_error("Invalid padded dimension in IVF index file");
-    }
-    // Bound every payload by the actual file before allocating or multiplying sizes.
-    size_t remaining = file_bytes - static_cast<size_t>(input.tellg());
-    const auto consume = [&remaining](size_t count, size_t bytes) {
-        if (bytes != 0 && count > remaining / bytes) {
-            throw std::runtime_error("Invalid or truncated IVF index payload");
-        }
-        remaining -= count * bytes;
-    };
-    consume(loaded.num_clusters_, sizeof(size_t));
-    consume(loaded.max_elements_, sizeof(PID));
-    consume(loaded.max_elements_, loaded.rerank_vector_bytes());
-    if (loaded.rotator_type_ == RotatorType::MatrixRotator) {
-        consume(loaded.dim_, sizeof(float) * loaded.padded_dim_);
-    } else if (loaded.rotator_type_ == RotatorType::FhtKacRotator) {
-        consume(1, loaded.padded_dim_ / 2);
-    } else {
-        throw std::runtime_error("Invalid IVF rotator type");
-    }
-    if (loaded.initializer_type_ != InitializerType::HNSW) {
-        consume(loaded.num_clusters_, sizeof(float) * loaded.padded_dim_);
-    }
-    if (loaded.initializer_type_ == InitializerType::FlatRaBitQ) {
-        consume(loaded.padded_dim_, sizeof(float));
-        consume(
-            div_round_up(loaded.num_clusters_, fastscan::kBatchSize), loaded.batch_bytes()
-        );
-    }
-
-    // Load the number of points in each cluster
-    std::vector<size_t> cluster_sizes(loaded.num_clusters_, 0);
-    input.read(
-        reinterpret_cast<char*>(cluster_sizes.data()),
-        static_cast<std::streamsize>(sizeof(size_t) * loaded.num_clusters_)
-    );
-
-    size_t total = 0;
-    for (size_t size : cluster_sizes) {
-        if (size > loaded.max_elements_ - total) {
-            throw std::runtime_error("Invalid cluster counts in IVF index file");
-        }
-        total += size;
-        consume(div_round_up(size, fastscan::kBatchSize), loaded.batch_bytes());
-    }
-    if (total != loaded.max_elements_) {
-        throw std::runtime_error("Invalid cluster counts in IVF index file");
-    }
-    loaded.rotator_ = rotator_impl::make_rotator_for_loading(
-        loaded.dim_, loaded.rotator_type_, loaded.padded_dim_
-    );
-
-    // Load rotator
-    loaded.rotator_->load(input);
-
-    // Load data: initializer payload, then all batch data, all ex data and all IDs,
-    // each in cluster order
-    loaded.allocate_storage(cluster_sizes);
-    if (loaded.initializer_type_ == InitializerType::HNSW) {
-        // These layouts kept the routing graph in a sidecar file beside the index.
-        const std::string sidecar = std::string(filename) + detail::kHnswSidecarSuffix;
-        std::ifstream graph(
-            io_impl::filesystem_path(sidecar), std::ios::binary | std::ios::ate
-        );
-        if (!graph) {
-            throw std::runtime_error("Cannot open HNSW centroid sidecar");
-        }
-        const auto graph_bytes =
-            static_cast<uint64_t>(static_cast<std::streamoff>(graph.tellg()));
-        graph.seekg(0);
-        loaded.initializer_->read(graph, graph_bytes);
-    } else {
-        loaded.initializer_->read(input, loaded.flat_routing_bytes());
-    }
-    for (size_t i = 0; i < loaded.num_clusters_; ++i) {
-        input.read(
-            loaded.cluster_storage_[i].batch_data(),
-            static_cast<std::streamsize>(loaded.batch_data_bytes(cluster_sizes[i]))
-        );
-    }
-    if (loaded.has_rerank_data()) {
-        for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+        uint64_t magic = 0;
+        input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+        const bool explicit_padding = magic == kFormatMagic;
+        if (explicit_padding) {
+            uint32_t version = 0, flags = 0;
+            uint64_t stored_padded_dim = 0;
+            input.read(reinterpret_cast<char*>(&version), sizeof(version));
+            input.read(reinterpret_cast<char*>(&flags), sizeof(flags));
             input.read(
-                loaded.cluster_storage_[i].rerank_data(),
-                static_cast<std::streamsize>(loaded.rerank_data_bytes(cluster_sizes[i]))
+                reinterpret_cast<char*>(&stored_padded_dim), sizeof(stored_padded_dim)
+            );
+            if (version != 1 && version != kFormatVersion) {
+                throw FormatError("Unsupported IVF index version");
+            }
+            if (flags > 1 || stored_padded_dim > std::numeric_limits<size_t>::max()) {
+                throw FormatError("Invalid IVF index metadata");
+            }
+            loaded.raw_reranking_ = flags == 1;
+            loaded.padded_dim_ = static_cast<size_t>(stored_padded_dim);
+            if (version >= 2) {
+                uint32_t initializer = 0;
+                input.read(reinterpret_cast<char*>(&initializer), sizeof(initializer));
+                if (initializer < static_cast<uint32_t>(InitializerType::Flat) ||
+                    initializer > static_cast<uint32_t>(InitializerType::HNSW)) {
+                    throw FormatError("Invalid IVF initializer type in index file");
+                }
+                loaded.initializer_type_ = static_cast<InitializerType>(initializer);
+            }
+        } else if (magic == kRawFormatMagic) {
+            loaded.raw_reranking_ = true;
+            uint32_t version = 0;
+            input.read(reinterpret_cast<char*>(&version), sizeof(version));
+            if (version != kRawFormatVersion) {
+                throw FormatError("Unsupported raw IVF index version");
+            }
+        } else {
+            input.seekg(0);
+        }
+
+        // Load metadata
+        input.read(reinterpret_cast<char*>(&loaded.max_elements_), sizeof(size_t));
+        input.read(reinterpret_cast<char*>(&loaded.dim_), sizeof(size_t));
+        input.read(reinterpret_cast<char*>(&loaded.num_clusters_), sizeof(size_t));
+        input.read(reinterpret_cast<char*>(&loaded.ex_bits_), sizeof(size_t));
+        input.read(
+            reinterpret_cast<char*>(&loaded.rotator_type_), sizeof(loaded.rotator_type_)
+        );
+        input.read(
+            reinterpret_cast<char*>(&loaded.metric_type_), sizeof(loaded.metric_type_)
+        );
+        // Missing routing metadata means a historical file. Its payload layout must
+        // follow the original threshold, independently of the current Auto policy.
+        if (loaded.initializer_type_ == InitializerType::Auto) {
+            loaded.initializer_type_ = loaded.num_clusters_ < kHistoricalHnswMinClusters
+                                           ? InitializerType::Flat
+                                           : InitializerType::HNSW;
+        }
+        if ((loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
+            loaded.max_elements_ == 0 ||
+            loaded.max_elements_ > buffer::kSearchBufferMaxPointCount || loaded.dim_ == 0 ||
+            loaded.num_clusters_ == 0 ||
+            loaded.num_clusters_ > buffer::kSearchBufferMaxPointCount ||
+            loaded.ex_bits_ > 8 || (loaded.raw_reranking_ && loaded.ex_bits_ != 0) ||
+            loaded.dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
+            throw FormatError("Invalid IVF index metadata");
+        }
+        if (!explicit_padding) {
+            // Both historical formats omit padded_dim and always used 64-coordinate blocks.
+            loaded.padded_dim_ = round_up_to_multiple(loaded.dim_, 64);
+        }
+        if (loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
+            loaded.padded_dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
+            throw FormatError("Invalid padded dimension in IVF index file");
+        }
+        // Bound every payload by the actual file before allocating or multiplying sizes.
+        size_t remaining = file_bytes - static_cast<size_t>(input.tellg());
+        const auto consume = [&remaining](size_t count, size_t bytes) {
+            if (bytes != 0 && count > remaining / bytes) {
+                throw FormatError("Invalid or truncated IVF index payload");
+            }
+            remaining -= count * bytes;
+        };
+        consume(loaded.num_clusters_, sizeof(size_t));
+        consume(loaded.max_elements_, sizeof(PID));
+        consume(loaded.max_elements_, loaded.rerank_vector_bytes());
+        if (loaded.rotator_type_ == RotatorType::MatrixRotator) {
+            consume(loaded.dim_, sizeof(float) * loaded.padded_dim_);
+        } else if (loaded.rotator_type_ == RotatorType::FhtKacRotator) {
+            consume(1, loaded.padded_dim_ / 2);
+        } else {
+            throw FormatError("Invalid IVF rotator type");
+        }
+        if (loaded.initializer_type_ != InitializerType::HNSW) {
+            consume(loaded.num_clusters_, sizeof(float) * loaded.padded_dim_);
+        }
+        if (loaded.initializer_type_ == InitializerType::FlatRaBitQ) {
+            consume(loaded.padded_dim_, sizeof(float));
+            consume(
+                div_round_up(loaded.num_clusters_, fastscan::kBatchSize),
+                loaded.batch_bytes()
             );
         }
-    }
-    for (size_t i = 0; i < loaded.num_clusters_; ++i) {
-        input.read(
-            reinterpret_cast<char*>(loaded.cluster_storage_[i].ids()),
-            static_cast<std::streamsize>(ids_bytes(cluster_sizes[i]))
-        );
-    }
-    if (remaining != 0) {
-        throw std::runtime_error("IVF index file has unexpected trailing data");
-    }
-    loaded.complete_load(cluster_sizes);
 
-    input.close();
-    swap(loaded);
+        // Load the number of points in each cluster
+        std::vector<size_t> cluster_sizes(loaded.num_clusters_, 0);
+        input.read(
+            reinterpret_cast<char*>(cluster_sizes.data()),
+            static_cast<std::streamsize>(sizeof(size_t) * loaded.num_clusters_)
+        );
+
+        size_t total = 0;
+        for (size_t size : cluster_sizes) {
+            if (size > loaded.max_elements_ - total) {
+                throw FormatError("Invalid cluster counts in IVF index file");
+            }
+            total += size;
+            consume(div_round_up(size, fastscan::kBatchSize), loaded.batch_bytes());
+        }
+        if (total != loaded.max_elements_) {
+            throw FormatError("Invalid cluster counts in IVF index file");
+        }
+        loaded.rotator_ = rotator_impl::make_rotator_for_loading(
+            loaded.dim_, loaded.rotator_type_, loaded.padded_dim_
+        );
+
+        // Load rotator
+        loaded.rotator_->load(input);
+
+        // Load data: initializer payload, then all batch data, all ex data and all IDs,
+        // each in cluster order
+        loaded.allocate_storage(cluster_sizes);
+        if (loaded.initializer_type_ == InitializerType::HNSW) {
+            // These layouts kept the routing graph in a sidecar file beside the index.
+            const std::string sidecar = std::string(filename) + detail::kHnswSidecarSuffix;
+            std::ifstream graph(
+                io_impl::filesystem_path(sidecar), std::ios::binary | std::ios::ate
+            );
+            if (!graph) {
+                throw std::runtime_error("Cannot open HNSW centroid sidecar");
+            }
+            const auto graph_bytes =
+                static_cast<uint64_t>(static_cast<std::streamoff>(graph.tellg()));
+            graph.seekg(0);
+            loaded.initializer_->read(graph, graph_bytes);
+        } else {
+            loaded.initializer_->read(input, loaded.flat_routing_bytes());
+        }
+        for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+            input.read(
+                loaded.cluster_storage_[i].batch_data(),
+                static_cast<std::streamsize>(loaded.batch_data_bytes(cluster_sizes[i]))
+            );
+        }
+        if (loaded.has_rerank_data()) {
+            for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+                input.read(
+                    loaded.cluster_storage_[i].rerank_data(),
+                    static_cast<std::streamsize>(loaded.rerank_data_bytes(cluster_sizes[i]))
+                );
+            }
+        }
+        for (size_t i = 0; i < loaded.num_clusters_; ++i) {
+            input.read(
+                reinterpret_cast<char*>(loaded.cluster_storage_[i].ids()),
+                static_cast<std::streamsize>(ids_bytes(cluster_sizes[i]))
+            );
+        }
+        if (remaining != 0) {
+            throw FormatError("IVF index file has unexpected trailing data");
+        }
+        loaded.complete_load(cluster_sizes);
+
+        input.close();
+        swap(loaded);
+    } catch (const std::ios_base::failure&) {
+        throw FormatError("IVF index file is truncated");
+    }
 }
 
 void IVF::read_format2(std::istream& input) {
@@ -1412,7 +1423,7 @@ void IVF::complete_load(const std::vector<size_t>& cluster_sizes) {
     for (size_t i = 0; i < num_clusters_; ++i) {
         for (PID id : cluster_storage_[i].id_storage) {
             if (id >= max_elements_ || id >= buffer::kSearchBufferCheckedMask) {
-                throw std::runtime_error("Invalid point ID in IVF index file");
+                throw FormatError("Invalid point ID in IVF index file");
             }
         }
     }

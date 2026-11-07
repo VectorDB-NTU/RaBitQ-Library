@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
@@ -108,7 +109,7 @@ TEST_P(HistoricalPersistenceTest, LoadsSearchesResavesAndPreservesStateAfterFail
         index.save(output.string().c_str());
         EXPECT_TRUE(read_bytes(output) == saved);
         std::filesystem::resize_file(output, std::filesystem::file_size(output) - 1);
-        EXPECT_THROW(index.load(output.string().c_str()), std::runtime_error);
+        EXPECT_THROW(index.load(output.string().c_str()), FormatError);
         check_counts();
         search();
         compare();
@@ -202,6 +203,60 @@ INSTANTIATE_TEST_SUITE_P(
     ),
     [](const auto& info) { return info.param.name; }
 );
+// Truncated files of the earlier layouts raise FormatError like format-2 files.
+TEST(HistoricalPersistenceTest, TruncatedEarlierFilesRaiseFormatError) {
+    namespace fs = std::filesystem;
+    const fs::path path =
+        fs::temp_directory_path() / rabitq_test::process_unique("historical_truncated");
+    for (const char* name : {"ivf4_flat_l2", "hnsw1_l2", "qg4_l2"}) {
+        SCOPED_TRACE(name);
+        fs::copy_file(
+            fs::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.8.3" / (std::string(name) + ".index"),
+            path,
+            fs::copy_options::overwrite_existing
+        );
+        fs::resize_file(path, fs::file_size(path) / 2);
+        const std::string file = path.string();
+        if (name[0] == 'i') {
+            ivf::IVF index;
+            EXPECT_THROW(index.load(file.c_str()), FormatError);
+        } else if (name[0] == 'h') {
+            hnsw::HierarchicalNSW index;
+            EXPECT_THROW(index.load(file.c_str()), FormatError);
+        } else {
+            symqg::QuantizedGraph<float> index;
+            EXPECT_THROW(index.load(file.c_str()), FormatError);
+        }
+    }
+    // A metric byte that is neither L2 nor IP, at offset 61 of an RABQIDX1 v2 file.
+    fs::copy_file(
+        fs::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.8.3" / "ivf4_flat_l2.index",
+        path,
+        fs::copy_options::overwrite_existing
+    );
+    {
+        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+        file.seekp(61);
+        file.put(static_cast<char>(2));
+    }
+    ivf::IVF bad_metric;
+    try {
+        bad_metric.load(path.string().c_str());
+        ADD_FAILURE() << "an invalid metric was loaded";
+    } catch (const FormatError& error) {
+        EXPECT_STREQ(error.what(), "Invalid IVF index metadata");
+    }
+    fs::remove(path);
+    ivf::IVF missing;
+    try {
+        missing.load((path.string() + ".missing").c_str());
+        ADD_FAILURE() << "a missing file was loaded";
+    } catch (const FormatError&) {
+        ADD_FAILURE() << "a missing file is not a format error";
+    } catch (const std::runtime_error&) {  // "Cannot open IVF index file"
+    }
+}
+
 // The checks of the SymphonyQG layout before format 2, on a copy of its v0.8.3 file.
 TEST(HistoricalPersistenceTest, RejectsMalformedEarlierGraphFilesWithoutChangingTarget) {
     namespace fs = std::filesystem;
@@ -231,8 +286,7 @@ TEST(HistoricalPersistenceTest, RejectsMalformedEarlierGraphFilesWithoutChanging
         EXPECT_STREQ(error.what(), "QuantizedGraph file has an invalid padded dimension");
     }
     EXPECT_THROW(
-        load_patched(kPointCountOffset, std::numeric_limits<size_t>::max()),
-        std::invalid_argument
+        load_patched(kPointCountOffset, std::numeric_limits<size_t>::max()), FormatError
     );
     EXPECT_EQ(target.num_vertices(), 65U);
     EXPECT_EQ(target.metric_type(), METRIC_IP);

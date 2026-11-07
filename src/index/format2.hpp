@@ -13,17 +13,16 @@
 #include <string_view>
 #include <vector>
 
+#include "rabitqlib/index/format_error.hpp"
+
 // The index container of format 2, specified in docs/formats.md ("Index files,
 // format 2"). This layer reads and writes the header, the section table and section
 // bytes; each index defines its own sections and validates their contents.
 namespace rabitqlib::index_detail::format2 {
 
 // A file that is not a valid format-2 container, or uses something this release
-// does not support.
-class FormatError : public std::runtime_error {
-   public:
-    using std::runtime_error::runtime_error;
-};
+// does not support: the library-wide index file error.
+using FormatError = ::rabitqlib::FormatError;
 
 inline constexpr std::array<char, 8> kMagic = {'R', 'A', 'B', 'Q', 'I', 'N', 'D', 'X'};
 inline constexpr uint32_t kVersion = 2;

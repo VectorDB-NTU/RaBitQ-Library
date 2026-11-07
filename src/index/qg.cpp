@@ -32,6 +32,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/detail/visited_set.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/symqg/detail/search_scratch.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/bitops.hpp"
@@ -479,7 +480,7 @@ void QuantizedGraph<float>::read_format2(std::istream& input) {
         const auto neighbors = get_neighbors(source);
         for (size_t i = 0; i < max_degree_; ++i) {
             if (neighbors[i] >= max_elements_) {
-                throw std::runtime_error("QuantizedGraph neighbor ID is invalid");
+                throw FormatError("QuantizedGraph neighbor ID is invalid");
             }
         }
     }
@@ -523,13 +524,13 @@ void QuantizedGraph<float>::load(const char* filename) {
 
     auto read_exact = [&](void* destination, size_t bytes, const char* field) {
         if (bytes > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
-            throw std::runtime_error("QuantizedGraph field is too large to read");
+            throw FormatError("QuantizedGraph field is too large to read");
         }
         input.read(
             reinterpret_cast<char*>(destination), static_cast<std::streamsize>(bytes)
         );
         if (!input) {
-            throw std::runtime_error(
+            throw FormatError(
                 std::string("QuantizedGraph file is truncated while reading ") + field
             );
         }
@@ -544,7 +545,7 @@ void QuantizedGraph<float>::load(const char* filename) {
         uint32_t version = 0;
         read_value(version, "format version");
         if (version != kFormatVersion) {
-            throw std::runtime_error("QuantizedGraph file version is unsupported");
+            throw FormatError("QuantizedGraph file version is unsupported");
         }
     } else {
         // Files produced before qg-quant have no header and always contain raw vectors.
@@ -567,9 +568,13 @@ void QuantizedGraph<float>::load(const char* filename) {
         loaded.quantization_bits_ = 0;
     }
 
-    loaded.validate_configuration();
+    try {
+        loaded.validate_configuration();
+    } catch (const std::invalid_argument& error) {
+        throw FormatError(error.what());  // stored settings that do not fit
+    }
     if (stored_padded_dim < loaded.dim_ || stored_padded_dim % 32 != 0) {
-        throw std::runtime_error("QuantizedGraph file has an invalid padded dimension");
+        throw FormatError("QuantizedGraph file has an invalid padded dimension");
     }
     // Older files use 64-coordinate padding. Their saved rotation and codes must
     // retain that dimension, including when initialize() allocates the row storage.
@@ -597,7 +602,7 @@ void QuantizedGraph<float>::load(const char* filename) {
     const size_t payload_offset = static_cast<size_t>(payload_position);
     if (payload_offset > file_size ||
         file_size - payload_offset != expected_payload_bytes) {
-        throw std::runtime_error("QuantizedGraph payload size is invalid");
+        throw FormatError("QuantizedGraph payload size is invalid");
     }
 
     loaded.initialize(false);
@@ -613,14 +618,14 @@ void QuantizedGraph<float>::load(const char* filename) {
         const auto neighbors = loaded.get_neighbors(source);
         for (size_t i = 0; i < loaded.max_degree_; ++i) {
             if (neighbors[i] >= loaded.max_elements_) {
-                throw std::runtime_error("QuantizedGraph neighbor ID is invalid");
+                throw FormatError("QuantizedGraph neighbor ID is invalid");
             }
         }
     }
 
     loaded.rotator_->load(input);
     if (!input) {
-        throw std::runtime_error("QuantizedGraph file is truncated while reading rotator");
+        throw FormatError("QuantizedGraph file is truncated while reading rotator");
     }
 
     input.close();

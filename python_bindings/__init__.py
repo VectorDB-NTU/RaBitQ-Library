@@ -9,6 +9,7 @@ import warnings
 
 from ._rabitqlib import (
     FinalAssignmentMode,
+    FormatError,
     HnswIndex,
     IvfIndex,
     QGKMeansIterationStats,
@@ -627,6 +628,7 @@ class RaBitQKMeans(_KMeans):
 
 __all__ = [
     "FinalAssignmentMode",
+    "FormatError",
     "HnswIndex",
     "IvfIndex",
     "QGKMeans",

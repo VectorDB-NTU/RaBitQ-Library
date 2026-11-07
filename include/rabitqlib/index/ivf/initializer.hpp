@@ -17,6 +17,7 @@
 
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/ivf/detail/hnsw_sidecar.hpp"
 #include "rabitqlib/index/ivf/types.hpp"  // IWYU pragma: export
 #include "rabitqlib/index/types.hpp"
@@ -66,7 +67,7 @@ class Initializer {
     // Write the routing data that read() restores.
     virtual void write(std::ostream& output) const = 0;
     // Read `bytes` bytes that write() wrote, from the current position of `input`.
-    // Data that does not fit this initializer raises std::runtime_error.
+    // Data that does not fit this initializer raises FormatError.
     virtual void read(std::istream& input, uint64_t bytes) = 0;
 };
 inline Initializer::~Initializer() = default;
@@ -131,13 +132,13 @@ class FlatInitializer : public Initializer {
 
     void read(std::istream& input, uint64_t bytes) override {
         if (bytes != sizeof(float) * dim_ * num_cluster_) {
-            throw std::runtime_error("IVF Flat initializer data has the wrong size");
+            throw FormatError("IVF Flat initializer data has the wrong size");
         }
         input.read(
             reinterpret_cast<char*>(centroids_.data()), static_cast<std::streamsize>(bytes)
         );
         if (!input) {
-            throw std::runtime_error("IVF Flat initializer cannot be read");
+            throw FormatError("IVF Flat initializer cannot be read");
         }
     }
 };
@@ -314,10 +315,14 @@ class HNSWInitializer : public Initializer {
             graph.label_offset_ - graph.offsetData_ != space_->get_data_size() ||
             graph.size_data_per_element_ - graph.label_offset_ !=
                 sizeof(hnswlib::labeltype)) {
-            throw std::runtime_error("HNSW centroid graph changed while loading");
+            throw FormatError("HNSW centroid graph changed while loading");
         }
         detail::validate_hnsw_centroid_graph(graph);
-        rebuild_label_lookup();
+        try {
+            rebuild_label_lookup();
+        } catch (const std::runtime_error& error) {
+            throw FormatError(error.what());  // stored labels that do not fit
+        }
     }
 
     ~HNSWInitializer() override = default;

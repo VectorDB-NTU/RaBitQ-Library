@@ -178,6 +178,12 @@ Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before
 downgrading the library.
 
+A truncated, corrupt, mismatched or unsupported file raises `rabitqlib.FormatError`,
+a subclass of both `ValueError` and `RuntimeError`, so `except RuntimeError`
+handlers still catch it. A file that cannot be opened raises a plain `RuntimeError`.
+C++ loaders throw `rabitqlib::FormatError` from `rabitqlib/index/format_error.hpp`,
+a subclass of `std::runtime_error`.
+
 Index files are trusted input. Loaders validate structure and reject truncated,
 inconsistent, or unsupported files so that mistakes are reported, but they are
 not a security boundary: a crafted file can make `load` allocate its stored

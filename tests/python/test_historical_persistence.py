@@ -8,7 +8,8 @@ from pathlib import Path
 import format2_file
 import numpy as np
 import pytest
-from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
+import rabitqlib
+from rabitqlib import HnswIndex, IvfIndex, SymqgIndex, quant
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "persistence"
 NAMES = [
@@ -201,3 +202,30 @@ def test_v083_graphs_load_and_migrate(name, tmp_path):
         actual_ids, actual_distances = index.search(queries, k, ef=64)
         np.testing.assert_array_equal(actual_ids, ids)
         np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
+
+
+def test_rejected_files_raise_format_error(tmp_path):
+    assert issubclass(rabitqlib.FormatError, ValueError)
+    assert issubclass(rabitqlib.FormatError, RuntimeError)
+    assert rabitqlib.FormatError.__module__ == "rabitqlib"
+    assert quant.FormatError is rabitqlib.FormatError
+    for name, cls in [
+        ("ivf4_flat_l2", IvfIndex),
+        ("hnsw1_l2", HnswIndex),
+        ("qg4_l2", SymqgIndex),
+    ]:
+        legacy = (FIXTURES / "v0.8.3" / f"{name}.index").read_bytes()
+        damaged = tmp_path / f"{name}.index"
+        damaged.write_bytes(legacy[: len(legacy) // 2])
+        with pytest.raises(rabitqlib.FormatError):
+            cls.load(str(damaged))
+        migrated = tmp_path / f"{name}-format2.index"
+        cls.load(str(FIXTURES / "v0.8.3" / f"{name}.index")).save(str(migrated))
+        payload = migrated.read_bytes()
+        migrated.write_bytes(payload[:-1])
+        with pytest.raises(rabitqlib.FormatError, match="index file"):
+            cls.load(str(migrated))
+    # Failing to open a file is not a format error.
+    with pytest.raises(RuntimeError) as missing:
+        IvfIndex.load(str(tmp_path / "missing.index"))
+    assert not isinstance(missing.value, rabitqlib.FormatError)

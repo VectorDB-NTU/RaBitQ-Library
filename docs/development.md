@@ -551,6 +551,10 @@ keep their provenance and hashes, and do not regenerate them with the current wr
 Index files are trusted input (see the usage guide): validate structure and sizes so
 that corrupt or mismatched files are reported before allocation, without treating a
 crafted file as a supported input.
+Readers throw `rabitqlib::FormatError` (`include/rabitqlib/index/format_error.hpp`) for
+any truncated, corrupt, mismatched or unsupported content, including errors raised by
+shared validators while loading; only a file that cannot be opened throws a plain
+`std::runtime_error`. Python maps it to `rabitqlib.FormatError`; rejection tests assert it.
 
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
 serialized fields for new formats (earlier layouts store several `size_t` fields; keep their readers unchanged), validate sizes before allocation, check every

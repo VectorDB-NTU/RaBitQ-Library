@@ -39,6 +39,7 @@
 #include "rabitqlib/index/detail/hnsw_dispatch.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/detail/visited_pool.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/hnsw/hnsw_quant.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
@@ -338,7 +339,7 @@ void HierarchicalNSW::load(const char* filename) {
 // The unversioned layout of releases up to 0.8.
 void HierarchicalNSW::read_legacy(std::ifstream& input) {
     auto invalid_file = []() -> void {
-        throw std::runtime_error("HNSW index file is invalid or truncated");
+        throw FormatError("HNSW index file is invalid or truncated");
     };
     auto read_header = [&](auto& value) {
         input.read(reinterpret_cast<char*>(&value), sizeof(value));
@@ -655,7 +656,7 @@ void HierarchicalNSW::check_writable(const char* operation) const {
 
 void HierarchicalNSW::validate_graph() {
     const auto invalid = []() -> void {
-        throw std::runtime_error("HNSW index file is invalid or truncated");
+        throw FormatError("HNSW index file is invalid or truncated");
     };
     const size_t element_count = num_stored_points_;
     for (size_t i = 0; i < element_count; ++i) {

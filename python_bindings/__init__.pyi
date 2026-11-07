@@ -15,6 +15,7 @@ __version__: str
 
 __all__ = [
     "FinalAssignmentMode",
+    "FormatError",
     "HnswIndex",
     "IvfIndex",
     "QGKMeans",
@@ -35,6 +36,9 @@ _QGInit: TypeAlias = Literal["pipnn", "random"]
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
 
 # pybind11 enums are not subclasses of enum.Enum.
+class FormatError(ValueError, RuntimeError):
+    """A damaged or mismatched index file or serialized byte string, or one this release cannot read. A subclass of both ValueError and RuntimeError."""
+
 class FinalAssignmentMode:
     """Final centroid assignment policy.
 

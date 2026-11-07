@@ -1,6 +1,6 @@
 # Byte formats
 
-This is the specification of the byte formats `rabitqlib.quant` reads and writes. It is shared with the planned index format revision, which will add its own blob kinds. While `rabitqlib.quant` is provisional, a release may stop reading an old format version; reading it then raises `quant.FormatError` instead of returning wrong results. A promise that every released version stays readable comes with stabilisation.
+This is the specification of the byte formats `rabitqlib.quant` reads and writes. It is shared with the planned index format revision, which will add its own blob kinds. While `rabitqlib.quant` is provisional, a release may stop reading an old format version; reading it then raises `rabitqlib.FormatError` (also `quant.FormatError`) instead of returning wrong results. A promise that every released version stays readable comes with stabilisation.
 
 Every format has a version. A change to any layout is a new version, never an edit of an existing one. The golden files in `tests/python/fixtures/quant/` freeze each version and are never regenerated.
 
@@ -354,6 +354,8 @@ A reader checks, in order, and validates every size before allocating. The loade
 
 Steps 1–7 belong to the container; step 8 and the index's header rules in step 4 belong to each index. Readers read through the stream buffer, so the stream's exception mask does not matter, and need seekable input.
 
+A file that fails any of these checks, or a damaged file of an [earlier layout](#earlier-layouts), raises `rabitqlib::FormatError` in C++, a subclass of `std::runtime_error`, and `rabitqlib.FormatError` in Python, a subclass of both `ValueError` and `RuntimeError`. `rabitqlib.quant` raises the same class for blobs. A file that cannot be opened raises a plain `std::runtime_error` (Python `RuntimeError`).
+
 Index files remain trusted input (see [Index file compatibility](docs/index/usage.md#index-file-compatibility)). These checks report truncated, corrupt or mismatched files; they do not make crafted files safe.
 
 ### Writing
@@ -373,5 +375,4 @@ Readers dispatch on the leading bytes: `"RABQINDX"`, then each index's legacy ma
 
 ### Open questions
 
-- Python error type for a rejected file: index loads raise `RuntimeError` today, `rabitqlib.quant` raises `FormatError` (a `ValueError`). Proposed: one top-level `rabitqlib.FormatError` that subclasses both `ValueError` and `RuntimeError`, raised by `load` and by `rabitqlib.quant`, so existing `except RuntimeError` handlers keep working.
 - Whether the header should be a [blob](#blobs) kind instead of its own magic. Proposed: its own magic, as above. A blob checksums its whole body, which is too costly for large index files, so index files get their own container and nest blobs in sections.
