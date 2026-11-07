@@ -201,7 +201,7 @@ TEST(HistoricalPersistenceTest, LoadsTheHnswSidecarOfEarlierLayouts) {
         fs::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.8.3" / "ivf4_hnsw_l2.index";
     const fs::path directory =
         fs::temp_directory_path() /
-        fs::u8path(rabitq_test::process_unique("historical_sidecar_\u6d4b\u8bd5"));
+        fs::u8path(rabitq_test::process_unique(u8"historical_sidecar_\u6d4b\u8bd5"));
     fs::create_directories(directory);
     const fs::path index_path = directory / fs::u8path(u8"\u7d22\u5f15.index");
     const fs::path sidecar = fs::path(index_path.native() + fs::path(".hnsw").native());
