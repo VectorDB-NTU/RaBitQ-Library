@@ -12,6 +12,14 @@
 namespace rabitqlib {
 namespace {
 
+template <typename Call>
+void expect_message(const Call& call, const std::string& message) {
+    try {
+        call();
+        ADD_FAILURE() << "expected: " << message;
+    } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+}
+
 TEST(InputChecksTest, DetectsEveryNonFiniteValueForFloatAndDouble) {
     const std::vector<float> finite{
         0.0F,
@@ -59,12 +67,6 @@ TEST(InputChecksTest, CoordinateBoundMatchesClusteringAndAcceptsItself) {
     EXPECT_NO_THROW(check_coordinates(values.data(), values.size(), kDim, "data"));
     EXPECT_NO_THROW(check_coordinates(values.data(), 0, kDim, "data"));
 
-    const auto expect_message = [](const auto& call, const std::string& message) {
-        try {
-            call();
-            ADD_FAILURE() << "expected: " << message;
-        } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
-    };
     values[kDim - 1] = std::nextafter(bound, std::numeric_limits<float>::infinity());
     expect_message(
         [&] { check_coordinates(values.data(), values.size(), kDim, "data"); },
@@ -87,41 +89,50 @@ TEST(InputChecksTest, CoordinateBoundMatchesClusteringAndAcceptsItself) {
         "data must contain only finite values"
     );
 }
+
 TEST(InputChecksTest, NonFiniteWinsOverOversizedFiniteValues) {
     constexpr size_t kDim = 128;
     const float bound = max_coordinate_magnitude(kDim);
     const float oversized = std::nextafter(bound, std::numeric_limits<float>::infinity());
-
-    const auto expect_message = [](const auto& call, const std::string& message) {
-        try {
-            call();
-            ADD_FAILURE() << "expected: " << message;
-        } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
-    };
     for (float non_finite :
          {std::numeric_limits<float>::quiet_NaN(),
           std::numeric_limits<float>::signaling_NaN(),
           std::numeric_limits<float>::infinity(),
           -std::numeric_limits<float>::infinity()}) {
-        // case where oversized finite precedes infinite value:
+        // The oversized finite value precedes the non-finite value.
         std::vector<float> values(3, 0.25F);
-
         values[0] = oversized;
         values[2] = non_finite;
-
         expect_message(
             [&] { check_coordinates(values.data(), values.size(), kDim, "data"); },
             "data must contain only finite values"
         );
-        // case where infinite value precedes oversized value:
+        // The non-finite value precedes the oversized finite value.
         values[0] = non_finite;
         values[2] = oversized;
-
         expect_message(
             [&] { check_coordinates(values.data(), values.size(), kDim, "data"); },
             "data must contain only finite values"
         );
     }
 }
+
+TEST(InputChecksTest, ZeroDimensionRejectsOnlyNonFiniteValues) {
+    // dim == 0 makes the range bound infinite; every finite value is accepted.
+    std::vector<float> values{
+        std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), 0.25F};
+    EXPECT_NO_THROW(check_coordinates(values.data(), values.size(), 0, "data"));
+    for (float non_finite :
+         {std::numeric_limits<float>::quiet_NaN(),
+          std::numeric_limits<float>::infinity(),
+          -std::numeric_limits<float>::infinity()}) {
+        values[1] = non_finite;
+        expect_message(
+            [&] { check_coordinates(values.data(), values.size(), 0, "data"); },
+            "data must contain only finite values"
+        );
+    }
+}
+
 }  // namespace
 }  // namespace rabitqlib

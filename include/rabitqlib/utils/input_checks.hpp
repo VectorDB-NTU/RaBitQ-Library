@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -49,7 +50,9 @@ static inline float max_coordinate_magnitude(size_t dim) {
 static inline void check_coordinates(
     const float* values, size_t count, size_t dim, const char* what
 ) {
-    const float bound = max_coordinate_magnitude(dim);
+    // Capping the bound keeps +/-Inf out of range when dim == 0 makes it infinite.
+    const float bound =
+        std::min(max_coordinate_magnitude(dim), std::numeric_limits<float>::max());
     size_t out_of_range = 0;
     for (size_t i = 0; i < count; ++i) {
         out_of_range += static_cast<size_t>(!(std::fabs(values[i]) <= bound));
