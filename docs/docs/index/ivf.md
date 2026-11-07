@@ -52,7 +52,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`2**32 - 1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
+| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest

@@ -456,8 +456,15 @@ void QuantizedGraph<float>::read_format2(std::istream& input) {
         );
     }
 
-    initialize_layout();
-    const size_t data_bytes = checked_multiply(max_elements_, record_bytes_);
+    size_t data_bytes = 0;
+    try {
+        initialize_layout();
+        data_bytes = checked_multiply(max_elements_, record_bytes_);
+    } catch (const std::length_error&) {
+        throw f2::FormatError(
+            "QuantizedGraph index file describes records too large to address"
+        );
+    }
     const f2::Section* centroid = nullptr;
     if (quantization_bits_ != 0) {
         centroid = require(kCentroidSection, padded_dim_ * sizeof(float));
@@ -579,20 +586,26 @@ void QuantizedGraph<float>::load(const char* filename) {
     // Older files use 64-coordinate padding. Their saved rotation and codes must
     // retain that dimension, including when initialize() allocates the row storage.
     loaded.padded_dim_ = stored_padded_dim;
-    loaded.initialize_layout();
-
-    const size_t centroid_bytes = loaded.quantization_bits_ == 0
-                                      ? 0
-                                      : checked_multiply(loaded.padded_dim_, sizeof(float));
-    const size_t data_bytes = checked_multiply(loaded.max_elements_, loaded.record_bytes_);
-    const size_t rotator_bytes =
-        loaded.rotator_type_ == RotatorType::MatrixRotator
-            ? checked_multiply(
-                  checked_multiply(sizeof(float), loaded.dim_), loaded.padded_dim_
-              )
-            : checked_multiply(loaded.padded_dim_, size_t{4}) / 8;
-    const size_t expected_payload_bytes =
-        checked_add(checked_add(centroid_bytes, data_bytes), rotator_bytes);
+    size_t centroid_bytes = 0;
+    size_t data_bytes = 0;
+    size_t expected_payload_bytes = 0;
+    try {
+        loaded.initialize_layout();
+        centroid_bytes = loaded.quantization_bits_ == 0
+                             ? 0
+                             : checked_multiply(loaded.padded_dim_, sizeof(float));
+        data_bytes = checked_multiply(loaded.max_elements_, loaded.record_bytes_);
+        const size_t rotator_bytes =
+            loaded.rotator_type_ == RotatorType::MatrixRotator
+                ? checked_multiply(
+                      checked_multiply(sizeof(float), loaded.dim_), loaded.padded_dim_
+                  )
+                : checked_multiply(loaded.padded_dim_, size_t{4}) / 8;
+        expected_payload_bytes =
+            checked_add(checked_add(centroid_bytes, data_bytes), rotator_bytes);
+    } catch (const std::length_error&) {
+        throw FormatError("QuantizedGraph file describes records too large to address");
+    }
 
     const auto payload_position = input.tellg();
     if (payload_position < 0) {
@@ -605,7 +618,12 @@ void QuantizedGraph<float>::load(const char* filename) {
         throw FormatError("QuantizedGraph payload size is invalid");
     }
 
-    loaded.initialize(false);
+    try {
+        loaded.initialize(false);
+    } catch (const std::invalid_argument& error) {
+        // Dimensions the stored rotation does not support, such as FHT/Kac below 64.
+        throw FormatError(std::string("QuantizedGraph file is invalid: ") + error.what());
+    }
 
     if (loaded.quantization_bits_ != 0) {
         loaded.centroid_.resize(loaded.padded_dim_);

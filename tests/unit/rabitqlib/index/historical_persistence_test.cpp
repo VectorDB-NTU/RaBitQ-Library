@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -11,6 +12,7 @@
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
@@ -203,6 +205,77 @@ INSTANTIATE_TEST_SUITE_P(
     ),
     [](const auto& info) { return info.param.name; }
 );
+// Damaged headers of the earlier layouts that pass the size checks raise FormatError
+// rather than the errors of the code that would use them.
+TEST(HistoricalPersistenceTest, MalformedEarlierHeadersRaiseFormatError) {
+    namespace fs = std::filesystem;
+    const fs::path path =
+        fs::temp_directory_path() / rabitq_test::process_unique("historical_header");
+    struct Case {
+        const char* fixture;
+        size_t keep_bytes;                                 // 0 keeps the whole file
+        std::vector<std::pair<size_t, uint64_t>> patches;  // little-endian u64 fields
+        const char* message;
+    };
+    const uint64_t huge = uint64_t{1} << 62;
+    const Case cases[] = {
+        // RABQIDX1 v2: the stream fails inside the fixed header.
+        {"ivf4_flat_l2", 20, {}, "IVF index file is truncated"},
+        // An FHT/Kac dimension below 64 at offset 36.
+        {"ivf4_flat_l2",
+         0,
+         {{36, 32}},
+         "Invalid IVF rotator dimensions: Unsupported dimension for FhtKacRotator"},
+        // SymphonyQG quantized layout: dimension at 28, padded dimension at 36.
+        {"qg4_l2",
+         0,
+         {{28, 33}},
+         "QuantizedGraph file is invalid: Unsupported dimension for FhtKacRotator"},
+        {"qg4_l2",
+         0,
+         {{28, huge}, {36, huge}},
+         "QuantizedGraph file describes records too large to address"},
+        // The headerless raw layout: dimension at 16, padded dimension at 24.
+        {"qg0_ip",
+         0,
+         {{16, huge}, {24, huge}},
+         "QuantizedGraph file describes records too large to address"},
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.message);
+        fs::copy_file(
+            fs::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.8.3" /
+                (std::string(c.fixture) + ".index"),
+            path,
+            fs::copy_options::overwrite_existing
+        );
+        if (c.keep_bytes != 0) {
+            fs::resize_file(path, c.keep_bytes);
+        }
+        {
+            std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+            for (const auto& [offset, value] : c.patches) {
+                file.seekp(static_cast<std::streamoff>(offset));
+                for (size_t i = 0; i < sizeof(uint64_t); ++i) {
+                    file.put(static_cast<char>(value >> (8 * i)));
+                }
+            }
+        }
+        const std::string file = path.string();
+        try {
+            if (c.fixture[0] == 'i') {
+                ivf::IVF index;
+                index.load(file.c_str());
+            } else {
+                symqg::QuantizedGraph<float> index;
+                index.load(file.c_str());
+            }
+            ADD_FAILURE() << "accepted";
+        } catch (const FormatError& error) { EXPECT_STREQ(error.what(), c.message); }
+    }
+    fs::remove(path);
+}
+
 // Truncated files of the earlier layouts raise FormatError like format-2 files.
 TEST(HistoricalPersistenceTest, TruncatedEarlierFilesRaiseFormatError) {
     namespace fs = std::filesystem;

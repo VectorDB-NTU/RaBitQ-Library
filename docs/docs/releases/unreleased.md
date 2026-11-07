@@ -31,7 +31,7 @@
 
 ## C++ changes
 
-- Loading an index throws `rabitqlib::FormatError`, a subclass of `std::runtime_error` in the new header `rabitqlib/index/format_error.hpp`, for a damaged, mismatched or unsupported file. Failing to open the file still throws `std::runtime_error`. A SymphonyQG file of an earlier layout with invalid settings threw `std::invalid_argument`; it now throws `FormatError`.
+- Loading an index throws `rabitqlib::FormatError`, a subclass of `std::runtime_error` in the new header `rabitqlib/index/format_error.hpp`, for a damaged, mismatched or unsupported file. Failing to open the file still throws `std::runtime_error`. Files of earlier layouts that threw other exceptions for invalid contents now throw `FormatError` too: an IVF-RaBitQ file with an invalid metric or a dimension its rotation does not support, which threw `std::invalid_argument`, and a SymphonyQG file with invalid settings or dimensions, which threw `std::invalid_argument` or `std::length_error`.
 
 - `ivf::Initializer` and its subclasses:
   - `save(std::ofstream&, const char*)` becomes `write(std::ostream&)`, and `load(std::ifstream&, const char*)` becomes `read(std::istream&, uint64_t bytes)`.

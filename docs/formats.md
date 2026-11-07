@@ -354,7 +354,7 @@ A reader checks, in order, and validates every size before allocating. The loade
 
 Steps 1–7 belong to the container; step 8 and the index's header rules in step 4 belong to each index. Readers read through the stream buffer, so the stream's exception mask does not matter, and need seekable input.
 
-A file that fails any of these checks, or a damaged file of an [earlier layout](#earlier-layouts), raises `rabitqlib::FormatError` in C++, a subclass of `std::runtime_error`, and `rabitqlib.FormatError` in Python, a subclass of both `ValueError` and `RuntimeError`. `rabitqlib.quant` raises the same class for blobs. A file that cannot be opened raises a plain `std::runtime_error` (Python `RuntimeError`).
+A file that fails any of these checks, or a damaged file of an [earlier layout](#earlier-layouts), raises `rabitqlib::FormatError` in C++, a subclass of `std::runtime_error`, and `rabitqlib.FormatError` in Python, a subclass of both `ValueError` and `RuntimeError`. `rabitqlib.quant` raises the same class for blobs. A file that cannot be opened raises a plain `std::runtime_error` (Python `RuntimeError`). A read that fails after opening cannot be told from a truncated file, so it raises `FormatError`.
 
 Index files remain trusted input (see [Index file compatibility](docs/index/usage.md#index-file-compatibility)). These checks report truncated, corrupt or mismatched files; they do not make crafted files safe.
 

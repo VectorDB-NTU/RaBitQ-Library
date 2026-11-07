@@ -225,6 +225,26 @@ def test_rejected_files_raise_format_error(tmp_path):
         migrated.write_bytes(payload[:-1])
         with pytest.raises(rabitqlib.FormatError, match="index file"):
             cls.load(str(migrated))
+    # Damaged headers that pass the size checks, as in the C++ historical tests.
+    ivf = (FIXTURES / "v0.8.3" / "ivf4_flat_l2.index").read_bytes()
+    qg = bytearray((FIXTURES / "v0.8.3" / "qg4_l2.index").read_bytes())
+    struct.pack_into("<Q", qg, 28, 33)  # an FHT/Kac dimension below 64
+    migrated = tmp_path / "qg4_l2-resaved.index"
+    SymqgIndex.load(str(FIXTURES / "v0.8.3" / "qg4_l2.index")).save(str(migrated))
+    params = bytearray(migrated.read_bytes())
+    offset, _ = format2_file.sections(params)[format2_file.QG_PARAMS]
+    struct.pack_into("<Q", params, offset, 2**30)  # degree bound
+    struct.pack_into("<Q", params, 88, 2**31)  # point count
+    format2_file.reseal(params)
+    for cls, data, message in [
+        (IvfIndex, ivf[:20], "IVF index file is truncated"),
+        (SymqgIndex, bytes(qg), "Unsupported dimension for FhtKacRotator"),
+        (SymqgIndex, bytes(params), "records too large to address"),
+    ]:
+        damaged = tmp_path / "header.index"
+        damaged.write_bytes(data)
+        with pytest.raises(rabitqlib.FormatError, match=message):
+            cls.load(str(damaged))
     # Failing to open a file is not a format error.
     with pytest.raises(RuntimeError) as missing:
         IvfIndex.load(str(tmp_path / "missing.index"))

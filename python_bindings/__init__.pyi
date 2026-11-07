@@ -35,10 +35,10 @@ _QGInit: TypeAlias = Literal["pipnn", "random"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
 
-# pybind11 enums are not subclasses of enum.Enum.
 class FormatError(ValueError, RuntimeError):
     """A damaged or mismatched index file or serialized byte string, or one this release cannot read. A subclass of both ValueError and RuntimeError."""
 
+# pybind11 enums are not subclasses of enum.Enum.
 class FinalAssignmentMode:
     """Final centroid assignment policy.
 

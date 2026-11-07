@@ -37,6 +37,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/exact_nn.hpp"
 #include "rabitqlib/index/detail/visited_set.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/symqg/detail/pipnn.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/index/types.hpp"
@@ -1637,6 +1638,33 @@ TEST(QgPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget) {
         "QuantizedGraph index file is invalid: QuantizedGraph point count exceeds the "
         "search-buffer ID limit"
     );
+
+    // Settings within their limits whose records exceed size_t: 2**31 points with a
+    // degree bound of 2**30.
+    source.save(path.c_str());
+    std::string params = rabitq_test::read_format2_section(
+        path, rabitq_test::format2::IndexKind::SymphonyQg, rabitq_test::kQgSections, 768
+    );
+    rabitq_test::format2::put_u64(
+        reinterpret_cast<uint8_t*>(params.data()), uint64_t{1} << 30
+    );
+    rabitq_test::replace_format2_section(
+        path,
+        rabitq_test::format2::IndexKind::SymphonyQg,
+        rabitq_test::kQgSections,
+        768,
+        params
+    );
+    rabitq_test::patch_format2_header(path, 88, uint64_t{1} << 31, sizeof(uint64_t));
+    try {
+        target.load(path.c_str());
+        ADD_FAILURE() << "accepted records too large to address";
+    } catch (const FormatError& error) {
+        EXPECT_STREQ(
+            error.what(), "QuantizedGraph index file describes records too large to address"
+        );
+    }
+    EXPECT_EQ(target.num_vertices(), 65U);
 
     if (std::filesystem::exists("/dev/full")) {
         EXPECT_THROW(source.save("/dev/full"), std::ios_base::failure);

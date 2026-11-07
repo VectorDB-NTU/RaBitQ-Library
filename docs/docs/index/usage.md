@@ -180,7 +180,8 @@ downgrading the library.
 
 A truncated, corrupt, mismatched or unsupported file raises `rabitqlib.FormatError`,
 a subclass of both `ValueError` and `RuntimeError`, so `except RuntimeError`
-handlers still catch it. A file that cannot be opened raises a plain `RuntimeError`.
+handlers still catch it. A file that cannot be opened raises a plain `RuntimeError`;
+a read that fails after opening looks like truncation and raises `FormatError`.
 C++ loaders throw `rabitqlib::FormatError` from `rabitqlib/index/format_error.hpp`,
 a subclass of `std::runtime_error`.
 
