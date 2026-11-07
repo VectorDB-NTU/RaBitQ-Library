@@ -189,7 +189,14 @@ INSTANTIATE_TEST_SUITE_P(
             "v0.8.3", "ivf4_hnsw_l2", 96, 130, 4, ivf::InitializerType::HNSW},
         HistoricalFixtureCase{
             "v0.8.3", "ivf32_hnsw_ip", 96, 130, 4, ivf::InitializerType::HNSW},
-        HistoricalFixtureCase{"v0.8.3", "ivf1_flat_matrix_l2", 96, 130, 4}
+        HistoricalFixtureCase{"v0.8.3", "ivf1_flat_matrix_l2", 96, 130, 4},
+        HistoricalFixtureCase{"v0.8.3", "hnsw1_l2", 96, 130},
+        HistoricalFixtureCase{"v0.8.3", "hnsw5_ip", 96, 130},
+        HistoricalFixtureCase{"v0.8.3", "hnsw9_l2", 96, 130},
+        HistoricalFixtureCase{"v0.8.3", "qg0_ip", 96, 130},
+        HistoricalFixtureCase{"v0.8.3", "qg4_l2", 96, 130},
+        HistoricalFixtureCase{"v0.8.3", "qg8_ip", 96, 130},
+        HistoricalFixtureCase{"v0.8.3", "qg4_matrix_l2", 96, 130}
     ),
     [](const auto& info) { return info.param.name; }
 );
