@@ -208,7 +208,7 @@ class IvfIndex:
 
     @property
     def seed(self) -> int | None:
-        """Rotation seed, or None for an index loaded from disk or created in the 0.7 form."""
+        """Rotation seed, or None for an index loaded from a file from a release up to 0.8 or created in the 0.7 form."""
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
@@ -434,7 +434,7 @@ class IvfIndex:
         Notes
         -----
         A trained index without vectors raises RuntimeError; add vectors first.
-        IVF with HNSW centroid routing also writes its required sidecar file.
+        The one file includes HNSW centroid routing; releases up to 0.8 cannot read it.
         """
 
     @staticmethod
@@ -451,6 +451,11 @@ class IvfIndex:
         -------
         index : IvfIndex
             A trained index ready for search.
+
+        Notes
+        -----
+        Files from releases up to 0.8 with HNSW centroid routing also need the
+        accompanying ``<path>.hnsw`` file.
         """
 
     @property
@@ -636,7 +641,7 @@ class HnswIndex:
 
     @property
     def seed(self) -> int | None:
-        """Graph and rotation seed, or None for an index loaded from disk."""
+        """Graph and rotation seed, or None for an index loaded from a file from a release up to 0.8."""
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
@@ -867,7 +872,8 @@ class HnswIndex:
         Notes
         -----
         A trained index without vectors raises RuntimeError; add vectors first.
-        The saved state includes the rotation used to build the index.
+        The saved state includes the rotation used to build the index and its seed;
+        releases up to 0.8 cannot read the file.
         """
 
     @staticmethod
@@ -1063,11 +1069,11 @@ class SymqgIndex:
 
     @property
     def ef_construction(self) -> int | None:
-        """Construction search breadth of the current graph or the next add, or None for an index loaded from disk."""
+        """Construction search breadth of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8."""
 
     @property
     def init(self) -> _QGInit | None:
-        """Graph initialization method of the current graph or the next add, or None for an index loaded from disk."""
+        """Graph initialization method of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8."""
 
     @property
     def nbits(self) -> int:
@@ -1083,7 +1089,7 @@ class SymqgIndex:
 
     @property
     def seed(self) -> int | None:
-        """Rotation and graph-construction seed, or None for an index loaded from disk."""
+        """Rotation and graph-construction seed, or None for an index loaded from a file from a release up to 0.8."""
 
     def train(
         self, x: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
@@ -1225,7 +1231,8 @@ class SymqgIndex:
 
         Notes
         -----
-        The saved state includes the rotation used to build the index.
+        The saved state includes the rotation used to build the index and its seed;
+        releases up to 0.8 cannot read the file.
         """
 
     @staticmethod

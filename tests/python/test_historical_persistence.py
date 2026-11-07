@@ -5,6 +5,7 @@ import json
 import struct
 from pathlib import Path
 
+import format2_file
 import numpy as np
 import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
@@ -47,7 +48,7 @@ def test_fixture_hashes_match_pinned_manifest():
             ), filename
     expected = {
         path.relative_to(FIXTURES).as_posix()
-        for suffix in ("*.index", "*.expected")
+        for suffix in ("*.index", "*.hnsw", "*.expected")
         for path in FIXTURES.rglob(suffix)
     }
     assert expected
@@ -125,3 +126,78 @@ def test_ivf_v1_header_uses_historical_payload_and_padding(name, tmp_path):
         RuntimeError, match="^Invalid padded dimension in IVF index file$"
     ):
         cls.load(str(destination))
+
+
+# The last IVF layout before format 2: RABQIDX1 version 2 and the HNSW sidecar.
+V083_IVF = [
+    ("ivf4_flat_l2", "flat"),
+    ("ivf7_flatrabitq_ip", "flat_rabitq"),
+    ("ivf4_hnsw_l2", "hnsw"),
+    ("ivf32_hnsw_ip", "hnsw"),
+    ("ivf1_flat_matrix_l2", "flat"),
+]
+
+
+@pytest.mark.parametrize("name,initializer", V083_IVF)
+def test_v083_ivf_loads_and_migrates_without_loss(name, initializer, tmp_path):
+    path = FIXTURES / "v0.8.3" / f"{name}.index"
+    lines = path.with_suffix(".expected").read_text().splitlines()
+    count, dim, nq, k = map(int, lines[0].split())
+    queries = np.fromstring(lines[1], sep=" ", dtype=np.float32).reshape(nq, dim)
+    results = np.loadtxt(lines[2:])
+    ids = results[:, 0].astype(np.uint32).reshape(nq, k)
+    distances = results[:, 1].astype(np.float32).reshape(nq, k)
+
+    index = IvfIndex.load(str(path))
+    assert index.initializer == initializer
+    assert index.num_stored_points == count
+    assert index.num_points == count - 1
+    destination = tmp_path / "migrated.index"
+    index.save(str(destination))
+    assert not Path(str(destination) + ".hnsw").exists()
+    for loaded in (index, IvfIndex.load(str(destination))):
+        actual_ids, actual_distances = loaded.search(queries, k, nprobe=4)
+        np.testing.assert_array_equal(actual_ids, ids)
+        np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
+
+    # Format 2 keeps every byte: converting back reproduces the 0.8.3 files, which
+    # also checks the converter that other tests use to build earlier layouts.
+    main, sidecar = format2_file.to_rabqidx1(destination.read_bytes())
+    assert main == path.read_bytes()
+    original_sidecar = Path(str(path) + ".hnsw")
+    if initializer == "hnsw":
+        assert sidecar == original_sidecar.read_bytes()
+    else:
+        assert sidecar is None and not original_sidecar.exists()
+
+
+# The last HNSW-RaBitQ and SymphonyQG layouts before format 2.
+V083_GRAPHS = ["hnsw1_l2", "hnsw5_ip", "hnsw9_l2", "qg0_ip", "qg4_l2", "qg8_ip"]
+V083_GRAPHS += ["qg4_matrix_l2"]
+
+
+@pytest.mark.parametrize("name", V083_GRAPHS)
+def test_v083_graphs_load_and_migrate(name, tmp_path):
+    path = FIXTURES / "v0.8.3" / f"{name}.index"
+    lines = path.with_suffix(".expected").read_text().splitlines()
+    count, dim, nq, k = map(int, lines[0].split())
+    queries = np.fromstring(lines[1], sep=" ", dtype=np.float32).reshape(nq, dim)
+    results = np.loadtxt(lines[2:])
+    ids = results[:, 0].astype(np.uint32).reshape(nq, k)
+    distances = results[:, 1].astype(np.float32).reshape(nq, k)
+    cls = HnswIndex if name.startswith("hnsw") else SymqgIndex
+
+    original = cls.load(str(path))
+    assert original.seed is None  # earlier layouts do not record it
+    if cls is SymqgIndex:
+        assert (original.ef_construction, original.init) == (None, None)
+    destination = tmp_path / "migrated.index"
+    original.save(str(destination))
+    assert destination.read_bytes()[:8] == format2_file.MAGIC
+    for index in (original, cls.load(str(destination))):
+        assert index.num_stored_points == count
+        assert index.num_points == count - (1 if cls is HnswIndex else 0)
+        assert index.seed is None
+        actual_ids, actual_distances = index.search(queries, k, ef=64)
+        np.testing.assert_array_equal(actual_ids, ids)
+        np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)

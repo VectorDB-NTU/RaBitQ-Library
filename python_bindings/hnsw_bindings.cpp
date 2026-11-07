@@ -337,8 +337,15 @@ class HnswIndex {
         wrapper.num_clusters_ = wrapper.index_->is_trained()
                                     ? wrapper.index_->num_clusters()
                                     : kDefaultNumClusters;
+        // Format-2 files record the seed; files from releases up to 0.8 do not.
+        const std::optional<uint64_t> seed = wrapper.index_->seed();
+        if (seed.has_value()) {
+            wrapper.seed_ = static_cast<size_t>(*seed);
+        }
         wrapper.cp_ = default_training_parameters(
-            wrapper.index_->metric_type(), rabitqkmeans::RaBitQKMeansParameters{}.seed
+            wrapper.index_->metric_type(),
+            seed.has_value() ? static_cast<uint32_t>(*seed)
+                             : rabitqkmeans::RaBitQKMeansParameters{}.seed
         );
         return wrapper;
     }
@@ -447,7 +454,7 @@ class HnswIndex {
     std::unique_ptr<hnsw::HierarchicalNSW> index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
     size_t num_clusters_ = 0;     // Centroid count train and set_centroids expect.
-    std::optional<size_t> seed_;  // Unknown for loaded indexes.
+    std::optional<size_t> seed_;  // Unknown for files from releases up to 0.8.
 };
 
 }  // namespace rabitqlib::python_bindings
@@ -722,7 +729,8 @@ path : str, bytes, bytearray, or os.PathLike
 Notes
 -----
 A trained index without vectors raises RuntimeError; add vectors first.
-The saved state includes the rotation used to build the index.)doc"
+The saved state includes the rotation used to build the index and its seed;
+releases up to 0.8 cannot read the file.)doc"
         )
         .def_static(
             "load",
@@ -793,7 +801,7 @@ index : HnswIndex
         .def_property_readonly(
             "seed",
             &HnswIndex::seed,
-            R"doc(Graph and rotation seed, or None for an index loaded from disk.)doc"
+            R"doc(Graph and rotation seed, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property(
             "cp",

@@ -209,6 +209,10 @@ Python counterparts for complete examples.
 
 ## Persistence
 
+`save` writes [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2), which also records the seed, `ef_construction`
+and `init`, so they survive a reload. Releases up to 0.8 cannot read these files; every
+earlier file still loads, without these settings, and saving it writes format 2.
+
 All three modes pad the rotated domain to a multiple of 32. Loading an older
 index preserves its saved padded dimension, including historical multiples of 64.
 Older library versions that enforce 64-dimension padding cannot load new files

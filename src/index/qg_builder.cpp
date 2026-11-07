@@ -79,6 +79,11 @@ QGBuilder::QGBuilder(
         throw std::invalid_argument("QuantizedGraph initialization is invalid");
     }
     initialization_ = init;
+    // The graph records its construction settings for its index file. Rebuilding replaces
+    // whatever unknown features a loaded file described.
+    qg_.ef_construction_ = ef_construction;
+    qg_.initialization_ = init;
+    qg_.read_only_ = false;
     reset(data);
 }
 

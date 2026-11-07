@@ -5,16 +5,17 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <fstream>
+#include <cstring>
 #include <ios>
-#include <iterator>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include "format2_file.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
@@ -127,11 +128,15 @@ TEST(IvfInitializerTest, ReloadChangesRoutingAndFailedLoadPreservesExistingIndex
         EXPECT_EQ(actual_ids, expected_ids);
         EXPECT_EQ(actual_distances, expected_distances);
         {
-            std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
-            // A persisted v2 file must contain a concrete initializer, never Auto.
-            file.seekp(24);
-            const uint32_t invalid = 0;
-            file.write(reinterpret_cast<const char*>(&invalid), sizeof(invalid));
+            // A persisted file must contain a concrete initializer, never Auto.
+            using rabitq_test::format2::IndexKind;
+            std::string params = rabitq_test::read_format2_section(
+                path, IndexKind::Ivf, rabitq_test::kIvfSections, 256
+            );
+            std::memset(params.data() + 8, 0, sizeof(uint32_t));
+            rabitq_test::replace_format2_section(
+                path, IndexKind::Ivf, rabitq_test::kIvfSections, 256, params
+            );
         }
         EXPECT_THROW(target.load(path.c_str()), std::runtime_error);
         EXPECT_EQ(target.initializer_type(), type);
@@ -223,19 +228,18 @@ TEST(IvfFlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
     std::vector<float> centroids(kDim * kCount), queries(8 * kDim);
     std::generate(centroids.begin(), centroids.end(), [&] { return normal(generator); });
     std::generate(queries.begin(), queries.end(), [&] { return normal(generator); });
-    const rabitq_test::TempFile path_file("flat_rabitq_initializer.bin");
-    const std::string& path = path_file.path();
     for (auto metric : {METRIC_L2, METRIC_IP}) {
         FlatRaBitQInitializer index(kDim, kCount, metric), loaded(kDim, kCount, metric);
         index.add_vectors(centroids.data(), 2);
+        std::stringstream stored;
+        index.write(stored);
+        const std::string bytes = stored.str();
         {
-            std::ofstream out(path, std::ios::binary);
-            index.save(out, nullptr);
+            FlatRaBitQInitializer wrong_size(kDim, kCount, metric);
+            std::stringstream copy(bytes);
+            EXPECT_THROW(wrong_size.read(copy, bytes.size() - 1), std::runtime_error);
         }
-        {
-            std::ifstream input(path, std::ios::binary);
-            loaded.load(input, nullptr);
-        }
+        loaded.read(stored, bytes.size());
         for (size_t i = 0; i < kCount; ++i) {
             EXPECT_TRUE(
                 std::equal(index.centroid(i), index.centroid(i) + kDim, loaded.centroid(i))
@@ -259,15 +263,9 @@ TEST(IvfFlatRaBitQInitializerTest, PersistsCodesAndSupportsConcurrentSearch) {
                 EXPECT_FLOAT_EQ(actual[i][j].distance, expected[i][j].distance);
             }
         }
-        std::ifstream before(path, std::ios::binary);
-        const std::string bytes{std::istreambuf_iterator<char>(before), {}};
-        before.close();
-        {
-            std::ofstream out(path, std::ios::binary);
-            loaded.save(out, nullptr);
-        }
-        std::ifstream after(path, std::ios::binary);
-        EXPECT_EQ((std::string{std::istreambuf_iterator<char>(after), {}}), bytes);
+        std::ostringstream resaved;
+        loaded.write(resaved);
+        EXPECT_EQ(resaved.str(), bytes);
     }
 }
 }  // namespace

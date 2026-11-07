@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+import format2_file
 import numpy as np
 import pytest
 from conftest import DIM, N_CLUSTERS, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
@@ -205,7 +206,7 @@ def test_save_rejects_unopenable_destination(built_hnsw, tmp_path):
 
 @pytest.mark.skipif(not Path("/dev/full").exists(), reason="/dev/full is unavailable")
 def test_save_reports_write_or_close_failure(built_hnsw):
-    with pytest.raises(RuntimeError, match="HNSW failed to write index file"):
+    with pytest.raises(RuntimeError, match="HNSW index file cannot be written"):
         built_hnsw.save("/dev/full")
 
 
@@ -227,9 +228,15 @@ def test_save_load_roundtrip(built_hnsw, query_data, tmp_path):
 def test_load_rejects_count_larger_than_capacity(built_hnsw, tmp_path):
     path = tmp_path / "hnsw-invalid-count.index"
     built_hnsw.save(str(path))
-    with path.open("r+b") as index_file:
-        index_file.write((1).to_bytes(np.dtype(np.uintp).itemsize, byteorder="little"))
-    with pytest.raises(RuntimeError, match="HNSW"):
+    # The capacity is the first field of the graph parameters, which are checksummed.
+    payload = bytearray(path.read_bytes())
+    offset, _ = format2_file.sections(payload)[format2_file.HNSW_PARAMS]
+    payload[offset : offset + 8] = (1).to_bytes(8, "little")
+    format2_file.reseal(payload)
+    path.write_bytes(payload)
+    with pytest.raises(
+        RuntimeError, match="^HNSW index file has invalid graph parameters$"
+    ):
         HnswIndex.load(str(path))
 
 
@@ -557,7 +564,7 @@ def test_legacy_padding_round_trip_and_add(tmp_path):
     )
     path = tmp_path / "migrated.index"
     index.save(str(path))
-    assert int.from_bytes(path.read_bytes()[24:32], "little") == 128
+    assert format2_file.padded_dim(path.read_bytes()) == 128
     loaded = HnswIndex.load(str(path))
     actual = loaded.search(query, k=3, ef=8)
     np.testing.assert_array_equal(actual[0], ids)

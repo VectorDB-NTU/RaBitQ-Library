@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <ios>
+#include <istream>
 #include <memory>
+#include <ostream>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -61,8 +63,11 @@ class Initializer {
     virtual void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const = 0;
-    virtual void load(std::ifstream& input, const char* filename) = 0;
-    virtual void save(std::ofstream& output, const char* filename) const = 0;
+    // Write the routing data that read() restores.
+    virtual void write(std::ostream& output) const = 0;
+    // Read `bytes` bytes that write() wrote, from the current position of `input`.
+    // Data that does not fit this initializer raises std::runtime_error.
+    virtual void read(std::istream& input, uint64_t bytes) = 0;
 };
 inline Initializer::~Initializer() = default;
 
@@ -113,8 +118,8 @@ class FlatInitializer : public Initializer {
         std::copy_n(centroid_candidates.begin(), num_probes, candidates.begin());
     }
 
-    // The flat initializer stores its centroids inline in the index file stream.
-    void save(std::ofstream& output, const char* /*filename*/) const override {
+    // The flat initializer stores only its centroids.
+    void write(std::ostream& output) const override {
         output.write(
             reinterpret_cast<const char*>(centroids_.data()),
             static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
@@ -124,10 +129,12 @@ class FlatInitializer : public Initializer {
         }
     }
 
-    void load(std::ifstream& input, const char* /*filename*/) override {
+    void read(std::istream& input, uint64_t bytes) override {
+        if (bytes != sizeof(float) * dim_ * num_cluster_) {
+            throw std::runtime_error("IVF Flat initializer data has the wrong size");
+        }
         input.read(
-            reinterpret_cast<char*>(centroids_.data()),
-            static_cast<std::streamsize>(sizeof(float) * dim_ * num_cluster_)
+            reinterpret_cast<char*>(centroids_.data()), static_cast<std::streamsize>(bytes)
         );
         if (!input) {
             throw std::runtime_error("IVF Flat initializer cannot be read");
@@ -153,8 +160,8 @@ class FlatRaBitQInitializer : public Initializer {
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override;
-    void save(std::ofstream& output, const char* filename) const override;
-    void load(std::ifstream& input, const char* filename) override;
+    void write(std::ostream& output) const override;
+    void read(std::istream& input, uint64_t bytes) override;
 };
 
 // Keep centroid routing on the same runtime-selected distance kernels as flat IVF.
@@ -291,25 +298,23 @@ class HNSWInitializer : public Initializer {
         }
     }
 
-    // The HNSW initializer stores its graph in a separate hnswlib sidecar file.
-    void save(std::ofstream& /*output*/, const char* filename) const override {
-        alg_hnsw_->saveIndex(std::string(filename) + detail::kHnswSidecarSuffix);
-    }
+    // The HNSW initializer stores its graph in hnswlib's own layout, which earlier
+    // releases wrote to the sidecar file <index>.hnsw.
+    void write(std::ostream& output) const override { alg_hnsw_->saveIndex(output); }
 
-    void load(std::ifstream& /*input*/, const char* filename) override {
-        const std::string sidecar = std::string(filename) + detail::kHnswSidecarSuffix;
-        detail::validate_hnsw_sidecar_file(sidecar, num_cluster_, space_->get_data_size());
-        alg_hnsw_->loadIndex(sidecar, space_, num_cluster_);
+    void read(std::istream& input, uint64_t bytes) override {
+        detail::validate_hnsw_graph(input, bytes, num_cluster_, space_->get_data_size());
+        alg_hnsw_->loadIndex(input, static_cast<size_t>(bytes), space_, num_cluster_);
         const auto& graph = *alg_hnsw_;
-        // validate_hnsw_sidecar_file already checked these header fields, and loadIndex
-        // reads them again from a second open of the file. Recheck the loaded values so
-        // a sidecar replaced in between cannot give centroid() an out-of-record offset.
+        // validate_hnsw_graph already checked these header fields, and loadIndex reads
+        // them again. Recheck the loaded values so that data changed in between cannot
+        // give centroid() an out-of-record offset.
         if (graph.offsetData_ > graph.label_offset_ ||
             graph.label_offset_ > graph.size_data_per_element_ ||
             graph.label_offset_ - graph.offsetData_ != space_->get_data_size() ||
             graph.size_data_per_element_ - graph.label_offset_ !=
                 sizeof(hnswlib::labeltype)) {
-            throw std::runtime_error("HNSW centroid sidecar changed while loading");
+            throw std::runtime_error("HNSW centroid graph changed while loading");
         }
         detail::validate_hnsw_centroid_graph(graph);
         rebuild_label_lookup();

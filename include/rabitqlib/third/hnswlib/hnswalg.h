@@ -688,8 +688,14 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         if (!output.is_open())
             throw std::runtime_error("Cannot open HNSW index file for writing");
         output.exceptions(std::ios::failbit | std::ios::badbit);
-        std::streampos position;
+        saveIndex(output);
+        output.close();
+    }
 
+
+    // RaBitQ: the stream overloads let an index embed the graph in a section of its own
+    // file. The bytes are those of the path overload, which delegates to them.
+    void saveIndex(std::ostream &output) {
         writeBinaryPOD(output, offsetLevel0_);
         writeBinaryPOD(output, max_elements_);
         writeBinaryPOD(output, cur_element_count);
@@ -713,7 +719,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             if (linkListSize)
                 output.write(linkLists_[i], linkListSize);
         }
-        output.close();
     }
 
 
@@ -723,11 +728,20 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         if (!input.is_open())
             throw std::runtime_error("Cannot open file");
 
-        clear();
         // get file size:
         input.seekg(0, input.end);
-        std::streampos total_filesize = input.tellg();
+        const std::streamoff total_filesize = input.tellg();
         input.seekg(0, input.beg);
+        loadIndex(input, static_cast<size_t>(total_filesize), s, max_elements_i);
+        input.close();
+    }
+
+
+    // RaBitQ: read a graph of `total_bytes` bytes that starts at the current position.
+    void loadIndex(std::istream &input, size_t total_bytes, SpaceInterface<dist_t> *s, size_t max_elements_i = 0) {
+        clear();
+        const std::streampos begin = input.tellg();
+        const std::streampos end = begin + static_cast<std::streamoff>(total_bytes);
 
         readBinaryPOD(input, offsetLevel0_);
         readBinaryPOD(input, max_elements_);
@@ -758,7 +772,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         /// Optional - check if index is ok:
         input.seekg(cur_element_count * size_data_per_element_, input.cur);
         for (size_t i = 0; i < cur_element_count; i++) {
-            if (input.tellg() < 0 || input.tellg() >= total_filesize) {
+            if (input.tellg() < begin || input.tellg() >= end) {
                 throw std::runtime_error("Index seems to be corrupted or unsupported");
             }
 
@@ -770,13 +784,13 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         }
 
         // throw exception if it either corrupted or old index
-        if (input.tellg() != total_filesize)
+        if (input.tellg() != end)
             throw std::runtime_error("Index seems to be corrupted or unsupported");
 
         input.clear();
         /// Optional check end
 
-        input.seekg(pos, input.beg);
+        input.seekg(pos);
 
         data_level0_memory_ = (char *) malloc(max_elements * size_data_per_element_);
         if (data_level0_memory_ == nullptr)
@@ -819,10 +833,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                 if (allow_replace_deleted_) deleted_elements.insert(i);
             }
         }
-
-        input.close();
-
-        return;
     }
 
 

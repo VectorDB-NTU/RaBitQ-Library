@@ -122,9 +122,9 @@ with TemporaryDirectory() as directory:
     np.testing.assert_allclose(loaded_distances, distances)
 ```
 
-The loaded index owns its data and restores the saved rotation. IVF-RaBitQ indexes using
-HNSW centroid routing also need the accompanying `.hnsw` file; keep it with the
-main index. This small example uses Flat routing and has no sidecar.
+The loaded index owns its data and restores the saved rotation. IVF-RaBitQ saves one
+file, including its HNSW centroid routing; files from releases up to 0.8 with HNSW
+routing also need the accompanying `.hnsw` file.
 See [file compatibility](index/usage.md#index-file-compatibility) before downgrading.
 
 ## Next steps

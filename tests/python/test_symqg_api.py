@@ -136,8 +136,8 @@ def test_add_builds_once_and_search_finds_the_vectors(nbits, base_data, tmp_path
     index.save(tmp_path / "graph.index")
     loaded = SymqgIndex.load(tmp_path / "graph.index")
     assert loaded.nbits == nbits
-    # Files store neither the seed nor the construction settings.
-    assert (loaded.seed, loaded.ef_construction, loaded.init) == (None, None, None)
+    # Format-2 files record the seed and the construction settings.
+    assert (loaded.seed, loaded.ef_construction, loaded.init) == (5, 60, "pipnn")
     assert loaded.is_trained
     with pytest.raises(RuntimeError, match=message):
         loaded.add(base_data)

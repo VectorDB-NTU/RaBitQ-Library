@@ -316,6 +316,10 @@ through 0.5.1 check every cluster ID on `load` and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.
 
+`save` writes [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2), which also records the construction seed, so
+`seed` survives a reload. Releases up to 0.8 cannot read these files; every earlier
+file still loads, without a recorded seed, and saving it writes format 2.
+
 New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
 Loading preserves the saved padded dimension and rotation, so older indexes
 using multiples of 64 remain readable. Older library versions cannot load new
