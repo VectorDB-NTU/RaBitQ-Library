@@ -148,7 +148,8 @@ native call, or pass `num_threads=1`, in such processes.
 clustering classes default to `0`. `search` defaults to one thread (`None` or `1`),
 as do the deprecated `build`, which requires an integer, and `search_batch`.
 Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, so pass
-`num_threads=1` when a build must be reproducible.
+`num_threads=1` when a build must be reproducible. The same holds for the centroid graph
+of IVF-RaBitQ HNSW routing, which `train`, `set_centroids` or the first `add` builds.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.
 

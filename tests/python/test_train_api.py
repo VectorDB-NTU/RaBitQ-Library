@@ -496,9 +496,11 @@ def test_ivf_first_add_keeps_every_setting(options, base_data, tmp_path):
         return index
 
     implicit = make()
-    implicit.add(base_data, num_threads=1)
+    implicit.add(base_data, num_threads=1)  # trains with the add's single thread
     explicit = make()
-    explicit.train(base_data)
+    # The saved file includes HNSW routing, whose graph is reproducible only when
+    # it is built with one thread.
+    explicit.train(base_data, num_threads=1)
     explicit.add(base_data, num_threads=1)
     assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
         explicit, tmp_path / "explicit.index"
