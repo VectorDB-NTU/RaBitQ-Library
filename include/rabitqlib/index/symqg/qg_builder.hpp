@@ -14,8 +14,6 @@
 namespace rabitqlib::symqg {
 inline constexpr size_t kMaxBsIter = 5;  // max iter for binary search of pruning bar
 using CandidateList = std::vector<AnnCandidate<float>>;
-enum class QGInitialization { PiPNN, Random };
-
 // Owns temporary state for SymphonyQG initialization and refinement.
 class QGBuilder {
     friend struct QGConstructionTestAccess;

@@ -14,6 +14,10 @@ IVF_HNSW_ROUTING = 260
 IVF_CODES = 261
 IVF_RERANK = 262
 IVF_IDS = 263
+HNSW_PARAMS = 512
+QG_PARAMS = 768
+QG_CENTROID = 769
+QG_RECORDS = 770
 
 
 def sections(data: bytes) -> dict[int, tuple[int, int]]:

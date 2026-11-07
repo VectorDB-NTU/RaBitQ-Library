@@ -52,6 +52,11 @@
 namespace rabitqlib::ivf {
 
 namespace {
+using index_detail::format2::get_u32;
+using index_detail::format2::get_u64;
+using index_detail::format2::put_u32;
+using index_detail::format2::put_u64;
+
 // remove() marks a point by this f_add; save and load keep the marker.
 constexpr float kRemovedFAdd = std::numeric_limits<float>::infinity();
 // Files without routing metadata used HNSW routing from this many clusters.
@@ -86,33 +91,6 @@ uint32_t routing_section(InitializerType type) {
     }
 }
 
-void put_u32(uint8_t* out, uint32_t value) {
-    for (size_t i = 0; i < 4; ++i) {
-        out[i] = static_cast<uint8_t>(value >> (8 * i));
-    }
-}
-
-void put_u64(uint8_t* out, uint64_t value) {
-    for (size_t i = 0; i < 8; ++i) {
-        out[i] = static_cast<uint8_t>(value >> (8 * i));
-    }
-}
-
-uint32_t get_u32(const uint8_t* in) {
-    uint32_t value = 0;
-    for (size_t i = 0; i < 4; ++i) {
-        value |= static_cast<uint32_t>(in[i]) << (8 * i);
-    }
-    return value;
-}
-
-uint64_t get_u64(const uint8_t* in) {
-    uint64_t value = 0;
-    for (size_t i = 0; i < 8; ++i) {
-        value |= static_cast<uint64_t>(in[i]) << (8 * i);
-    }
-    return value;
-}
 }  // namespace
 
 IVF::IVF() noexcept = default;
@@ -202,6 +180,7 @@ void IVF::swap(IVF& other) noexcept {
     swap(raw_reranking_, other.raw_reranking_);
     swap(ready_, other.ready_);
     swap(read_only_, other.read_only_);
+    swap(seed_, other.seed_);
     swap(ex_bits_, other.ex_bits_);
     swap(rotator_type_, other.rotator_type_);
     swap(rotator_, other.rotator_);
@@ -254,7 +233,8 @@ IVF::IVF(
     , raw_reranking_(total_bits == 32)
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
-    , metric_type_(metric_type) {
+    , metric_type_(metric_type)
+    , seed_(seed) {
     configure(total_bits);
     rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_, seed));
 }
@@ -956,13 +936,14 @@ void IVF::write_file(const char* filename) const {
     header.code_bits = raw_reranking_ ? 1 : static_cast<uint32_t>(ex_bits_ + 1);
     header.raw_type = raw_reranking_ ? f2::RawType::Float32 : f2::RawType::None;
     header.id_bits = 32;
+    header.seed = seed_;
     header.num_points = max_elements_;
 
     std::vector<uint8_t> rotator(
         rabitqlib::detail::rotator_blob_bytes(rotator_type_, dim_, padded_dim_)
     );
     rabitqlib::detail::encode_rotator_blob(
-        *rotator_, rotator_type_, dim_, std::nullopt, rotator.data()
+        *rotator_, rotator_type_, dim_, seed_, rotator.data()
     );
     std::array<uint8_t, kParamsBytes> params{};
     put_u64(params.data(), num_clusters_);
@@ -1275,6 +1256,10 @@ void IVF::read_format2(std::istream& input) {
                 std::to_string(header.num_points)
             );
         }
+        if (header.seed.has_value() &&
+            *header.seed > std::numeric_limits<uint32_t>::max()) {
+            throw f2::FormatError("IVF index file has a seed above 32 bits");
+        }
     });
     const f2::Header& header = reader.header();
     metric_type_ = header.metric == f2::Metric::InnerProduct ? METRIC_IP : METRIC_L2;
@@ -1283,6 +1268,9 @@ void IVF::read_format2(std::istream& input) {
     raw_reranking_ = header.raw_type == f2::RawType::Float32;
     ex_bits_ = raw_reranking_ ? 0 : header.code_bits - 1;
     max_elements_ = static_cast<size_t>(header.num_points);
+    if (header.seed.has_value()) {
+        seed_ = static_cast<uint32_t>(*header.seed);
+    }
 
     // A section of this kind, whose size, when given, must match before it is read.
     const auto require = [&reader](uint32_t kind, std::optional<uint64_t> size) {

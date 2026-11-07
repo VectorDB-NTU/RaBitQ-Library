@@ -78,7 +78,9 @@ int main(int argc, char** argv) {
         const std::string name = c.name;
         hnsw::HierarchicalNSW index(kCount, kDim, c.total_bits, 8, 64, 42, c.metric);
         std::vector<PID> assigned = clusters;
-        index.construct(kClusters, centroids.data(), kCount, data.data(), assigned.data(), 1);
+        index.construct(
+            kClusters, centroids.data(), kCount, data.data(), assigned.data(), 1
+        );
         const PID removed = 0;
         index.remove(&removed, 1);
         index.save((directory / (name + ".index")).string().c_str());
@@ -107,14 +109,20 @@ int main(int argc, char** argv) {
     };
     for (const auto& c : qg_cases) {
         const std::string name = c.name;
-        symqg::QuantizedGraph<float> index(kCount, kDim, 32, c.metric, c.rotator, c.bits, 42);
-        symqg::QGBuilder builder(index, 64, data.data(), 1, symqg::QGInitialization::PiPNN, 42);
+        symqg::QuantizedGraph<float> index(
+            kCount, kDim, 32, c.metric, c.rotator, c.bits, 42
+        );
+        symqg::QGBuilder builder(
+            index, 64, data.data(), 1, symqg::QGInitialization::PiPNN, 42
+        );
         builder.build();
         index.save((directory / (name + ".index")).string().c_str());
         std::vector<PID> ids(kQueries * kTopK);
         std::vector<float> distances(ids.size());
         index.set_ef(64);
-        index.search_batch(queries.data(), kQueries, kTopK, ids.data(), distances.data(), 1);
+        index.search_batch(
+            queries.data(), kQueries, kTopK, ids.data(), distances.data(), 1
+        );
         write_expected(name, ids, distances);
     }
     return 0;

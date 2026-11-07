@@ -18,9 +18,11 @@
 namespace rabitq_test {
 namespace format2 = rabitqlib::index_detail::format2;
 
-// Every IVF-RaBitQ section kind, for reading back an IVF file in full.
+// Every section kind of each index, for reading back a file in full.
 inline const std::vector<uint32_t> kIvfSections = {
     1, 256, 257, 258, 259, 260, 261, 262, 263};
+inline const std::vector<uint32_t> kHnswSections = {1, 512, 513, 514, 515, 516};
+inline const std::vector<uint32_t> kQgSections = {1, 768, 769, 770};
 
 // A whole format-2 file: the header and each known section with its bytes, in file order.
 struct Format2Contents {

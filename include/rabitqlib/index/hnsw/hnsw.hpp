@@ -7,9 +7,11 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <iosfwd>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <random>
 #include <unordered_map>
@@ -70,6 +72,9 @@ class HierarchicalNSW {
     [[nodiscard]] size_t M() const { return M_; }
     [[nodiscard]] size_t ef_construction() const { return ef_construction_; }
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
+    // The construction seed, or no value for an index loaded from a file that does not
+    // record it (files from releases up to 0.8).
+    [[nodiscard]] std::optional<uint64_t> seed() const { return seed_; }
     // Logical capacity, nonremoved points, and stored records (including removals).
     [[nodiscard]] size_t max_elements() const { return max_elements_; }
     [[nodiscard]] size_t num_points() const {
@@ -284,6 +289,10 @@ class HierarchicalNSW {
     std::unordered_map<PID, PID> label_lookup_;
 
     std::default_random_engine level_generator_;
+    std::optional<uint64_t> seed_;  // the construction seed, when known
+    // Loaded from a file with read-only-compatible features this release does not know:
+    // search works, but add, resize, remove and save refuse the index.
+    bool read_only_ = false;
 
     std::unique_ptr<VisitedSetPool> visited_set_pool_{nullptr};
 
@@ -381,8 +390,19 @@ class HierarchicalNSW {
 
     int random_level(double multiplier);
 
-    // Write the index file at exactly this path.
+    // Write the index file in format 2 at exactly this path.
     void write_file(const char* filename) const;
+
+    // Read a file into this freshly created index: format 2, or the earlier layout.
+    void read_format2(std::istream& input);
+    void read_legacy(std::ifstream& input);
+
+    // Check the loaded records and link lists, and rebuild what they imply: the label
+    // lookup and the removed-point count.
+    void validate_graph();
+
+    // Refuse an operation that would modify or save a read-only index.
+    void check_writable(const char* operation) const;
 
     // A link list is a count header followed by neighbor IDs.
     [[nodiscard]] PID* upper_layer_links(PID internal_id, int level) {

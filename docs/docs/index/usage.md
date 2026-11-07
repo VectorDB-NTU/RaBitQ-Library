@@ -170,9 +170,9 @@ routing graph.
 
 The compatibility suite loads frozen files written by v0.5.2 and v0.8.3, compares
 search IDs and distances, and verifies save/load migration and rejection of truncated
-or unsupported versions. IVF-RaBitQ saves in
+or unsupported versions. Every index saves in
 [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2),
-which releases up to 0.8 cannot read. See the
+which releases up to 0.8 cannot read, and which records the construction seed. See the
 [fixture provenance and coverage](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence).
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before

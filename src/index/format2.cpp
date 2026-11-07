@@ -20,34 +20,6 @@ constexpr uint32_t kKnownSectionFlags = kSectionRequired | kSectionChecksummed;
 constexpr size_t kChecksumOffset = 108;
 constexpr size_t kChunkBytes = size_t{1} << 16;
 
-void put_u32(uint8_t* out, uint32_t value) {
-    for (size_t i = 0; i < 4; ++i) {
-        out[i] = static_cast<uint8_t>(value >> (8 * i));
-    }
-}
-
-void put_u64(uint8_t* out, uint64_t value) {
-    for (size_t i = 0; i < 8; ++i) {
-        out[i] = static_cast<uint8_t>(value >> (8 * i));
-    }
-}
-
-uint32_t get_u32(const uint8_t* in) {
-    uint32_t value = 0;
-    for (size_t i = 0; i < 4; ++i) {
-        value |= static_cast<uint32_t>(in[i]) << (8 * i);
-    }
-    return value;
-}
-
-uint64_t get_u64(const uint8_t* in) {
-    uint64_t value = 0;
-    for (size_t i = 0; i < 8; ++i) {
-        value |= static_cast<uint64_t>(in[i]) << (8 * i);
-    }
-    return value;
-}
-
 // Round up to a multiple of kSectionAlignment; the caller has bounded `value`.
 uint64_t align_section(uint64_t value) {
     return (value + kSectionAlignment - 1) / kSectionAlignment * kSectionAlignment;

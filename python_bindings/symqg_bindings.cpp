@@ -167,9 +167,14 @@ class SymqgIndex {
         wrapper.max_degree_ = wrapper.index_->degree_bound();
         wrapper.metric_type_ = wrapper.index_->metric_type();
         wrapper.quantization_bits_ = wrapper.index_->quantization_bits();
-        // Files store neither the seed nor the construction settings.
-        wrapper.ef_construction_.reset();
+        // Format-2 files record the seed and the construction settings; earlier files
+        // record neither.
+        wrapper.seed_ = wrapper.index_->seed();
+        wrapper.ef_construction_ = wrapper.index_->ef_construction();
         wrapper.init_.reset();
+        if (const auto init = wrapper.index_->initialization(); init.has_value()) {
+            wrapper.init_ = *init == symqg::QGInitialization::PiPNN ? "pipnn" : "random";
+        }
         return wrapper;
     }
 
@@ -314,7 +319,7 @@ class SymqgIndex {
     // Settings of the current graph, or of the next add; unknown after load.
     std::optional<size_t> ef_construction_ = kDefaultEfConstruction;
     std::optional<std::string> init_ = "pipnn";
-    std::optional<uint32_t> seed_;  // Unknown for loaded indexes.
+    std::optional<uint32_t> seed_;  // Unknown for files from releases up to 0.8.
     bool seed_given_ = false;       // The user chose the seed.
     mutable IndexAccess access_;
     std::unique_ptr<symqg::QuantizedGraph<float>> index_;
@@ -510,7 +515,8 @@ path : str, bytes, bytearray, or os.PathLike
 
 Notes
 -----
-The saved state includes the rotation used to build the index.)doc"
+The saved state includes the rotation used to build the index and its seed;
+releases up to 0.8 cannot read the file.)doc"
         )
         .def_static(
             "load",
@@ -548,12 +554,12 @@ index : SymqgIndex
         .def_property_readonly(
             "ef_construction",
             &SymqgIndex::ef_construction,
-            R"doc(Construction search breadth of the current graph or the next add, or None for an index loaded from disk.)doc"
+            R"doc(Construction search breadth of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property_readonly(
             "init",
             &SymqgIndex::init,
-            R"doc(Graph initialization method of the current graph or the next add, or None for an index loaded from disk.)doc"
+            R"doc(Graph initialization method of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property_readonly(
             "num_points",
@@ -585,6 +591,6 @@ index : SymqgIndex
         .def_property_readonly(
             "seed",
             &SymqgIndex::seed,
-            R"doc(Rotation and graph-construction seed, or None for an index loaded from disk.)doc"
+            R"doc(Rotation and graph-construction seed, or None for an index loaded from a file from a release up to 0.8.)doc"
         );
 }

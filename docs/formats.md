@@ -97,7 +97,7 @@ The body defines the rotation; `seed` only records where it came from. A seeded 
 
 ## Index files, format 2 (draft)
 
-> **Status: draft for 0.9 (#211, #212).** The container (`src/index/format2.*`) is implemented, and IVF-RaBitQ reads and writes format 2; HNSW-RaBitQ and SymphonyQG do not yet, and no index stores the cosine metric or a seed yet. Field numbers, section kinds and the open questions at the end may still change until a release writes format 2.
+> **Status: draft for 0.9 (#211, #212).** The container (`src/index/format2.*`) is implemented, and IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG read and write format 2; no index stores the cosine metric yet, and IVF-SSD and companion files are not implemented. Field numbers, section kinds and the open questions at the end may still change until a release writes format 2.
 
 Format 2 is one container for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG, and later for the SSD-resident IVF index from RaBitQ-SSD. It replaces the per-index layouts: IVF-RaBitQ `RABQIDX1` versions 1 and 2, the unversioned HNSW-RaBitQ layout, SymphonyQG's quantized version 1 and its raw layout, and the unversioned hnswlib sidecar `<file>.hnsw` of IVF-RaBitQ. Every released layout stays readable (see [Earlier layouts](#earlier-layouts)); `save` always writes format 2.
 
@@ -144,7 +144,7 @@ Every section starts at or after `header_bytes`. Non-empty sections do not overl
 | 68 | 4 | u32 | `raw_type` | Element type of stored raw vectors: 0 = none, 1 = float32, 2 = uint8 |
 | 72 | 4 | u32 | `id_bits` | Width of the point IDs stored in the file: 32 or 64 |
 | 76 | 4 | u32 | `flags` | Bit 0, `seed_known`: `seed` is valid |
-| 80 | 8 | u64 | `seed` | The index's construction seed (graph levels, graph construction, training sample). Zero when `seed_known` is clear. The rotator records its own seed |
+| 80 | 8 | u64 | `seed` | The index's construction seed. Zero when `seed_known` is clear, which a file migrated from an earlier layout has. IVF-RaBitQ: the rotation and training seed, at most 2^32 − 1. HNSW-RaBitQ: the graph-level and training seed, whose low 32 bits seeded the rotation. SymphonyQG: the rotation seed, at most 2^32 − 1, which Python also uses for graph construction. The rotator blob records the rotation seed again |
 | 88 | 8 | u64 | `num_points` | Stored points, including removed ones |
 | 96 | 8 | u64 | `section_table_offset` | A multiple of 8, at least `header_bytes` |
 | 104 | 4 | u32 | `section_count` | At least 1 |
@@ -164,7 +164,7 @@ The Python `nbits` maps to these fields as follows. IVF-RaBitQ `nbits` 1–9 is 
 | 24 | 4 | u32 | `crc32` | Over the section's bytes when `checksummed` is set; zero otherwise |
 | 28 | 4 | — | reserved | |
 
-Kind 0 is reserved, and a kind appears at most once. Section flags other than the two above are rejected; a later version cannot add a section flag without a new `version`. Writers checksum the header-like sections (parameters, cluster sizes, companions), whose values size later allocations, and leave bulk data unchecksummed, so that loading a large index does not read it twice.
+Kind 0 is reserved, and a kind appears at most once. Section flags other than the two above are rejected; a later version cannot add a section flag without a new `version`. Writers checksum the header-like sections (parameters, cluster sizes, companions), whose values size later allocations, and leave bulk data unchecksummed, so that loading a large index does not read it twice. Per-point arrays such as `hnsw_levels` count as bulk data: the header fixes their size, and readers check every value against its limit.
 
 A section the reader does not know is handled by its `required` bit: a required one rejects the file, and an optional one is skipped without reading it, so its checksum is not verified. A writer marks a section optional only if dropping it leaves a correct index, for example a cache that can be recomputed. `save` drops optional sections it does not know.
 
@@ -175,7 +175,7 @@ The three masks follow the ext4 superblock: they say what an older reader may do
 | Mask | A reader that does not know a set bit |
 | --- | --- |
 | `incompat_features` | Rejects the file; reading it would give wrong results |
-| `ro_compat_features` | May load and search; operations that change or save the index (`add`, `reserve`, `remove`, `save`) raise, because they would leave the unknown data stale. Rebuilding the index with `construct` replaces that data, so the rebuilt index is writable |
+| `ro_compat_features` | May load and search; operations that change or save the index (`add`, `reserve`, `remove`, `save`) raise, because they would leave the unknown data stale. Rebuilding replaces that data and makes the index writable again: IVF-RaBitQ `construct`, or a new SymphonyQG build; HNSW-RaBitQ cannot be rebuilt in place |
 | `compat_features` | Ignores the bit; `save` clears it |
 
 The error names the unknown bits and `writer_version`, such as "index file uses incompatible features 0x4 that this release does not know; written by rabitqlib 0.10.0".
@@ -219,7 +219,7 @@ Kinds 1–255 are shared, 256–511 are IVF-RaBitQ, 512–767 HNSW-RaBitQ, 768�
 | 514 | `hnsw_records` | HNSW | `num_points` [base-layer records](#hnsw-rabitq-records) |
 | 515 | `hnsw_levels` | HNSW | `num_points` × u32 levels |
 | 516 | `hnsw_upper_links` | HNSW | The upper-layer link lists of points with level > 0 in point order; each is `level × upper_links_bytes` |
-| 768 | `qg_params` | SymphonyQG | `max_degree` u64; `entry_point` u64; `ef_construction` u64 (0 = unknown); `init` u32 (0 = unknown); reserved u32 |
+| 768 | `qg_params` | SymphonyQG | `max_degree` u64; `entry_point` u64; `ef_construction` u64 (0 = unknown); `init` u32 (0 = unknown, 1 = PiPNN, 2 = random); reserved u32 |
 | 769 | `qg_centroid` | SymphonyQG, `code_bits > 0` | `padded_dim` f32 |
 | 770 | `qg_records` | SymphonyQG | `num_points` [records](#symphonyqg-records) |
 
@@ -298,7 +298,7 @@ Every vertex has `max_degree` neighbor slots, a multiple of 32. Let `V` be the s
 | `V` | `(max_degree / 32) * (padded_dim * 4 + 256)` | The neighbors' 1-bit codes, quantized against this vertex, as [FastScan blocks](#fastscan-blocks-version-1) without the `error` factor: sign codes, then 32 `add` and 32 `rescale` values |
 | `V + (max_degree / 32) * (padded_dim * 4 + 256)` | `4 * max_degree` | Neighbor IDs |
 
-Unused lanes of a partial neighbor block have zero factors, and their IDs are unspecified.
+Unused lanes of a partial neighbor block have zero factors. Their IDs are left over from construction, but like every ID slot they are below `num_points`, which readers check.
 
 ### IVF-RaBitQ files
 
@@ -308,9 +308,18 @@ Besides the rules above, an IVF-RaBitQ reader requires:
 - `code_bits` from 1 to 9, with `raw_type = float32` only when `code_bits = 1`, and `raw_type` none or float32;
 - `id_bits = 32`;
 - in `ivf_params`, `num_clusters` from 1 to 2^31, `initializer` 1 to 3, and the reserved field zero;
-- cluster sizes that add up to `num_points`.
+- cluster sizes that add up to `num_points`;
+- a seed, when known, of at most 2^32 − 1.
 
 This release also rejects the cosine metric, which no IVF-RaBitQ file stores yet.
+
+### HNSW-RaBitQ files
+
+An HNSW-RaBitQ reader requires `num_points` from 1 to 2^31, `code_bits` from 1 to 9, `raw_type` none, `id_bits = 32`, `dim` at least 64, and an FHT/Kac rotator. In `hnsw_params`: `max_elements` from `num_points` to 2^31; `num_clusters` from 1 to 2^31; `M` from 2 to 10,000, with `upper_max_degree = M` and `base_max_degree = 2 * M`; `ef_construction` at least `M`; a finite positive `level_multiplier`; `max_level` at least 0; `entry_point` below `num_points`; and the reserved field zero. Every level in `hnsw_levels` is at most `max_level`, and the entry point's level equals it. Every record's cluster ID (without the removal mark) is below `num_clusters`, its labels are distinct, its base-layer neighbor count is at most `base_max_degree` and each upper-layer count at most `M`, and every neighbor ID is below `num_points` with at least the level of the list that holds it. This release rejects the cosine metric.
+
+### SymphonyQG files
+
+A SymphonyQG reader requires `id_bits = 32` and either raw vectors (`code_bits = 0`, `raw_type = float32`) or `code_bits` 4 or 8 with `raw_type` none; a seed, when known, of at most 2^32 − 1; `num_points` up to 2^31; in `qg_params`, a `max_degree` that is a positive multiple of 32 and below `num_points`, `entry_point` below `num_points`, `init` 0 to 2 and the reserved field zero; `qg_centroid` exactly when the codes are quantized; and every neighbor ID below `num_points`. This release rejects the cosine metric.
 
 ### Companion files
 
@@ -366,4 +375,3 @@ Readers dispatch on the leading bytes: `"RABQINDX"`, then each index's legacy ma
 
 - Python error type for a rejected file: index loads raise `RuntimeError` today, `rabitqlib.quant` raises `FormatError` (a `ValueError`). Proposed: one top-level `rabitqlib.FormatError` that subclasses both `ValueError` and `RuntimeError`, raised by `load` and by `rabitqlib.quant`, so existing `except RuntimeError` handlers keep working.
 - Whether the header should be a [blob](#blobs) kind instead of its own magic. Proposed: its own magic, as above. A blob checksums its whole body, which is too costly for large index files, so index files get their own container and nest blobs in sections.
-- Whether `seed` should keep the full u64 that HNSW-RaBitQ accepts, while the rotator blob records a u32 seed. Proposed: u64 in the header; the rotator blob's seed stays informational and has `seed_known` clear when the seed does not fit in u32.

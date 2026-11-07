@@ -94,7 +94,8 @@ class IVF {
     // Loaded from a file with read-only-compatible features this release does not know:
     // search works, but add, reserve, remove and save refuse the index.
     bool read_only_ = false;
-    size_t ex_bits_ = 0;  // total bits = ex_bits_ + 1; 0 with raw reranking
+    std::optional<uint32_t> seed_;  // the construction seed, when known
+    size_t ex_bits_ = 0;            // total bits = ex_bits_ + 1; 0 with raw reranking
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     std::unique_ptr<Rotator<float>> rotator_;
     std::vector<Cluster> clusters_;
@@ -264,6 +265,9 @@ class IVF {
     [[nodiscard]] size_t dimension() const { return dim_; }
     [[nodiscard]] size_t nbits() const { return raw_reranking_ ? 32 : ex_bits_ + 1; }
     [[nodiscard]] MetricType metric_type() const { return metric_type_; }
+    // The rotation seed of the seeded constructor, or no value when it is unknown: the
+    // point-count constructor draws one, and files from releases up to 0.8 omit it.
+    [[nodiscard]] std::optional<uint32_t> seed() const { return seed_; }
     [[nodiscard]] RotatorType rotator_type() const { return rotator_type_; }
     [[nodiscard]] InitializerType initializer_type() const { return initializer_type_; }
     // Centroids are set, by train, set_centroids, construct or load.

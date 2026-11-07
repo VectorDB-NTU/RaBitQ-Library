@@ -553,14 +553,13 @@ that corrupt or mismatched files are reported before allocation, without treatin
 crafted file as a supported input.
 
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
-serialized fields for new formats (the HNSW and QG bodies still store several `size_t` fields;
-change those only with a format version bump), validate sizes before allocation, check every
+serialized fields for new formats (earlier layouts store several `size_t` fields; keep their readers unchanged), validate sizes before allocation, check every
 read, and retain a compatibility test fixture or an explicit rejection path. Review each affected
 format; changes to shared serialization helpers require auditing every format using them.
-IVF-RaBitQ writes index format 2 ([`docs/formats.md`](formats.md#index-format-2), container in
-`src/index/format2.*`) and still reads its earlier layouts. HNSW-RaBitQ and SymphonyQG have
-separate formats. SymphonyQG includes a versioned quantized format plus a legacy raw-format
-fallback; preserve both unless a breaking change is explicitly requested. When a writer moves to
+Every index writes index format 2 ([`docs/formats.md`](formats.md#index-format-2), container in
+`src/index/format2.*`) and still reads its earlier layouts: IVF-RaBitQ's `RABQIDX1` versions and
+unversioned files, HNSW-RaBitQ's unversioned layout, and SymphonyQG's versioned quantized layout
+and raw fallback. Preserve those readers unless a breaking change is explicitly requested. When a writer moves to
 a new format, freeze the last files of the old writer as release-produced fixtures first.
 
 ### Change Python bindings

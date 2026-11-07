@@ -362,8 +362,12 @@ class IvfIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
         }
-        wrapper.cp_ = untrainable_parameters(wrapper.index_->metric_type());
         wrapper.builds_by_construct_ = true;
+        wrapper.seed_ = wrapper.index_->seed();  // recorded by format-2 files
+        wrapper.cp_ = default_training_parameters(
+            wrapper.index_->metric_type(),
+            wrapper.seed_.value_or(rabitqkmeans::RaBitQKMeansParameters{}.seed)
+        );
         return wrapper;
     }
 
@@ -461,7 +465,7 @@ class IvfIndex {
     mutable IndexAccess access_;
     std::unique_ptr<ivf::IVF> index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
-    std::optional<uint32_t> seed_;  // Unknown for point-count and loaded indexes.
+    std::optional<uint32_t> seed_;  // Unknown for point-count indexes and 0.8 files.
     // Point-count and loaded indexes build by construct, never by training.
     bool builds_by_construct_ = false;
 };
@@ -813,7 +817,7 @@ accompanying ``<path>.hnsw`` file.)doc"
         .def_property_readonly(
             "seed",
             &IvfIndex::seed,
-            R"doc(Rotation seed, or None for an index loaded from disk or created in the 0.7 form.)doc"
+            R"doc(Rotation seed, or None for an index loaded from a file from a release up to 0.8 or created in the 0.7 form.)doc"
         )
         .def_property(
             "cp",

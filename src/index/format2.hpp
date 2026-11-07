@@ -46,6 +46,35 @@ enum class RawType : uint32_t { None = 0, Float32 = 1, Uint8 = 2 };
 inline constexpr uint32_t kSectionRequired = 1U << 0;
 inline constexpr uint32_t kSectionChecksummed = 1U << 1;
 
+// Little-endian fields of fixed width, for section contents.
+inline void put_u32(uint8_t* out, uint32_t value) {
+    for (size_t i = 0; i < 4; ++i) {
+        out[i] = static_cast<uint8_t>(value >> (8 * i));
+    }
+}
+
+inline void put_u64(uint8_t* out, uint64_t value) {
+    for (size_t i = 0; i < 8; ++i) {
+        out[i] = static_cast<uint8_t>(value >> (8 * i));
+    }
+}
+
+[[nodiscard]] inline uint32_t get_u32(const uint8_t* in) {
+    uint32_t value = 0;
+    for (size_t i = 0; i < 4; ++i) {
+        value |= static_cast<uint32_t>(in[i]) << (8 * i);
+    }
+    return value;
+}
+
+[[nodiscard]] inline uint64_t get_u64(const uint8_t* in) {
+    uint64_t value = 0;
+    for (size_t i = 0; i < 8; ++i) {
+        value |= static_cast<uint64_t>(in[i]) << (8 * i);
+    }
+    return value;
+}
+
 // The section kind every index shares: its rotator blob.
 inline constexpr uint32_t kRotatorSection = 1;
 

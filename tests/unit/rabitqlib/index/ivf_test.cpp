@@ -53,6 +53,8 @@ struct IvfTestAccess {
 
     static std::unique_ptr<Rotator<float>>& rotator(IVF& index) { return index.rotator_; }
 
+    static std::optional<uint32_t>& seed(IVF& index) { return index.seed_; }
+
     // Rotated centroid as the initializer routes with it.
     static std::vector<float> centroid(const IVF& index, PID i) {
         const float* centroid = index.initializer_->centroid(i);
@@ -1808,13 +1810,15 @@ TEST(IvfTrainTest, SetCentroidsAndAddMatchConstructByteForByte) {
                 << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
             );
             IVF constructed(kCount, kDynDim, kDynNumClusters, bits, metric);
-            // Give the point-count constructor the rotation the seed selects.
+            // Give the point-count constructor the rotation the seed selects, and the
+            // seed itself, which the file records.
             IvfTestAccess::rotator(constructed)
                 .reset(
                     choose_rotator<float>(
                         kDynDim, RotatorType::FhtKacRotator, constructed.padded_dim(), kSeed
                     )
                 );
+            IvfTestAccess::seed(constructed) = kSeed;
             constructed.construct(
                 points.data(), centroids.data(), assigned.data(), false, 1
             );
