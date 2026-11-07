@@ -118,7 +118,8 @@ TEST(InputChecksTest, NonFiniteWinsOverOversizedFiniteValues) {
 }
 
 TEST(InputChecksTest, ZeroDimensionRejectsOnlyNonFiniteValues) {
-    // dim == 0 makes the range bound infinite; every finite value is accepted.
+    // dim == 0 has no range limit; every finite value is accepted.
+    EXPECT_EQ(max_coordinate_magnitude(0), std::numeric_limits<float>::max());
     std::vector<float> values{
         std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), 0.25F};
     EXPECT_NO_THROW(check_coordinates(values.data(), values.size(), 0, "data"));
