@@ -1539,7 +1539,7 @@ TEST(QgFormat2Test, RejectsContentsThatDoNotFitTheGraph) {
     );
     expect_rejected(
         "neighbor out of range",
-        [](auto& c) {
+        [&](auto& c) {
             std::string& records = c.bytes(770);
             // The last 4 bytes are the last vertex's last neighbor ID.
             rabitq_test::format2::put_u32(
