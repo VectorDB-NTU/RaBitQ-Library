@@ -5,37 +5,39 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <ios>
+#include <istream>
 #include <limits>
 #include <stdexcept>
-#include <string>
 
 #include "rabitqlib/third/hnswlib/hnswlib.h"
-#include "rabitqlib/utils/path.hpp"
 
 namespace rabitqlib::ivf::detail {
 
-// The HNSW initializer stores its graph at the index path plus this suffix. Saving,
-// loading and atomic replacement must all agree on it.
+// Releases before index format 2 stored the HNSW routing graph at the index path plus
+// this suffix; loading those files reads it from there.
 inline constexpr char kHnswSidecarSuffix[] = ".hnsw";
 
-// hnswlib's native sidecar has no version tag. Check the existing writer's
-// header and record lengths before its loader uses offsets or allocates links.
-// As with the main index file, callers must not mutate the file during loading.
-inline void validate_hnsw_sidecar_file(
-    const std::string& path, size_t expected_count, size_t vector_bytes
+// hnswlib's native layout has no version tag. Check the header and record lengths of
+// the `bytes` bytes at the current position of `input` before hnswlib's loader uses
+// offsets or allocates links, then restore the position. As with the index file,
+// callers must not mutate the data during loading.
+inline void validate_hnsw_graph(
+    std::istream& input, uint64_t bytes, size_t expected_count, size_t vector_bytes
 ) {
-    std::ifstream input(io_impl::filesystem_path(path), std::ios::binary | std::ios::ate);
-    if (!input) {
-        throw std::runtime_error("Cannot open HNSW centroid sidecar");
+    const std::streampos begin = input.tellg();
+    if (begin == std::streampos(std::streamoff(-1))) {
+        throw std::runtime_error("Cannot read HNSW centroid graph");
     }
-    const auto end = input.tellg();
-    input.seekg(0);
+    // Stay within the graph's bytes, as a budget rather than by querying the position:
+    // in an index file, other data follows them.
+    auto remaining = static_cast<std::streamoff>(bytes);
     const auto read = [&](auto& value) {
-        if (!input.read(reinterpret_cast<char*>(&value), sizeof(value))) {
-            throw std::runtime_error("Truncated HNSW centroid sidecar");
+        if (remaining < static_cast<std::streamoff>(sizeof(value)) ||
+            !input.read(reinterpret_cast<char*>(&value), sizeof(value))) {
+            throw std::runtime_error("Truncated HNSW centroid graph");
         }
+        remaining -= static_cast<std::streamoff>(sizeof(value));
     };
     size_t level0_offset = 0, capacity = 0, count = 0, level0_record_bytes = 0;
     size_t label_offset = 0, data_offset = 0;
@@ -78,8 +80,7 @@ inline void validate_hnsw_sidecar_file(
     if (max_level < 0 || entry >= count) {
         throw std::runtime_error("Invalid HNSW centroid entry point or maximum level");
     }
-    auto remaining = end - input.tellg();
-    if (remaining < 0 || count > static_cast<uintmax_t>(remaining) / level0_record_bytes) {
+    if (count > static_cast<uintmax_t>(remaining) / level0_record_bytes) {
         throw std::runtime_error("Truncated HNSW centroid base records");
     }
     const auto level0_records_bytes =
@@ -89,11 +90,7 @@ inline void validate_hnsw_sidecar_file(
     size_t highest_level = 0, entry_level = 0;
     for (size_t i = 0; i < count; ++i) {
         unsigned int link_bytes = 0;  // Native type written by hnswlib::saveIndex.
-        if (remaining < static_cast<std::streamoff>(sizeof(link_bytes))) {
-            throw std::runtime_error("Truncated HNSW centroid sidecar");
-        }
         read(link_bytes);
-        remaining -= static_cast<std::streamoff>(sizeof(link_bytes));
         if (link_bytes % upper_layer_links_bytes != 0 ||
             link_bytes > static_cast<uintmax_t>(remaining)) {
             throw std::runtime_error("Invalid HNSW centroid upper-link length");
@@ -114,6 +111,8 @@ inline void validate_hnsw_sidecar_file(
         entry_level != highest_level) {
         throw std::runtime_error("Invalid HNSW centroid level structure");
     }
+    input.clear();
+    input.seekg(begin);
 }
 
 inline void validate_hnsw_centroid_graph(const hnswlib::HierarchicalNSW<float>& graph) {

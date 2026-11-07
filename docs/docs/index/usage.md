@@ -126,7 +126,7 @@ A conflicting call immediately raises
 It does not wait or queue an update. Access protection includes Python input
 conversion and is released when the operation returns or raises an exception.
 Different index objects can operate independently. Concurrent saves must use
-different output paths, including any sidecar files.
+different output paths.
 
 Search parameters such as `ef`, `nprobe`, precision, and `num_threads` belong to
 each call. When using a Python thread pool, consider `num_threads=1` to avoid
@@ -156,20 +156,22 @@ C++ paths use UTF-8 on Windows and native path bytes on POSIX.
 Python `save`/`load` accept strings, `pathlib.Path` and `os.PathLike` objects;
 existing `bytes` and `bytearray` paths remain supported. POSIX paths preserve native
 bytes, but non-UTF-8 filenames require filesystem support. Windows byte paths use
-UTF-8. Embedded null characters are rejected before file access. IVF HNSW sidecars
-use the same path conversion.
+UTF-8. Embedded null characters are rejected before file access. The HNSW sidecars
+of IVF files from earlier releases use the same path conversion.
 
 `save` writes a temporary file beside the destination and renames it into place, so a
 failed save leaves an existing index unchanged. A replaced file keeps its permission
 bits, but not its owner or other hard links. Symbolic links and other non-regular
-destinations are written in place. IVF renames its HNSW sidecar before the index file;
-a failure between the two renames can leave a new sidecar beside the old index.
+destinations are written in place. IVF-RaBitQ writes one file that includes its HNSW
+routing graph.
 
 ## Index file compatibility
 
-The compatibility suite loads frozen files written by v0.5.2, compares search
-IDs and distances, and verifies save/load migration and rejection of truncated
-or unsupported versions. See the
+The compatibility suite loads frozen files written by v0.5.2 and v0.8.3, compares
+search IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. IVF-RaBitQ saves in
+[index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2),
+which releases up to 0.8 cannot read. See the
 [fixture provenance and coverage](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence).
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before

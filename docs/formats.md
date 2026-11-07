@@ -93,9 +93,11 @@ The body is what `Rotator<float>::save()` writes, and `body_bytes` must equal it
 
 The body defines the rotation; `seed` only records where it came from. A seeded FHT/Kac rotation is identical on every platform, while a matrix drawn from a seed is reproducible only with the same standard library and build, which is why the matrix itself is stored.
 
+<a id="index-format-2"></a>
+
 ## Index files, format 2 (draft)
 
-> **Status: draft for 0.9 (#211, #212).** The container layer (header, section table, checksums) is implemented in `src/index/format2.*`, but no index reads or writes format 2 yet. Field numbers, section kinds and the open questions at the end may still change; until the format ships, no file in this layout exists.
+> **Status: draft for 0.9 (#211, #212).** The container (`src/index/format2.*`) is implemented, and IVF-RaBitQ reads and writes format 2; HNSW-RaBitQ and SymphonyQG do not yet, and no index stores the cosine metric or a seed yet. Field numbers, section kinds and the open questions at the end may still change until a release writes format 2.
 
 Format 2 is one container for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG, and later for the SSD-resident IVF index from RaBitQ-SSD. It replaces the per-index layouts: IVF-RaBitQ `RABQIDX1` versions 1 and 2, the unversioned HNSW-RaBitQ layout, SymphonyQG's quantized version 1 and its raw layout, and the unversioned hnswlib sidecar `<file>.hnsw` of IVF-RaBitQ. Every released layout stays readable (see [Earlier layouts](#earlier-layouts)); `save` always writes format 2.
 
@@ -173,7 +175,7 @@ The three masks follow the ext4 superblock: they say what an older reader may do
 | Mask | A reader that does not know a set bit |
 | --- | --- |
 | `incompat_features` | Rejects the file; reading it would give wrong results |
-| `ro_compat_features` | May load and search; `add`, `remove` and `save` raise, because they would leave the unknown data stale |
+| `ro_compat_features` | May load and search; operations that change or save the index (`add`, `reserve`, `remove`, `save`) raise, because they would leave the unknown data stale. Rebuilding the index with `construct` replaces that data, so the rebuilt index is writable |
 | `compat_features` | Ignores the bit; `save` clears it |
 
 The error names the unknown bits and `writer_version`, such as "index file uses incompatible features 0x4 that this release does not know; written by rabitqlib 0.10.0".
@@ -202,13 +204,13 @@ Kinds 1–255 are shared, 256–511 are IVF-RaBitQ, 512–767 HNSW-RaBitQ, 768�
 
 | Kind | Name | Used by | Content |
 | --- | --- | --- | --- |
-| 1 | `rotator` | All | A [rotator blob](#rotator-kind-1-version-1), byte for byte what `Rotator.to_bytes()` writes. Its `dim` and `padded_dim` must equal the header's |
+| 1 | `rotator` | All | A [rotator blob](#rotator-kind-1-version-1), byte for byte what `Rotator.to_bytes()` writes. Its `dim` and `padded_dim` must equal the header's. Not checksummed by the container: the blob carries its own CRC-32 |
 | 2 | `companions` | IVF-SSD | The [companion table](#companion-files) |
 | 256 | `ivf_params` | IVF | `num_clusters` u64; `initializer` u32 (1 = flat, 2 = FlatRaBitQ, 3 = HNSW); reserved u32 |
 | 257 | `ivf_cluster_sizes` | IVF | `num_clusters` × u64; the sum equals `num_points` |
-| 258 | `ivf_centroids` | IVF, flat and FlatRaBitQ | `num_clusters × padded_dim` f32, rotated |
-| 259 | `ivf_flat_rabitq` | IVF, FlatRaBitQ | The global centroid (`padded_dim` f32), then the centroids' [FastScan blocks](#fastscan-blocks-version-1) |
-| 260 | `ivf_hnsw_routing` | IVF, HNSW | The centroid graph, byte for byte the current `<file>.hnsw` sidecar (hnswlib layout) |
+| 258 | `ivf_flat_routing` | IVF, flat | The rotated centroids, `num_clusters × padded_dim` f32 |
+| 259 | `ivf_flat_rabitq_routing` | IVF, FlatRaBitQ | The rotated centroids as above, the global centroid (their mean, `padded_dim` f32), then `ceil(num_clusters / 32)` [FastScan blocks](#fastscan-blocks-version-1) of the centroids, quantized against the global centroid under the index metric |
+| 260 | `ivf_hnsw_routing` | IVF, HNSW | The [HNSW routing graph](#hnsw-routing-graph), byte for byte the `<file>.hnsw` sidecar of earlier releases |
 | 261 | `ivf_codes` | IVF | Per cluster in cluster order, `ceil(size / 32)` [FastScan blocks](#fastscan-blocks-version-1). Removed points have `add = +inf` |
 | 262 | `ivf_rerank` | IVF, `code_bits > 1` or raw | Per point in cluster order: a [single-code record](#single-code-record) with `b = code_bits - 1`, or `dim` raw values of `raw_type` |
 | 263 | `ivf_ids` | IVF | Per point in cluster order, `id_bits`-wide IDs |
@@ -220,6 +222,8 @@ Kinds 1–255 are shared, 256–511 are IVF-RaBitQ, 512–767 HNSW-RaBitQ, 768�
 | 768 | `qg_params` | SymphonyQG | `max_degree` u64; `entry_point` u64; `ef_construction` u64 (0 = unknown); `init` u32 (0 = unknown); reserved u32 |
 | 769 | `qg_centroid` | SymphonyQG, `code_bits > 0` | `padded_dim` f32 |
 | 770 | `qg_records` | SymphonyQG | `num_points` [records](#symphonyqg-records) |
+
+An IVF file has exactly one routing section, the one that `ivf_params` names; a rerank section exactly when `code_bits > 1` or raw vectors are stored.
 
 The HNSW per-point length prefix of the current layout becomes `hnsw_levels`, so a reader knows every size before reading the link lists.
 
@@ -262,6 +266,28 @@ Let `L = 4 * (base_max_degree + 1)` and `U = 4 * (upper_max_degree + 1)`.
 
 A point at level `l > 0` has `l` upper-layer link lists in `hnsw_upper_links`, for levels 1 to `l`, each `U` bytes: a u16 count, 2 reserved bytes, then `upper_max_degree` neighbor IDs.
 
+#### HNSW routing graph
+
+The centroid graph of IVF-RaBitQ's HNSW routing is the layout hnswlib's `saveIndex` writes. Unlike the rest of format 2 it is not defined field by field by this library, so it is fixed here as written on the supported 64-bit little-endian platforms (`size_t` is 8 bytes, `int` and `unsigned` 4):
+
+| Offset | Size | Type | Field | Rule |
+| --- | --- | --- | --- | --- |
+| 0 | 8 | u64 | `offset_level0` | 0 |
+| 8 | 8 | u64 | `max_elements` | At least `count` |
+| 16 | 8 | u64 | `count` | `num_clusters` |
+| 24 | 8 | u64 | `record_bytes` | `label_offset + 8` |
+| 32 | 8 | u64 | `label_offset` | `data_offset + 4 * padded_dim` |
+| 40 | 8 | u64 | `data_offset` | `4 + 4 * max_m0` |
+| 48 | 4 | i32 | `max_level` | The entry point's level, at least 0 |
+| 52 | 4 | u32 | `entry_point` | Below `count` |
+| 56 | 8 | u64 | `max_m` | `m` |
+| 64 | 8 | u64 | `max_m0` | `2 * m` |
+| 72 | 8 | u64 | `m` | 2 to 10,000 |
+| 80 | 8 | f64 | `level_multiplier` | Finite and positive |
+| 88 | 8 | u64 | `ef_construction` | At least `m` |
+
+Then `count` base records of `record_bytes`: a u16 neighbor count of at most `max_m0`, a flags byte whose bit 0 (hnswlib's deletion mark) must be clear, a reserved byte, `max_m0` u32 neighbor IDs, the rotated centroid (`padded_dim` f32) and its label (u64). Then, per point in order, a u32 byte length followed by that many bytes of upper-layer link lists: `level` lists of `4 + 4 * max_m` bytes each, laid out as in the base record. Every neighbor ID is below `count` and has at least the level of the list that holds it.
+
 #### SymphonyQG records
 
 Every vertex has `max_degree` neighbor slots, a multiple of 32. Let `V` be the size of the vector part: `4 * dim` for raw vectors, or the [single-code record](#single-code-record) size with `b = code_bits` otherwise.
@@ -273,6 +299,18 @@ Every vertex has `max_degree` neighbor slots, a multiple of 32. Let `V` be the s
 | `V + (max_degree / 32) * (padded_dim * 4 + 256)` | `4 * max_degree` | Neighbor IDs |
 
 Unused lanes of a partial neighbor block have zero factors, and their IDs are unspecified.
+
+### IVF-RaBitQ files
+
+Besides the rules above, an IVF-RaBitQ reader requires:
+
+- `num_points` from 1 to 2^31, and every stored ID below it;
+- `code_bits` from 1 to 9, with `raw_type = float32` only when `code_bits = 1`, and `raw_type` none or float32;
+- `id_bits = 32`;
+- in `ivf_params`, `num_clusters` from 1 to 2^31, `initializer` 1 to 3, and the reserved field zero;
+- cluster sizes that add up to `num_points`.
+
+This release also rejects the cosine metric, which no IVF-RaBitQ file stores yet.
 
 ### Companion files
 

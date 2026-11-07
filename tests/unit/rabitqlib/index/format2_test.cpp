@@ -13,8 +13,11 @@
 #include <string>
 #include <vector>
 
+#include "crc32.hpp"
+
 namespace {
 namespace f2 = rabitqlib::index_detail::format2;
+using rabitqlib::detail::crc32;
 
 constexpr uint32_t kParams = 256;
 constexpr uint32_t kBulk = 261;
@@ -57,8 +60,8 @@ void reseal(std::string& bytes) {
     const uint32_t count = get_u32(bytes, 104);
     std::string header = bytes.substr(0, header_bytes);
     put_u32(header, 108, 0);
-    uint32_t crc = f2::crc32(header.data(), header.size());
-    crc = f2::crc32(bytes.data() + table_offset, size_t{32} * count, crc);
+    uint32_t crc = crc32(header.data(), header.size());
+    crc = crc32(bytes.data() + table_offset, size_t{32} * count, crc);
     put_u32(bytes, 108, crc);
 }
 
@@ -164,18 +167,6 @@ class SequentialOutput : public std::streambuf {
     }
 };
 
-TEST(Format2Crc32Test, MatchesZlib) {
-    EXPECT_EQ(f2::crc32("", 0), 0U);
-    EXPECT_EQ(f2::crc32("123456789", 9), 0xCBF43926U);
-    std::vector<uint8_t> data(1024);
-    for (size_t i = 0; i < data.size(); ++i) {
-        data[i] = static_cast<uint8_t>(i);
-    }
-    EXPECT_EQ(f2::crc32(data.data(), data.size()), 0xB70B4C26U);  // zlib.crc32
-    const uint32_t first = f2::crc32(data.data(), 100);
-    EXPECT_EQ(f2::crc32(data.data() + 100, data.size() - 100, first), 0xB70B4C26U);
-}
-
 TEST(Format2ContainerTest, RoundTripsHeaderAndSections) {
     const std::string bytes = valid_file();
     std::istringstream stream(bytes);
@@ -241,7 +232,7 @@ TEST(Format2ContainerTest, WritesAndReadsWithoutSeeking) {
 
     SequentialInput input_buffer(valid_file());
     std::istream input(&input_buffer);
-    EXPECT_THROW(f2::has_magic(input), f2::FormatError);
+    EXPECT_THROW(f2::has_magic(input, f2::IndexKind::Ivf), f2::FormatError);
     try {
         f2::Reader reader(input, f2::IndexKind::Ivf, kKnown);
         ADD_FAILURE() << "expected FormatError";
@@ -252,14 +243,14 @@ TEST(Format2ContainerTest, WritesAndReadsWithoutSeeking) {
 
 TEST(Format2ContainerTest, DetectsTheMagicAndRestoresThePosition) {
     std::istringstream good(valid_file());
-    EXPECT_TRUE(f2::has_magic(good));
+    EXPECT_TRUE(f2::has_magic(good, f2::IndexKind::Ivf));
     EXPECT_EQ(good.tellg(), std::streampos(0));
     std::istringstream legacy(std::string("RABQIDX1") + std::string(200, '\0'));
-    EXPECT_FALSE(f2::has_magic(legacy));
+    EXPECT_FALSE(f2::has_magic(legacy, f2::IndexKind::Ivf));
 
     std::istringstream short_file("RABQ");
     short_file.exceptions(std::ios::failbit | std::ios::badbit);
-    EXPECT_FALSE(f2::has_magic(short_file));
+    EXPECT_FALSE(f2::has_magic(short_file, f2::IndexKind::Ivf));
     EXPECT_EQ(short_file.tellg(), std::streampos(0));
 }
 

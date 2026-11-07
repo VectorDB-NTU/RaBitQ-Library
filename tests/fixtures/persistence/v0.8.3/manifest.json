@@ -1,0 +1,22 @@
+{
+  "source_tag": "v0.8.3",
+  "source_commit": "dabfdb8c200a6f155df4edd0b9c825e6728b14a1",
+  "writer": "tests/fixtures/persistence/v0.8.3/generate.cpp",
+  "producer": "Linux x86-64, g++ 14.3.0, Release, one thread, native optimization OFF",
+  "byte_order": "little",
+  "size_t_bytes": 8,
+  "sha256": {
+    "v0.8.3/ivf1_flat_matrix_l2.expected": "f1616ce0a6f59a57984e62eda1a16b92a54f603434e163ce5a2f33c336a0a252",
+    "v0.8.3/ivf1_flat_matrix_l2.index": "c864c367f4eaac449984694402d42ba81706391c61405f3fcdcf233a7f4d92f4",
+    "v0.8.3/ivf32_hnsw_ip.expected": "8280cf8c79e396c94ddb0a3bf77d69f45f7261b1ea71e90e5522395286376f89",
+    "v0.8.3/ivf32_hnsw_ip.index": "61935ec5f4a5c3b2aeb990ccb9bafa25e7323658c65a20f0344e79e0c8df7194",
+    "v0.8.3/ivf32_hnsw_ip.index.hnsw": "320c644a727fa94f7e5ced3821d8fcca6562c22904acfbd158fc5b3f6c3c5eb4",
+    "v0.8.3/ivf4_flat_l2.expected": "c2d41f4b7c18332d94f01ebdf493658b8f468b5c517bc9961cbfea2ffdb33dbe",
+    "v0.8.3/ivf4_flat_l2.index": "d324a9df508c32fee0a862868d3f7b2fcd7acc999db4e7bd5761b4f6cd1d07be",
+    "v0.8.3/ivf4_hnsw_l2.expected": "4235ed49a3d008e34b646358ec0de0649c63122b3f5f60e813df8a0d494c3a88",
+    "v0.8.3/ivf4_hnsw_l2.index": "88b5b7d1b7e5be99506421cd36ad6bb1785490446f55788d5b39a1069d5b304c",
+    "v0.8.3/ivf4_hnsw_l2.index.hnsw": "1797edb3eb1fb16a20684d8873cbc2c0713bdf1623ff31f366e8f016f5e616cf",
+    "v0.8.3/ivf7_flatrabitq_ip.expected": "c602bd98139b597532067094b001ff992d4498ea07ad7ddaf6762b8261f67d83",
+    "v0.8.3/ivf7_flatrabitq_ip.index": "54c11bcb813395eed099c8e8f65cdd96d97ca1ed684703e66abe27fd06887929"
+  }
+}

@@ -46,6 +46,9 @@ enum class RawType : uint32_t { None = 0, Float32 = 1, Uint8 = 2 };
 inline constexpr uint32_t kSectionRequired = 1U << 0;
 inline constexpr uint32_t kSectionChecksummed = 1U << 1;
 
+// The section kind every index shares: its rotator blob.
+inline constexpr uint32_t kRotatorSection = 1;
+
 struct Header {
     uint64_t incompat_features = 0;
     uint64_t ro_compat_features = 0;
@@ -69,9 +72,6 @@ struct Section {
     uint64_t size = 0;
     uint32_t crc32 = 0;
 };
-
-// CRC-32 as zlib.crc32 computes it; pass an earlier result as `crc` to continue it.
-uint32_t crc32(const void* data, size_t size, uint32_t crc = 0);
 
 class SectionSink;
 
@@ -113,10 +113,85 @@ class SectionSink {
     uint64_t remaining_;
 };
 
+// An output stream that passes its bytes to a section sink, for section writers that
+// take a std::ostream. A sink error propagates as an exception.
+class SinkStream : public std::ostream {
+   public:
+    explicit SinkStream(SectionSink& sink) : std::ostream(nullptr), buffer_(sink) {
+        rdbuf(&buffer_);
+        exceptions(std::ios::badbit);
+    }
+
+   private:
+    class Buffer : public std::streambuf {
+       public:
+        explicit Buffer(SectionSink& sink) : sink_(sink) {}
+
+       private:
+        int_type overflow(int_type c) override {
+            if (!traits_type::eq_int_type(c, traits_type::eof())) {
+                const char value = traits_type::to_char_type(c);
+                sink_.write(&value, 1);
+            }
+            return traits_type::not_eof(c);
+        }
+        std::streamsize xsputn(const char* data, std::streamsize count) override {
+            sink_.write(data, static_cast<size_t>(count));
+            return count;
+        }
+
+        SectionSink& sink_;
+    };
+
+    Buffer buffer_;
+};
+
+// An output stream that only counts its bytes, to size a section before writing it.
+class CountingStream : public std::ostream {
+   public:
+    CountingStream() : std::ostream(nullptr) { rdbuf(&buffer_); }
+    [[nodiscard]] uint64_t count() const { return buffer_.count; }
+
+   private:
+    class Buffer : public std::streambuf {
+       public:
+        uint64_t count = 0;
+
+       private:
+        int_type overflow(int_type c) override {
+            count += traits_type::eq_int_type(c, traits_type::eof()) ? 0 : 1;
+            return traits_type::not_eof(c);
+        }
+        std::streamsize xsputn(const char* /*data*/, std::streamsize n) override {
+            count += static_cast<uint64_t>(n);
+            return n;
+        }
+    };
+
+    Buffer buffer_;
+};
+
 // Whether the input starts with the format-2 magic. It reads through the stream
 // buffer, so the stream's state and exception mask do not matter, and restores the
-// position. Input that cannot seek raises FormatError.
-bool has_magic(std::istream& input);
+// position. Input that cannot seek raises FormatError, named for `kind`.
+bool has_magic(std::istream& input, IndexKind kind);
+
+// Reads one section front to back in pieces, seeking only once. Other reads of the
+// same input move its position, so finish one section before reading another.
+class SectionInput {
+   public:
+    // Read the next `size` bytes of the section.
+    void read(void* out, size_t size);
+
+   private:
+    friend class Reader;
+    SectionInput(std::streambuf& input, const std::string& name, uint64_t size)
+        : input_(input), name_(name), remaining_(size) {}
+
+    std::streambuf& input_;
+    std::string name_;
+    uint64_t remaining_;
+};
 
 class Reader {
    public:
@@ -142,6 +217,8 @@ class Reader {
     [[nodiscard]] const Section* find(uint32_t kind) const;
     // Read `size` bytes starting `offset` bytes into `section`.
     void read(const Section& section, uint64_t offset, void* out, size_t size);
+    // Read `section` from its start in consecutive pieces; for large sections.
+    SectionInput open(const Section& section);
 
    private:
     void read_at(uint64_t offset, void* out, size_t size, const std::string& what);

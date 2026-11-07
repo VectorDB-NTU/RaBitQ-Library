@@ -8,27 +8,17 @@
 #include <string>
 #include <unordered_set>
 
+#include "../core/crc32.hpp"
+
 namespace rabitqlib::index_detail::format2 {
 namespace {
+
+using rabitqlib::detail::crc32;
 
 constexpr uint32_t kHeaderFlagSeedKnown = 1U << 0;
 constexpr uint32_t kKnownSectionFlags = kSectionRequired | kSectionChecksummed;
 constexpr size_t kChecksumOffset = 108;
 constexpr size_t kChunkBytes = size_t{1} << 16;
-
-constexpr std::array<uint32_t, 256> make_crc_table() {
-    std::array<uint32_t, 256> table{};
-    for (uint32_t i = 0; i < 256; ++i) {
-        uint32_t value = i;
-        for (int bit = 0; bit < 8; ++bit) {
-            value = (value & 1U) != 0 ? 0xEDB88320U ^ (value >> 1) : value >> 1;
-        }
-        table[i] = value;
-    }
-    return table;
-}
-
-constexpr std::array<uint32_t, 256> kCrcTable = make_crc_table();
 
 void put_u32(uint8_t* out, uint32_t value) {
     for (size_t i = 0; i < 4; ++i) {
@@ -191,15 +181,6 @@ void write_zeros(std::ostream& output, uint64_t count) {
 
 }  // namespace
 
-uint32_t crc32(const void* data, size_t size, uint32_t crc) {
-    const auto* bytes = static_cast<const uint8_t*>(data);
-    crc = ~crc;
-    for (size_t i = 0; i < size; ++i) {
-        crc = kCrcTable[(crc ^ bytes[i]) & 0xFFU] ^ (crc >> 8);
-    }
-    return ~crc;
-}
-
 void SectionSink::write(const void* data, size_t size) {
     if (size > remaining_) {
         throw std::invalid_argument("index section writer wrote more bytes than declared");
@@ -339,11 +320,13 @@ void write_file(
     }
 }
 
-bool has_magic(std::istream& input) {
+bool has_magic(std::istream& input, IndexKind kind) {
     std::streambuf& buffer = *input.rdbuf();
     const auto start = buffer.pubseekoff(0, std::ios::cur, std::ios::in);
     if (start == std::streampos(std::streamoff(-1))) {
-        throw FormatError("index file input must be seekable");
+        throw FormatError(
+            std::string(component(kind)) + " index file input must be seekable"
+        );
     }
     std::array<char, kMagic.size()> magic{};
     const std::streamsize count = buffer.sgetn(magic.data(), magic.size());
@@ -574,6 +557,27 @@ void Reader::read(const Section& section, uint64_t offset, void* out, size_t siz
     read_at(
         section.offset + offset, out, size, "section kind " + std::to_string(section.kind)
     );
+}
+
+SectionInput Reader::open(const Section& section) {
+    const std::string name = component_ + " section kind " + std::to_string(section.kind);
+    const auto offset = static_cast<std::streamoff>(section.offset);
+    if (input_.pubseekpos(offset, std::ios::in) != std::streampos(offset)) {
+        throw FormatError(name + " cannot be read");
+    }
+    return SectionInput(input_, name, section.size);
+}
+
+void SectionInput::read(void* out, size_t size) {
+    if (size > remaining_) {
+        throw std::out_of_range(name_ + " read past its end");
+    }
+    if (size != 0 &&
+        input_.sgetn(static_cast<char*>(out), static_cast<std::streamsize>(size)) !=
+            static_cast<std::streamsize>(size)) {
+        throw FormatError(name_ + " cannot be read");
+    }
+    remaining_ -= size;
 }
 
 void Reader::read_at(uint64_t offset, void* out, size_t size, const std::string& what) {

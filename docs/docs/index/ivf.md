@@ -457,8 +457,8 @@ The removal marker lives in the ordinary batch data and needs no additional
 format change; removal survives `save` and `load`. No file written before
 `remove` existed has an infinite `f_add`, so nothing in an old file is
 reinterpreted. Release 0.5.0 also excludes removed points when reading its
-supported legacy formats. However, current saves always use `RABQIDX1` v2,
-including when resaving a loaded legacy index. Older releases cannot read these
+supported legacy formats. However, current saves always use index format 2,
+including when resaving a loaded legacy index. Releases up to 0.8 cannot read these
 files, regardless of whether they contain removals.
 
 ## Persistence
@@ -468,19 +468,23 @@ Save a constructed index with:
 ```c++
 ivf.save(output_index_file);
 ```
-New files use the `RABQIDX1` magic, version 2, storage flags, an explicit
-padded dimension, and a uint32 initializer type (1 = Flat, 2 = Flat RaBitQ,
-3 = HNSW) before the index metadata. `Auto` is resolved before saving. Loading
-restores the routing type, storage mode, rotation state, and padded dimension.
-Raw files also contain the original vectors, so querying does not require an external dataset.
+Files are written in
+[index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2):
+one file with a header, a section table, and sections for the rotation, the routing
+data, the codes and the IDs. HNSW routing is a section of that file, so there is no
+separate sidecar. `Auto` is resolved before saving. Loading restores the routing type,
+storage mode, rotation state, and padded dimension. Raw files also contain the original
+vectors, so querying does not require an external dataset. Releases up to 0.8 cannot
+read format 2. Indexes of more than 65,536 dimensions cannot be saved.
 
-Version-1 `RABQIDX1` files remain readable with their stored padding. Legacy
-unversioned quantized files and raw v1 files retain their original 64-dimension
-padding. All three historical formats infer routing with the original 20,000
-cluster threshold. HNSW routing still requires the accompanying `.hnsw` file.
-Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded
-legacy index writes the new header without changing its padded dimension or encoded data. Older library
-versions cannot read the new format.
+Files from earlier releases remain readable. `RABQIDX1` version 2 files store their
+routing type; version-1 `RABQIDX1` files keep their stored padding; legacy unversioned
+quantized files and raw v1 files retain their original 64-dimension padding. These three
+older layouts infer routing with the original 20,000 cluster threshold. All of these
+layouts keep HNSW routing in the accompanying `.hnsw` file, which loading reads.
+Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded file
+writes format 2 without changing its padded dimension or encoded data; a `.hnsw` file
+left beside it is not removed and is no longer used.
 
 ## Implementation details
 

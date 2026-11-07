@@ -1,5 +1,6 @@
 """Portable kernels preserve metric, padded-domain, and persistence contracts."""
 
+import format2_file
 import numpy as np
 import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
@@ -52,9 +53,9 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
     index.save(str(path))
     payload = path.read_bytes()
     if kind == "ivf":
-        assert payload[:8] == b"RABQIDX1"
+        assert payload[:8] == format2_file.MAGIC
         multiple = 32
-        stored_padded = int.from_bytes(payload[16:24], "little")
+        stored_padded = format2_file.padded_dim(payload)
     elif kind == "qg":
         multiple = 32
         offset = (12 if bits else 0) + 3 * np.dtype(np.uintp).itemsize
@@ -115,13 +116,16 @@ def test_rejects_development_only_padding(tmp_path, kind, bits):
     check_index_round_trip(tmp_path, "l2", 65, kind, bits)
     path = tmp_path / "portable.index"
     payload = bytearray(path.read_bytes())
-    offset = {"ivf": 16, "hnsw": 24, "qg": 12 + 3 * np.dtype(np.uintp).itemsize}[kind]
+    offset = {"ivf": 56, "hnsw": 24, "qg": 12 + 3 * np.dtype(np.uintp).itemsize}[kind]
     # 80 is a valid pad16 dimension but unsupported by the pad32 kernels.
     payload[offset : offset + 8] = (80).to_bytes(8, "little")
+    if kind == "ivf":
+        format2_file.reseal(payload)
     path.write_bytes(payload)
     cls = {"ivf": IvfIndex, "hnsw": HnswIndex, "qg": SymqgIndex}[kind]
     message = {
-        "ivf": "Invalid padded dimension in IVF index file",
+        "ivf": "IVF index file has padded dimension 80, which must be a multiple of "
+        "32 from the dimension 65 to 65536",
         "hnsw": "HNSW index file is invalid or truncated",
         "qg": "QuantizedGraph file has an invalid padded dimension",
     }[kind]

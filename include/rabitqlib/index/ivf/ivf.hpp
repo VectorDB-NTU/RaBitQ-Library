@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -90,7 +91,10 @@ class IVF {
     size_t num_clusters_ = 0;
     bool raw_reranking_ = false;  // raw vectors replace extra-bit codes
     bool ready_ = false;          // centroids set, construction or loading completed
-    size_t ex_bits_ = 0;          // total bits = ex_bits_ + 1; 0 with raw reranking
+    // Loaded from a file with read-only-compatible features this release does not know:
+    // search works, but add, reserve, remove and save refuse the index.
+    bool read_only_ = false;
+    size_t ex_bits_ = 0;  // total bits = ex_bits_ + 1; 0 with raw reranking
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     std::unique_ptr<Rotator<float>> rotator_;
     std::vector<Cluster> clusters_;
@@ -190,8 +194,21 @@ class IVF {
         const float* query, size_t k, size_t nprobe, const PID* result_ids
     ) const;
 
-    // Write the index file, and any initializer sidecar, at exactly this path.
+    // Write the index file in format 2 at exactly this path.
     void write_file(const char* filename) const;
+
+    // Load a format-2 file into this freshly created index.
+    void read_format2(std::istream& input);
+
+    // Bytes of Flat or FlatRaBitQ routing data; HNSW routing has no fixed size.
+    [[nodiscard]] size_t flat_routing_bytes() const;
+
+    // Check the stored IDs, create the cluster views, count removed points and mark the
+    // index ready: the end of loading in every format.
+    void complete_load(const std::vector<size_t>& cluster_sizes);
+
+    // Refuse an operation that would modify or save a read-only index.
+    void check_writable(const char* operation) const;
 
    public:
     explicit IVF() noexcept;

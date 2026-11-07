@@ -505,12 +505,13 @@ in place of extra-bit codes.
 
 #### IVF formats and initialization
 
-New IVF files have a magic/version header, an explicit padded dimension, and a resolved initializer type (v2); v1 files infer the historical
-Flat/HNSW choice at 20,000 clusters, independently of current auto selection.
-New IVF auto routing uses Flat below 5,000 clusters, Flat RaBitQ below 60,000,
-and HNSW otherwise. Flat RaBitQ persists its mean and codes in the main file;
-HNSW retains its sidecar. Legacy quantized files and raw v1 files infer
-64-dimension padding.
+New IVF files use index format 2 (`docs/formats.md`): the resolved initializer type
+is in `ivf_params`, and the routing data, including the HNSW graph, is a section of
+the one file. Earlier `RABQIDX1` v2 files store the initializer type; v1 files infer
+the historical Flat/HNSW choice at 20,000 clusters, independently of current auto
+selection. Those layouts keep HNSW routing in the `<file>.hnsw` sidecar. New IVF auto
+routing uses Flat below 5,000 clusters, Flat RaBitQ below 60,000, and HNSW otherwise.
+Legacy quantized files and raw v1 files infer 64-dimension padding.
 
 #### Search defaults
 
@@ -532,7 +533,7 @@ and buffer changes must also preserve the [ID marker](#search-buffer-id-marker) 
 
 Filesystem path strings are UTF-8 on Windows and native path bytes on POSIX. Use
 `io_impl::filesystem_path` from `utils/path.hpp` before opening files or querying
-filesystem metadata, including IVF's HNSW sidecar. It converts UTF-8 to native Unicode
+filesystem metadata, including the HNSW sidecar of earlier IVF files. It converts UTF-8 to native Unicode
 on Windows and preserves existing path bytes on Linux/macOS.
 
 For path-only changes, check path conversion and the affected I/O operations; the
@@ -552,13 +553,15 @@ that corrupt or mismatched files are reported before allocation, without treatin
 crafted file as a supported input.
 
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
-serialized fields for new formats (the current IVF, HNSW and QG bodies still store several
-`size_t` fields; change those only with a format version bump), validate sizes before
-allocation, check every read, and retain a
-compatibility test fixture or an explicit rejection path. Review each affected format;
-changes to shared serialization helpers require auditing every format using them.
-IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG have separate formats. SymphonyQG includes a versioned quantized format plus a legacy
-raw-format fallback; preserve both unless a breaking change is explicitly requested.
+serialized fields for new formats (the HNSW and QG bodies still store several `size_t` fields;
+change those only with a format version bump), validate sizes before allocation, check every
+read, and retain a compatibility test fixture or an explicit rejection path. Review each affected
+format; changes to shared serialization helpers require auditing every format using them.
+IVF-RaBitQ writes index format 2 ([`docs/formats.md`](formats.md#index-format-2), container in
+`src/index/format2.*`) and still reads its earlier layouts. HNSW-RaBitQ and SymphonyQG have
+separate formats. SymphonyQG includes a versioned quantized format plus a legacy raw-format
+fallback; preserve both unless a breaking change is explicitly requested. When a writer moves to
+a new format, freeze the last files of the old writer as release-produced fixtures first.
 
 ### Change Python bindings
 
@@ -840,8 +843,8 @@ Centroids, data, and queries compared by the same estimator must be in the same 
 
 Rotator state is part of persisted index state. Loading an index must restore the exact rotation
 used at construction; generating a new random rotator produces silently incorrect distances.
-Honor stored padded dimensions instead of recomputing them from current defaults. IVF `RABQIDX1`
-v1 and v2 files explicitly store this field; preserve it for both versions. Only legacy unversioned
+Honor stored padded dimensions instead of recomputing them from current defaults. Index format 2
+and IVF `RABQIDX1` v1 and v2 files explicitly store this field; preserve it. Only legacy unversioned
 quantized IVF files and old raw v1 files omit it and infer historical 64-dimension padding.
 Unreleased pad16 files whose stored dimension is not divisible by 32 are rejected.
 
@@ -875,9 +878,9 @@ updates or persistence. These markers affect live search as well as saved files.
 IVF-RaBitQ `remove` stores a removed point as `f_add = +inf` inside the existing batch data, so it needs no
 discriminator. No index written before `remove` existed has an infinite `f_add`, so nothing in an old
 file is reinterpreted. In the legacy file formats readable by release 0.5.0, that reader also
-excludes removed points. This compatibility of the removal marker does not extend to the current
-writer's `RABQIDX1` v2 format: older releases cannot read current saves, even when resaving a loaded
-legacy index. Keep this convention when touching IVF-RaBitQ code:
+excludes removed points. This compatibility of the removal marker does not extend to index
+format 2, which the current writer uses: releases up to 0.8 cannot read current saves, even when
+resaving a loaded legacy index. Keep this convention when touching IVF-RaBitQ code:
 
 - Every estimator and scan path must turn `f_add = +inf` into an infinite estimated distance and an
   infinite lower bound, and never into NaN. A NaN distance would enter the result buffer.

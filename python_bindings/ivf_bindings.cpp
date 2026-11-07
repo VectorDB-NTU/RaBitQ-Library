@@ -747,7 +747,7 @@ path : str, bytes, bytearray, or os.PathLike
 Notes
 -----
 A trained index without vectors raises RuntimeError; add vectors first.
-IVF with HNSW centroid routing also writes its required sidecar file.)doc"
+The one file includes HNSW centroid routing; releases up to 0.8 cannot read it.)doc"
         )
         .def_static(
             "load",
@@ -764,7 +764,12 @@ path : str, bytes, bytearray, or os.PathLike
 Returns
 -------
 index : IvfIndex
-    A trained index ready for search.)doc"
+    A trained index ready for search.
+
+Notes
+-----
+Files from releases up to 0.8 with HNSW centroid routing also need the
+accompanying ``<path>.hnsw`` file.)doc"
         )
         .def(
             "__repr__",
