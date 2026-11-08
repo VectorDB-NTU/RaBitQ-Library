@@ -38,7 +38,12 @@ static inline bool all_finite(const T* values, size_t count) {
 
 // Largest coordinate magnitude whose squared distances, their products in graph
 // pruning, and rotated residuals stay inside float32; shared with clustering.
+// dim == 0 has no such limit; FLT_MAX avoids dividing by zero and still leaves
+// +/-Inf out of range.
 static inline float max_coordinate_magnitude(size_t dim) {
+    if (dim == 0) {
+        return std::numeric_limits<float>::max();
+    }
     return static_cast<float>(std::sqrt(
         std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
         (64.0 * static_cast<double>(dim))
@@ -49,15 +54,17 @@ static inline float max_coordinate_magnitude(size_t dim) {
 static inline void check_coordinates(
     const float* values, size_t count, size_t dim, const char* what
 ) {
-    if (!all_finite(values, count)) {
-        throw std::invalid_argument(std::string(what) + " must contain only finite values");
-    }
     const float bound = max_coordinate_magnitude(dim);
     size_t out_of_range = 0;
     for (size_t i = 0; i < count; ++i) {
         out_of_range += static_cast<size_t>(!(std::fabs(values[i]) <= bound));
     }
     if (out_of_range != 0) {
+        if (!all_finite(values, count)) {
+            throw std::invalid_argument(
+                std::string(what) + " must contain only finite values"
+            );
+        }
         throw std::invalid_argument(
             std::string(what) + " exceeds the safe float32 coordinate range"
         );
