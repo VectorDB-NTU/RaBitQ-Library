@@ -58,6 +58,9 @@ class ChangeSelectionTest(unittest.TestCase):
         )
         self.assertEqual(classify(["README.md", "sample/python/README.md"]), set())
         self.assertEqual(
+            classify(["docs/docs/quick_start.md"]), {"docs", "python_build"}
+        )
+        self.assertEqual(
             classify([".github/workflows/docs.yml"]), {"docs", "python_quality"}
         )
 

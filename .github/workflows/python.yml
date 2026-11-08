@@ -95,6 +95,7 @@ jobs:
         run: >-
           python -m pytest --tb=short -q
           tests/python/test_import.py
+          tests/python/test_quick_start.py
           tests/python/test_ivf.py::test_save_load_roundtrip
           tests/python/test_hnsw.py::test_save_load_roundtrip
           tests/python/test_symqg.py::test_save_load_roundtrip
