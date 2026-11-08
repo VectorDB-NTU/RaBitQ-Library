@@ -11,6 +11,7 @@ only the affected job groups:
 | Changes | Checks |
 | --- | --- |
 | Documentation and Markdown only | Documentation build for `docs/`; no C++ or Python builds; the documentation summary is always emitted |
+| `docs/docs/quick_start.md` | Documentation build plus the Linux source-install job, which runs the page's Python blocks |
 | Issue forms/configuration and CODEOWNERS | No C++/Python builds |
 | `benchmarks/core/`, `benchmarks/hotpaths/` code/build files | Ubuntu benchmark build and bounded smoke tests; C++ formatting or Python lint as applicable, without the wheel/platform matrix for benchmark-only edits |
 | `.github/workflows/test.yaml` | C++ checks, ShellCheck, Python quality (including summary-job tests), and benchmark smoke |

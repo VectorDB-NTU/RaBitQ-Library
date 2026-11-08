@@ -82,6 +82,9 @@ def classify(paths):
     for path in paths:
         if path.startswith("docs/"):
             selected.add("docs")
+            if path == "docs/docs/quick_start.md":
+                # tests/python/test_quick_start.py executes this page's Python blocks.
+                selected.add("python_build")
             continue
         if path.endswith(".md"):
             continue
