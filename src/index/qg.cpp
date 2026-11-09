@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "../core/blob.hpp"
+#include "cosine.hpp"
 #include "file_replacement.hpp"
 #include "format2.hpp"
 #include "rabitqlib/core/data_layout.hpp"
@@ -114,7 +115,9 @@ size_t QuantizedGraph<float>::degree_bound() const { return max_degree_; }
 
 PID QuantizedGraph<float>::entry_point() const { return entry_point_id_; }
 
-MetricType QuantizedGraph<float>::metric_type() const { return metric_type_; }
+MetricType QuantizedGraph<float>::metric_type() const {
+    return cosine_ ? METRIC_COSINE : metric_type_;
+}
 
 size_t QuantizedGraph<float>::quantization_bits() const { return quantization_bits_; }
 
@@ -149,7 +152,8 @@ QuantizedGraph<float>::QuantizedGraph(
     , max_degree_(max_degree)
     , dim_(dim)
     , padded_dim_(dim)
-    , metric_type_(metric_type)
+    , metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE)
     , rotator_type_(rotator_type)
     , quantization_bits_(quantization_bits)
     , seed_(seed)
@@ -297,7 +301,7 @@ void QuantizedGraph<float>::write_file(const char* filename) const {
 
     f2::Header header;
     header.index_kind = f2::IndexKind::SymphonyQg;
-    header.metric = metric_type_ == METRIC_IP ? f2::Metric::InnerProduct : f2::Metric::L2;
+    header.metric = f2::header_metric(metric_type());
     header.dim = dim_;
     header.padded_dim = padded_dim_;
     header.code_bits = static_cast<uint32_t>(quantization_bits_);
@@ -364,12 +368,6 @@ void QuantizedGraph<float>::read_format2(std::istream& input) {
         f2::kRotatorSection, kParamsSection, kCentroidSection, kRecordsSection};
     f2::Reader reader(
         input, f2::IndexKind::SymphonyQg, known_kinds, [](const f2::Header& header) {
-            if (header.metric == f2::Metric::Cosine) {
-                throw f2::FormatError(
-                    "QuantizedGraph index file uses the cosine metric, which this release "
-                    "does not support"
-                );
-            }
             const bool raw =
                 header.code_bits == 0 && header.raw_type == f2::RawType::Float32;
             const bool quantized = (header.code_bits == 4 || header.code_bits == 8) &&
@@ -387,7 +385,8 @@ void QuantizedGraph<float>::read_format2(std::istream& input) {
         }
     );
     const f2::Header& header = reader.header();
-    metric_type_ = header.metric == f2::Metric::InnerProduct ? METRIC_IP : METRIC_L2;
+    metric_type_ = index_detail::stored_metric(f2::metric_type(header.metric));
+    cosine_ = header.metric == f2::Metric::Cosine;
     dim_ = static_cast<size_t>(header.dim);
     padded_dim_ = static_cast<size_t>(header.padded_dim);
     quantization_bits_ = header.code_bits;
@@ -1073,6 +1072,13 @@ void QuantizedGraph<float>::search_with_scratch_impl(
         throw std::invalid_argument("QuantizedGraph visited set must be initialized");
     }
 
+    if (cosine_) {
+        // Every search path ends here; the buffer is reused across this thread's queries.
+        thread_local std::vector<float> normalized_query;
+        normalized_query.resize(dim_);
+        index_detail::normalize_vector(query, normalized_query.data(), dim_);
+        query = normalized_query.data();
+    }
     rotator_->rotate(query, scratch.rotated_query);
     std::optional<QuantizedQuery> quantized_query;
     if (quantization_bits_ != 0) {

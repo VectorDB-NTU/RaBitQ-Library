@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "blob.hpp"
+#include "cosine.hpp"
 #include "format2_file.hpp"
 #include "ivf_search.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
@@ -2005,13 +2006,13 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
     for (auto& value : points) {
         value *= 10.0F;  // Means of these points are far from unit norm.
     }
-    for (auto metric : {METRIC_L2, METRIC_IP}) {
-        SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
+    for (auto metric : {METRIC_L2, METRIC_IP, METRIC_COSINE}) {
+        SCOPED_TRACE(static_cast<int>(metric));
         const auto cp = default_training_parameters(metric, 5);
         EXPECT_EQ(cp.niter, 10U);
         EXPECT_EQ(cp.max_points_per_centroid, 256U);
         EXPECT_EQ(cp.seed, 5U);
-        EXPECT_EQ(cp.spherical, metric == METRIC_IP);
+        EXPECT_EQ(cp.spherical, metric != METRIC_L2);
 
         IVF index(kDynDim, kDynNumClusters, 4, metric, 5);
         index.train(kCount, points.data(), cp);
@@ -2022,13 +2023,152 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
             for (const float value : centroid) {
                 norm_sqr += static_cast<double>(value) * value;
             }
-            if (metric == METRIC_IP) {
+            if (metric != METRIC_L2) {
                 EXPECT_NEAR(std::sqrt(norm_sqr), 1.0, 1e-3);
             } else {
                 EXPECT_GT(std::sqrt(norm_sqr), 2.0);
             }
         }
     }
+}
+
+TEST(IvfCosineTest, MatchesInnerProductOverNormalizedVectors) {
+    constexpr size_t kCount = 300;
+    constexpr size_t kQueries = 4;
+    const auto points = rabitq_test::rescaled_rows(random_rows(kCount, 31), kDynDim);
+    const auto queries = rabitq_test::rescaled_rows(random_rows(kQueries, 32), kDynDim);
+    const auto unit_points = rabitq_test::normalized_rows(points, kDynDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDynDim);
+    const rabitq_test::TempFile cosine_file("rabitq_ivf_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_ivf_cosine_ip.index");
+    const rabitq_test::TempFile damaged_file("rabitq_ivf_cosine_damaged.index");
+    for (const size_t total_bits : {size_t{1}, size_t{5}, size_t{32}}) {
+        for (const auto initializer : {InitializerType::Flat, InitializerType::HNSW}) {
+            SCOPED_TRACE(
+                std::to_string(total_bits) + " bits, initializer " +
+                std::to_string(static_cast<int>(initializer))
+            );
+            // One thread, so that the HNSW routing graph is reproducible.
+            auto cp = default_training_parameters(METRIC_COSINE, 7);
+            cp.num_threads = 1;
+            IVF cosine(
+                kDynDim,
+                kDynNumClusters,
+                total_bits,
+                METRIC_COSINE,
+                7,
+                RotatorType::FhtKacRotator,
+                initializer
+            );
+            cosine.train(kCount, points.data(), cp);
+            cosine.add(points.data(), kCount, nullptr, false, 1);
+            IVF ip(
+                kDynDim,
+                kDynNumClusters,
+                total_bits,
+                METRIC_IP,
+                7,
+                RotatorType::FhtKacRotator,
+                initializer
+            );
+            ip.train(kCount, unit_points.data(), cp);
+            ip.add(unit_points.data(), kCount, nullptr, false, 1);
+            EXPECT_EQ(cosine.metric_type(), METRIC_COSINE);
+
+            // The files differ only in the metric field.
+            cosine.save(cosine_file.path().c_str());
+            ip.save(ip_file.path().c_str());
+            rabitq_test::expect_same_sections_except_metric(
+                cosine_file.path(),
+                ip_file.path(),
+                rabitq_test::format2::IndexKind::Ivf,
+                rabitq_test::kIvfSections
+            );
+
+            IVF loaded;
+            loaded.load(cosine_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+            for (size_t q = 0; q < kQueries; ++q) {
+                const auto expected =
+                    search_everything(ip, unit_queries.data() + q * kDynDim);
+                for (const IVF* index : {&cosine, &loaded}) {
+                    const auto actual =
+                        search_everything(*index, queries.data() + q * kDynDim);
+                    EXPECT_EQ(actual.ids, expected.ids);
+                    EXPECT_EQ(actual.distances, expected.distances);
+                }
+            }
+            std::vector<PID> ids(kQueries * 5);
+            std::vector<PID> expected_ids(ids.size());
+            std::vector<float> distances(ids.size());
+            std::vector<float> expected_distances(ids.size());
+            loaded.search_batch(
+                queries.data(),
+                kQueries,
+                5,
+                kDynNumClusters,
+                ids.data(),
+                distances.data(),
+                {},
+                2
+            );
+            ip.search_batch(
+                unit_queries.data(),
+                kQueries,
+                5,
+                kDynNumClusters,
+                expected_ids.data(),
+                expected_distances.data()
+            );
+            EXPECT_EQ(ids, expected_ids);
+            EXPECT_EQ(distances, expected_distances);
+
+            // A failed load keeps the metric; loading an inner-product file replaces it.
+            {
+                std::ofstream damaged(damaged_file.path(), std::ios::binary);
+                damaged << "not an index";
+            }
+            EXPECT_THROW(loaded.load(damaged_file.path().c_str()), std::runtime_error);
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+            loaded.load(ip_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_IP);
+            const auto reloaded = search_everything(loaded, queries.data());
+            EXPECT_EQ(reloaded.distances, search_everything(ip, queries.data()).distances);
+        }
+    }
+}
+
+TEST(IvfCosineTest, ChecksTrainingDataBeforeNormalizing) {
+    auto points = random_rows(40, 35);
+    points[7] = std::numeric_limits<float>::quiet_NaN();
+    IVF index(kDynDim, kDynNumClusters, 4, METRIC_COSINE, 7);
+    try {
+        index.train(40, points.data(), default_training_parameters(METRIC_COSINE, 7));
+        ADD_FAILURE() << "trained on a NaN";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "IVF training data must contain only finite values");
+    }
+    EXPECT_FALSE(index.is_trained());
+}
+
+TEST(IvfCosineTest, ZeroVectorsHaveDistanceOne) {
+    constexpr size_t kCount = 40;
+    auto points = random_rows(kCount, 33);
+    std::fill(points.begin(), points.begin() + kDynDim, 0.0F);  // point 0 is zero
+    const auto centroids = random_rows(kDynNumClusters, 34);
+    const std::vector<PID> assigned(kCount, 0);
+    // Raw reranking returns exact distances.
+    IVF index(kCount, kDynDim, kDynNumClusters, 32, METRIC_COSINE);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const std::vector<float> zero(kDynDim, 0.0F);
+    const auto from_zero = search_everything(index, zero.data());
+    EXPECT_EQ(from_zero.distances, std::vector<float>(kCount, 1.0F));
+    const auto from_point = search_everything(index, points.data() + kDynDim);
+    EXPECT_EQ(from_point.ids.front(), 1U);
+    EXPECT_NEAR(from_point.distances.front(), 0.0F, 1e-6F);
+    const auto zero_rank = std::find(from_point.ids.begin(), from_point.ids.end(), 0U);
+    ASSERT_NE(zero_rank, from_point.ids.end());
+    EXPECT_EQ(from_point.distances[zero_rank - from_point.ids.begin()], 1.0F);
 }
 
 uint32_t get_size(const std::string& bytes, size_t offset) {
@@ -2169,11 +2309,6 @@ TEST(IvfFormat2Test, RejectsContentsThatDoNotFitAnIvfIndex) {
     const auto set_u32 = [](std::string& bytes, size_t offset, uint32_t value) {
         std::memcpy(bytes.data() + offset, &value, sizeof(value));
     };
-    expect_rejected(
-        "cosine",
-        [](auto& c) { c.header.metric = f2::Metric::Cosine; },
-        "IVF index file uses the cosine metric, which this release does not support"
-    );
     expect_rejected(
         "64-bit IDs",
         [](auto& c) { c.header.id_bits = 64; },

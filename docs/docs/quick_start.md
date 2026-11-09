@@ -45,7 +45,7 @@ print(ids[0])
 The first `add` on an untrained index trains it on the added vectors, as
 `index.train(data)` would, then adds them. Training uses the settings in
 `index.cp`: 10 k-means iterations on at most 256 sampled vectors per centroid,
-spherical k-means for `metric="ip"`, and the index `seed`. Change `index.cp`
+spherical k-means for `metric="ip"` and `"cosine"`, and the index `seed`. Change `index.cp`
 before the first `add` to tune them, call `index.train(sample)` first to train on a
 sample, or call `index.set_centroids(centroids)` to use centroids you computed
 elsewhere. `train` and `add` use every available CPU by default, capped by
@@ -69,8 +69,9 @@ number of points, after removals, or when the probed IVF-RaBitQ clusters contain
 few points. IDs are `int64`; unfilled slots contain ID `-1` and distance `+inf`. Filter them with
 `valid = np.isfinite(distances)` before using IDs to index your data.
 
-The `metric` argument accepts `"l2"` and `"ip"` (also `"innerproduct"`). For
-cosine search, normalize database and query vectors first and use `metric="ip"`.
+The `metric` argument accepts `"l2"`, `"ip"` (also `"innerproduct"`) and `"cosine"`.
+`metric="cosine"` scales database and query vectors to unit length and returns
+`1 - cos`; the saved file records it, so a loaded index keeps normalizing.
 
 ## Measure recall
 

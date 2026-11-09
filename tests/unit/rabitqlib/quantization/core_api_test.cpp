@@ -376,6 +376,8 @@ TEST(CoreApiTest, RejectsBadParametersAndBuffersBeforeWritingCodes) {
     auto bad = p;
     bad.metric = static_cast<rabitqlib::MetricType>(255);
     EXPECT_THROW(api::requirements(bad, out.layout), std::invalid_argument);
+    bad.metric = rabitqlib::METRIC_COSINE;  // only the ANN indexes accept it
+    EXPECT_THROW(api::requirements(bad, out.layout), std::invalid_argument);
     bad = p;
     bad.t_const = std::numeric_limits<double>::infinity();
     EXPECT_THROW(api::requirements(bad, out.layout), std::invalid_argument);

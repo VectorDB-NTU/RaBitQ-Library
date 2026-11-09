@@ -4,7 +4,9 @@
 #include <stdexcept>
 
 namespace rabitqlib {
-enum MetricType : uint8_t { METRIC_L2, METRIC_IP };
+// METRIC_COSINE is accepted only by the ANN indexes, which normalize vectors and
+// store inner-product codes; quantizers, FastScan and clustering reject it.
+enum MetricType : uint8_t { METRIC_L2, METRIC_IP, METRIC_COSINE };
 
 inline void validate_metric_type(MetricType metric_type) {
     if (metric_type != METRIC_L2 && metric_type != METRIC_IP) {

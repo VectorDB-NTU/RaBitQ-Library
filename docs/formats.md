@@ -97,7 +97,7 @@ The body defines the rotation; `seed` only records where it came from. A seeded 
 
 ## Index files, format 2 (draft)
 
-> **Status: draft for 0.9 (#211, #212).** The container (`src/index/format2.*`) is implemented, and IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG read and write format 2; no index stores the cosine metric yet, and IVF-SSD and companion files are not implemented. Field numbers, section kinds and the open questions at the end may still change until a release writes format 2.
+> **Status: draft for 0.9 (#211, #212).** The container (`src/index/format2.*`) is implemented, and IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG read and write format 2, including the cosine metric; IVF-SSD and companion files are not implemented. Field numbers, section kinds and the open questions at the end may still change until a release writes format 2.
 
 Format 2 is one container for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG, and later for the SSD-resident IVF index from RaBitQ-SSD. It replaces the per-index layouts: IVF-RaBitQ `RABQIDX1` versions 1 and 2, the unversioned HNSW-RaBitQ layout, SymphonyQG's quantized version 1 and its raw layout, and the unversioned hnswlib sidecar `<file>.hnsw` of IVF-RaBitQ. Every released layout stays readable (see [Earlier layouts](#earlier-layouts)); `save` always writes format 2.
 
@@ -192,7 +192,9 @@ No bit is defined in version 2. Bits are assigned when a feature needs one. Exam
 
 ### Metrics
 
-L2 and inner product are as in [Distance conventions](development.md#distance-conventions). Cosine stores the codes and factors of inner product over L2-normalized vectors. The index normalizes data on `add` and queries on `search`, and reports `1 - cos` as the distance. It is a stored metric, not a flag of the caller, so a reloaded index keeps normalizing.
+L2 and inner product are as in [Distance conventions](development.md#distance-conventions). Cosine stores the codes and factors of inner product over L2-normalized vectors. The index normalizes data on `train`, `add` and construction, and queries on `search`, and reports `1 - cos` as the distance. It is a stored metric, not a flag of the caller, so a reloaded index keeps normalizing.
+
+Normalization computes `scale = 1 / sqrt(s)` in double precision, where `s` is the sum of the squared coordinates added in coordinate order in double precision; each coordinate is multiplied by `scale` in double precision and rounded once to float32. The product of two float32 values is exact in double precision, so the sum does not depend on whether a compiler fuses multiply and add. A zero vector stays zero, so its true distance to every vector is 1. Every vector section (codes, raw float32 vectors and the IVF rerank vectors) holds the normalized vectors, so a cosine file equals the inner-product file of the normalized vectors except for `metric`. Centroids are stored as the index was given or trained them.
 
 ### Point IDs
 
@@ -311,15 +313,13 @@ Besides the rules above, an IVF-RaBitQ reader requires:
 - cluster sizes that add up to `num_points`;
 - a seed, when known, of at most 2^32 − 1.
 
-This release also rejects the cosine metric, which no IVF-RaBitQ file stores yet.
-
 ### HNSW-RaBitQ files
 
-An HNSW-RaBitQ reader requires `num_points` from 1 to 2^31, `code_bits` from 1 to 9, `raw_type` none, `id_bits = 32`, `dim` at least 64, and an FHT/Kac rotator. In `hnsw_params`: `max_elements` from `num_points` to 2^31; `num_clusters` from 1 to 2^31; `M` from 2 to 10,000, with `upper_max_degree = M` and `base_max_degree = 2 * M`; `ef_construction` at least `M`; a finite positive `level_multiplier`; `max_level` at least 0; `entry_point` below `num_points`; and the reserved field zero. Every level in `hnsw_levels` is at most `max_level`, and the entry point's level equals it. Every record's cluster ID (without the removal mark) is below `num_clusters`, its labels are distinct, its base-layer neighbor count is at most `base_max_degree` and each upper-layer count at most `M`, and every neighbor ID is below `num_points` with at least the level of the list that holds it. This release rejects the cosine metric.
+An HNSW-RaBitQ reader requires `num_points` from 1 to 2^31, `code_bits` from 1 to 9, `raw_type` none, `id_bits = 32`, `dim` at least 64, and an FHT/Kac rotator. In `hnsw_params`: `max_elements` from `num_points` to 2^31; `num_clusters` from 1 to 2^31; `M` from 2 to 10,000, with `upper_max_degree = M` and `base_max_degree = 2 * M`; `ef_construction` at least `M`; a finite positive `level_multiplier`; `max_level` at least 0; `entry_point` below `num_points`; and the reserved field zero. Every level in `hnsw_levels` is at most `max_level`, and the entry point's level equals it. Every record's cluster ID (without the removal mark) is below `num_clusters`, its labels are distinct, its base-layer neighbor count is at most `base_max_degree` and each upper-layer count at most `M`, and every neighbor ID is below `num_points` with at least the level of the list that holds it.
 
 ### SymphonyQG files
 
-A SymphonyQG reader requires `id_bits = 32` and either raw vectors (`code_bits = 0`, `raw_type = float32`) or `code_bits` 4 or 8 with `raw_type` none; a seed, when known, of at most 2^32 − 1; `num_points` up to 2^31; in `qg_params`, a `max_degree` that is a positive multiple of 32 and below `num_points`, `entry_point` below `num_points`, `init` 0 to 2 and the reserved field zero; `qg_centroid` exactly when the codes are quantized; and every neighbor ID below `num_points`. This release rejects the cosine metric.
+A SymphonyQG reader requires `id_bits = 32` and either raw vectors (`code_bits = 0`, `raw_type = float32`) or `code_bits` 4 or 8 with `raw_type` none; a seed, when known, of at most 2^32 − 1; `num_points` up to 2^31; in `qg_params`, a `max_degree` that is a positive multiple of 32 and below `num_points`, `entry_point` below `num_points`, `init` 0 to 2 and the reserved field zero; `qg_centroid` exactly when the codes are quantized; and every neighbor ID below `num_points`.
 
 ### Companion files
 

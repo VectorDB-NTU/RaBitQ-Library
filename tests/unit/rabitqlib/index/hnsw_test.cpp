@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "cosine.hpp"
 #include "format2_file.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/encoder.hpp"
@@ -1057,13 +1058,6 @@ TEST_F(HnswFormat2Test, RejectsContentsThatDoNotFitTheGraph) {
     expect_rejected(damaged, "HNSW index file has invalid graph parameters");
 
     damaged = saved;
-    damaged.header.metric = rabitq_test::format2::Metric::Cosine;
-    expect_rejected(
-        damaged,
-        "HNSW index file uses the cosine metric, which this release does not support"
-    );
-
-    damaged = saved;
     damaged.bytes(515).resize(4 * (kCount - 1));
     expect_rejected(
         damaged,
@@ -1121,6 +1115,120 @@ TEST_F(HnswSaveTest, RejectsTruncatedFileWithoutLosingExistingIndex) {
         EXPECT_NE(std::string(error.what()).find("HNSW"), std::string::npos);
     }
     EXPECT_EQ(loaded.search(data_.data(), 1, 2, kCount, 1), expected);
+}
+
+TEST(HnswCosineTest, MatchesInnerProductOverNormalizedVectors) {
+    constexpr size_t kDim = 65, kCount = 200, kQueries = 4, kClusters = 4;
+    std::mt19937 generator(41);
+    std::normal_distribution<float> normal;
+    std::vector<float> raw((kCount + kQueries) * kDim);
+    for (auto& value : raw) {
+        value = normal(generator);
+    }
+    const auto rows = rabitq_test::rescaled_rows(raw, kDim);
+    const std::vector<float> points(rows.begin(), rows.begin() + kCount * kDim);
+    const std::vector<float> queries(rows.begin() + kCount * kDim, rows.end());
+    const auto unit_points = rabitq_test::normalized_rows(points, kDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDim);
+    auto cp = default_training_parameters(METRIC_COSINE, 7);
+    cp.num_threads = 1;
+    const rabitq_test::TempFile cosine_file("rabitq_hnsw_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_hnsw_cosine_ip.index");
+    const rabitq_test::TempFile damaged_file("rabitq_hnsw_cosine_damaged.index");
+    for (const size_t total_bits : {size_t{1}, size_t{5}}) {
+        SCOPED_TRACE(total_bits);
+        HierarchicalNSW cosine(kCount, kDim, total_bits, 8, 50, 7, METRIC_COSINE);
+        cosine.train(kClusters, kCount, points.data(), cp);
+        cosine.add(points.data(), kCount, nullptr, false, 1);
+        HierarchicalNSW ip(kCount, kDim, total_bits, 8, 50, 7, METRIC_IP);
+        ip.train(kClusters, kCount, unit_points.data(), cp);
+        ip.add(unit_points.data(), kCount, nullptr, false, 1);
+        EXPECT_EQ(cosine.metric_type(), METRIC_COSINE);
+
+        cosine.save(cosine_file.path().c_str());
+        ip.save(ip_file.path().c_str());
+        rabitq_test::expect_same_sections_except_metric(
+            cosine_file.path(),
+            ip_file.path(),
+            rabitq_test::format2::IndexKind::Hnsw,
+            rabitq_test::kHnswSections
+        );
+        HierarchicalNSW loaded;
+        loaded.load(cosine_file.path().c_str());
+        EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+        const auto expected = ip.search(unit_queries.data(), kQueries, 10, 64, 1);
+        EXPECT_EQ(cosine.search(queries.data(), kQueries, 10, 64, 1), expected);
+        EXPECT_EQ(loaded.search(queries.data(), kQueries, 10, 64, 2), expected);
+
+        // A failed load keeps the metric; loading an inner-product file replaces it.
+        {
+            std::ofstream damaged(damaged_file.path(), std::ios::binary);
+            damaged << "not an index";
+        }
+        EXPECT_THROW(loaded.load(damaged_file.path().c_str()), std::runtime_error);
+        EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+        loaded.load(ip_file.path().c_str());
+        EXPECT_EQ(loaded.metric_type(), METRIC_IP);
+        EXPECT_EQ(
+            loaded.search(queries.data(), kQueries, 10, 64, 1),
+            ip.search(queries.data(), kQueries, 10, 64, 1)
+        );
+    }
+
+    // construct normalizes its data too; the centroids are used as given.
+    std::vector<PID> cosine_ids(kCount, 0);
+    std::vector<PID> ip_ids(kCount, 0);
+    const std::vector<float> centroids(unit_points.begin(), unit_points.begin() + kDim);
+    HierarchicalNSW cosine(kCount, kDim, 5, 8, 50, 7, METRIC_COSINE);
+    cosine.construct(1, centroids.data(), kCount, points.data(), cosine_ids.data(), 1);
+    HierarchicalNSW ip(kCount, kDim, 5, 8, 50, 7, METRIC_IP);
+    ip.construct(1, centroids.data(), kCount, unit_points.data(), ip_ids.data(), 1);
+    EXPECT_EQ(
+        cosine.search(queries.data(), kQueries, 10, 64, 1),
+        ip.search(unit_queries.data(), kQueries, 10, 64, 1)
+    );
+}
+
+TEST(HnswCosineTest, ChecksTrainingDataAndEstimatesZeroVectors) {
+    constexpr size_t kDim = 64, kCount = 100;
+    std::mt19937 generator(45);
+    std::normal_distribution<float> normal;
+    std::vector<float> points(kCount * kDim);
+    for (auto& value : points) {
+        value = normal(generator);
+    }
+    auto bad = points;
+    bad[3] = std::numeric_limits<float>::infinity();
+    HierarchicalNSW untrained(kCount, kDim, 9, 8, 50, 7, METRIC_COSINE);
+    try {
+        untrained.train(
+            2, kCount, bad.data(), default_training_parameters(METRIC_COSINE, 7)
+        );
+        ADD_FAILURE() << "trained on an infinite value";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "HNSW training data must contain only finite values");
+    }
+
+    // Point 0 is zero. At 9 bits, estimates of its true distance 1 are close to 1.
+    std::fill(points.begin(), points.begin() + kDim, 0.0F);
+    HierarchicalNSW index(kCount, kDim, 9, 8, 50, 7, METRIC_COSINE);
+    index.train(2, kCount, points.data(), default_training_parameters(METRIC_COSINE, 7));
+    index.add(points.data(), kCount, nullptr, false, 1);
+    const std::vector<float> zero(kDim, 0.0F);
+    const auto from_zero = index.search(zero.data(), 1, 10, 64, 1);
+    ASSERT_EQ(from_zero[0].size(), 10U);
+    for (const auto& [distance, id] : from_zero[0]) {
+        EXPECT_NEAR(distance, 1.0F, 0.05F) << id;
+    }
+    const auto from_point = index.search(points.data() + kDim, 1, kCount, kCount, 1);
+    bool found = false;
+    for (const auto& [distance, id] : from_point[0]) {
+        if (id == 0) {
+            found = true;
+            EXPECT_NEAR(distance, 1.0F, 0.05F);
+        }
+    }
+    EXPECT_TRUE(found);
 }
 
 using Results = std::vector<std::vector<std::pair<float, PID>>>;

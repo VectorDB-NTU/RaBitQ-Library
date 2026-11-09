@@ -70,7 +70,7 @@ see [C++ integration](../cpp_integration.md).
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
 | `num_clusters` | Python keyword, default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
-| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
+| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` was called `random_seed` before 0.8. |
 | `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
 | `k`, `ef` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. Omitted, `None` or zero `ef` uses `max(k, 64)` in Python, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 

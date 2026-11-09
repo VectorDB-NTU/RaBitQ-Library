@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 
+#include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/format_error.hpp"
 
 // The index container of format 2, specified in docs/formats.md ("Index files,
@@ -40,6 +41,29 @@ inline constexpr uint64_t kKnownCompatFeatures = 0;
 
 enum class IndexKind : uint32_t { Ivf = 1, Hnsw = 2, SymphonyQg = 3 };
 enum class Metric : uint32_t { L2 = 1, InnerProduct = 2, Cosine = 3 };
+
+inline Metric header_metric(MetricType metric_type) {
+    switch (metric_type) {
+        case METRIC_IP:
+            return Metric::InnerProduct;
+        case METRIC_COSINE:
+            return Metric::Cosine;
+        default:
+            return Metric::L2;
+    }
+}
+
+// The reader has checked the header field.
+inline MetricType metric_type(Metric metric) {
+    switch (metric) {
+        case Metric::InnerProduct:
+            return METRIC_IP;
+        case Metric::Cosine:
+            return METRIC_COSINE;
+        default:
+            return METRIC_L2;
+    }
+}
 enum class RawType : uint32_t { None = 0, Float32 = 1, Uint8 = 2 };
 
 inline constexpr uint32_t kSectionRequired = 1U << 0;

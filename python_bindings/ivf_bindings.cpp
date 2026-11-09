@@ -73,7 +73,7 @@ class IvfIndex {
         const std::string& initializer,
         const py::object& seed
     ) {
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         const auto initializer_type = initializer_from_string(initializer);
         const auto rotation_seed =
             seed.is_none() ? std::random_device{}()
@@ -102,7 +102,7 @@ class IvfIndex {
         const std::string& metric,
         const std::string& initializer
     ) {
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         IvfIndex wrapper;
         wrapper.index_ = std::make_unique<ivf::IVF>(
             max_elements,
@@ -488,9 +488,9 @@ num_clusters : int
 nbits : int, optional
     Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
     float32 vectors with one-bit filtering and raw reranking. Default is 7.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-    automatically normalized for cosine similarity.
+metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
+    scales data and queries to unit length.
 initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
     Centroid routing strategy. Default is 'auto'.
 seed : int, optional
@@ -726,8 +726,8 @@ Returns
 ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
+    Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+    1 - cos for cosine. These are distances, not similarity scores.
 
 Notes
 -----
@@ -824,10 +824,12 @@ accompanying ``<path>.hnsw`` file.)doc"
             &IvfIndex::cp,
             &IvfIndex::set_cp,
             py::return_value_policy::reference_internal,
-            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed.)doc"
+            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the index seed.)doc"
         )
         .def_property_readonly(
-            "metric", &IvfIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+            "metric",
+            &IvfIndex::metric,
+            R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         )
         .def_property_readonly(
             "initializer",

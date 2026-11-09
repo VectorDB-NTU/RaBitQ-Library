@@ -45,7 +45,7 @@ class SymqgIndex {
     )
         : dim_(dim)
         , max_degree_(max_degree)
-        , metric_type_(metric_from_string(metric))
+        , metric_type_(index_metric_from_string(metric))
         , ef_construction_(ef_construction)
         , init_(init) {
         // Reject now what add would reject only after converting all the data.
@@ -346,9 +346,9 @@ ef_construction : int, optional
     Default is 200.
 init : {'pipnn', 'random'}, optional
     Keyword-only. Graph initialization method. Default is 'pipnn'.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-    Vectors are not automatically normalized for cosine similarity.
+metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    Keyword-only. Squared L2, inner-product or cosine distance. Default is
+    'l2'. 'cosine' scales data and queries to unit length.
 seed : int, optional
     Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
     None (default) draws one at random; the seed property reports it.
@@ -399,8 +399,8 @@ Returns
 ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
+    Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+    1 - cos for cosine. These are distances, not similarity scores.
 
 Notes
 -----
@@ -577,7 +577,9 @@ index : SymqgIndex
             R"doc(Always True: SymphonyQG needs no training.)doc"
         )
         .def_property_readonly(
-            "metric", &SymqgIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+            "metric",
+            &SymqgIndex::metric,
+            R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         )
         .def_property_readonly(
             "nbits",

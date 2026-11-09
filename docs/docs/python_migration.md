@@ -33,7 +33,7 @@ keyword-only in 0.8. Since 0.8.2, `nbits` defaults to 7 (0.8.0 and 0.8.1 require
 it). HNSW-RaBitQ used to default to `nbits=8`; the old form keeps that default.
 
 `train` uses the settings in `index.cp`: 10 iterations (25 before 0.8.2), at most 256 sampled
-vectors per centroid, spherical k-means for `metric="ip"`, and the index seed.
+vectors per centroid, spherical k-means for `metric="ip"` (and, from 0.9, `"cosine"`), and the index seed.
 See [IVF-RaBitQ training](index/ivf.md#training-centroids-in-python) for the
 details and for `set_centroids`. The [clustering classes](clustering.md) still
 work if you want to run k-means yourself.

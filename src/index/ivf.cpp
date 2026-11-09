@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "../core/blob.hpp"
+#include "cosine.hpp"
 #include "file_replacement.hpp"
 #include "format2.hpp"
 #include "ivf_search.hpp"
@@ -187,6 +188,7 @@ void IVF::swap(IVF& other) noexcept {
     swap(rotator_, other.rotator_);
     swap(clusters_, other.clusters_);
     swap(metric_type_, other.metric_type_);
+    swap(cosine_, other.cosine_);
     swap(ip_func_, other.ip_func_);
 }
 
@@ -207,7 +209,8 @@ IVF::IVF(
     , raw_reranking_(total_bits == 32)
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
-    , metric_type_(metric_type) {
+    , metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE) {
     configure(total_bits);
     if (num_points == 0 || num_points > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("IVF point count exceeds the supported ID range");
@@ -235,7 +238,8 @@ IVF::IVF(
     , seed_(seed)
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
-    , metric_type_(metric_type) {
+    , metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE) {
     configure(total_bits);
     rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_, seed));
 }
@@ -345,7 +349,14 @@ void IVF::train(
         throw std::invalid_argument("IVF training data exceeds addressable storage");
     }
     // k-means checks the data for finite, in-range coordinates in parallel with
-    // the bound check_coordinates uses; set_centroids checks its centroids.
+    // the bound check_coordinates uses; set_centroids checks its centroids. The cosine
+    // metric checks the data before normalizing it, as add does.
+    std::vector<float> normalized;
+    if (cosine_) {
+        check_coordinates(data, num_points * dim_, dim_, "IVF training data");
+        normalized = index_detail::normalized_rows(data, num_points, dim_, cp.num_threads);
+        data = normalized.data();
+    }
     std::vector<float> centroids;
     if (num_clusters_ <= kMaxRaBitQKMeansClusters) {
         rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters_, cp);
@@ -388,6 +399,11 @@ void IVF::construct(
     }
     check_coordinates(data, max_elements_ * dim_, dim_, "IVF construction data");
     check_coordinates(centroids, num_clusters_ * dim_, dim_, "IVF construction centroids");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, max_elements_, dim_, num_threads);
+        data = normalized.data();
+    }
 
     allocate_storage(cluster_sizes);
     create_cluster_views(cluster_sizes);
@@ -529,6 +545,11 @@ void IVF::add(
         throw std::invalid_argument("IVF configuration exceeds addressable storage");
     }
     check_coordinates(data, num_points * dim_, dim_, "IVF add data");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
+        data = normalized.data();
+    }
 
     // Assign every new point to a cluster
     std::vector<PID> assigned(num_points);
@@ -931,7 +952,7 @@ void IVF::write_file(const char* filename) const {
 
     f2::Header header;
     header.index_kind = f2::IndexKind::Ivf;
-    header.metric = metric_type_ == METRIC_IP ? f2::Metric::InnerProduct : f2::Metric::L2;
+    header.metric = f2::header_metric(metric_type());
     header.dim = dim_;
     header.padded_dim = padded_dim_;
     header.code_bits = raw_reranking_ ? 1 : static_cast<uint32_t>(ex_bits_ + 1);
@@ -1246,11 +1267,6 @@ void IVF::read_format2(std::istream& input) {
         kRerankSection,
         kIdsSection};
     f2::Reader reader(input, f2::IndexKind::Ivf, known_kinds, [](const f2::Header& header) {
-        if (header.metric == f2::Metric::Cosine) {
-            throw f2::FormatError(
-                "IVF index file uses the cosine metric, which this release does not support"
-            );
-        }
         if (header.id_bits != 32) {
             throw f2::FormatError(
                 "IVF index file has 64-bit IDs; IVF-RaBitQ stores 32 bits"
@@ -1281,7 +1297,8 @@ void IVF::read_format2(std::istream& input) {
         }
     });
     const f2::Header& header = reader.header();
-    metric_type_ = header.metric == f2::Metric::InnerProduct ? METRIC_IP : METRIC_L2;
+    metric_type_ = index_detail::stored_metric(f2::metric_type(header.metric));
+    cosine_ = header.metric == f2::Metric::Cosine;
     dim_ = static_cast<size_t>(header.dim);
     padded_dim_ = static_cast<size_t>(header.padded_dim);
     raw_reranking_ = header.raw_type == f2::RawType::Float32;
@@ -1492,6 +1509,12 @@ void IVF::search(
 ) const {
     validate_search(query, k, nprobe, result_ids);
     check_coordinates(query, dim_, dim_, "IVF search query");
+    std::vector<float> normalized_query;
+    if (cosine_) {
+        normalized_query.resize(dim_);
+        index_detail::normalize_vector(query, normalized_query.data(), dim_);
+        query = normalized_query.data();
+    }
 
     nprobe = std::min(nprobe, num_clusters_);  // Probe at most every cluster
     std::vector<float> rotated_query(padded_dim_);

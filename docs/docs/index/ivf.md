@@ -50,7 +50,7 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `num_clusters` | Number of centroids `train` or the first `add` learns, or `set_centroids` supplies; every cluster ID must be in `[0, num_clusters)`. |
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only `nbits` defaults to 7; C++ requires it. |
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
-| `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
+| `metric` | Python `"l2"`, `"ip"` or `"cosine"`; defaults to `"l2"`. See [the cosine metric](usage.md#the-cosine-metric). |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
 | `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
@@ -208,7 +208,7 @@ and quantizes vectors. On an untrained index, the first `add` without
 to train on a different sample. Training uses the settings in `index.cp`, a
 [`RaBitQKMeansParameters`](../clustering.md#rabitqkmeans) whose defaults differ
 from the k-means classes: 10 iterations, at most 256 sampled vectors per
-centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"`, and
+centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"` and `"cosine"`, and
 `seed` equal to the index seed. Change fields before training:
 
 ```python
@@ -272,7 +272,7 @@ index.add(data.data(), num_points);
   centroid routing.
 - `default_training_parameters(metric, seed)` runs 10 iterations on at most
   256 sampled points per centroid and selects spherical k-means for inner
-  product. The k-means classes keep their own defaults, which train on every point.
+  product and cosine. The k-means classes keep their own defaults, which train on every point.
 - `train` and `set_centroids` replace the centroids only while the index stores
   no points, removed ones included; otherwise they throw `std::logic_error`.
   A failed call leaves the index unchanged.

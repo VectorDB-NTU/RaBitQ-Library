@@ -46,7 +46,7 @@ class HnswIndex {
                 std::to_string(buffer::kSearchBufferMaxPointCount) + "]"
             );
         }
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         const auto graph_seed = checked_seed(seed, std::numeric_limits<size_t>::max());
         // Capacity grows on add; resize preallocates.
         index_ = std::make_unique<hnsw::HierarchicalNSW>(
@@ -67,7 +67,7 @@ class HnswIndex {
         const std::string& metric,
         const py::object& random_seed
     ) {
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         const auto graph_seed =
             checked_seed(random_seed, std::numeric_limits<size_t>::max());
         HnswIndex wrapper;
@@ -480,9 +480,9 @@ M : int, optional
     2 * M edges. Default is 16.
 ef_construction : int, optional
     Keyword-only. Construction search breadth. Default is 200.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-    Vectors are not automatically normalized for cosine similarity.
+metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    Keyword-only. Squared L2, inner-product or cosine distance. Default is
+    'l2'. 'cosine' scales data and queries to unit length.
 seed : int, optional
     Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
     32 bits). Default is 100.
@@ -661,8 +661,8 @@ Returns
 ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
+    Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+    1 - cos for cosine. These are distances, not similarity scores.
 
 Notes
 -----
@@ -807,9 +807,11 @@ index : HnswIndex
             &HnswIndex::cp,
             &HnswIndex::set_cp,
             py::return_value_policy::reference_internal,
-            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed.)doc"
+            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the low 32 bits of the index seed.)doc"
         )
         .def_property_readonly(
-            "metric", &HnswIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+            "metric",
+            &HnswIndex::metric,
+            R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         );
 }

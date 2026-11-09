@@ -12,6 +12,7 @@
 
 ## Python changes
 
+- New `metric="cosine"` for `IvfIndex`, `HnswIndex` and `SymqgIndex` (#212). The index scales data and queries to unit length and returns `1 - cos`; results equal those of a `metric="ip"` index built from the scaled vectors. A zero vector stays zero, so its true distance to every vector is 1. The saved file records the metric, so a loaded index keeps scaling. `index.metric` can now return `"cosine"`, and an invalid metric raises `metric must be 'l2', 'ip' or 'cosine'`. See [the cosine metric](../index/usage.md#the-cosine-metric).
 - Point IDs are `int64` at the Python boundary (#211):
   - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
@@ -30,6 +31,8 @@
   - A failed HNSW-RaBitQ write raises `HNSW index file cannot be written` instead of `HNSW failed to write index file`.
 
 ## C++ changes
+
+- `MetricType` gains `METRIC_COSINE`, which `IVF`, `HierarchicalNSW`, `QuantizedGraph<float>` and `default_training_parameters` accept. The indexes normalize their inputs and store inner-product codes; `metric_type()` returns `METRIC_COSINE`. Entry points that validate the metric reject it with their existing messages: the stable core API v1, factor computation in the encoders, the query classes, FastScan queries, clustering and the IVF initializers. Code with an exhaustive `switch` over `MetricType` may warn about the new value.
 
 - Loading an index throws `rabitqlib::FormatError`, a subclass of `std::runtime_error` in the new header `rabitqlib/index/format_error.hpp`, for a damaged, mismatched or unsupported file. Failing to open the file still throws `std::runtime_error`. Files of earlier layouts that threw other exceptions for invalid contents now throw `FormatError` too: an IVF-RaBitQ file with an invalid metric or a dimension its rotation does not support, which threw `std::invalid_argument`, and a SymphonyQG file with invalid settings or dimensions, which threw `std::invalid_argument` or `std::length_error`.
 

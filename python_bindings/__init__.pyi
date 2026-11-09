@@ -29,7 +29,7 @@ __all__ = [
 
 _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
-_Metric: TypeAlias = Literal["l2", "ip", "innerproduct"]
+_Metric: TypeAlias = Literal["l2", "ip", "innerproduct", "cosine"]
 _Initializer: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
 _QGInit: TypeAlias = Literal["pipnn", "random"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
@@ -89,9 +89,9 @@ class IvfIndex:
     nbits : int, optional
         Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
         float32 vectors with one-bit filtering and raw reranking. Default is 7.
-    metric : {'l2', 'ip', 'innerproduct'}, optional
-        Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-        automatically normalized for cosine similarity.
+    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
+        scales data and queries to unit length.
     initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
         Centroid routing strategy. Default is 'auto'.
     seed : int, optional
@@ -144,9 +144,9 @@ class IvfIndex:
         nbits : int, optional
             Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
             float32 vectors with one-bit filtering and raw reranking. Default is 7.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-            automatically normalized for cosine similarity.
+        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+            Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
+            scales data and queries to unit length.
         initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
             Centroid routing strategy. Default is 'auto'.
         seed : int, optional
@@ -216,13 +216,13 @@ class IvfIndex:
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
-        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed."""
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the index seed."""
 
     @cp.setter
     def cp(self, value: RaBitQKMeansParameters) -> None: ...
     @property
-    def metric(self) -> Literal["l2", "ip"]:
-        """Canonical metric name: 'l2' or 'ip'."""
+    def metric(self) -> Literal["l2", "ip", "cosine"]:
+        """Canonical metric name: 'l2', 'ip' or 'cosine'."""
 
     @property
     def nbits(self) -> int:
@@ -415,8 +415,8 @@ class IvfIndex:
         ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
+            Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+            1 - cos for cosine. These are distances, not similarity scores.
 
         Notes
         -----
@@ -499,9 +499,9 @@ class HnswIndex:
         2 * M edges. Default is 16.
     ef_construction : int, optional
         Keyword-only. Construction search breadth. Default is 200.
-    metric : {'l2', 'ip', 'innerproduct'}, optional
-        Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-        Vectors are not automatically normalized for cosine similarity.
+    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        Keyword-only. Squared L2, inner-product or cosine distance. Default is
+        'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
         Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
         32 bits). Default is 100.
@@ -562,9 +562,9 @@ class HnswIndex:
             2 * M edges. Default is 16.
         ef_construction : int, optional
             Keyword-only. Construction search breadth. Default is 200.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-            Vectors are not automatically normalized for cosine similarity.
+        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+            Keyword-only. Squared L2, inner-product or cosine distance. Default is
+            'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional
             Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
             32 bits). Default is 100.
@@ -649,13 +649,13 @@ class HnswIndex:
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
-        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed."""
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the low 32 bits of the index seed."""
 
     @cp.setter
     def cp(self, value: RaBitQKMeansParameters) -> None: ...
     @property
-    def metric(self) -> Literal["l2", "ip"]:
-        """Canonical metric name: 'l2' or 'ip'."""
+    def metric(self) -> Literal["l2", "ip", "cosine"]:
+        """Canonical metric name: 'l2', 'ip' or 'cosine'."""
 
     @property
     def nbits(self) -> int:
@@ -853,8 +853,8 @@ class HnswIndex:
         ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
+            Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+            1 - cos for cosine. These are distances, not similarity scores.
 
         Notes
         -----
@@ -923,9 +923,9 @@ class SymqgIndex:
         Default is 200.
     init : {'pipnn', 'random'}, optional
         Keyword-only. Graph initialization method. Default is 'pipnn'.
-    metric : {'l2', 'ip', 'innerproduct'}, optional
-        Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-        Vectors are not automatically normalized for cosine similarity.
+    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        Keyword-only. Squared L2, inner-product or cosine distance. Default is
+        'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
         Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
         None (default) draws one at random; the seed property reports it.
@@ -984,9 +984,9 @@ class SymqgIndex:
             Default is 200.
         init : {'pipnn', 'random'}, optional
             Keyword-only. Graph initialization method. Default is 'pipnn'.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-            Vectors are not automatically normalized for cosine similarity.
+        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+            Keyword-only. Squared L2, inner-product or cosine distance. Default is
+            'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional
             Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
             None (default) draws one at random; the seed property reports it.
@@ -1064,8 +1064,8 @@ class SymqgIndex:
         """Deprecated since 0.8: whether the index holds a graph; use len()."""
 
     @property
-    def metric(self) -> Literal["l2", "ip"]:
-        """Canonical metric name: 'l2' or 'ip'."""
+    def metric(self) -> Literal["l2", "ip", "cosine"]:
+        """Canonical metric name: 'l2', 'ip' or 'cosine'."""
 
     @property
     def max_degree(self) -> int:
@@ -1203,8 +1203,8 @@ class SymqgIndex:
         ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
+            Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+            1 - cos for cosine. These are distances, not similarity scores.
 
         Notes
         -----

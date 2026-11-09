@@ -48,9 +48,9 @@ $$
 ## Estimator
 
 The following derivation covers squared Euclidean distance and inner product.
-The public metric choices are `METRIC_L2` and `METRIC_IP`; there is no separate
-cosine metric. For cosine search, normalize both data and query vectors, then
-use inner product. The implementation represents inner-product distance as
+The estimator supports `METRIC_L2` and `METRIC_IP` and has no cosine metric. For
+cosine search, normalize both data and query vectors, then use inner product;
+the ANN indexes' `METRIC_COSINE` does this for you. The implementation represents inner-product distance as
 $1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle$, which preserves the same ranking while
 keeping the nearest-neighbor convention that smaller values are better.
 

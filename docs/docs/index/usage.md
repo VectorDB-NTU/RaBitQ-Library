@@ -27,6 +27,30 @@ accepts working dimensions from 2, with multiples of 32 required for `SplitPacke
 C++ [MatrixRotator](../rabitq/rotator.md) has separate dimension and storage requirements;
 the Python indexes do not expose a rotator choice.
 
+## The cosine metric
+
+With `metric="cosine"` (C++ `METRIC_COSINE`), every index scales data and queries to
+unit length, stores the inner-product codes of the scaled vectors, and returns
+`1 - cos` as the distance, the inner-product distance `1 - dot` of unit vectors.
+Results equal those of a `metric="ip"` index built from the same vectors after this
+scaling. A zero vector stays zero, as in hnswlib and Faiss: its true distance to every
+vector is 1, which quantized storage estimates like any other distance. Centroids
+passed to `set_centroids` or C++ `construct` are used as given; `train`, and the first
+`add` that trains, compute them from the scaled vectors with spherical k-means.
+
+The index checks the original coordinates first, as above. Because it then trains on
+scaled copies, invalid training data is reported as `IVF training data ...` or
+`HNSW training data ...` rather than with the k-means message of the other metrics.
+`train`, `add` and construction scale a copy of their whole input, so they briefly
+need memory for one more float32 copy of it. To bound that for very large data, call
+`train` on a sample and `add` the data in several calls. Queries are scaled one at a
+time.
+
+The metric is stored in the [index file](#index-file-compatibility), so a loaded index
+keeps scaling its inputs. Releases up to 0.8 have no cosine metric: there, normalize
+vectors yourself and use `metric="ip"`. The core quantization APIs, FastScan queries
+and clustering reject `METRIC_COSINE`.
+
 ## Index counts
 
 The unified count properties below are introduced in **0.7.0**. In particular,

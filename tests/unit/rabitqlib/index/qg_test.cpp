@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "cosine.hpp"
 #include "format2_file.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -1458,6 +1459,111 @@ TEST(QgFormat2Test, RecordsTheSeedAndConstructionSettings) {
         EXPECT_FALSE(unknown.ef_construction().has_value());
         EXPECT_FALSE(unknown.initialization().has_value());
     }
+}
+
+TEST(QgCosineTest, MatchesInnerProductOverNormalizedVectors) {
+    constexpr size_t kCount = 130, kDim = 65, kDegree = 32, kQueries = 4, kTopK = 10;
+    std::vector<float> raw((kCount + kQueries) * kDim);
+    std::mt19937 generator(43);
+    std::normal_distribution<float> normal;
+    for (auto& value : raw) {
+        value = normal(generator);
+    }
+    const auto rows = rabitq_test::rescaled_rows(raw, kDim);
+    const std::vector<float> points(rows.begin(), rows.begin() + kCount * kDim);
+    const std::vector<float> queries(rows.begin() + kCount * kDim, rows.end());
+    const auto unit_points = rabitq_test::normalized_rows(points, kDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDim);
+    const rabitq_test::TempFile cosine_file("rabitq_qg_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_qg_cosine_ip.index");
+    const rabitq_test::TempFile damaged_file("rabitq_qg_cosine_damaged.index");
+    for (const size_t bits : {0UL, 4UL, 8UL}) {
+        for (const auto init : {QGInitialization::PiPNN, QGInitialization::Random}) {
+            SCOPED_TRACE(std::to_string(bits) + " bits, init " + std::to_string(int(init)));
+            QuantizedGraph<float> cosine(
+                kCount, kDim, kDegree, METRIC_COSINE, RotatorType::FhtKacRotator, bits, 7
+            );
+            QGBuilder(cosine, 40, points.data(), 1, init, 7).build();
+            QuantizedGraph<float> ip(
+                kCount, kDim, kDegree, METRIC_IP, RotatorType::FhtKacRotator, bits, 7
+            );
+            QGBuilder(ip, 40, unit_points.data(), 1, init, 7).build();
+            EXPECT_EQ(cosine.metric_type(), METRIC_COSINE);
+
+            cosine.save(cosine_file.path().c_str());
+            ip.save(ip_file.path().c_str());
+            rabitq_test::expect_same_sections_except_metric(
+                cosine_file.path(),
+                ip_file.path(),
+                rabitq_test::format2::IndexKind::SymphonyQg,
+                rabitq_test::kQgSections
+            );
+            QuantizedGraph<float> loaded;
+            loaded.load(cosine_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+
+            std::vector<PID> expected(kQueries * kTopK);
+            std::vector<float> expected_distances(expected.size());
+            ip.search_batch_with_ef(
+                unit_queries.data(),
+                kQueries,
+                kTopK,
+                expected.data(),
+                expected_distances.data(),
+                64,
+                1
+            );
+            for (QuantizedGraph<float>* index : {&cosine, &loaded}) {
+                std::vector<PID> ids(expected.size());
+                std::vector<float> distances(expected.size());
+                index->search_batch_with_ef(
+                    queries.data(), kQueries, kTopK, ids.data(), distances.data(), 64, 2
+                );
+                EXPECT_EQ(ids, expected);
+                EXPECT_EQ(distances, expected_distances);
+                index->set_ef(64);
+                index->search(queries.data(), kTopK, ids.data(), distances.data());
+                EXPECT_TRUE(std::equal(ids.begin(), ids.begin() + kTopK, expected.begin()));
+                EXPECT_TRUE(
+                    std::equal(
+                        distances.begin(),
+                        distances.begin() + kTopK,
+                        expected_distances.begin()
+                    )
+                );
+            }
+
+            // A failed load keeps the metric; loading an inner-product file replaces it.
+            {
+                std::ofstream damaged(damaged_file.path(), std::ios::binary);
+                damaged << "not an index";
+            }
+            EXPECT_THROW(loaded.load(damaged_file.path().c_str()), std::runtime_error);
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+            loaded.load(ip_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_IP);
+        }
+    }
+}
+
+TEST(QgCosineTest, ZeroQueryHasDistanceOne) {
+    constexpr size_t kCount = 65, kDim = 64, kDegree = 32;
+    std::vector<float> data(kCount * kDim);
+    std::mt19937 generator(44);
+    std::normal_distribution<float> normal;
+    for (auto& value : data) {
+        value = normal(generator);
+    }
+    // Raw vectors give exact distances.
+    QuantizedGraph<float> index(
+        kCount, kDim, kDegree, METRIC_COSINE, RotatorType::FhtKacRotator, 0, 7
+    );
+    QGBuilder(index, 40, data.data(), 1, QGInitialization::Random, 7).build();
+    const std::vector<float> zero(kDim, 0.0F);
+    std::vector<PID> ids(10);
+    std::vector<float> distances(10);
+    index.search_batch_with_ef(zero.data(), 1, 10, ids.data(), distances.data(), 64, 1);
+    EXPECT_EQ(distances, std::vector<float>(10, 1.0F));
 }
 
 TEST(QgFormat2Test, RejectsContentsThatDoNotFitTheGraph) {

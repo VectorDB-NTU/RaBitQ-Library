@@ -211,8 +211,26 @@ inline MetricType metric_from_string(const std::string& metric) {
     throw std::invalid_argument("metric must be 'l2' or 'ip'");
 }
 
+// Indexes also accept the cosine metric, which rabitqlib.quant rejects.
+inline MetricType index_metric_from_string(const std::string& metric) {
+    if (metric == "cosine") {
+        return METRIC_COSINE;
+    }
+    if (metric == "l2" || metric == "ip" || metric == "innerproduct") {
+        return metric_from_string(metric);
+    }
+    throw std::invalid_argument("metric must be 'l2', 'ip' or 'cosine'");
+}
+
 inline std::string metric_to_string(MetricType metric) {
-    return metric == METRIC_IP ? "ip" : "l2";
+    switch (metric) {
+        case METRIC_IP:
+            return "ip";
+        case METRIC_COSINE:
+            return "cosine";
+        default:
+            return "l2";
+    }
 }
 
 template <typename T>

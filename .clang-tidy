@@ -65,7 +65,7 @@ CheckOptions:
   readability-identifier-naming.StructIgnoredRegexp: '^rebind$'
   readability-identifier-naming.EnumCase: CamelCase
   readability-identifier-naming.EnumConstantCase: CamelCase
-  readability-identifier-naming.EnumConstantIgnoredRegexp: '^(METRIC_L2|METRIC_IP|RECONSTRUCTION|UNBIASED_ESTIMATION|PLAIN)$'
+  readability-identifier-naming.EnumConstantIgnoredRegexp: '^(METRIC_L2|METRIC_IP|METRIC_COSINE|RECONSTRUCTION|UNBIASED_ESTIMATION|PLAIN)$'
   readability-identifier-naming.TypeAliasCase: CamelCase
   readability-identifier-naming.TypeAliasIgnoredRegexp: '^(value_type|pointer|reference|difference_type|iterator_category|is_always_equal|other|maxheap|minheap|ex_ipfunc)$'
   readability-identifier-naming.TypedefCase: CamelCase

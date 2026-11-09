@@ -71,7 +71,9 @@ class HierarchicalNSW {
     [[nodiscard]] size_t nbits() const { return ex_bits_ + 1; }
     [[nodiscard]] size_t M() const { return M_; }
     [[nodiscard]] size_t ef_construction() const { return ef_construction_; }
-    [[nodiscard]] MetricType metric_type() const { return metric_type_; }
+    [[nodiscard]] MetricType metric_type() const {
+        return cosine_ ? METRIC_COSINE : metric_type_;
+    }
     // The construction seed, or no value for an index loaded from a file that does not
     // record it (files from releases up to 0.8).
     [[nodiscard]] std::optional<uint64_t> seed() const { return seed_; }
@@ -210,7 +212,8 @@ class HierarchicalNSW {
     size_t remove(const PID* labels, size_t num_points);
 
     // Queries use the original dimension. Each result is (distance, external label),
-    // where distance estimates squared L2 or 1 - dot according to the index metric.
+    // where distance estimates squared L2, 1 - dot or 1 - cos according to the index
+    // metric.
     // ef_search is raised to k and clamped to the stored point count. An empty index,
     // trained or not, returns no results.
     std::vector<std::vector<std::pair<float, PID>>> search(
@@ -244,7 +247,8 @@ class HierarchicalNSW {
     size_t upper_layer_max_degree_{0};
     size_t base_layer_max_degree_{0};
     size_t ef_construction_{0};
-    MetricType metric_type_{METRIC_L2};
+    MetricType metric_type_{METRIC_L2};  // METRIC_IP for the cosine metric
+    bool cosine_{false};  // normalize data and queries; metric_type_ is METRIC_IP
 
     double level_multiplier_{0.0};
     // max_level_ == -1 and entry_point_id_ == kPidMax mark an empty graph.

@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "../core/blob.hpp"
+#include "cosine.hpp"
 #include "file_replacement.hpp"
 #include "format2.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
@@ -83,17 +84,18 @@ HierarchicalNSW::HierarchicalNSW(
     size_t random_seed,
     MetricType metric_type
 )
-    : metric_type_(metric_type)
+    : metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE)
     , link_list_locks_(max_elements)
     , element_levels_(max_elements)
     , raw_dist_func_(
-          (metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
+          (metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
       ) {
     static_assert(
         buffer::kSearchBufferMaxPointCount <= kRemovedMask,
         "cluster IDs must leave the removal bit free"
     );
-    validate_metric_type(metric_type);
+    validate_metric_type(metric_type_);
     if (M < 2) {
         throw std::invalid_argument("HNSW M must be at least 2");
     }
@@ -181,7 +183,7 @@ void HierarchicalNSW::write_file(const char* filename) const {
 
     f2::Header header;
     header.index_kind = f2::IndexKind::Hnsw;
-    header.metric = metric_type_ == METRIC_IP ? f2::Metric::InnerProduct : f2::Metric::L2;
+    header.metric = f2::header_metric(metric_type());
     header.dim = dim_;
     header.padded_dim = padded_dim_;
     header.code_bits = static_cast<uint32_t>(ex_bits_ + 1);
@@ -308,6 +310,7 @@ void HierarchicalNSW::load(const char* filename) {
     swap(base_layer_max_degree_, loaded.base_layer_max_degree_);
     swap(ef_construction_, loaded.ef_construction_);
     swap(metric_type_, loaded.metric_type_);
+    swap(cosine_, loaded.cosine_);
     swap(level_multiplier_, loaded.level_multiplier_);
     swap(max_level_, loaded.max_level_);
     link_list_locks_.swap(loaded.link_list_locks_);
@@ -500,12 +503,6 @@ void HierarchicalNSW::read_format2(std::istream& input) {
         kUpperLinksSection};
     f2::Reader reader(
         input, f2::IndexKind::Hnsw, known_kinds, [](const f2::Header& header) {
-            if (header.metric == f2::Metric::Cosine) {
-                throw f2::FormatError(
-                    "HNSW index file uses the cosine metric, which this release does not "
-                    "support"
-                );
-            }
             if (header.id_bits != 32 || header.raw_type != f2::RawType::None) {
                 throw f2::FormatError("HNSW index file stores 64-bit IDs or raw vectors");
             }
@@ -524,7 +521,8 @@ void HierarchicalNSW::read_format2(std::istream& input) {
         }
     );
     const f2::Header& header = reader.header();
-    metric_type_ = header.metric == f2::Metric::InnerProduct ? METRIC_IP : METRIC_L2;
+    metric_type_ = index_detail::stored_metric(f2::metric_type(header.metric));
+    cosine_ = header.metric == f2::Metric::Cosine;
     dim_ = static_cast<size_t>(header.dim);
     padded_dim_ = static_cast<size_t>(header.padded_dim);
     ex_bits_ = header.code_bits - 1;
@@ -754,6 +752,11 @@ void HierarchicalNSW::construct(
     }
     check_coordinates(data, num_points * dim_, dim_, "HNSW construction data");
     check_coordinates(centroids, num_clusters * dim_, dim_, "HNSW construction centroids");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
+        data = normalized.data();
+    }
 
     try {
         num_clusters_ = num_clusters;
@@ -868,7 +871,14 @@ void HierarchicalNSW::train(
         throw std::invalid_argument("HNSW training data exceeds addressable storage");
     }
     // k-means checks the data for finite, in-range coordinates in parallel with
-    // the bound check_coordinates uses; set_centroids checks its centroids.
+    // the bound check_coordinates uses; set_centroids checks its centroids. The cosine
+    // metric checks the data before normalizing it, as add does.
+    std::vector<float> normalized;
+    if (cosine_) {
+        check_coordinates(data, num_points * dim_, dim_, "HNSW training data");
+        normalized = index_detail::normalized_rows(data, num_points, dim_, cp.num_threads);
+        data = normalized.data();
+    }
     rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters, cp);
     kmeans.train_centroids(num_points, data);
     set_centroids(num_clusters, kmeans.centroids.data());
@@ -1242,7 +1252,14 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
         num_threads,
         [&](size_t index, size_t /*thread*/) {
             std::vector<float> rotated_query(padded_dim_);
-            rotator_->rotate(queries + (index * dim_), rotated_query.data());
+            const float* query = queries + (index * dim_);
+            std::vector<float> normalized_query;
+            if (cosine_) {
+                normalized_query.resize(dim_);
+                index_detail::normalize_vector(query, normalized_query.data(), dim_);
+                query = normalized_query.data();
+            }
+            rotator_->rotate(query, rotated_query.data());
             results[index] = detail::search_knn_sorted(
                 *this, rotated_query.data(), k, std::max(ef_search, k)
             );
@@ -1623,6 +1640,11 @@ std::vector<PID> HierarchicalNSW::add(
         throw std::invalid_argument("HNSW add point count exceeds the supported ID range");
     }
     check_coordinates(data, num_points * dim_, dim_, "HNSW add data");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
+        data = normalized.data();
+    }
     std::vector<PID> labels(num_points);
     // Either the caller names the cluster of every point, or each one goes to its
     // nearest centroid, ordered the way a query is routed.

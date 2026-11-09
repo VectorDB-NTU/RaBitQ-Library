@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cosine.hpp"
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/fastscan/query.hpp"
 #include "rabitqlib/index/detail/buffer.hpp"
@@ -110,6 +111,13 @@ void QGBuilder::reset(const float* data) {
         throw std::invalid_argument("QuantizedGraph build data must not be null");
     }
     check_coordinates(data, num_points_ * dim_, dim_, "QuantizedGraph build data");
+    // The graph keeps its own copy of the vectors, so the normalized rows can go
+    // when reset returns.
+    std::vector<float> normalized;
+    if (qg_.cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points_, dim_, num_workers_);
+        data = normalized.data();
+    }
     if (initialization_ == QGInitialization::PiPNN) {
         auto initial = detail::build_initial_graph(
             data, num_points_, dim_, max_degree_, qg_.metric_type_, num_workers_

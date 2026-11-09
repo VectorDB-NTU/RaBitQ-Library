@@ -462,7 +462,9 @@ parity against a saved pre-change build when changing those shared implementatio
 
 Keep `tests/fixtures/core_api_v1/consumer.cpp` unchanged when extending v1; add tests.
 Changes to v1 names, signatures, aggregate fields, enum values, buffer/code semantics
-or allocation guarantees require an explicit API-major decision. The stable header
+or allocation guarantees require an explicit API-major decision. Adding a `MetricType`
+value that v1 rejects, as `METRIC_COSINE` does, is not such a change; keep v1's rejection
+covered by `core_api_test.cpp`. The stable header
 must not expose Eigen, record maps, ANN or ISA-specific types. Workspace APIs must
 never silently allocate on the heap or spawn worker threads.
 
@@ -854,7 +856,10 @@ Unreleased pad16 files whose stored dimension is not divisible by 32 are rejecte
 ### Distance conventions
 
 The library supports `METRIC_L2` and `METRIC_IP`. Some internal helpers represent inner-product
-distance as `1 - dot_product`, and estimator correction terms differ between metrics. Do not reuse
+distance as `1 - dot_product`, and estimator correction terms differ between metrics.
+`METRIC_COSINE` exists only at the ANN index boundary: an index stores `METRIC_IP` internally,
+normalizes inputs where they enter (`src/index/cosine.hpp`), and records the metric in its file.
+Quantizers, FastScan, clustering and the IVF initializers keep rejecting it. Do not reuse
 an L2 norm/correction formula for IP merely because both paths compile. Test ordering and returned
 distance semantics separately.
 

@@ -93,7 +93,8 @@ class QuantizedGraph<float> {
     size_t padded_dim_ = 0;
     float (*raw_dist_func_)(const float*, const float*, size_t) = nullptr;
     PID entry_point_id_ = 0;
-    MetricType metric_type_ = METRIC_L2;
+    MetricType metric_type_ = METRIC_L2;  // METRIC_IP for the cosine metric
+    bool cosine_ = false;  // normalize data and queries; metric_type_ is METRIC_IP
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
     std::vector<float> centroid_;   // rotated global centroid for qg-quant
@@ -366,7 +367,8 @@ class QuantizedGraph<float> {
      * buffers, including visited sets.
      *
      * An optional g_k1xsumq must come from BatchQuery::g_k1xsumq() for the same
-     * query and this graph's rotation. A null pointer recomputes the sum.
+     * query and this graph's rotation; with the cosine metric, for the query scaled to
+     * unit norm. A null pointer recomputes the sum.
      */
     void search_with_scratch(
         const float* __restrict__ query,

@@ -319,6 +319,42 @@ TEST(HistoricalPersistenceTest, TruncatedEarlierFilesRaiseFormatError) {
     } catch (const FormatError& error) {
         EXPECT_STREQ(error.what(), "Invalid IVF index metadata");
     }
+    // Metric byte 2, METRIC_COSINE in memory, never appears in these layouts.
+    const struct {
+        const char* name;
+        std::streamoff offset;
+        const char* message;
+    } graph_metrics[] = {
+        {"hnsw5_ip", 48, "HNSW index file is invalid or truncated"},
+        {"qg8_ip", 49, "Metric type must be METRIC_L2 or METRIC_IP"},
+        {"qg0_ip", 37, "Metric type must be METRIC_L2 or METRIC_IP"},
+    };
+    for (const auto& c : graph_metrics) {
+        SCOPED_TRACE(c.name);
+        fs::copy_file(
+            fs::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.8.3" /
+                (std::string(c.name) + ".index"),
+            path,
+            fs::copy_options::overwrite_existing
+        );
+        {
+            std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+            file.seekg(c.offset);
+            ASSERT_EQ(file.get(), 1);  // the IP metric byte
+            file.seekp(c.offset);
+            file.put(static_cast<char>(2));
+        }
+        try {
+            if (c.name[0] == 'h') {
+                hnsw::HierarchicalNSW index;
+                index.load(path.string().c_str());
+            } else {
+                symqg::QuantizedGraph<float> index;
+                index.load(path.string().c_str());
+            }
+            ADD_FAILURE() << "an invalid metric was loaded";
+        } catch (const FormatError& error) { EXPECT_STREQ(error.what(), c.message); }
+    }
     fs::remove(path);
     ivf::IVF missing;
     try {

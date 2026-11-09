@@ -186,10 +186,11 @@ def check_input_contracts() -> None:
     centroids = x.mean(axis=0, keepdims=True)
     signed = np.zeros(80, dtype=np.int64)
     unsigned = np.zeros(80, dtype=np.uint32)
-    metrics: tuple[Literal["l2", "ip", "innerproduct"], ...] = (
+    metrics: tuple[Literal["l2", "ip", "innerproduct", "cosine"], ...] = (
         "l2",
         "ip",
         "innerproduct",
+        "cosine",
     )
     for metric in metrics:
         ivf = IvfIndex(64, 1, nbits=4, metric=metric)
@@ -227,6 +228,7 @@ def check_input_contracts() -> None:
         graph.add(x)
     # Returned option values must be usable as inputs without casts.
     IvfIndex(64, 1, nbits=4, metric=ivf.metric, initializer=ivf.initializer)
+    assert_type(ivf.metric, Literal["l2", "ip", "cosine"])
 
 
 def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
@@ -236,7 +238,7 @@ def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
     ivf = IvfIndex(64, 1, nbits=4)
     hnsw = HnswIndex(64, nbits=4)
     graph = SymqgIndex(64)
-    IvfIndex(64, 1, nbits=4, metric="cosine")  # type: ignore[call-overload]
+    IvfIndex(64, 1, nbits=4, metric="cos")  # type: ignore[call-overload]
     HnswIndex(64, nbits=4, metric="L2")  # type: ignore[call-overload]
     SymqgIndex(64, metric="inner_product")  # type: ignore[call-overload]
     IvfIndex(64, 1, nbits=4, initializer="flat_rabit")  # type: ignore[call-overload]
