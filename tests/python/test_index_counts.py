@@ -18,7 +18,7 @@ def check_counts(index, capacity, stored, active):
 @pytest.mark.parametrize(
     "kind,bits",
     [("ivf", 1), ("ivf", 4), ("ivf", 32), ("hnsw", 1), ("hnsw", 9)]
-    + [("symqg", bits) for bits in (0, 4, 8)],
+    + [("symqg", bits) for bits in (32, 4, 8)],
 )
 def test_count_contract_through_lifecycle(tmp_path, kind, bits):
     metric = "l2"
@@ -28,20 +28,28 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
     centroid = np.zeros((1, dim), np.float32)
     assignments = np.zeros(count + 4, np.uint32)
     if kind == "ivf":
-        index = IvfIndex(dim, count, 1, bits, metric=metric)
-        capacity = count
+        index = IvfIndex(dim, 1, nbits=bits, metric=metric)
+        capacity = 0
     elif kind == "hnsw":
-        index = HnswIndex(dim, 64, M=8, ef_construction=40, nbits=bits, metric=metric)
+        index = HnswIndex(
+            dim, num_clusters=1, M=8, ef_construction=40, nbits=bits, metric=metric
+        )
+        index.resize(64)
         capacity = 64
     else:
-        index = SymqgIndex(dim, max_degree=32, quantization_bits=bits, metric=metric)
+        index = SymqgIndex(
+            dim, max_degree=32, ef_construction=40, nbits=bits, metric=metric
+        )
         capacity = 0
     check_counts(index, capacity, 0, 0)
     if kind == "symqg":
-        index.build(data[:count], ef_construction=40, num_threads=1)
+        index.add(data[:count], num_threads=1)
         capacity = count
     else:
-        index.build(data[:count], centroid, assignments[:count])
+        index.set_centroids(centroid)
+        index.add(data[:count], cluster_ids=assignments[:count], num_threads=1)
+        if kind == "ivf":
+            capacity = count
     check_counts(index, capacity, count, count)
 
     path = tmp_path / "counts.index"
@@ -66,7 +74,7 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
         capacity = 80
         check_counts(index, capacity, count, count - 3)
 
-    ids = index.add(data[count : count + 3], assignments[:3])
+    ids = index.add(data[count : count + 3], cluster_ids=assignments[:3])
     np.testing.assert_array_equal(ids, np.arange(count, count + 3))
     stored = count + 3
     if kind == "ivf":
@@ -87,7 +95,9 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
     hits, _ = index.search(data[:1], k=1, **args)
     assert np.all(hits == np.iinfo(np.uint32).max)
 
-    np.testing.assert_array_equal(index.add(data[-1:], assignments[:1]), [stored])
+    np.testing.assert_array_equal(
+        index.add(data[-1:], cluster_ids=assignments[:1]), [stored]
+    )
     stored += 1
     if kind == "ivf":
         capacity = stored
