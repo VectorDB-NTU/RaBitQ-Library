@@ -2415,7 +2415,7 @@ See the <a href="../../modular_migration/">migration guide</a> and
 <p>Let <span class="arithmatex"><span class="MathJax_Preview">B</span><script type="math/tex">B</script></span> be the total bits per dimension. Encoding produces two parts:</p>
 <ol>
 <li>A <strong>sign code</strong>: one bit per coordinate.</li>
-<li>An <strong>extra-bit code</strong>: the remaining <span class="arithmatex"><span class="MathJax_Preview">B-1</span><script type="math/tex">B-1</script></span> bits when <span class="arithmatex"><span class="MathJax_Preview">B&gt;1</span><script type="math/tex">B>1</script></span>.</li>
+<li>An <strong>extra-bit code</strong>: the remaining <span class="arithmatex"><span class="MathJax_Preview">B-1</span><script type="math/tex">B-1</script></span> bits when <span class="arithmatex"><span class="MathJax_Preview">B&gt;1</span><script type="math/tex">B&gt;1</script></span>.</li>
 </ol>
 <p>The internal sign encoder is in <code>core/detail/rabitq_impl.hpp</code>. Use the public
 entry points in <code>core/encoder.hpp</code> or <code>fastscan/encoder.hpp</code>; implementation

@@ -2094,11 +2094,11 @@ Then use bitwise-and <code>&amp;</code> and <code>popcnt</code> to estimate the 
 </div>
 <script type="math/tex; mode=display">
 \begin{align}
-\left< \mathbf{x}_0,\mathbf{q}_r'\right>
-&\approx \left< \mathbf{x}_0,\Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D\right>
-\\&=\Delta_q \left< \mathbf{x}_0,\mathbf{q}_u\right> + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
-\\ &=\Delta_q \sum_{i=0}^{B_q-1} \left( 2^i\left< \mathbf{x}_0,\mathbf{q}_u^{(i)}\right> \right) + v_q \cdot\mathrm{popcnt}(\mathbf{x}_0)
-\\ &=\Delta_q \sum_{i=0}^{B_q-1} 2^i\cdot \mathrm{popcnt}(\mathbf{x}_0\ \&\  \mathbf{q}_u^{(i)})  + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
+\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;
+&amp;\approx \left&lt; \mathbf{x}_0,\Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D\right&gt;
+\\&amp;=\Delta_q \left&lt; \mathbf{x}_0,\mathbf{q}_u\right&gt; + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
+\\ &amp;=\Delta_q \sum_{i=0}^{B_q-1} \left( 2^i\left&lt; \mathbf{x}_0,\mathbf{q}_u^{(i)}\right&gt; \right) + v_q \cdot\mathrm{popcnt}(\mathbf{x}_0)
+\\ &amp;=\Delta_q \sum_{i=0}^{B_q-1} 2^i\cdot \mathrm{popcnt}(\mathbf{x}_0\ \&amp;\  \mathbf{q}_u^{(i)})  + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
 \end{align}
 </script>
 </div>
@@ -2117,7 +2117,7 @@ for background.</p>
 </div>
 <script type="math/tex; mode=display">
 \begin{align}
-\left< \mathbf{x}_0,\mathbf{q}_r'\right>= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
+\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
 \end{align}
 </script>
 </div>
