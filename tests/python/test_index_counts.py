@@ -44,11 +44,12 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
     check_counts(index, capacity, 0, 0)
     if kind == "symqg":
         index.add(data[:count], num_threads=1)
+        capacity = count
     else:
         index.set_centroids(centroid)
         index.add(data[:count], cluster_ids=assignments[:count], num_threads=1)
-    if kind != "hnsw":
-        capacity = count
+        if kind == "ivf":
+            capacity = count
     check_counts(index, capacity, count, count)
 
     path = tmp_path / "counts.index"
@@ -73,7 +74,7 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
         capacity = 80
         check_counts(index, capacity, count, count - 3)
 
-    ids = index.add(data[count : count + 3], cluster_ids=assignments[:3], num_threads=1)
+    ids = index.add(data[count : count + 3], cluster_ids=assignments[:3])
     np.testing.assert_array_equal(ids, np.arange(count, count + 3))
     stored = count + 3
     if kind == "ivf":
@@ -95,7 +96,7 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
     assert np.all(hits == np.iinfo(np.uint32).max)
 
     np.testing.assert_array_equal(
-        index.add(data[-1:], cluster_ids=assignments[:1], num_threads=1), [stored]
+        index.add(data[-1:], cluster_ids=assignments[:1]), [stored]
     )
     stored += 1
     if kind == "ivf":
