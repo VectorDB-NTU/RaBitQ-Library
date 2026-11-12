@@ -21,8 +21,10 @@ _EF_BUILD = 50
 
 @pytest.fixture(scope="module")
 def built_symqg(base_data):
-    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
-    idx.build(base_data, ef_construction=_EF_BUILD)
+    # A seeded single-thread build is reproducible, so the self-retrieval test can
+    # require every probe (#216).
+    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE, ef_construction=_EF_BUILD, seed=42)
+    idx.add(base_data, num_threads=1)
     return idx
 
 
@@ -234,7 +236,8 @@ def test_failed_rebuild_preserves_index(
 
 @pytest.mark.parametrize("bits", [0, 4, 8])
 def test_successful_rebuild_replaces_index(base_data, tmp_path, bits):
-    index = SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=bits)
+    # Seeded, and build uses one thread, so every self-query below must succeed.
+    index = SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=bits, seed=42)
     index.build(base_data[:40], ef_construction=_EF_BUILD)
     replacement = base_data[40:88] + 10
     index.build(replacement, ef_construction=_EF_BUILD)
