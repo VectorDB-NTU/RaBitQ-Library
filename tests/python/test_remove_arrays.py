@@ -14,11 +14,12 @@ def test_remove_integer_views_preserve_input_and_validate_atomically(
     count, dim = 8, 64
     data = np.random.default_rng(42).normal(size=(count, dim)).astype(np.float32)
     index = (
-        IvfIndex(dim, count, 1, 4)
+        IvfIndex(dim, 1, nbits=4)
         if kind == "ivf"
-        else HnswIndex(dim, count, M=2, ef_construction=10, nbits=4)
+        else HnswIndex(dim, num_clusters=1, M=2, ef_construction=10, nbits=4)
     )
-    index.build(data, np.zeros((1, dim), np.float32), np.zeros(count, np.uint32))
+    index.set_centroids(np.zeros((1, dim), np.float32))
+    index.add(data, cluster_ids=np.zeros(count, np.uint32), num_threads=1)
     search_args = {"nprobe": 1} if kind == "ivf" else {"ef": count}
     before = index.search(data, k=1, **search_args)
 

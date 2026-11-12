@@ -255,8 +255,9 @@ def test_sampled_results_build_an_ivf_index(model_type):
     x = clustered(4 * clusters, 23)
     model = make_model(model_type, max_points_per_centroid=1)
     model.train(x)
-    index = IvfIndex(DIM, len(x), clusters, 4)
-    index.build(x, model.centroids, model.assignments)
+    index = IvfIndex(DIM, clusters, nbits=4)
+    index.set_centroids(model.centroids)
+    index.add(x, cluster_ids=model.assignments, num_threads=1)
     ids, _ = index.search(x[:3], 5, nprobe=clusters)
     for query, neighbors in enumerate(ids):
         assert query in neighbors

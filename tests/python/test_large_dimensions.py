@@ -14,21 +14,29 @@ def test_large_dimension_round_trip(tmp_path, dim, metric, kind):
     data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
     data /= np.linalg.norm(data, axis=1, keepdims=True)
     if kind == "ivf":
-        index = IvfIndex(dim, count, 1, nbits=4, metric=metric)
+        index = IvfIndex(dim, 1, nbits=4, metric=metric)
         search_args = {"nprobe": 1}
     elif kind == "hnsw":
         index = HnswIndex(
-            dim, count, M=count, ef_construction=count, nbits=4, metric=metric
+            dim,
+            num_clusters=1,
+            M=count,
+            ef_construction=count,
+            nbits=4,
+            metric=metric,
         )
         search_args = {"ef": count}
     else:
-        index = SymqgIndex(dim, max_degree=32, quantization_bits=4, metric=metric)
+        index = SymqgIndex(
+            dim, max_degree=32, ef_construction=count, nbits=4, metric=metric
+        )
         search_args = {"ef": count}
 
     if kind == "qg":
-        index.build(data, ef_construction=count, num_threads=2)
+        index.add(data, num_threads=2)
     else:
-        index.build(data, data.mean(axis=0, keepdims=True), np.zeros(count, np.uint32))
+        index.set_centroids(data.mean(axis=0, keepdims=True))
+        index.add(data, cluster_ids=np.zeros(count, np.uint32), num_threads=1)
     queries = data[:3]
     ids, distances = index.search(queries, k=1, **search_args)
     np.testing.assert_array_equal(ids[:, 0], np.arange(3))
@@ -47,9 +55,9 @@ def test_rejects_dimensions_above_fht_limit(kind):
     dim = 65537
     with pytest.raises(ValueError, match="Unsupported dimension for FhtKacRotator"):
         if kind == "ivf":
-            IvfIndex(dim, 40, 1, nbits=4)
+            IvfIndex(dim, 1, nbits=4)
         elif kind == "hnsw":
-            HnswIndex(dim, 40, nbits=4)
+            HnswIndex(dim, nbits=4)
         else:
-            index = SymqgIndex(dim, max_degree=32, quantization_bits=4)
-            index.build(np.zeros((40, dim), dtype=np.float32), ef_construction=40)
+            index = SymqgIndex(dim, max_degree=32, ef_construction=40, nbits=4)
+            index.add(np.zeros((40, dim), dtype=np.float32), num_threads=1)

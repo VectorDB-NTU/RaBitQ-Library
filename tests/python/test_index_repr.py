@@ -16,7 +16,7 @@ SUMMARIES = {
         "num_clusters={clusters}, is_trained={built})"
     ),
     "symqg": (
-        "SymqgIndex(dim=64, metric='ip', nbits={nbits}, "
+        "SymqgIndex(dim=64, metric='ip', nbits={bits}, "
         "num_points={live}, max_degree=32)"
     ),
 }
@@ -29,42 +29,44 @@ def vectors():
 
 def unbuilt_index(kind, bits):
     if kind == "ivf":
-        return IvfIndex(64, 80, 1, bits, metric="innerproduct")
+        return IvfIndex(64, 1, nbits=bits, metric="innerproduct")
     if kind == "hnsw":
-        return HnswIndex(64, 96, nbits=bits, metric="innerproduct")
-    return SymqgIndex(64, 32, metric="innerproduct", quantization_bits=bits)
+        index = HnswIndex(64, nbits=bits, num_clusters=1, metric="innerproduct")
+        # Keep capacity distinct from the 80 stored points.
+        index.resize(96)
+        return index
+    return SymqgIndex(
+        64, max_degree=32, ef_construction=40, metric="innerproduct", nbits=bits
+    )
 
 
 def build_index(index, vectors):
     if isinstance(index, SymqgIndex):
-        index.build(vectors, 40)
+        index.add(vectors, num_threads=1)
     else:
-        index.build(
-            vectors, vectors.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32)
-        )
+        index.set_centroids(vectors.mean(axis=0, keepdims=True))
+        index.add(vectors, cluster_ids=np.zeros(80, dtype=np.uint32), num_threads=1)
 
 
 @pytest.mark.parametrize(
-    "kind,bits", [("ivf", 4), ("ivf", 32), ("hnsw", 8), ("symqg", 0), ("symqg", 8)]
+    "kind,bits", [("ivf", 4), ("ivf", 32), ("hnsw", 8), ("symqg", 32), ("symqg", 8)]
 )
 def test_repr_lifecycle(kind, bits, vectors, tmp_path):
     index = unbuilt_index(kind, bits)
-    capacity = 96 if kind == "hnsw" else 80
     before = SUMMARIES[kind].format(
         bits=bits,
-        nbits=32 if bits == 0 else bits,
         live=0,
         stored=0,
-        capacity=capacity,
-        clusters=16 if kind == "hnsw" else 1,
+        capacity=96 if kind == "hnsw" else 0,
+        clusters=1,
         built=False,
     )
     assert repr(index) == str(index) == before
 
     build_index(index, vectors)
+    capacity = 96 if kind == "hnsw" else 80
     after = SUMMARIES[kind].format(
         bits=bits,
-        nbits=32 if bits == 0 else bits,
         live=80,
         stored=80,
         capacity=capacity,
