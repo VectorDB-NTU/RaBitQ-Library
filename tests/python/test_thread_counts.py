@@ -19,23 +19,23 @@ def test_build_and_search_thread_counts(kind, metric, build_threads):
     data = rng.standard_normal((96, 64)).astype(np.float32)
     data /= np.linalg.norm(data, axis=1, keepdims=True)
     if kind == "ivf":
-        index = IvfIndex(64, len(data), 1, nbits=8, metric=metric)
+        index = IvfIndex(64, 1, nbits=8, metric=metric)
         search_args = {"nprobe": 1}
     elif kind == "hnsw":
         index = HnswIndex(
-            64, len(data), M=16, ef_construction=96, nbits=8, metric=metric
+            64, num_clusters=1, M=16, ef_construction=96, nbits=8, metric=metric
         )
         search_args = {"ef": 96}
     else:
-        index = SymqgIndex(64, max_degree=32, metric=metric)
+        index = SymqgIndex(64, max_degree=32, ef_construction=96, metric=metric)
         search_args = {"ef": 96}
     if kind == "qg":
-        index.build(data, ef_construction=96, num_threads=build_threads)
+        index.add(data, num_threads=build_threads)
     else:
-        index.build(
+        index.set_centroids(data.mean(axis=0, keepdims=True))
+        index.add(
             data,
-            data.mean(axis=0, keepdims=True),
-            np.zeros(len(data), dtype=np.uint32),
+            cluster_ids=np.zeros(len(data), dtype=np.uint32),
             num_threads=build_threads,
         )
 
@@ -43,7 +43,12 @@ def test_build_and_search_thread_counts(kind, metric, build_threads):
     expected_ids, expected_distances = index.search(
         data, k=5, num_threads=1, **search_args
     )
-    np.testing.assert_array_equal(expected_ids[:, 0], np.arange(len(data)))
+    self_recall = np.mean(expected_ids[:, 0] == np.arange(len(data)))
+    if kind == "ivf":
+        assert self_recall == 1
+    else:
+        # A parallel or unseeded graph build can leave a point unreachable (#216).
+        assert self_recall >= 0.95
     assert np.isfinite(expected_distances).all()
     for threads in (0, MAX_THREADS):
         ids, distances = index.search(data, k=5, num_threads=threads, **search_args)

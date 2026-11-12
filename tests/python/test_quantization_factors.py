@@ -11,8 +11,9 @@ from rabitqlib import IvfIndex
 def test_collinear_ivf_query_keeps_finite_distances(nbits, metric, high_accuracy):
     data = np.full((1, 512), 0.1, dtype=np.float32)
     centroid = np.zeros_like(data)
-    index = IvfIndex(data.shape[1], len(data), 1, nbits=nbits, metric=metric)
-    index.build(data, centroid, np.zeros(len(data), dtype=np.uint32), num_threads=1)
+    index = IvfIndex(data.shape[1], 1, nbits=nbits, metric=metric)
+    index.set_centroids(centroid)
+    index.add(data, cluster_ids=np.zeros(len(data), dtype=np.uint32), num_threads=1)
 
     # The C++ regression fixes the rotated residual to trigger negative roundoff.
     # This exercises the normal Python boundary with its randomly sampled rotation.

@@ -10,18 +10,19 @@ from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 def test_unicode_path_round_trip(tmp_path, kind, unicode_directory):
     data = np.random.default_rng(42).standard_normal((64, 64)).astype(np.float32)
     if kind.startswith("ivf"):
-        index = IvfIndex(64, 64, 1, nbits=32 if kind == "ivf_raw" else 4)
+        index = IvfIndex(64, 1, nbits=32 if kind == "ivf_raw" else 4)
     elif kind == "hnsw":
-        index = HnswIndex(64, 64, M=4, nbits=4)
+        index = HnswIndex(64, num_clusters=1, M=4, nbits=4)
     else:
-        bits = {"qg": 0, "qg4": 4, "qg8": 8}[kind]
-        index = SymqgIndex(64, max_degree=32, quantization_bits=bits)
+        bits = {"qg": 32, "qg4": 4, "qg8": 8}[kind]
+        index = SymqgIndex(64, max_degree=32, ef_construction=64, nbits=bits)
 
     if kind.startswith("qg"):
-        index.build(data, ef_construction=64)
+        index.add(data, num_threads=1)
         search_args = {"ef": 64}
     else:
-        index.build(data, data.mean(axis=0, keepdims=True), np.zeros(64, np.uint32))
+        index.set_centroids(data.mean(axis=0, keepdims=True))
+        index.add(data, cluster_ids=np.zeros(64, np.uint32), num_threads=1)
         search_args = {"nprobe": 1} if kind.startswith("ivf") else {"ef": 64}
 
     directory = tmp_path / "\u6d4b\u8bd5_\U0001f680" if unicode_directory else tmp_path
