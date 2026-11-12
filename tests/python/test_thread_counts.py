@@ -43,7 +43,12 @@ def test_build_and_search_thread_counts(kind, metric, build_threads):
     expected_ids, expected_distances = index.search(
         data, k=5, num_threads=1, **search_args
     )
-    np.testing.assert_array_equal(expected_ids[:, 0], np.arange(len(data)))
+    self_recall = np.mean(expected_ids[:, 0] == np.arange(len(data)))
+    if kind == "ivf":
+        assert self_recall == 1
+    else:
+        # A parallel or unseeded graph build can leave a point unreachable (#216).
+        assert self_recall >= 0.95
     assert np.isfinite(expected_distances).all()
     for threads in (0, MAX_THREADS):
         ids, distances = index.search(data, k=5, num_threads=threads, **search_args)

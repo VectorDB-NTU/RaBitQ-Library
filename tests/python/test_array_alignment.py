@@ -51,49 +51,50 @@ def test_indexes_accept_unaligned_build_and_query_arrays(kind, offset, tmp_path)
             return HnswIndex(
                 65, num_clusters=2, M=8, ef_construction=32, nbits=4, seed=42
             )
-        return SymqgIndex(65, max_degree=32, ef_construction=32)
+        return SymqgIndex(65, max_degree=32, ef_construction=32, seed=42)
+
+    def fill(index, vectors, centers):
+        if kind == "qg":
+            index.add(vectors, num_threads=1)
+        else:
+            index.set_centroids(centers)
+            index.add(vectors, cluster_ids=labels, num_threads=1)
 
     if kind == "ivf":
         parameters = {"nprobe": 2}
     else:
         parameters = {"ef": 65}
 
-    if kind != "qg":
-        reference = make_index()
-        reference.set_centroids(centroids)
-        reference.add(data, cluster_ids=labels, num_threads=1)
-        reference_path = tmp_path / "aligned.index"
-        reference.save(str(reference_path))
-        expected_bytes = reference_path.read_bytes()
-        expected = reference.search(queries, k=5, num_threads=1, **parameters)
+    # Explicit seeds and one build thread make every index reproducible.
+    reference = make_index()
+    fill(reference, data, centroids)
+    reference_path = tmp_path / "aligned.index"
+    reference.save(str(reference_path))
+    expected_bytes = reference_path.read_bytes()
+    expected = reference.search(queries, k=5, num_threads=1, **parameters)
+    if kind == "qg":
+        # SymphonyQG stores raw vectors, so its distances are exact.
+        exact = np.sum(
+            (queries.astype(np.float64)[:, None] - data.astype(np.float64)) ** 2,
+            axis=2,
+        )
+        np.testing.assert_allclose(
+            expected[1],
+            np.take_along_axis(exact, expected[0], axis=1),
+            rtol=2e-6,
+            atol=1e-5,
+        )
 
     # Isolate each conversion so a damaged centroid cannot hide behind data damage.
     inputs = [(unaligned_data, centroids)]
     if kind != "qg":
         inputs += [(data, unaligned_centroids), (unaligned_data, unaligned_centroids)]
     for vectors, centers in inputs:
-        # Explicit seeds reproduce the IVF rotation and HNSW's rotation and serial
-        # graph.
         index = make_index()
-        if kind == "qg":
-            index.add(vectors, num_threads=1)
-            ids, distances = index.search(queries, k=len(data), **parameters)
-            for row in ids:
-                np.testing.assert_array_equal(np.sort(row), np.arange(len(data)))
-            exact = np.sum(
-                (queries.astype(np.float64)[:, None] - data.astype(np.float64)) ** 2,
-                axis=2,
-            )
-            np.testing.assert_allclose(
-                distances, np.take_along_axis(exact, ids, axis=1), rtol=2e-6, atol=1e-5
-            )
-            expected = index.search(queries, k=5, num_threads=1, **parameters)
-        else:
-            index.set_centroids(centers)
-            index.add(vectors, cluster_ids=labels, num_threads=1)
-            actual_path = tmp_path / "unaligned.index"
-            index.save(str(actual_path))
-            assert actual_path.read_bytes() == expected_bytes
+        fill(index, vectors, centers)
+        actual_path = tmp_path / "unaligned.index"
+        index.save(str(actual_path))
+        assert actual_path.read_bytes() == expected_bytes
         for values in (queries, unaligned_queries):
             actual = index.search(values, k=5, num_threads=1, **parameters)
             for result, reference_result in zip(actual, expected, strict=True):
