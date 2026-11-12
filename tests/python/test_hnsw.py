@@ -86,13 +86,14 @@ def test_seed_reproduces_serial_build_and_search(tmp_path):
 
 
 def test_parallel_build_preserves_self_retrieval(base_data, clusters):
-    # Keep every neighbor so insertion-order-dependent pruning cannot isolate a
-    # point. This checks parallel construction, not sparse-graph recall.
+    # M equals the point count, so the base layer holds 2M >= N - 1 links and never
+    # prunes a reverse link: every point stays reachable under any thread
+    # interleaving. This checks parallel construction, not sparse-graph recall.
     idx = HnswIndex(DIM, N_VECTORS, M=N_VECTORS, ef_construction=N_VECTORS, nbits=4)
     centroids, cluster_ids = clusters
     idx.build(base_data, centroids, cluster_ids, num_threads=8)
-    ids, distances = idx.search(base_data[:10], k=1, ef=N_VECTORS)
-    np.testing.assert_array_equal(ids[:, 0], np.arange(10))
+    ids, distances = idx.search(base_data, k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(N_VECTORS))
     assert np.isfinite(distances).all()
 
 
@@ -251,7 +252,10 @@ def test_add_returns_dense_labels_and_preserves_search(
     _, cluster_ids = clusters
     assert partial_hnsw.num_points == 400
     before, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
-    ids = partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    # One thread, as the build used, so the grown graph and `after` are reproducible.
+    ids = partial_hnsw.add(
+        base_data[400:], cluster_ids=cluster_ids[400:], num_threads=1
+    )
     np.testing.assert_array_equal(ids, np.arange(400, N_VECTORS))
     assert partial_hnsw.num_points == N_VECTORS
     # A sparse graph can isolate the odd point, as it can after build, so this
@@ -265,8 +269,8 @@ def test_add_returns_dense_labels_and_preserves_search(
 
 
 def test_add_into_a_dense_graph_retrieves_every_point(base_data, clusters):
-    # Keeping every neighbor removes the pruning that isolates points, so the
-    # added points must all be found.
+    # M equals the point count, so the base layer holds 2M >= N - 1 links and never
+    # prunes a reverse link: even a parallel add keeps every point reachable.
     centroids, cluster_ids = clusters
     idx = HnswIndex(DIM, N_VECTORS, M=N_VECTORS, ef_construction=N_VECTORS, nbits=4)
     idx.build(base_data[:400], centroids, cluster_ids[:400])
@@ -331,7 +335,7 @@ def test_resize_grows_capacity_and_allows_more(base_data, clusters):
     assert idx.max_elements == N_VECTORS
     assert idx.num_points == 400
 
-    idx.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    idx.add(base_data[400:], cluster_ids=cluster_ids[400:], num_threads=1)
     assert idx.num_points == N_VECTORS
     ids, _ = idx.search(base_data[:10], k=1, ef=N_VECTORS)
     np.testing.assert_array_equal(ids[:, 0], np.arange(10))
@@ -457,7 +461,8 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     plain = HnswIndex.load(str(plain_path))
     for index in (idx, loaded, plain):
         index.resize(count + len(new))
-        index.add(new)
+        # One thread: graphs grown in parallel differ, and the searches compare them.
+        index.add(new, num_threads=1)
         assert index.num_stored_points == count + len(new)
         assert index.num_points == count + len(new) - (0 if index is plain else 4)
 

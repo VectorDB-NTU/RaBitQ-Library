@@ -25,10 +25,18 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
         )
         search_args = {"ef": 96}
     else:
-        index = SymqgIndex(dim, max_degree=32, quantization_bits=bits, metric=metric)
+        # Seeded and single-threaded, so every self-query below must succeed (#216).
+        index = SymqgIndex(
+            dim,
+            max_degree=32,
+            nbits=bits or 32,
+            ef_construction=96,
+            metric=metric,
+            seed=42,
+        )
         search_args = {"ef": 96}
     if kind == "qg":
-        index.build(data, ef_construction=96)
+        index.add(data, num_threads=1)
     else:
         index.build(
             data, data.mean(axis=0, keepdims=True), np.zeros(len(data), np.uint32)

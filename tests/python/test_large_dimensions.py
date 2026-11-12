@@ -28,12 +28,13 @@ def test_large_dimension_round_trip(tmp_path, dim, metric, kind):
         search_args = {"ef": count}
     else:
         index = SymqgIndex(
-            dim, max_degree=32, ef_construction=count, nbits=4, metric=metric
+            dim, max_degree=32, ef_construction=count, nbits=4, metric=metric, seed=42
         )
         search_args = {"ef": count}
 
+    # A seeded single-thread build is reproducible, so every self-query must succeed.
     if kind == "qg":
-        index.add(data, num_threads=2)
+        index.add(data, num_threads=1)
     else:
         index.set_centroids(data.mean(axis=0, keepdims=True))
         index.add(data, cluster_ids=np.zeros(count, np.uint32), num_threads=1)
