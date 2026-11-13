@@ -23,17 +23,16 @@ class FilesystemPath:
 def built_index(request):
     data = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
     if request.param == "symqg":
-        index = SymqgIndex(64, 32)
-        index.build(data, 40)
+        index = SymqgIndex(64, max_degree=32, ef_construction=40)
+        index.add(data, num_threads=1)
     else:
         if request.param.startswith("ivf"):
             initializer = "hnsw" if request.param == "ivf_hnsw" else "flat"
-            index = IvfIndex(64, 80, 1, 4, initializer=initializer)
+            index = IvfIndex(64, 1, nbits=4, initializer=initializer)
         else:
-            index = HnswIndex(64, 80, nbits=4)
-        index.build(
-            data, data.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32)
-        )
+            index = HnswIndex(64, nbits=4, num_clusters=1)
+        index.set_centroids(data.mean(axis=0, keepdims=True))
+        index.add(data, cluster_ids=np.zeros(80, dtype=np.uint32), num_threads=1)
     return index, data[:2]
 
 
@@ -214,10 +213,10 @@ def test_path_callback_runs_before_access_guard(built_index, tmp_path):
             elif isinstance(index, HnswIndex):
                 index.resize(index.max_elements)
             else:
-                data = (
-                    np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-                )
-                index.build(data, 40)
+                # add is SymphonyQG's only write. It takes the write guard and then
+                # refuses a built graph; a guard still held would raise "busy".
+                with pytest.raises(RuntimeError, match="incremental addition"):
+                    index.add(np.zeros((1, 64), dtype=np.float32))
             return str(tmp_path / "callback.index")
 
     index.save(UpdatingPath())
@@ -226,37 +225,23 @@ def test_path_callback_runs_before_access_guard(built_index, tmp_path):
     np.testing.assert_array_equal(restored.search(queries, 3, 32)[0], expected[0])
 
 
-@pytest.mark.parametrize("index_kind,rows", [("ivf", 79), ("hnsw", 0)])
-def test_build_row_count_diagnostics(index_kind, rows):
-    if index_kind == "ivf":
-        index = IvfIndex(64, 80, 1, 4)
-        expected = "number of data rows must match index max_elements; expected 80, got shape (79, 64)"
-    else:
-        # HNSW capacity grows, so only an empty build is rejected.
-        index = HnswIndex(64, 80)
-        expected = "number of data rows must be at least 1; got shape (0, 64)"
-    with pytest.raises(ValueError) as error:
-        index.build(
-            np.zeros((rows, 64)), np.zeros((1, 64)), np.zeros(rows, dtype=np.uint32)
-        )
-    assert str(error.value) == expected
-
-
 @pytest.mark.parametrize("index_kind,dtype", [("ivf", np.uint32), ("hnsw", np.int64)])
 def test_cluster_id_error_identifies_position(
     index_kind, dtype: type[np.int64] | type[np.uint32]
 ):
     if index_kind == "ivf":
-        index = IvfIndex(64, 80, 1, 4)
-        prefix = "cluster_ids must be in [0, num_clusters)"
+        index = IvfIndex(64, 1, nbits=4)
     else:
-        index = HnswIndex(64, 80)
-        prefix = "cluster_ids contains an out-of-range value"
+        index = HnswIndex(64, nbits=8, num_clusters=1)
+    index.set_centroids(np.zeros((1, 64)))
     ids = np.zeros(80, dtype=dtype)
     ids[-1] = 1
     with pytest.raises(ValueError) as error:
-        index.build(np.zeros((80, 64)), np.zeros((1, 64)), ids)
-    assert str(error.value) == prefix + "; expected [0, 1), invalid entry at index 79"
+        index.add(np.zeros((80, 64)), cluster_ids=ids, num_threads=1)
+    assert str(error.value) == (
+        "cluster_ids must be in [0, num_clusters); expected [0, 1), "
+        "invalid entry at index 79"
+    )
 
 
 @pytest.mark.parametrize("built_index", ["ivf_hnsw"], indirect=True)
@@ -297,19 +282,9 @@ def test_nonfinite_or_oversized_coordinates_are_rejected(built_index, value, mes
         index.search(bad_queries, 3, 32)
     extra = np.random.default_rng(7).normal(size=(2, 64)).astype(np.float32)
     extra[0, 0] = value
-    if isinstance(index, IvfIndex):
+    if isinstance(index, (IvfIndex, HnswIndex)):
         with pytest.raises(ValueError, match=message):
-            index.add(extra)
-    elif isinstance(index, HnswIndex):
-        # The shared fixture is at capacity, which is checked before coordinates.
-        data = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-        spare = HnswIndex(64, 82, nbits=4)
-        spare.build(
-            data, data.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32)
-        )
-        with pytest.raises(ValueError, match=message):
-            spare.add(extra)
-        assert spare.num_points == 80
+            index.add(extra, num_threads=1)
     assert index.num_points == before
     ids, distances = index.search(queries, 3, 32)
     assert ids.shape == (2, 3) and np.all(np.isfinite(distances))
@@ -322,17 +297,22 @@ def test_build_rejects_bad_coordinates_without_building(index_kind, value):
     bad_data = data.copy()
     bad_data[5, 3] = value
     if index_kind == "symqg":
-        index = SymqgIndex(64, 32)
+        index = SymqgIndex(64, max_degree=32, ef_construction=40)
         with pytest.raises(ValueError):
-            index.build(bad_data, 40)
+            index.add(bad_data, num_threads=1)
     else:
         centroid = data.mean(axis=0, keepdims=True)
         ids = np.zeros(80, dtype=np.uint32)
-        index = IvfIndex(64, 80, 1, 4) if index_kind == "ivf" else HnswIndex(64, 80)
-        with pytest.raises(ValueError):
-            index.build(bad_data, centroid, ids)
+        index = (
+            IvfIndex(64, 1, nbits=4)
+            if index_kind == "ivf"
+            else HnswIndex(64, nbits=8, num_clusters=1)
+        )
         bad_centroid = centroid.copy()
         bad_centroid[0, 0] = value
         with pytest.raises(ValueError):
-            index.build(data, bad_centroid, ids)
-    assert not index.is_built
+            index.set_centroids(bad_centroid)
+        index.set_centroids(centroid)
+        with pytest.raises(ValueError):
+            index.add(bad_data, cluster_ids=ids, num_threads=1)
+    assert len(index) == 0

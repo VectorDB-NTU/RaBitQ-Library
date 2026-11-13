@@ -42,7 +42,9 @@ work if you want to run k-means yourself.
 
 - **Thread defaults.** `train` and `add` now default to every available CPU
   (`num_threads=None`, the same as `0`), capped by `OMP_NUM_THREADS` since 0.8.1; 0.7 `build` and
-  `add` defaulted to one thread. This applies to every `add` call that does not
+  `add` defaulted to one thread. Since 0.8.5, IVF-RaBitQ `set_centroids` follows
+  the same default and takes `num_threads`; before, it always used every CPU and
+  ignored `OMP_NUM_THREADS`. This applies to every `add` call that does not
   pass `num_threads`, including 0.7 code such as `index.add(x)`, without a
   warning. `search` still defaults to one thread, and the deprecated `build`
   keeps its default of 1.
@@ -51,6 +53,11 @@ work if you want to run k-means yourself.
   to `add` for the same graph on every run. With one thread and the same seed,
   `set_centroids` followed by `add` produces exactly the index that 0.7 `build`
   produced from the same centroids and cluster IDs.
+- **IVF-RaBitQ HNSW routing builds are not reproducible by default.** 0.7 `build`
+  built the routing graph with its own thread count, one by default. With more
+  than one thread, `set_centroids`, `train` and a training `add` build it in a
+  nondeterministic order; pass `num_threads=1` (to `set_centroids` since 0.8.5)
+  and a fixed `seed` for the same graph on every run.
 - **`k` above the point count.** 0.8.0 and 0.8.1 raised `ValueError` when `k`
   exceeded `num_stored_points` (HNSW-RaBitQ) or the point count (IVF-RaBitQ,
   SymphonyQG). Since 0.8.2, every index accepts any `k >= 1` and fills missing

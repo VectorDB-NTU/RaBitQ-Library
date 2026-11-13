@@ -200,7 +200,15 @@ def check_saved_index_and_query(tmp_path, kind, metric, data):
     search_args = {"nprobe": 2} if kind == "ivf" else {"ef": len(data)}
     ids, distances = index.search(queries, k=5, num_threads=2, **search_args)
     assert index.metric == metric
-    np.testing.assert_array_equal(ids[:, 0], np.arange(len(queries)))
+    if kind == "ivf":
+        np.testing.assert_array_equal(ids[:, 0], np.arange(len(queries)))
+    else:
+        # The examples build graphs with two threads (SymphonyQG also without a fixed
+        # seed), and graph indexes do not guarantee that every point is reachable:
+        # check the self-recall of every point instead.
+        self_ids, _ = index.search(data, k=1, num_threads=2, **search_args)
+        found = np.count_nonzero(self_ids[:, 0] == np.arange(len(data)))
+        assert found >= 0.95 * len(data)
     assert np.isfinite(distances).all()
     restored_path = tmp_path / "restored.index"
     index.save(str(restored_path))

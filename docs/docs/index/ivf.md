@@ -223,7 +223,9 @@ index.add(vectors)
   keeping its default graph settings. The threshold is provisional and has not
   been measured.
 - `set_centroids(centroids)` uses centroids of shape `(num_clusters, dim)`
-  computed elsewhere instead of training.
+  computed elsewhere instead of training. Its keyword `num_threads` sets the
+  workers that rotate the centroids and build the routing; only the HNSW routing
+  graph varies with it.
 - Training or setting centroids again replaces them while the index stores no
   vectors; once it stores any (including removed ones), both raise
   `RuntimeError`. A failed call leaves the index unchanged.

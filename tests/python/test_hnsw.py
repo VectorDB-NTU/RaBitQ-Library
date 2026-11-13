@@ -16,12 +16,25 @@ _EF = 50  # generous ef for correctness tests on a small dataset
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 
+def _built(
+    data, centroids, cluster_ids, num_threads=1, fast_quantization=False, **options
+):
+    """An index over data with the given centroids; the first add links the points."""
+    index = HnswIndex(data.shape[1], num_clusters=len(centroids), **options)
+    index.set_centroids(centroids)
+    index.add(
+        data,
+        cluster_ids=cluster_ids,
+        num_threads=num_threads,
+        fast_quantization=fast_quantization,
+    )
+    return index
+
+
 @pytest.fixture(scope="module")
 def built_hnsw(base_data, clusters):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
-    idx.build(base_data, centroids, cluster_ids)
-    return idx
+    return _built(base_data, centroids, cluster_ids, M=8, ef_construction=50, nbits=4)
 
 
 # ── construction ──────────────────────────────────────────────────────────────
@@ -30,32 +43,11 @@ def built_hnsw(base_data, clusters):
 @pytest.mark.parametrize("m", [0, 1])
 def test_rejects_too_small_m(m):
     with pytest.raises(ValueError, match="^HNSW M must be at least 2$"):
-        HnswIndex(DIM, N_VECTORS, M=m)
-
-
-@pytest.mark.parametrize("reload", [False, True])
-def test_rejected_rebuild_preserves_index(base_data, clusters, tmp_path, reload):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
-    centroids, cluster_ids = clusters
-    idx.build(base_data, centroids, cluster_ids)
-    if reload:
-        path = str(tmp_path / "hnsw.index")
-        idx.save(path)
-        idx = HnswIndex.load(path)
-    before = idx.search(base_data[:10], k=3, ef=_EF)
-    with pytest.raises(
-        RuntimeError, match="^HNSW index is already trained, constructed or loaded$"
-    ):
-        idx.build(base_data, centroids[:1], np.zeros(N_VECTORS, dtype=np.uint32))
-    assert idx.is_built
-    assert idx.num_clusters == N_CLUSTERS
-    after = idx.search(base_data[:10], k=3, ef=_EF)
-    for actual, expected in zip(after, before, strict=True):
-        np.testing.assert_array_equal(actual, expected)
+        HnswIndex(DIM, M=m)
 
 
 def test_properties(built_hnsw):
-    assert built_hnsw.is_built
+    assert len(built_hnsw) == N_VECTORS
     assert built_hnsw.dim == DIM
     assert built_hnsw.nbits == 4
     assert built_hnsw.metric == "l2"
@@ -72,10 +64,9 @@ def test_seed_reproduces_serial_build_and_search(tmp_path):
     snapshots = []
     results = []
     for run, seed in enumerate((42, 42, 43)):
-        index = HnswIndex(
-            65, len(data), M=8, ef_construction=32, nbits=4, random_seed=seed
+        index = _built(
+            data, centroids, clusters, M=8, ef_construction=32, nbits=4, seed=seed
         )
-        index.build(data, centroids, clusters, num_threads=1)
         path = tmp_path / f"seed-{run}.index"
         index.save(str(path))
         snapshots.append(path.read_bytes())
@@ -87,13 +78,21 @@ def test_seed_reproduces_serial_build_and_search(tmp_path):
 
 
 def test_parallel_build_preserves_self_retrieval(base_data, clusters):
-    # Keep every neighbor so insertion-order-dependent pruning cannot isolate a
-    # point. This checks parallel construction, not sparse-graph recall.
-    idx = HnswIndex(DIM, N_VECTORS, M=N_VECTORS, ef_construction=N_VECTORS, nbits=4)
+    # M equals the point count, so the base layer holds 2M >= N - 1 links and never
+    # prunes a reverse link: every point stays reachable under any thread
+    # interleaving. This checks parallel construction, not sparse-graph recall.
     centroids, cluster_ids = clusters
-    idx.build(base_data, centroids, cluster_ids, num_threads=8)
-    ids, distances = idx.search(base_data[:10], k=1, ef=N_VECTORS)
-    np.testing.assert_array_equal(ids[:, 0], np.arange(10))
+    idx = _built(
+        base_data,
+        centroids,
+        cluster_ids,
+        num_threads=8,
+        M=N_VECTORS,
+        ef_construction=N_VECTORS,
+        nbits=4,
+    )
+    ids, distances = idx.search(base_data, k=1, ef=N_VECTORS)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(N_VECTORS))
     assert np.isfinite(distances).all()
 
 
@@ -129,10 +128,17 @@ def test_self_retrieval(built_hnsw, base_data, clusters, fast_quantization):
     """Each database vector must be its own nearest neighbor at high ef."""
     idx = built_hnsw
     if fast_quantization:
-        idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
         centroids, cluster_ids = clusters
-        idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
-    assert idx.is_built
+        idx = _built(
+            base_data,
+            centroids,
+            cluster_ids,
+            fast_quantization=True,
+            M=8,
+            ef_construction=50,
+            nbits=4,
+        )
+    assert len(idx) == N_VECTORS
     probes = base_data[:10]
     ids, _ = idx.search(probes, k=1, ef=200)
     for i in range(10):
@@ -152,8 +158,9 @@ def test_recall_vs_brute_force(built_hnsw, base_data, query_data):
 
 
 def test_wrong_data_dim_raises(clusters):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
+    idx = HnswIndex(DIM, M=8, ef_construction=50, nbits=4, num_clusters=len(centroids))
+    idx.set_centroids(centroids)
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
     with pytest.raises(
         ValueError,
@@ -163,16 +170,20 @@ def test_wrong_data_dim_raises(clusters):
         )
         + "$",
     ):
-        idx.build(bad_data, centroids, cluster_ids)
+        idx.add(bad_data, cluster_ids=cluster_ids, num_threads=1)
 
 
 def test_out_of_range_cluster_id_raises(base_data, clusters):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
+    idx = HnswIndex(DIM, M=8, ef_construction=50, nbits=4, num_clusters=len(centroids))
+    idx.set_centroids(centroids)
     invalid_ids = cluster_ids.copy()
     invalid_ids[0] = len(centroids)
-    with pytest.raises(ValueError, match="cluster_ids contains an out-of-range value"):
-        idx.build(base_data, centroids, invalid_ids)
+    with pytest.raises(
+        ValueError, match=re.escape("cluster_ids must be in [0, num_clusters)")
+    ):
+        idx.add(base_data, cluster_ids=invalid_ids, num_threads=1)
+    assert len(idx) == 0
 
 
 def test_wrong_query_dim_raises(built_hnsw):
@@ -189,7 +200,7 @@ def test_wrong_query_dim_raises(built_hnsw):
 
 
 def test_search_before_build_raises(query_data):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    idx = HnswIndex(DIM, M=8, ef_construction=50, nbits=4)
     with pytest.raises(
         RuntimeError, match="^HnswIndex must be trained or loaded before search$"
     ):
@@ -215,7 +226,7 @@ def test_save_load_roundtrip(built_hnsw, query_data, tmp_path):
     built_hnsw.save(path)
 
     loaded = HnswIndex.load(path)
-    assert loaded.is_built
+    assert len(loaded) == len(built_hnsw)
     assert loaded.dim == built_hnsw.dim
     assert loaded.nbits == built_hnsw.nbits
 
@@ -246,9 +257,11 @@ def test_load_rejects_count_larger_than_capacity(built_hnsw, tmp_path):
 @pytest.fixture
 def partial_hnsw(base_data, clusters):
     """Built from the first 400 vectors, with room for the remaining 100."""
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
     centroids, cluster_ids = clusters
-    idx.build(base_data[:400], centroids, cluster_ids[:400])
+    idx = HnswIndex(DIM, M=8, ef_construction=50, nbits=4, num_clusters=len(centroids))
+    idx.set_centroids(centroids)
+    idx.resize(N_VECTORS)
+    idx.add(base_data[:400], cluster_ids=cluster_ids[:400], num_threads=1)
     return idx
 
 
@@ -258,7 +271,10 @@ def test_add_returns_dense_labels_and_preserves_search(
     _, cluster_ids = clusters
     assert partial_hnsw.num_points == 400
     before, _ = partial_hnsw.search(base_data[:10], k=1, ef=N_VECTORS)
-    ids = partial_hnsw.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    # One thread, as the build used, so the grown graph and `after` are reproducible.
+    ids = partial_hnsw.add(
+        base_data[400:], cluster_ids=cluster_ids[400:], num_threads=1
+    )
     np.testing.assert_array_equal(ids, np.arange(400, N_VECTORS))
     assert partial_hnsw.num_points == N_VECTORS
     # A sparse graph can isolate the odd point, as it can after build, so this
@@ -272,11 +288,17 @@ def test_add_returns_dense_labels_and_preserves_search(
 
 
 def test_add_into_a_dense_graph_retrieves_every_point(base_data, clusters):
-    # Keeping every neighbor removes the pruning that isolates points, so the
-    # added points must all be found.
+    # M equals the point count, so the base layer holds 2M >= N - 1 links and never
+    # prunes a reverse link: even a parallel add keeps every point reachable.
     centroids, cluster_ids = clusters
-    idx = HnswIndex(DIM, N_VECTORS, M=N_VECTORS, ef_construction=N_VECTORS, nbits=4)
-    idx.build(base_data[:400], centroids, cluster_ids[:400])
+    idx = _built(
+        base_data[:400],
+        centroids,
+        cluster_ids[:400],
+        M=N_VECTORS,
+        ef_construction=N_VECTORS,
+        nbits=4,
+    )
     idx.add(base_data[400:], cluster_ids=cluster_ids[400:])
     ids, _ = idx.search(base_data[400:], k=1, ef=N_VECTORS)
     np.testing.assert_array_equal(ids[:, 0], np.arange(400, N_VECTORS))
@@ -318,37 +340,31 @@ def test_add_rejects_wrong_dimension(partial_hnsw):
 
 
 def test_add_before_build_trains_first(base_data):
-    idx = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
+    idx = HnswIndex(DIM, M=8, ef_construction=50, nbits=4)
     np.testing.assert_array_equal(idx.add(base_data[:4]), np.arange(4))
     assert idx.is_trained
     assert idx.num_clusters == 4  # fewer rows than clusters: one centroid per row
     with pytest.raises(RuntimeError, match="trained or loaded"):
-        HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4).add(
+        HnswIndex(DIM, M=8, ef_construction=50, nbits=4).add(
             base_data[:4], cluster_ids=np.zeros(4, dtype=np.uint32)
         )
 
 
 def test_resize_grows_capacity_and_allows_more(base_data, clusters):
     centroids, cluster_ids = clusters
-    idx = HnswIndex(DIM, 400, M=8, ef_construction=50, nbits=4)
-    idx.build(base_data[:400], centroids, cluster_ids[:400])
-    assert idx.max_elements == 400
+    idx = _built(
+        base_data[:400], centroids, cluster_ids[:400], M=8, ef_construction=50, nbits=4
+    )
+    assert idx.max_elements == 400  # the first add allocates exactly its rows
 
     idx.resize(N_VECTORS)
     assert idx.max_elements == N_VECTORS
     assert idx.num_points == 400
 
-    idx.add(base_data[400:], cluster_ids=cluster_ids[400:])
+    idx.add(base_data[400:], cluster_ids=cluster_ids[400:], num_threads=1)
     assert idx.num_points == N_VECTORS
     ids, _ = idx.search(base_data[:10], k=1, ef=N_VECTORS)
     np.testing.assert_array_equal(ids[:, 0], np.arange(10))
-
-
-def test_zero_capacity_raises():
-    with pytest.raises(
-        ValueError, match="^HNSW max_elements must be greater than zero$"
-    ):
-        HnswIndex(max_elements=0, dim=64)
 
 
 def test_resize_below_element_count_raises(partial_hnsw):
@@ -364,8 +380,14 @@ def test_resize_across_allocation_threshold_preserves_search(tmp_path, nbits, me
     data = rng.standard_normal((97, 65)).astype(np.float32)
     queries = rng.standard_normal((7, 65)).astype(np.float32)
     centroids = data.mean(axis=0, keepdims=True)
-    index = HnswIndex(65, len(data), M=8, nbits=nbits, metric=metric)
-    index.build(data, centroids, np.zeros(len(data), dtype=np.uint32))
+    index = _built(
+        data,
+        centroids,
+        np.zeros(len(data), dtype=np.uint32),
+        M=8,
+        nbits=nbits,
+        metric=metric,
+    )
     expected_ids, expected_distances = index.search(queries, k=7, ef=97)
 
     # The level-0 allocation moves from below 2 MiB to above it and back.
@@ -405,12 +427,19 @@ _NO_ID = -1
 
 
 def _removable(nbits=4, metric="l2", count=120, dim=64, seed=61):
-    """A small built index with room for as many points again, plus those points."""
+    """A small built index, its points, and as many new points to add."""
     rng = np.random.default_rng(seed)
     data = rng.standard_normal((count * 2, dim)).astype(np.float32)
     centroids = data[:count].mean(axis=0, keepdims=True)
-    idx = HnswIndex(dim, count, M=8, ef_construction=50, nbits=nbits, metric=metric)
-    idx.build(data[:count], centroids, np.zeros(count, dtype=np.uint32))
+    idx = _built(
+        data[:count],
+        centroids,
+        np.zeros(count, dtype=np.uint32),
+        M=8,
+        ef_construction=50,
+        nbits=nbits,
+        metric=metric,
+    )
     return idx, data[:count], data[count:]
 
 
@@ -464,7 +493,8 @@ def test_remove_excludes_points_and_survives_reload(tmp_path, nbits, metric):
     plain = HnswIndex.load(str(plain_path))
     for index in (idx, loaded, plain):
         index.resize(count + len(new))
-        index.add(new)
+        # One thread: graphs grown in parallel differ, and the searches compare them.
+        index.add(new, num_threads=1)
         assert index.num_stored_points == count + len(new)
         assert index.num_points == count + len(new) - (0 if index is plain else 4)
 
@@ -505,7 +535,7 @@ def test_remove_rejects_invalid_ids_without_removing_anything():
     np.testing.assert_array_equal(before[1], after[1])
     assert idx.remove([0, 1]) == 2
 
-    unbuilt = HnswIndex(64, 4, M=8, ef_construction=50, nbits=4)
+    unbuilt = HnswIndex(64, M=8, ef_construction=50, nbits=4)
     with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.remove([0])
 
@@ -575,8 +605,9 @@ def test_legacy_padding_round_trip_and_add(tmp_path):
 
 def test_huge_ef_is_clamped_to_the_stored_point_count():
     data = np.random.default_rng(5).normal(size=(80, 64)).astype(np.float32)
-    index = HnswIndex(64, 80, nbits=4)
-    index.build(data, data.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32))
+    index = _built(
+        data, data.mean(axis=0, keepdims=True), np.zeros(80, dtype=np.uint32), nbits=4
+    )
     exhaustive_ids, exhaustive_distances = index.search(data[:3], k=5, ef=80)
     ids, distances = index.search(data[:3], k=5, ef=2**40)
     np.testing.assert_array_equal(ids, exhaustive_ids)

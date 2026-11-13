@@ -21,8 +21,10 @@ _EF_BUILD = 50
 
 @pytest.fixture(scope="module")
 def built_symqg(base_data):
-    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
-    idx.build(base_data, ef_construction=_EF_BUILD)
+    # A seeded single-thread build is reproducible, so the self-retrieval test can
+    # require every probe (#216).
+    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE, ef_construction=_EF_BUILD, seed=42)
+    idx.add(base_data, num_threads=1)
     return idx
 
 
@@ -30,12 +32,12 @@ def built_symqg(base_data):
 
 
 def test_properties(built_symqg):
-    assert built_symqg.is_built
+    assert len(built_symqg) == N_VECTORS
     assert built_symqg.dim == DIM
     assert built_symqg.max_degree == _MAX_DEGREE
     assert built_symqg.num_points == N_VECTORS
     assert built_symqg.metric == "l2"
-    assert built_symqg.quantization_bits == 0
+    assert built_symqg.nbits == 32
 
 
 # ── search output shape and dtype ─────────────────────────────────────────────
@@ -60,15 +62,17 @@ def test_batch_search_matches_individual_queries(tmp_path, bits, metric):
     queries = rng.standard_normal((19, 130)).astype(np.float32)[:, ::2]
     assert not queries.flags.c_contiguous
     queries[4] = queries[0]
-    index = SymqgIndex(65, 32, metric=metric, quantization_bits=bits)
-    index.build(data, ef_construction=48, num_threads=1)
+    index = SymqgIndex(
+        65, max_degree=32, metric=metric, nbits=bits or 32, ef_construction=48
+    )
+    index.add(data, num_threads=1)
     path = str(tmp_path / "batch.index")
     index.save(path)
     restored = SymqgIndex.load(path)
 
-    # C++ owns the full ef/thread matrix. These scenarios retain the two aliases,
-    # serial/automatic/parallel scheduling, changing windows, and strided inputs
-    # while sharing a single build for each metric/storage pair.
+    # C++ owns the full ef/thread matrix. These scenarios retain serial, automatic
+    # and parallel scheduling, changing windows, and strided inputs while sharing a
+    # single build for each metric/storage pair.
     for k, ef, threads in [
         (7, 64, 1),
         (1, 1, 4),
@@ -82,29 +86,27 @@ def test_batch_search_matches_individual_queries(tmp_path, bits, metric):
         ]
         expected_ids = np.concatenate([result[0] for result in individual])
         expected_distances = np.concatenate([result[1] for result in individual])
-        for method in ("search", "search_batch"):
-            search = getattr(restored, method)
-            ids, distances = search(queries, k=k, ef=ef, num_threads=threads)
-            np.testing.assert_array_equal(ids, expected_ids)
-            np.testing.assert_array_equal(
-                distances.view(np.uint32), expected_distances.view(np.uint32)
-            )
-            empty_ids, empty_distances = search(
-                queries[:0], k=k, ef=ef, num_threads=threads
-            )
-            assert empty_ids.shape == empty_distances.shape == (0, k)
+        ids, distances = restored.search(queries, k=k, ef=ef, num_threads=threads)
+        np.testing.assert_array_equal(ids, expected_ids)
+        np.testing.assert_array_equal(
+            distances.view(np.uint32), expected_distances.view(np.uint32)
+        )
+        empty_ids, empty_distances = restored.search(
+            queries[:0], k=k, ef=ef, num_threads=threads
+        )
+        assert empty_ids.shape == empty_distances.shape == (0, k)
 
 
-def test_search_batch_validates_inputs(built_symqg, query_data):
+def test_search_validates_inputs(built_symqg, query_data):
     with pytest.raises(ValueError, match="queries must be a 2D NumPy array"):
-        built_symqg.search_batch(query_data[0], k=1, ef=_EF)
+        built_symqg.search(query_data[0], k=1, ef=_EF)
     with pytest.raises(ValueError, match="query dimension does not match index dim"):
-        built_symqg.search_batch(query_data[:, :-1], k=1, ef=_EF)
+        built_symqg.search(query_data[:, :-1], k=1, ef=_EF)
     with pytest.raises(ValueError, match=r"k must be between 1 and 2\*\*31"):
-        built_symqg.search_batch(query_data, k=0, ef=_EF)
+        built_symqg.search(query_data, k=0, ef=_EF)
     unbuilt = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
     with pytest.raises(RuntimeError, match="add them or load an index before search"):
-        unbuilt.search_batch(query_data, k=1, ef=_EF)
+        unbuilt.search(query_data, k=1, ef=_EF)
 
 
 # ── search correctness ────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ def test_recall_vs_brute_force(built_symqg, base_data, query_data):
 
 
 def test_wrong_data_dim_raises():
-    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE)
+    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE, ef_construction=_EF_BUILD)
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
     with pytest.raises(
         ValueError,
@@ -141,7 +143,7 @@ def test_wrong_data_dim_raises():
         )
         + "$",
     ):
-        idx.build(bad_data, ef_construction=_EF_BUILD)
+        idx.add(bad_data, num_threads=1)
 
 
 def test_wrong_query_dim_raises(built_symqg):
@@ -190,80 +192,11 @@ def test_search_raises_ef_to_k_and_defaults_it(built_symqg, query_data):
     np.testing.assert_array_equal(built_symqg.search(query_data, 3)[0], default[0])
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
-@pytest.mark.parametrize("metric", ["l2", "ip"])
-@pytest.mark.parametrize("replacement_points", [0, _MAX_DEGREE])
-def test_failed_rebuild_preserves_index(
-    base_data, query_data, tmp_path, bits, metric, replacement_points
-):
-    data = base_data[:40]
-    queries = query_data[:3]
-    index = SymqgIndex(
-        DIM, max_degree=_MAX_DEGREE, metric=metric, quantization_bits=bits
-    )
-    index.build(data, ef_construction=_EF_BUILD)
-    expected_ids, expected_distances = index.search(queries, k=5, ef=_EF)
-    before_path = tmp_path / "before.index"
-    index.save(str(before_path))
-
-    with pytest.raises(
-        ValueError,
-        match="QuantizedGraph degree bound must be smaller than the number of points",
-    ):
-        index.build(data[:replacement_points], ef_construction=_EF_BUILD)
-
-    assert index.is_built
-    assert index.num_points == len(data)
-    assert index.dim == DIM
-    assert index.max_degree == _MAX_DEGREE
-    assert index.metric == metric
-    assert index.quantization_bits == bits
-    ids, distances = index.search(queries, k=5, ef=_EF)
-    np.testing.assert_array_equal(ids, expected_ids)
-    np.testing.assert_array_equal(distances, expected_distances)
-
-    after_path = tmp_path / "after.index"
-    index.save(str(after_path))
-    assert after_path.read_bytes() == before_path.read_bytes()
-    restored = SymqgIndex.load(str(after_path))
-    assert restored.num_points == len(data)
-    restored_ids, restored_distances = restored.search(queries, k=5, ef=_EF)
-    np.testing.assert_array_equal(restored_ids, expected_ids)
-    np.testing.assert_array_equal(restored_distances, expected_distances)
-
-
-@pytest.mark.parametrize("bits", [0, 4, 8])
-def test_successful_rebuild_replaces_index(base_data, tmp_path, bits):
-    index = SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=bits)
-    index.build(base_data[:40], ef_construction=_EF_BUILD)
-    replacement = base_data[40:88] + 10
-    index.build(replacement, ef_construction=_EF_BUILD)
-
-    assert index.is_built
-    assert index.num_points == len(replacement)
-    assert index.quantization_bits == bits
-    ids, distances = index.search(replacement[:3], k=1, ef=_EF)
-    np.testing.assert_array_equal(ids[:, 0], np.arange(3))
-
-    path = str(tmp_path / "rebuilt.index")
-    index.save(path)
-    restored = SymqgIndex.load(path)
-    assert restored.num_points == len(replacement)
-    restored_ids, restored_distances = restored.search(replacement[:3], k=1, ef=_EF)
-    np.testing.assert_array_equal(restored_ids, ids)
-    np.testing.assert_array_equal(restored_distances, distances)
-
-
 def test_invalid_degree_raises():
     with pytest.raises(
         ValueError, match="^max_degree must be a positive multiple of 32$"
     ):
         SymqgIndex(DIM, max_degree=16)
-
-
-def test_invalid_quantization_bits_raises():
-    with pytest.raises(ValueError, match="^quantization_bits must be 0, 4, or 8$"):
-        SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=6)
 
 
 def test_save_propagates_write_failure(built_symqg):
@@ -275,9 +208,9 @@ def test_save_propagates_write_failure(built_symqg):
 
 @pytest.mark.parametrize("bits", [4, 8])
 def test_qg_quant_build_search_and_roundtrip(bits, base_data, query_data, tmp_path):
-    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE, quantization_bits=bits)
-    idx.build(base_data, ef_construction=_EF_BUILD)
-    assert idx.quantization_bits == bits
+    idx = SymqgIndex(DIM, max_degree=_MAX_DEGREE, nbits=bits, ef_construction=_EF_BUILD)
+    idx.add(base_data, num_threads=1)
+    assert idx.nbits == bits
 
     ids, dists = idx.search(query_data, k=5, ef=_EF)
     assert np.all(ids < N_VECTORS)
@@ -286,7 +219,7 @@ def test_qg_quant_build_search_and_roundtrip(bits, base_data, query_data, tmp_pa
     path = str(tmp_path / f"symqg_quant{bits}.index")
     idx.save(path)
     loaded = SymqgIndex.load(path)
-    assert loaded.quantization_bits == bits
+    assert loaded.nbits == bits
     loaded_ids, loaded_dists = loaded.search(query_data, k=5, ef=_EF)
     np.testing.assert_array_equal(loaded_ids, ids)
     np.testing.assert_allclose(loaded_dists, dists, rtol=1e-5)
@@ -300,7 +233,7 @@ def test_save_load_roundtrip(built_symqg, query_data, tmp_path):
     built_symqg.save(path)
 
     loaded = SymqgIndex.load(path)
-    assert loaded.is_built
+    assert len(loaded) == len(built_symqg)
     assert loaded.dim == built_symqg.dim
     assert loaded.max_degree == built_symqg.max_degree
     assert loaded.num_points == built_symqg.num_points
@@ -317,8 +250,8 @@ def test_code_only_build_saves_the_specified_layout(bits, metric, tmp_path):
     rng = np.random.default_rng(851)
     data = rng.normal(size=(65, 65)).astype(np.float32)
     queries = rng.normal(size=(3, 65)).astype(np.float32)
-    index = SymqgIndex(65, max_degree=32, metric=metric, quantization_bits=bits)
-    index.build(data, ef_construction=64)
+    index = SymqgIndex(65, max_degree=32, metric=metric, nbits=bits, ef_construction=64)
+    index.add(data, num_threads=1)
     data.fill(np.nan)
     path = tmp_path / "code_only.index"
     index.save(str(path))
@@ -350,8 +283,8 @@ def test_constant_vectors_preserve_returned_distance(metric, tmp_path):
     """Neighbor corrections must not shift the vertex distances returned to Python."""
     data = np.full((65, 64), 0.125, dtype=np.float32)
     queries = np.full((2, 64), 0.0625, dtype=np.float32)
-    index = SymqgIndex(64, max_degree=32, metric=metric)
-    index.build(data, ef_construction=64)
+    index = SymqgIndex(64, max_degree=32, metric=metric, ef_construction=64)
+    index.add(data, num_threads=1)
     ids, distances = index.search(queries, k=5, ef=64)
     expected = 0.5 if metric == "ip" else 0.25
     np.testing.assert_allclose(distances, expected, rtol=0, atol=1e-6)
@@ -370,10 +303,17 @@ def test_initialization_and_roundtrip(tmp_path, bits, metric, init):
     rng = np.random.default_rng(17)
     data = rng.standard_normal((160, 65)).astype(np.float32)
     queries = rng.standard_normal((8, 65)).astype(np.float32)
-    index = SymqgIndex(65, max_degree=32, metric=metric, quantization_bits=bits)
     kwargs = {} if init is None else {"init": init}
-    index.build(data, ef_construction=128, num_threads=2, **kwargs)
-    assert index.is_built
+    index = SymqgIndex(
+        65,
+        max_degree=32,
+        metric=metric,
+        nbits=bits or 32,
+        ef_construction=128,
+        **kwargs,
+    )
+    index.add(data, num_threads=2)
+    assert len(index) == len(data)
     ids, distances = index.search(queries, k=10, ef=160, num_threads=2)
     assert np.all(ids < len(data))
     assert np.isfinite(distances).all()
@@ -399,17 +339,15 @@ def test_initialization_and_roundtrip(tmp_path, bits, metric, init):
     np.testing.assert_array_equal(distances, restored_distances)
 
 
-def test_native_pipnn_rejects_invalid_build_arguments(base_data):
-    index = SymqgIndex(DIM, max_degree=32)
+def test_native_pipnn_rejects_invalid_build_arguments():
     with pytest.raises(ValueError, match="init must be 'random' or 'pipnn'"):
-        index.build(base_data, ef_construction=64, init="unknown")
+        SymqgIndex(DIM, max_degree=32, ef_construction=64, init="unknown")
     with pytest.raises(
         ValueError, match="ef_construction must be positive and fit uint32"
     ):
-        index.build(base_data, ef_construction=0, init="pipnn")
+        SymqgIndex(DIM, max_degree=32, ef_construction=0, init="pipnn")
 
 
 def test_default_initialization_is_pipnn():
     assert inspect.signature(SymqgIndex.__init__).parameters["init"].default == "pipnn"
     assert SymqgIndex(DIM).init == "pipnn"
-    assert inspect.signature(SymqgIndex.build).parameters["init"].default == "pipnn"

@@ -168,12 +168,13 @@ fewer workers. On macOS, OpenMP runtimes bundled by different packages (for
 example Faiss or PyTorch wheels) can crash when more than one of them starts
 worker threads in the same process; set `OMP_NUM_THREADS=1` before the first
 native call, or pass `num_threads=1`, in such processes.
-`train` and `add` on every index default to all CPUs (`None` or `0`); the
-clustering classes default to `0`. `search` defaults to one thread (`None` or `1`),
+`train` and `add` on every index, and IVF-RaBitQ `set_centroids`, default to all
+CPUs (`None` or `0`); the clustering classes default to `0`. `search` defaults to one thread (`None` or `1`),
 as do the deprecated `build`, which requires an integer, and `search_batch`.
-Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, so pass
-`num_threads=1` when a build must be reproducible. The same holds for the centroid graph
-of IVF-RaBitQ HNSW routing, which `train`, `set_centroids` or the first `add` builds.
+Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, and so
+does a multithreaded build of IVF-RaBitQ's HNSW centroid routing by `train`,
+`set_centroids` or the first `add`; pass `num_threads=1` when a build must be
+reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.
 

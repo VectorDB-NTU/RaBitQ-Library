@@ -12,28 +12,35 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
     # Unit vectors make self-query the exact winner for both metrics.
     data /= np.linalg.norm(data, axis=1, keepdims=True)
     if kind == "ivf":
-        index = IvfIndex(dim, len(data), 1, nbits=bits, metric=metric)
+        index = IvfIndex(dim, 1, nbits=bits, metric=metric)
         search_args = {"nprobe": 1}
     elif kind == "hnsw":
         index = HnswIndex(
             dim,
-            len(data),
+            num_clusters=1,
             M=16,
             ef_construction=96,
             nbits=bits,
             metric=metric,
-            random_seed=42,
+            seed=42,
         )
         search_args = {"ef": 96}
     else:
-        index = SymqgIndex(dim, max_degree=32, quantization_bits=bits, metric=metric)
+        # Seeded and single-threaded, so every self-query below must succeed (#216).
+        index = SymqgIndex(
+            dim,
+            max_degree=32,
+            nbits=bits or 32,
+            ef_construction=96,
+            metric=metric,
+            seed=42,
+        )
         search_args = {"ef": 96}
     if kind == "qg":
-        index.build(data, ef_construction=96)
+        index.add(data, num_threads=1)
     else:
-        index.build(
-            data, data.mean(axis=0, keepdims=True), np.zeros(len(data), np.uint32)
-        )
+        index.set_centroids(data.mean(axis=0, keepdims=True))
+        index.add(data, cluster_ids=np.zeros(len(data), np.uint32), num_threads=1)
     queries = data[:5].copy()
     ids, distances = index.search(queries, k=5, **search_args)
     assert ids.shape == distances.shape == (5, 5)
@@ -57,7 +64,7 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
     loaded = type(index).load(str(path))
     assert loaded.dim == dim
     assert loaded.metric == metric
-    assert (loaded.quantization_bits if kind == "qg" else loaded.nbits) == bits
+    assert loaded.nbits == (bits or 32 if kind == "qg" else bits)
     actual_ids, actual_distances = loaded.search(queries, k=5, **search_args)
     np.testing.assert_array_equal(actual_ids, ids)
     np.testing.assert_array_equal(actual_distances, distances)

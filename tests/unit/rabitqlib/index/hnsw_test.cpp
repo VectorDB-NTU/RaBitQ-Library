@@ -718,8 +718,9 @@ TEST(HnswResizeTest, SurvivesSaveAndLoad) {
     }
 }
 
-// Labels must not depend on the order threads happen to finish in, and every
-// added point must still be reachable.
+// Labels must not depend on the order threads happen to finish in. M equals the point
+// count, so the base layer holds 2M >= N - 1 links and never prunes a reverse link:
+// every point stays reachable under any thread interleaving, and must be found.
 TEST(HnswAddTest, ParallelAddKeepsLabelsAndTheGraph) {
     constexpr size_t kBuilt = 256;
     constexpr size_t kAdded = 256;

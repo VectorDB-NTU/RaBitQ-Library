@@ -206,7 +206,7 @@ def check_input_contracts() -> None:
         IvfIndex(64, 1, nbits=4, initializer=initializer)
     for ids in (signed, unsigned, [0] * 80, (0,) * 80):
         ivf = IvfIndex(64, 1, nbits=4)
-        ivf.set_centroids(centroids)
+        ivf.set_centroids(centroids, num_threads=1)
         ivf.add(x, cluster_ids=ids)
         ivf.add(x[:1], cluster_ids=[np.int64(0)])
         ivf.add(x[:1], cluster_ids=(np.uint32(0),))
