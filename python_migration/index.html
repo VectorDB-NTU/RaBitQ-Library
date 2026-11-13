@@ -2145,7 +2145,9 @@ work if you want to run k-means yourself.</p>
 <ul>
 <li><strong>Thread defaults.</strong> <code>train</code> and <code>add</code> now default to every available CPU
   (<code>num_threads=None</code>, the same as <code>0</code>), capped by <code>OMP_NUM_THREADS</code> since 0.8.1; 0.7 <code>build</code> and
-  <code>add</code> defaulted to one thread. This applies to every <code>add</code> call that does not
+  <code>add</code> defaulted to one thread. Since 0.8.5, IVF-RaBitQ <code>set_centroids</code> follows
+  the same default and takes <code>num_threads</code>; before, it always used every CPU and
+  ignored <code>OMP_NUM_THREADS</code>. This applies to every <code>add</code> call that does not
   pass <code>num_threads</code>, including 0.7 code such as <code>index.add(x)</code>, without a
   warning. <code>search</code> still defaults to one thread, and the deprecated <code>build</code>
   keeps its default of 1.</li>
@@ -2154,6 +2156,11 @@ work if you want to run k-means yourself.</p>
   to <code>add</code> for the same graph on every run. With one thread and the same seed,
   <code>set_centroids</code> followed by <code>add</code> produces exactly the index that 0.7 <code>build</code>
   produced from the same centroids and cluster IDs.</li>
+<li><strong>IVF-RaBitQ HNSW routing builds are not reproducible by default.</strong> 0.7 <code>build</code>
+  built the routing graph with its own thread count, one by default. With more
+  than one thread, <code>set_centroids</code>, <code>train</code> and a training <code>add</code> build it in a
+  nondeterministic order; pass <code>num_threads=1</code> (to <code>set_centroids</code> since 0.8.5)
+  and a fixed <code>seed</code> for the same graph on every run.</li>
 <li><strong><code>k</code> above the point count.</strong> 0.8.0 and 0.8.1 raised <code>ValueError</code> when <code>k</code>
   exceeded <code>num_stored_points</code> (HNSW-RaBitQ) or the point count (IVF-RaBitQ,
   SymphonyQG). Since 0.8.2, every index accepts any <code>k &gt;= 1</code> and fills missing

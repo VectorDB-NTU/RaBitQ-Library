@@ -2614,7 +2614,9 @@ centroid (<code>max_points_per_centroid</code>), spherical k-means for <code>met
   keeping its default graph settings. The threshold is provisional and has not
   been measured.</li>
 <li><code>set_centroids(centroids)</code> uses centroids of shape <code>(num_clusters, dim)</code>
-  computed elsewhere instead of training.</li>
+  computed elsewhere instead of training. Its keyword <code>num_threads</code> sets the
+  workers that rotate the centroids and build the routing; only the HNSW routing
+  graph varies with it.</li>
 <li>Training or setting centroids again replaces them while the index stores no
   vectors; once it stores any (including removed ones), both raise
   <code>RuntimeError</code>. A failed call leaves the index unchanged.</li>

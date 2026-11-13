@@ -2238,11 +2238,13 @@ fewer workers. On macOS, OpenMP runtimes bundled by different packages (for
 example Faiss or PyTorch wheels) can crash when more than one of them starts
 worker threads in the same process; set <code>OMP_NUM_THREADS=1</code> before the first
 native call, or pass <code>num_threads=1</code>, in such processes.
-<code>train</code> and <code>add</code> on every index default to all CPUs (<code>None</code> or <code>0</code>); the
-clustering classes default to <code>0</code>. <code>search</code> defaults to one thread (<code>None</code> or <code>1</code>),
+<code>train</code> and <code>add</code> on every index, and IVF-RaBitQ <code>set_centroids</code>, default to all
+CPUs (<code>None</code> or <code>0</code>); the clustering classes default to <code>0</code>. <code>search</code> defaults to one thread (<code>None</code> or <code>1</code>),
 as do the deprecated <code>build</code>, which requires an integer, and <code>search_batch</code>.
-Multithreaded HNSW-RaBitQ <code>add</code> links points in a nondeterministic order, so pass
-<code>num_threads=1</code> when a build must be reproducible.
+Multithreaded HNSW-RaBitQ <code>add</code> links points in a nondeterministic order, and so
+does a multithreaded build of IVF-RaBitQ's HNSW centroid routing by <code>train</code>,
+<code>set_centroids</code> or the first <code>add</code>; pass <code>num_threads=1</code> when a build must be
+reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.</p>
 <p>C++ paths use UTF-8 on Windows and native path bytes on POSIX.
