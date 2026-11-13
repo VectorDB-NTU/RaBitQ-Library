@@ -123,6 +123,7 @@ def test_corrupt_and_unsupported_blobs():
         with pytest.raises(quant.FormatError, match=message):
             quant.Rotator.from_bytes(data)
     assert issubclass(quant.FormatError, ValueError)
+    assert issubclass(quant.FormatError, RuntimeError)
     unknown_seed = quant.Rotator.from_bytes(patched(patched(blob, 20, 0), 56, 0))
     assert unknown_seed.seed is None
     with pytest.raises(TypeError, match="contiguous bytes-like"):

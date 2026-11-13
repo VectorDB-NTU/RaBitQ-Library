@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 #include <memory>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -25,6 +27,9 @@ class SearchBuffer;
 }  // namespace rabitqlib
 
 namespace rabitqlib::symqg {
+
+// How a builder initializes the graph before refinement.
+enum class QGInitialization { PiPNN, Random };
 
 class QuantizedQuery {
    private:
@@ -88,7 +93,8 @@ class QuantizedGraph<float> {
     size_t padded_dim_ = 0;
     float (*raw_dist_func_)(const float*, const float*, size_t) = nullptr;
     PID entry_point_id_ = 0;
-    MetricType metric_type_ = METRIC_L2;
+    MetricType metric_type_ = METRIC_L2;  // METRIC_IP for the cosine metric
+    bool cosine_ = false;  // normalize data and queries; metric_type_ is METRIC_IP
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     size_t quantization_bits_ = 0;  // 0: raw vectors, 4/8: packed RaBitQ vectors
     std::vector<float> centroid_;   // rotated global centroid for qg-quant
@@ -114,6 +120,13 @@ class QuantizedGraph<float> {
     size_t default_ef_search_ = 0;
     bool ready_ = false;
     uint32_t seed_ = 42;
+    bool seed_known_ = false;  // false for files that do not record the seed
+    // Construction settings a builder records; unknown (0 and no value) otherwise.
+    size_t ef_construction_ = 0;
+    std::optional<QGInitialization> initialization_;
+    // Loaded from a file with read-only-compatible features this release does not know:
+    // search works, but save refuses the graph until a builder rebuilds it.
+    bool read_only_ = false;
 
     [[nodiscard]] static size_t checked_add(size_t lhs, size_t rhs);
 
@@ -127,8 +140,11 @@ class QuantizedGraph<float> {
 
     void initialize(bool randomize_rotation = true);
 
-    // Write the graph file at exactly this path.
+    // Write the graph file in index format 2 at exactly this path.
     void write_file(const char* filename) const;
+
+    // Load a format-2 file into this freshly created graph.
+    void read_format2(std::istream& input);
 
     void copy_vectors(const float* data, size_t num_workers);
 
@@ -279,6 +295,14 @@ class QuantizedGraph<float> {
 
     [[nodiscard]] size_t quantization_bits() const;
 
+    // The rotation seed, or no value for a graph loaded from a file that does not
+    // record it (files from releases up to 0.8).
+    [[nodiscard]] std::optional<uint32_t> seed() const;
+
+    // The settings the builder used, or no value when they are unknown.
+    [[nodiscard]] std::optional<size_t> ef_construction() const;
+    [[nodiscard]] std::optional<QGInitialization> initialization() const;
+
     [[nodiscard]] bool is_quantized() const;
 
     void set_ep(PID entry);
@@ -343,7 +367,8 @@ class QuantizedGraph<float> {
      * buffers, including visited sets.
      *
      * An optional g_k1xsumq must come from BatchQuery::g_k1xsumq() for the same
-     * query and this graph's rotation. A null pointer recomputes the sum.
+     * query and this graph's rotation; with the cosine metric, for the query scaled to
+     * unit norm. A null pointer recomputes the sum.
      */
     void search_with_scratch(
         const float* __restrict__ query,

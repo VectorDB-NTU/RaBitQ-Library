@@ -20,7 +20,10 @@
 #include <utility>
 #include <vector>
 
+#include "../core/blob.hpp"
+#include "cosine.hpp"
 #include "file_replacement.hpp"
+#include "format2.hpp"
 #include "ivf_search.hpp"
 #include "rabitqlib/clustering/detail/kmeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
@@ -38,6 +41,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/ivf/cluster.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/training.hpp"
@@ -50,6 +54,11 @@
 namespace rabitqlib::ivf {
 
 namespace {
+using index_detail::format2::get_u32;
+using index_detail::format2::get_u64;
+using index_detail::format2::put_u32;
+using index_detail::format2::put_u64;
+
 // remove() marks a point by this f_add; save and load keep the marker.
 constexpr float kRemovedFAdd = std::numeric_limits<float>::infinity();
 // Files without routing metadata used HNSW routing from this many clusters.
@@ -59,6 +68,31 @@ constexpr const char* kPointCountConstructOnly =
     "IVF index created with a point count must be built by construct";
 // Scratch for the rows that flat routing in add rotates at a time.
 constexpr size_t kRoutingBlockBytes = size_t{128} << 20;
+
+// Index format 2 sections of IVF-RaBitQ (docs/formats.md, "Section kinds").
+constexpr uint32_t kParamsSection = 256;
+constexpr uint32_t kClusterSizesSection = 257;
+constexpr uint32_t kFlatRoutingSection = 258;
+constexpr uint32_t kFlatRaBitQRoutingSection = 259;
+constexpr uint32_t kHnswRoutingSection = 260;
+constexpr uint32_t kCodesSection = 261;
+constexpr uint32_t kRerankSection = 262;
+constexpr uint32_t kIdsSection = 263;
+constexpr size_t kParamsBytes = 16;
+// The rotator blob stores dimensions in 32 bits, up to the FHT/Kac limit.
+constexpr size_t kMaxSavedDim = rotator_impl::FhtKacRotator::kMaxDim;
+
+uint32_t routing_section(InitializerType type) {
+    switch (type) {
+        case InitializerType::Flat:
+            return kFlatRoutingSection;
+        case InitializerType::FlatRaBitQ:
+            return kFlatRaBitQRoutingSection;
+        default:
+            return kHnswRoutingSection;
+    }
+}
+
 }  // namespace
 
 IVF::IVF() noexcept = default;
@@ -147,11 +181,14 @@ void IVF::swap(IVF& other) noexcept {
     swap(num_clusters_, other.num_clusters_);
     swap(raw_reranking_, other.raw_reranking_);
     swap(ready_, other.ready_);
+    swap(read_only_, other.read_only_);
+    swap(seed_, other.seed_);
     swap(ex_bits_, other.ex_bits_);
     swap(rotator_type_, other.rotator_type_);
     swap(rotator_, other.rotator_);
     swap(clusters_, other.clusters_);
     swap(metric_type_, other.metric_type_);
+    swap(cosine_, other.cosine_);
     swap(ip_func_, other.ip_func_);
 }
 
@@ -172,7 +209,8 @@ IVF::IVF(
     , raw_reranking_(total_bits == 32)
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
-    , metric_type_(metric_type) {
+    , metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE) {
     configure(total_bits);
     if (num_points == 0 || num_points > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("IVF point count exceeds the supported ID range");
@@ -197,9 +235,11 @@ IVF::IVF(
     , padded_dim_(dim)
     , num_clusters_(num_clusters)
     , raw_reranking_(total_bits == 32)
+    , seed_(seed)
     , ex_bits_(total_bits == 32 ? 0 : total_bits - 1)
     , rotator_type_(rotator_type)
-    , metric_type_(metric_type) {
+    , metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE) {
     configure(total_bits);
     rotator_.reset(choose_rotator<float>(dim, rotator_type, padded_dim_, seed));
 }
@@ -309,7 +349,14 @@ void IVF::train(
         throw std::invalid_argument("IVF training data exceeds addressable storage");
     }
     // k-means checks the data for finite, in-range coordinates in parallel with
-    // the bound check_coordinates uses; set_centroids checks its centroids.
+    // the bound check_coordinates uses; set_centroids checks its centroids. The cosine
+    // metric checks the data before normalizing it, as add does.
+    std::vector<float> normalized;
+    if (cosine_) {
+        check_coordinates(data, num_points * dim_, dim_, "IVF training data");
+        normalized = index_detail::normalized_rows(data, num_points, dim_, cp.num_threads);
+        data = normalized.data();
+    }
     std::vector<float> centroids;
     if (num_clusters_ <= kMaxRaBitQKMeansClusters) {
         rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters_, cp);
@@ -352,6 +399,11 @@ void IVF::construct(
     }
     check_coordinates(data, max_elements_ * dim_, dim_, "IVF construction data");
     check_coordinates(centroids, num_clusters_ * dim_, dim_, "IVF construction centroids");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, max_elements_, dim_, num_threads);
+        data = normalized.data();
+    }
 
     allocate_storage(cluster_sizes);
     create_cluster_views(cluster_sizes);
@@ -393,6 +445,7 @@ void IVF::construct(
 
 void IVF::allocate_storage(const std::vector<size_t>& cluster_sizes) {
     ready_ = false;
+    read_only_ = false;
     num_removed_ = 0;
     free_storage();
     clusters_.clear();
@@ -477,6 +530,7 @@ void IVF::add(
             "IVF index must be trained, constructed or loaded before add"
         );
     }
+    check_writable("add");
     if (num_points == 0) {
         return;
     }
@@ -491,6 +545,11 @@ void IVF::add(
         throw std::invalid_argument("IVF configuration exceeds addressable storage");
     }
     check_coordinates(data, num_points * dim_, dim_, "IVF add data");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
+        data = normalized.data();
+    }
 
     // Assign every new point to a cluster
     std::vector<PID> assigned(num_points);
@@ -781,6 +840,7 @@ void IVF::reserve(PID cluster_id, size_t num_points) {
     if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before reserve");
     }
+    check_writable("reserve");
     if (cluster_id >= num_clusters_) {
         throw std::invalid_argument("IVF cluster ID is out of range");
     }
@@ -819,6 +879,7 @@ size_t IVF::remove(const PID* ids_to_remove, size_t num_points) {
     if (!ready_) {
         throw std::logic_error("IVF index must be constructed or loaded before remove");
     }
+    check_writable("remove");
     if (num_points == 0) {
         return 0;
     }
@@ -869,82 +930,117 @@ void IVF::save(const char* filename) const {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("IVF save filename must not be empty");
     }
-
-    // An HNSW initializer writes its sidecar next to the path it is given.
-    const auto write = [this](const std::string& path) { write_file(path.c_str()); };
-    if (initializer_type_ == InitializerType::HNSW) {
-        index_detail::save_replacing(filename, {detail::kHnswSidecarSuffix}, write);
-    } else {
-        index_detail::save_replacing(filename, {}, write);
+    check_writable("save");
+    if (dim_ > kMaxSavedDim) {
+        throw std::invalid_argument(
+            "IVF cannot save an index of more than " + std::to_string(kMaxSavedDim) +
+            " dimensions"
+        );
     }
+    index_detail::save_replacing(filename, {}, [this](const std::string& path) {
+        write_file(path.c_str());
+    });
 }
 
 void IVF::write_file(const char* filename) const {
+    namespace f2 = index_detail::format2;
     std::ofstream output(io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("IVF cannot open index file for writing");
     }
     output.exceptions(std::ios::failbit | std::ios::badbit);
-    const uint32_t flags = raw_reranking_ ? 1 : 0;
-    const uint64_t stored_padded_dim = padded_dim_;
-    output.write(reinterpret_cast<const char*>(&kFormatMagic), sizeof(kFormatMagic));
-    output.write(reinterpret_cast<const char*>(&kFormatVersion), sizeof(kFormatVersion));
-    output.write(reinterpret_cast<const char*>(&flags), sizeof(flags));
-    output.write(
-        reinterpret_cast<const char*>(&stored_padded_dim), sizeof(stored_padded_dim)
+
+    f2::Header header;
+    header.index_kind = f2::IndexKind::Ivf;
+    header.metric = f2::header_metric(metric_type());
+    header.dim = dim_;
+    header.padded_dim = padded_dim_;
+    header.code_bits = raw_reranking_ ? 1 : static_cast<uint32_t>(ex_bits_ + 1);
+    header.raw_type = raw_reranking_ ? f2::RawType::Float32 : f2::RawType::None;
+    header.id_bits = 32;
+    header.seed = seed_;
+    header.num_points = max_elements_;
+
+    std::vector<uint8_t> rotator(
+        rabitqlib::detail::rotator_blob_bytes(rotator_type_, dim_, padded_dim_)
     );
-
-    const auto stored_initializer = static_cast<uint32_t>(initializer_type_);
-    output.write(
-        reinterpret_cast<const char*>(&stored_initializer), sizeof(stored_initializer)
+    rabitqlib::detail::encode_rotator_blob(
+        *rotator_, rotator_type_, dim_, seed_, rotator.data()
     );
-
-    // Save metadata
-    output.write(reinterpret_cast<const char*>(&max_elements_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&dim_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&num_clusters_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&ex_bits_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&rotator_type_), sizeof(rotator_type_));
-    output.write(reinterpret_cast<const char*>(&metric_type_), sizeof(metric_type_));
-
-    // Save the number of points in each cluster
-    std::vector<size_t> cluster_sizes;
-    cluster_sizes.reserve(num_clusters_);
-    for (const auto& cluster : clusters_) {
-        cluster_sizes.push_back(cluster.num());
-    }
-    output.write(
-        reinterpret_cast<const char*>(cluster_sizes.data()),
-        static_cast<std::streamsize>(sizeof(size_t) * num_clusters_)
-    );
-
-    // Save rotator
-    rotator_->save(output);
-
-    // Save data: initializer payload, then all batch data, all ex data and all IDs,
-    // each in cluster order
-    initializer_->save(output, filename);
+    std::array<uint8_t, kParamsBytes> params{};
+    put_u64(params.data(), num_clusters_);
+    put_u32(params.data() + 8, static_cast<uint32_t>(initializer_type_));
+    std::vector<size_t> cluster_sizes(num_clusters_);
+    std::vector<uint8_t> sizes(sizeof(uint64_t) * num_clusters_);
+    uint64_t codes_bytes = 0;
+    uint64_t rerank_bytes = 0;
     for (size_t i = 0; i < num_clusters_; ++i) {
-        output.write(
-            cluster_storage_[i].batch_data(),
-            static_cast<std::streamsize>(batch_data_bytes(cluster_sizes[i]))
-        );
+        cluster_sizes[i] = clusters_[i].num();
+        put_u64(sizes.data() + (sizeof(uint64_t) * i), cluster_sizes[i]);
+        codes_bytes += batch_data_bytes(cluster_sizes[i]);
+        rerank_bytes += has_rerank_data() ? rerank_data_bytes(cluster_sizes[i]) : 0;
     }
+    f2::CountingStream routing_size;
+    initializer_->write(routing_size);
+
+    const auto bytes = [](const auto& buffer) {
+        return
+            [&buffer](f2::SectionSink& sink) { sink.write(buffer.data(), buffer.size()); };
+    };
+    std::vector<f2::SectionWrite> sections = {
+        {f2::kRotatorSection, f2::kSectionRequired, rotator.size(), bytes(rotator)},
+        {kParamsSection,
+         f2::kSectionRequired | f2::kSectionChecksummed,
+         params.size(),
+         bytes(params)},
+        {kClusterSizesSection,
+         f2::kSectionRequired | f2::kSectionChecksummed,
+         sizes.size(),
+         bytes(sizes)},
+        {routing_section(initializer_type_),
+         f2::kSectionRequired,
+         routing_size.count(),
+         [this](f2::SectionSink& sink) {
+             f2::SinkStream stream(sink);
+             initializer_->write(stream);
+         }},
+        {kCodesSection,
+         f2::kSectionRequired,
+         codes_bytes,
+         [&](f2::SectionSink& sink) {
+             for (size_t i = 0; i < num_clusters_; ++i) {
+                 sink.write(
+                     cluster_storage_[i].batch_data(), batch_data_bytes(cluster_sizes[i])
+                 );
+             }
+         }},
+    };
     if (has_rerank_data()) {
-        for (size_t i = 0; i < num_clusters_; ++i) {
-            output.write(
-                cluster_storage_[i].rerank_data(),
-                static_cast<std::streamsize>(rerank_data_bytes(cluster_sizes[i]))
-            );
-        }
-    }
-    for (size_t i = 0; i < num_clusters_; ++i) {
-        output.write(
-            reinterpret_cast<const char*>(cluster_storage_[i].ids()),
-            static_cast<std::streamsize>(ids_bytes(cluster_sizes[i]))
+        sections.push_back(
+            {kRerankSection,
+             f2::kSectionRequired,
+             rerank_bytes,
+             [&](f2::SectionSink& sink) {
+                 for (size_t i = 0; i < num_clusters_; ++i) {
+                     sink.write(
+                         cluster_storage_[i].rerank_data(),
+                         rerank_data_bytes(cluster_sizes[i])
+                     );
+                 }
+             }}
         );
     }
-
+    sections.push_back(
+        {kIdsSection,
+         f2::kSectionRequired,
+         ids_bytes(max_elements_),
+         [&](f2::SectionSink& sink) {
+             for (size_t i = 0; i < num_clusters_; ++i) {
+                 sink.write(cluster_storage_[i].ids(), ids_bytes(cluster_sizes[i]));
+             }
+         }}
+    );
+    f2::write_file(output, header, sections, RABITQ_LIBRARY_VERSION);
     output.close();
 }
 
@@ -956,14 +1052,27 @@ void IVF::load(const char* filename) {
     if (!input.is_open()) {
         throw std::runtime_error("Cannot open IVF index file");
     }
+    if (index_detail::format2::has_magic(input, index_detail::format2::IndexKind::Ivf)) {
+        IVF loaded;
+        loaded.read_format2(input);
+        swap(loaded);
+        return;
+    }
 
+    // An earlier layout: RABQIDX1, the raw-vector v1 layout or the unversioned one.
     IVF loaded;
-    input.exceptions(std::ios::failbit | std::ios::badbit);
+    // Every group of reads is checked before its values are used.
+    const auto check_read = [&input] {
+        if (!input) {
+            throw FormatError("IVF index file is truncated");
+        }
+    };
     input.seekg(0, std::ios::end);
     const auto file_bytes = static_cast<size_t>(input.tellg());
     input.seekg(0);
     uint64_t magic = 0;
     input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    check_read();
     const bool explicit_padding = magic == kFormatMagic;
     if (explicit_padding) {
         uint32_t version = 0, flags = 0;
@@ -971,20 +1080,22 @@ void IVF::load(const char* filename) {
         input.read(reinterpret_cast<char*>(&version), sizeof(version));
         input.read(reinterpret_cast<char*>(&flags), sizeof(flags));
         input.read(reinterpret_cast<char*>(&stored_padded_dim), sizeof(stored_padded_dim));
+        check_read();
         if (version != 1 && version != kFormatVersion) {
-            throw std::runtime_error("Unsupported IVF index version");
+            throw FormatError("Unsupported IVF index version");
         }
         if (flags > 1 || stored_padded_dim > std::numeric_limits<size_t>::max()) {
-            throw std::runtime_error("Invalid IVF index metadata");
+            throw FormatError("Invalid IVF index metadata");
         }
         loaded.raw_reranking_ = flags == 1;
         loaded.padded_dim_ = static_cast<size_t>(stored_padded_dim);
         if (version >= 2) {
             uint32_t initializer = 0;
             input.read(reinterpret_cast<char*>(&initializer), sizeof(initializer));
+            check_read();
             if (initializer < static_cast<uint32_t>(InitializerType::Flat) ||
                 initializer > static_cast<uint32_t>(InitializerType::HNSW)) {
-                throw std::runtime_error("Invalid IVF initializer type in index file");
+                throw FormatError("Invalid IVF initializer type in index file");
             }
             loaded.initializer_type_ = static_cast<InitializerType>(initializer);
         }
@@ -992,8 +1103,9 @@ void IVF::load(const char* filename) {
         loaded.raw_reranking_ = true;
         uint32_t version = 0;
         input.read(reinterpret_cast<char*>(&version), sizeof(version));
+        check_read();
         if (version != kRawFormatVersion) {
-            throw std::runtime_error("Unsupported raw IVF index version");
+            throw FormatError("Unsupported raw IVF index version");
         }
     } else {
         input.seekg(0);
@@ -1008,7 +1120,7 @@ void IVF::load(const char* filename) {
         reinterpret_cast<char*>(&loaded.rotator_type_), sizeof(loaded.rotator_type_)
     );
     input.read(reinterpret_cast<char*>(&loaded.metric_type_), sizeof(loaded.metric_type_));
-    validate_metric_type(loaded.metric_type_);
+    check_read();
     // Missing routing metadata means a historical file. Its payload layout must
     // follow the original threshold, independently of the current Auto policy.
     if (loaded.initializer_type_ == InitializerType::Auto) {
@@ -1016,13 +1128,14 @@ void IVF::load(const char* filename) {
                                        ? InitializerType::Flat
                                        : InitializerType::HNSW;
     }
-    if (loaded.max_elements_ == 0 ||
+    if ((loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
+        loaded.max_elements_ == 0 ||
         loaded.max_elements_ > buffer::kSearchBufferMaxPointCount || loaded.dim_ == 0 ||
         loaded.num_clusters_ == 0 ||
         loaded.num_clusters_ > buffer::kSearchBufferMaxPointCount || loaded.ex_bits_ > 8 ||
         (loaded.raw_reranking_ && loaded.ex_bits_ != 0) ||
         loaded.dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
-        throw std::runtime_error("Invalid IVF index metadata");
+        throw FormatError("Invalid IVF index metadata");
     }
     if (!explicit_padding) {
         // Both historical formats omit padded_dim and always used 64-coordinate blocks.
@@ -1030,13 +1143,13 @@ void IVF::load(const char* filename) {
     }
     if (loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
         loaded.padded_dim_ > (std::numeric_limits<size_t>::max() / 32) - 64) {
-        throw std::runtime_error("Invalid padded dimension in IVF index file");
+        throw FormatError("Invalid padded dimension in IVF index file");
     }
     // Bound every payload by the actual file before allocating or multiplying sizes.
     size_t remaining = file_bytes - static_cast<size_t>(input.tellg());
     const auto consume = [&remaining](size_t count, size_t bytes) {
         if (bytes != 0 && count > remaining / bytes) {
-            throw std::runtime_error("Invalid or truncated IVF index payload");
+            throw FormatError("Invalid or truncated IVF index payload");
         }
         remaining -= count * bytes;
     };
@@ -1048,7 +1161,7 @@ void IVF::load(const char* filename) {
     } else if (loaded.rotator_type_ == RotatorType::FhtKacRotator) {
         consume(1, loaded.padded_dim_ / 2);
     } else {
-        throw std::runtime_error("Invalid IVF rotator type");
+        throw FormatError("Invalid IVF rotator type");
     }
     if (loaded.initializer_type_ != InitializerType::HNSW) {
         consume(loaded.num_clusters_, sizeof(float) * loaded.padded_dim_);
@@ -1066,29 +1179,51 @@ void IVF::load(const char* filename) {
         reinterpret_cast<char*>(cluster_sizes.data()),
         static_cast<std::streamsize>(sizeof(size_t) * loaded.num_clusters_)
     );
+    check_read();
 
     size_t total = 0;
     for (size_t size : cluster_sizes) {
         if (size > loaded.max_elements_ - total) {
-            throw std::runtime_error("Invalid cluster counts in IVF index file");
+            throw FormatError("Invalid cluster counts in IVF index file");
         }
         total += size;
         consume(div_round_up(size, fastscan::kBatchSize), loaded.batch_bytes());
     }
     if (total != loaded.max_elements_) {
-        throw std::runtime_error("Invalid cluster counts in IVF index file");
+        throw FormatError("Invalid cluster counts in IVF index file");
     }
-    loaded.rotator_ = rotator_impl::make_rotator_for_loading(
-        loaded.dim_, loaded.rotator_type_, loaded.padded_dim_
-    );
+    try {
+        loaded.rotator_ = rotator_impl::make_rotator_for_loading(
+            loaded.dim_, loaded.rotator_type_, loaded.padded_dim_
+        );
+    } catch (const std::invalid_argument& error) {
+        // Dimensions the stored rotation does not support, such as FHT/Kac below 64.
+        throw FormatError(std::string("Invalid IVF rotator dimensions: ") + error.what());
+    }
 
     // Load rotator
     loaded.rotator_->load(input);
+    check_read();
 
     // Load data: initializer payload, then all batch data, all ex data and all IDs,
     // each in cluster order
     loaded.allocate_storage(cluster_sizes);
-    loaded.initializer_->load(input, filename);
+    if (loaded.initializer_type_ == InitializerType::HNSW) {
+        // These layouts kept the routing graph in a sidecar file beside the index.
+        const std::string sidecar = std::string(filename) + detail::kHnswSidecarSuffix;
+        std::ifstream graph(
+            io_impl::filesystem_path(sidecar), std::ios::binary | std::ios::ate
+        );
+        if (!graph) {
+            throw std::runtime_error("Cannot open HNSW centroid sidecar");
+        }
+        const auto graph_bytes =
+            static_cast<uint64_t>(static_cast<std::streamoff>(graph.tellg()));
+        graph.seekg(0);
+        loaded.initializer_->read(graph, graph_bytes);
+    } else {
+        loaded.initializer_->read(input, loaded.flat_routing_bytes());
+    }
     for (size_t i = 0; i < loaded.num_clusters_; ++i) {
         input.read(
             loaded.cluster_storage_[i].batch_data(),
@@ -1109,37 +1244,243 @@ void IVF::load(const char* filename) {
             static_cast<std::streamsize>(ids_bytes(cluster_sizes[i]))
         );
     }
-    for (size_t i = 0; i < loaded.num_clusters_; ++i) {
-        for (PID id : loaded.cluster_storage_[i].id_storage) {
-            if (id >= loaded.max_elements_ || id >= buffer::kSearchBufferCheckedMask) {
-                throw std::runtime_error("Invalid point ID in IVF index file");
-            }
-        }
-    }
-
-    loaded.create_cluster_views(cluster_sizes);
-    // Removal markers are already persisted, including in historical files.
-    // Count only logical rows: FastScan padding lanes are not stored points.
-    for (const auto& cluster : loaded.clusters_) {
-        for (size_t first = 0; first < cluster.num(); first += fastscan::kBatchSize) {
-            ConstBatchDataMap<float> batch(
-                cluster.batch_data() +
-                    (first / fastscan::kBatchSize) * loaded.batch_bytes(),
-                loaded.padded_dim_
-            );
-            const size_t batch_size = std::min(fastscan::kBatchSize, cluster.num() - first);
-            for (size_t lane = 0; lane < batch_size; ++lane) {
-                loaded.num_removed_ += batch.f_add()[lane] == kRemovedFAdd;
-            }
-        }
-    }
+    check_read();
     if (remaining != 0) {
-        throw std::runtime_error("IVF index file has unexpected trailing data");
+        throw FormatError("IVF index file has unexpected trailing data");
     }
-    loaded.ready_ = true;
+    loaded.complete_load(cluster_sizes);
 
     input.close();
     swap(loaded);
+}
+
+void IVF::read_format2(std::istream& input) {
+    namespace f2 = index_detail::format2;
+    const std::vector<uint32_t> known_kinds = {
+        f2::kRotatorSection,
+        kParamsSection,
+        kClusterSizesSection,
+        kFlatRoutingSection,
+        kFlatRaBitQRoutingSection,
+        kHnswRoutingSection,
+        kCodesSection,
+        kRerankSection,
+        kIdsSection};
+    f2::Reader reader(input, f2::IndexKind::Ivf, known_kinds, [](const f2::Header& header) {
+        if (header.id_bits != 32) {
+            throw f2::FormatError(
+                "IVF index file has 64-bit IDs; IVF-RaBitQ stores 32 bits"
+            );
+        }
+        if (header.raw_type == f2::RawType::Uint8) {
+            throw f2::FormatError(
+                "IVF index file has uint8 raw vectors, which IVF-RaBitQ lacks"
+            );
+        }
+        if (header.code_bits == 0 ||
+            (header.raw_type == f2::RawType::Float32 && header.code_bits != 1)) {
+            throw f2::FormatError(
+                "IVF index file has " + std::to_string(header.code_bits) +
+                " code bits, which its raw vectors do not allow"
+            );
+        }
+        if (header.num_points == 0 ||
+            header.num_points > buffer::kSearchBufferMaxPointCount) {
+            throw f2::FormatError(
+                "IVF index file has an invalid point count " +
+                std::to_string(header.num_points)
+            );
+        }
+        if (header.seed.has_value() &&
+            *header.seed > std::numeric_limits<uint32_t>::max()) {
+            throw f2::FormatError("IVF index file has a seed above 32 bits");
+        }
+    });
+    const f2::Header& header = reader.header();
+    metric_type_ = index_detail::stored_metric(f2::metric_type(header.metric));
+    cosine_ = header.metric == f2::Metric::Cosine;
+    dim_ = static_cast<size_t>(header.dim);
+    padded_dim_ = static_cast<size_t>(header.padded_dim);
+    raw_reranking_ = header.raw_type == f2::RawType::Float32;
+    ex_bits_ = raw_reranking_ ? 0 : header.code_bits - 1;
+    max_elements_ = static_cast<size_t>(header.num_points);
+    if (header.seed.has_value()) {
+        seed_ = static_cast<uint32_t>(*header.seed);
+    }
+
+    // A section of this kind, whose size, when given, must match before it is read.
+    const auto require = [&reader](uint32_t kind, std::optional<uint64_t> size) {
+        const f2::Section* section = reader.find(kind);
+        if (section == nullptr) {
+            throw f2::FormatError(
+                "IVF index file has no section kind " + std::to_string(kind)
+            );
+        }
+        if (size.has_value() && section->size != *size) {
+            throw f2::FormatError(
+                "IVF index file section kind " + std::to_string(kind) + " has " +
+                std::to_string(section->size) + " bytes; expected " + std::to_string(*size)
+            );
+        }
+        return section;
+    };
+    const auto read_all = [&reader](const f2::Section& section) {
+        std::vector<uint8_t> bytes(static_cast<size_t>(section.size));
+        reader.read(section, 0, bytes.data(), bytes.size());
+        return bytes;
+    };
+
+    const std::vector<uint8_t> params = read_all(*require(kParamsSection, kParamsBytes));
+    const uint64_t num_clusters = get_u64(params.data());
+    const uint32_t initializer = get_u32(params.data() + 8);
+    if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
+        throw f2::FormatError(
+            "IVF index file has an invalid cluster count " + std::to_string(num_clusters)
+        );
+    }
+    if (initializer < static_cast<uint32_t>(InitializerType::Flat) ||
+        initializer > static_cast<uint32_t>(InitializerType::HNSW) ||
+        get_u32(params.data() + 12) != 0) {
+        throw f2::FormatError("IVF index file has invalid routing parameters");
+    }
+    num_clusters_ = static_cast<size_t>(num_clusters);
+    initializer_type_ = static_cast<InitializerType>(initializer);
+
+    const std::vector<uint8_t> sizes =
+        read_all(*require(kClusterSizesSection, sizeof(uint64_t) * num_clusters_));
+    std::vector<size_t> cluster_sizes(num_clusters_);
+    uint64_t total = 0;
+    uint64_t codes_bytes = 0;
+    uint64_t rerank_bytes = 0;
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        const uint64_t size = get_u64(sizes.data() + (sizeof(uint64_t) * i));
+        if (size > max_elements_ - total) {
+            throw f2::FormatError("IVF index file cluster sizes exceed its point count");
+        }
+        total += size;
+        cluster_sizes[i] = static_cast<size_t>(size);
+        codes_bytes += batch_data_bytes(cluster_sizes[i]);
+        rerank_bytes += has_rerank_data() ? rerank_data_bytes(cluster_sizes[i]) : 0;
+    }
+    if (total != max_elements_) {
+        throw f2::FormatError(
+            "IVF index file cluster sizes do not add up to its point count"
+        );
+    }
+
+    const std::vector<uint8_t> blob = read_all(*require(f2::kRotatorSection, std::nullopt));
+    rabitqlib::detail::DecodedRotator rotator;
+    try {
+        rotator = rabitqlib::detail::decode_rotator_blob(blob.data(), blob.size());
+    } catch (const std::invalid_argument& error) {
+        throw f2::FormatError(
+            std::string("IVF index file has an invalid rotator (") + error.what() + ")"
+        );
+    }
+    if (rotator.dim != dim_ || rotator.padded_dim != padded_dim_) {
+        throw f2::FormatError("IVF index file rotator does not match its dimensions");
+    }
+    rotator_type_ = rotator.type;
+    rotator_ = std::move(rotator.rotator);
+
+    const uint32_t routing_kind = routing_section(initializer_type_);
+    for (const uint32_t kind :
+         {kFlatRoutingSection, kFlatRaBitQRoutingSection, kHnswRoutingSection}) {
+        if (kind != routing_kind && reader.find(kind) != nullptr) {
+            throw f2::FormatError("IVF index file has routing data of another initializer");
+        }
+    }
+    const f2::Section* routing = require(
+        routing_kind,
+        initializer_type_ == InitializerType::HNSW
+            ? std::nullopt
+            : std::optional<uint64_t>(flat_routing_bytes())
+    );
+    const f2::Section* codes = require(kCodesSection, codes_bytes);
+    const f2::Section* rerank = nullptr;
+    if (has_rerank_data()) {
+        rerank = require(kRerankSection, rerank_bytes);
+    } else if (reader.find(kRerankSection) != nullptr) {
+        throw f2::FormatError(
+            "IVF index file has rerank data that its code bits do not use"
+        );
+    }
+    const f2::Section* ids = require(kIdsSection, ids_bytes(max_elements_));
+
+    allocate_storage(cluster_sizes);
+    std::istream routing_input(input.rdbuf());
+    routing_input.seekg(static_cast<std::streamoff>(routing->offset));
+    initializer_->read(routing_input, routing->size);
+    // Read each bulk section front to back: a seek per cluster would discard the file
+    // buffer every time.
+    f2::SectionInput codes_input = reader.open(*codes);
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        codes_input.read(
+            cluster_storage_[i].batch_data(), batch_data_bytes(cluster_sizes[i])
+        );
+    }
+    if (rerank != nullptr) {
+        f2::SectionInput rerank_input = reader.open(*rerank);
+        for (size_t i = 0; i < num_clusters_; ++i) {
+            rerank_input.read(
+                cluster_storage_[i].rerank_data(), rerank_data_bytes(cluster_sizes[i])
+            );
+        }
+    }
+    f2::SectionInput ids_input = reader.open(*ids);
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        ids_input.read(cluster_storage_[i].ids(), ids_bytes(cluster_sizes[i]));
+    }
+    complete_load(cluster_sizes);
+    read_only_ = reader.read_only();
+}
+
+size_t IVF::flat_routing_bytes() const {
+    const size_t centroids = sizeof(float) * num_clusters_ * padded_dim_;
+    if (initializer_type_ == InitializerType::FlatRaBitQ) {
+        return centroids + (sizeof(float) * padded_dim_) +
+               (div_round_up(num_clusters_, fastscan::kBatchSize) * batch_bytes());
+    }
+    return centroids;
+}
+
+void IVF::complete_load(const std::vector<size_t>& cluster_sizes) {
+    for (size_t i = 0; i < num_clusters_; ++i) {
+        for (PID id : cluster_storage_[i].id_storage) {
+            if (id >= max_elements_ || id >= buffer::kSearchBufferCheckedMask) {
+                throw FormatError("Invalid point ID in IVF index file");
+            }
+        }
+    }
+
+    create_cluster_views(cluster_sizes);
+    // Removal markers are already persisted, including in historical files.
+    // Count only logical rows: FastScan padding lanes are not stored points.
+    for (const auto& cluster : clusters_) {
+        for (size_t first = 0; first < cluster.num(); first += fastscan::kBatchSize) {
+            ConstBatchDataMap<float> batch(
+                cluster.batch_data() + (first / fastscan::kBatchSize) * batch_bytes(),
+                padded_dim_
+            );
+            const size_t batch_size = std::min(fastscan::kBatchSize, cluster.num() - first);
+            for (size_t lane = 0; lane < batch_size; ++lane) {
+                num_removed_ += batch.f_add()[lane] == kRemovedFAdd;
+            }
+        }
+    }
+    ready_ = true;
+}
+
+void IVF::check_writable(const char* operation) const {
+    if (read_only_) {
+        throw std::logic_error(
+            std::string(
+                "IVF index was loaded from a file with features this release "
+                "cannot update, so it cannot "
+            ) +
+            operation
+        );
+    }
 }
 
 void IVF::search(
@@ -1168,6 +1509,12 @@ void IVF::search(
 ) const {
     validate_search(query, k, nprobe, result_ids);
     check_coordinates(query, dim_, dim_, "IVF search query");
+    std::vector<float> normalized_query;
+    if (cosine_) {
+        normalized_query.resize(dim_);
+        index_detail::normalize_vector(query, normalized_query.data(), dim_);
+        query = normalized_query.data();
+    }
 
     nprobe = std::min(nprobe, num_clusters_);  // Probe at most every cluster
     std::vector<float> rotated_query(padded_dim_);

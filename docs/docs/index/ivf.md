@@ -50,13 +50,13 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `num_clusters` | Number of centroids `train` or the first `add` learns, or `set_centroids` supplies; every cluster ID must be in `[0, num_clusters)`. |
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only `nbits` defaults to 7; C++ requires it. |
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
-| `metric` | Python `"l2"` or `"ip"`; defaults to `"l2"`. |
+| `metric` | Python `"l2"`, `"ip"` or `"cosine"`; defaults to `"l2"`. See [the cosine metric](usage.md#the-cosine-metric). |
 | `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`2**32 - 1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
+| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
-to largest. Quantized distances are estimates. Unfilled slots use ID `2**32 - 1`
+to largest. Quantized distances are estimates. IDs are `int64` in Python. Unfilled slots use ID `-1`
 and distance `+inf`; see [result handling](../quick_start.md#read-the-results).
 See the shared [input and concurrency contracts](usage.md).
 
@@ -208,7 +208,7 @@ and quantizes vectors. On an untrained index, the first `add` without
 to train on a different sample. Training uses the settings in `index.cp`, a
 [`RaBitQKMeansParameters`](../clustering.md#rabitqkmeans) whose defaults differ
 from the k-means classes: 10 iterations, at most 256 sampled vectors per
-centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"`, and
+centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"` and `"cosine"`, and
 `seed` equal to the index seed. Change fields before training:
 
 ```python
@@ -274,7 +274,7 @@ index.add(data.data(), num_points);
   centroid routing.
 - `default_training_parameters(metric, seed)` runs 10 iterations on at most
   256 sampled points per centroid and selects spherical k-means for inner
-  product. The k-means classes keep their own defaults, which train on every point.
+  product and cosine. The k-means classes keep their own defaults, which train on every point.
 - `train` and `set_centroids` replace the centroids only while the index stores
   no points, removed ones included; otherwise they throw `std::logic_error`.
   A failed call leaves the index unchanged.
@@ -452,15 +452,15 @@ enters the result buffer and never triggers reranking. Any code that estimates
 IVF-RaBitQ distances must keep this behavior and must never turn `+inf` into NaN.
 
 Search may return fewer than `k` results once points are removed: the missing slots
-hold `kPidMax` (`2**32 - 1` in Python) with an infinite distance, as when the probed
+hold `kPidMax` (`-1` in Python) with an infinite distance, as when the probed
 clusters hold fewer than `k` points.
 
 The removal marker lives in the ordinary batch data and needs no additional
 format change; removal survives `save` and `load`. No file written before
 `remove` existed has an infinite `f_add`, so nothing in an old file is
 reinterpreted. Release 0.5.0 also excludes removed points when reading its
-supported legacy formats. However, current saves always use `RABQIDX1` v2,
-including when resaving a loaded legacy index. Older releases cannot read these
+supported legacy formats. However, current saves always use index format 2,
+including when resaving a loaded legacy index. Releases up to 0.8 cannot read these
 files, regardless of whether they contain removals.
 
 ## Persistence
@@ -470,19 +470,23 @@ Save a constructed index with:
 ```c++
 ivf.save(output_index_file);
 ```
-New files use the `RABQIDX1` magic, version 2, storage flags, an explicit
-padded dimension, and a uint32 initializer type (1 = Flat, 2 = Flat RaBitQ,
-3 = HNSW) before the index metadata. `Auto` is resolved before saving. Loading
-restores the routing type, storage mode, rotation state, and padded dimension.
-Raw files also contain the original vectors, so querying does not require an external dataset.
+Files are written in
+[index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2):
+one file with a header, a section table, and sections for the rotation, the routing
+data, the codes and the IDs. HNSW routing is a section of that file, so there is no
+separate sidecar. `Auto` is resolved before saving. Loading restores the routing type,
+storage mode, rotation state, and padded dimension. Raw files also contain the original
+vectors, so querying does not require an external dataset. Releases up to 0.8 cannot
+read format 2. Indexes of more than 65,536 dimensions cannot be saved.
 
-Version-1 `RABQIDX1` files remain readable with their stored padding. Legacy
-unversioned quantized files and raw v1 files retain their original 64-dimension
-padding. All three historical formats infer routing with the original 20,000
-cluster threshold. HNSW routing still requires the accompanying `.hnsw` file.
-Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded
-legacy index writes the new header without changing its padded dimension or encoded data. Older library
-versions cannot read the new format.
+Files from earlier releases remain readable. `RABQIDX1` version 2 files store their
+routing type; version-1 `RABQIDX1` files keep their stored padding; legacy unversioned
+quantized files and raw v1 files retain their original 64-dimension padding. These three
+older layouts infer routing with the original 20,000 cluster threshold. All of these
+layouts keep HNSW routing in the accompanying `.hnsw` file, which loading reads.
+Flat RaBitQ loads its saved codes without random re-quantization. Saving a loaded file
+writes format 2 without changing its padded dimension or encoded data; a `.hnsw` file
+left beside it is not removed and is no longer used.
 
 ## Implementation details
 

@@ -93,7 +93,7 @@ def test_count_contract_through_lifecycle(tmp_path, kind, bits):
     check_counts(index, capacity, stored, 0)
     args = {"nprobe": 1} if kind == "ivf" else {"ef": stored}
     hits, _ = index.search(data[:1], k=1, **args)
-    assert np.all(hits == np.iinfo(np.uint32).max)
+    assert np.all(hits == -1)
 
     np.testing.assert_array_equal(
         index.add(data[-1:], cluster_ids=assignments[:1]), [stored]

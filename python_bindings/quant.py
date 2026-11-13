@@ -50,8 +50,9 @@ FACTORS_VERSION = 1
 FASTSCAN_BLOCKS_VERSION = 1
 """Version of the pack_fastscan_blocks layout."""
 
-# Classes report this module, so pickle and help() find them here.
-for _public in (FormatError, Query, Rotator):
+# Classes report this module, so pickle and help() find them here. FormatError is
+# rabitqlib.FormatError, shared with index loading.
+for _public in (Query, Rotator):
     _public.__module__ = __name__
 del _public
 

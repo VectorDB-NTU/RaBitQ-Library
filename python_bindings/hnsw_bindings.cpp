@@ -46,7 +46,7 @@ class HnswIndex {
                 std::to_string(buffer::kSearchBufferMaxPointCount) + "]"
             );
         }
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         const auto graph_seed = checked_seed(seed, std::numeric_limits<size_t>::max());
         // Capacity grows on add; resize preallocates.
         index_ = std::make_unique<hnsw::HierarchicalNSW>(
@@ -67,7 +67,7 @@ class HnswIndex {
         const std::string& metric,
         const py::object& random_seed
     ) {
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         const auto graph_seed =
             checked_seed(random_seed, std::numeric_limits<size_t>::max());
         HnswIndex wrapper;
@@ -177,7 +177,7 @@ class HnswIndex {
         num_clusters_ = num_clusters;
     }
 
-    py::array_t<PID> add(
+    py::array_t<int64_t> add(
         py::handle data,
         const py::object& cluster_ids,
         std::optional<size_t> num_threads,
@@ -203,7 +203,7 @@ class HnswIndex {
         }
 
         // Allocated before the index is touched.
-        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
+        auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
         const auto* data_ptr = data_array.data();
         const size_t threads = num_threads.value_or(0);
         if (trains) {
@@ -287,7 +287,6 @@ class HnswIndex {
         const size_t ef_search = ef.value_or(0) == 0 ? std::max<size_t>(k, 64) : *ef;
 
         auto output = unfilled_search_results(static_cast<size_t>(query_array.shape(0)), k);
-        auto result_ids_view = output.ids.mutable_unchecked<2>();
         auto distances_view = output.distances.mutable_unchecked<2>();
 
         const auto* queries_data = query_array.data();
@@ -305,13 +304,13 @@ class HnswIndex {
                                             k, results[static_cast<size_t>(i)].size()
                                         ));
                  ++j) {
-                result_ids_view(i, j) =
+                output.ids[(static_cast<size_t>(i) * k) + static_cast<size_t>(j)] =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].second;
                 distances_view(i, j) =
                     results[static_cast<size_t>(i)][static_cast<size_t>(j)].first;
             }
         }
-        return py::make_tuple(output.ids, output.distances);
+        return output.to_python();
     }
 
     void save(py::handle path) const {
@@ -337,8 +336,15 @@ class HnswIndex {
         wrapper.num_clusters_ = wrapper.index_->is_trained()
                                     ? wrapper.index_->num_clusters()
                                     : kDefaultNumClusters;
+        // Format-2 files record the seed; files from releases up to 0.8 do not.
+        const std::optional<uint64_t> seed = wrapper.index_->seed();
+        if (seed.has_value()) {
+            wrapper.seed_ = static_cast<size_t>(*seed);
+        }
         wrapper.cp_ = default_training_parameters(
-            wrapper.index_->metric_type(), rabitqkmeans::RaBitQKMeansParameters{}.seed
+            wrapper.index_->metric_type(),
+            seed.has_value() ? static_cast<uint32_t>(*seed)
+                             : rabitqkmeans::RaBitQKMeansParameters{}.seed
         );
         return wrapper;
     }
@@ -447,7 +453,7 @@ class HnswIndex {
     std::unique_ptr<hnsw::HierarchicalNSW> index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
     size_t num_clusters_ = 0;     // Centroid count train and set_centroids expect.
-    std::optional<size_t> seed_;  // Unknown for loaded indexes.
+    std::optional<size_t> seed_;  // Unknown for files from releases up to 0.8.
 };
 
 }  // namespace rabitqlib::python_bindings
@@ -474,9 +480,9 @@ M : int, optional
     2 * M edges. Default is 16.
 ef_construction : int, optional
     Keyword-only. Construction search breadth. Default is 200.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-    Vectors are not automatically normalized for cosine similarity.
+metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    Keyword-only. Squared L2, inner-product or cosine distance. Default is
+    'l2'. 'cosine' scales data and queries to unit length.
 seed : int, optional
     Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
     32 bits). Default is 100.
@@ -526,7 +532,7 @@ fast_quantization : bool, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n,)
+ids : ndarray of int64, shape (n,)
     Assigned point IDs.
 
 Notes
@@ -652,16 +658,16 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n_queries, k)
+ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
+    Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+    1 - cos for cosine. These are distances, not similarity scores.
 
 Notes
 -----
 Requires a trained or loaded index. Returns (ids, distances), in that
-order. Missing neighbors have ID 4294967295 and distance inf; test
+order. Missing neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
         )
@@ -722,7 +728,8 @@ path : str, bytes, bytearray, or os.PathLike
 Notes
 -----
 A trained index without vectors raises RuntimeError; add vectors first.
-The saved state includes the rotation used to build the index.)doc"
+The saved state includes the rotation used to build the index and its seed;
+releases up to 0.8 cannot read the file.)doc"
         )
         .def_static(
             "load",
@@ -793,16 +800,18 @@ index : HnswIndex
         .def_property_readonly(
             "seed",
             &HnswIndex::seed,
-            R"doc(Graph and rotation seed, or None for an index loaded from disk.)doc"
+            R"doc(Graph and rotation seed, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property(
             "cp",
             &HnswIndex::cp,
             &HnswIndex::set_cp,
             py::return_value_policy::reference_internal,
-            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed.)doc"
+            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the low 32 bits of the index seed.)doc"
         )
         .def_property_readonly(
-            "metric", &HnswIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+            "metric",
+            &HnswIndex::metric,
+            R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         );
 }

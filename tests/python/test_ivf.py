@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+import format2_file
 import numpy as np
 import pytest
 from conftest import DIM, N_CLUSTERS, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
@@ -65,7 +66,7 @@ def test_properties(built_ivf):
 def test_search_output_contract(built_ivf, query_data, nq, k, nprobe):
     ids, dists = built_ivf.search(query_data[:nq], k=k, nprobe=nprobe)
     assert ids.shape == dists.shape == (nq, k)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
     assert np.isfinite(dists).all()
@@ -104,7 +105,7 @@ def test_batch_search_matches_individual_queries(bits, metric):
                 assert empty_ids.shape == empty_distances.shape == (0, 7)
     index.remove(np.arange(len(data)))
     ids, distances = index.search(queries, k=7, nprobe=4, num_threads=4)
-    assert np.all(ids == np.iinfo(np.uint32).max)
+    assert np.all(ids == -1)
     assert np.all(np.isinf(distances))
 
 
@@ -117,7 +118,7 @@ def test_unfilled_results_use_sentinels():
 
     ids, dists = idx.search(data[:1], k=3, nprobe=1)
     assert ids[0, 0] == 0
-    np.testing.assert_array_equal(ids[0, 1:], np.iinfo(np.uint32).max)
+    np.testing.assert_array_equal(ids[0, 1:], -1)
     assert np.all(np.isinf(dists[0, 1:]))
 
 
@@ -336,11 +337,10 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     # The reranking region contains precisely original floats in cluster order,
     # with no extra-bit codes/factors or padded coordinates.
     payload = path.read_bytes()
-    ids_bytes = len(data) * np.dtype(np.uint32).itemsize
-    raw_bytes = original.nbytes
     stored = np.frombuffer(
-        payload[-ids_bytes - raw_bytes : -ids_bytes], dtype=np.float32
+        format2_file.section(payload, format2_file.IVF_RERANK), dtype=np.float32
     )
+    assert stored.nbytes == original.nbytes
     order = np.argsort(cluster_ids, kind="stable")
     np.testing.assert_array_equal(stored.reshape(original.shape), original[order])
     one_bit = _built(
@@ -352,7 +352,13 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     )
     one_bit_path = tmp_path / "one-bit.index"
     one_bit.save(str(one_bit_path))
-    assert len(payload) - one_bit_path.stat().st_size == raw_bytes
+    # Raw storage adds only the rerank section; every other section is the same size.
+    raw_sections = format2_file.sections(payload)
+    one_bit_sections = format2_file.sections(one_bit_path.read_bytes())
+    assert raw_sections.pop(format2_file.IVF_RERANK)[1] == original.nbytes
+    assert {kind: size for kind, (_, size) in raw_sections.items()} == {
+        kind: size for kind, (_, size) in one_bit_sections.items()
+    }
 
 
 @pytest.mark.parametrize(
@@ -391,8 +397,8 @@ def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded, nonzero_dista
     saved = tmp_path / "legacy.index"
     idx.save(str(saved))
     payload = saved.read_bytes()
-    assert payload[:8] == b"RABQIDX1"
-    assert int.from_bytes(payload[16:24], "little") == padded
+    assert payload[:8] == format2_file.MAGIC
+    assert format2_file.padded_dim(payload) == padded
     loaded_ids, loaded_distances = IvfIndex.load(str(saved)).search(queries, 3, 1)
     np.testing.assert_array_equal(loaded_ids, ids)
     np.testing.assert_array_equal(loaded_distances, distances)
@@ -419,7 +425,11 @@ def test_raw_index_rejects_invalid_files(tmp_path, damage):
     idx = _built(data, data[:1], np.zeros(2, dtype=np.uint32), nbits=32)
     path = tmp_path / "invalid.index"
     idx.save(str(path))
-    payload = bytearray(path.read_bytes())
+    # Damage the RABQIDX1 layout that releases up to 0.8 wrote, which loading still reads.
+    payload = bytearray(format2_file.to_rabqidx1(path.read_bytes())[0])
+    assert payload[:8] == b"RABQIDX1"
+    path.write_bytes(payload)
+    IvfIndex.load(str(path))  # undamaged, the converted file loads
     if damage == "version":
         payload[8:12] = (99).to_bytes(4, "little")
     elif damage == "flags":
@@ -477,32 +487,43 @@ def test_automatic_high_accuracy(nbits, tmp_path):
             np.testing.assert_array_equal(actual[1], expected[1])
 
 
-@pytest.mark.parametrize("failure", ["open", "write"])
-def test_hnsw_sidecar_save_failures(tmp_path, failure):
-    if failure == "write" and not Path("/dev/full").exists():
+@pytest.mark.parametrize("initializer", ["flat", "flat_rabitq", "hnsw"])
+def test_save_failure_keeps_the_index(tmp_path, initializer):
+    if not Path("/dev/full").exists():
         pytest.skip("requires a device that rejects writes")
+    data = np.zeros((2, 64), dtype=np.float32)
+    data[1, 0] = 1
+    idx = _built(
+        data, data, np.arange(2, dtype=np.uint32), nbits=32, initializer=initializer
+    )
+    expected = idx.search(data, 1, 1)
+    # /dev/full is not a regular file, so save writes it in place and the write fails.
+    with pytest.raises(RuntimeError):
+        idx.save("/dev/full")
+    # Failure does not invalidate the in-memory index, and saving can be retried.
+    path = tmp_path / "retried.index"
+    idx.save(str(path))
+    for obj in (idx, IvfIndex.load(str(path))):
+        actual = obj.search(data, 1, 1)
+        np.testing.assert_array_equal(actual[0], expected[0])
+        np.testing.assert_array_equal(actual[1], expected[1])
+
+
+def test_hnsw_routing_is_saved_inside_the_index_file(tmp_path):
     data = np.zeros((2, 64), dtype=np.float32)
     data[1, 0] = 1
     idx = _built(
         data, data, np.arange(2, dtype=np.uint32), nbits=32, initializer="hnsw"
     )
     expected = idx.search(data, 1, 1)
-    path = tmp_path / "sidecar_failure.index"
+    path = tmp_path / "embedded.index"
+    # A path where releases up to 0.8 wrote the sidecar is neither used nor needed.
     sidecar = Path(str(path) + ".hnsw")
-    if failure == "open":
-        sidecar.mkdir()
-        message = "Cannot open HNSW index file for writing"
-    else:
-        sidecar.symlink_to("/dev/full")
-        message = None  # The stream failure message depends on the standard library.
-    with pytest.raises(RuntimeError, match=message):
-        idx.save(str(path))
-    if failure == "open":
-        sidecar.rmdir()
-    else:
-        sidecar.unlink()
-    # Failure does not invalidate the in-memory index, and saving can be retried.
+    sidecar.mkdir()
     idx.save(str(path))
+    assert sidecar.is_dir()
+    payload = path.read_bytes()
+    assert format2_file.IVF_HNSW_ROUTING in format2_file.sections(payload)
     for obj in (idx, IvfIndex.load(str(path))):
         actual = obj.search(data, 1, 1)
         np.testing.assert_array_equal(actual[0], expected[0])
@@ -587,7 +608,7 @@ def _dynamic_index(nbits=4, metric="l2", count=120, dim=65, clusters=3, seed=61)
 def test_add_returns_ids_and_makes_points_searchable():
     idx, old, new, _ = _dynamic_index(nbits=32)
     added = idx.add(new)
-    assert added.dtype == np.uint32
+    assert added.dtype == np.int64
     np.testing.assert_array_equal(added, np.arange(len(old), len(old) + len(new)))
     assert idx.max_elements == len(old) + len(new)
     # k may now exceed the original point count; raw storage makes the ranking exact.
@@ -729,7 +750,7 @@ def test_remove_excludes_points_and_survives_reload(
             keep = ~np.isin(before_ids[q], removed)
             np.testing.assert_array_equal(ids[q, :alive], before_ids[q][keep])
             np.testing.assert_array_equal(dists[q, :alive], before_dists[q][keep])
-            assert np.all(ids[q, alive:] == np.iinfo(np.uint32).max)
+            assert np.all(ids[q, alive:] == -1)
             assert np.all(np.isinf(dists[q, alive:]))
         top, top_dists = index.search(
             queries, k=10, nprobe=3, high_accuracy=high_accuracy
@@ -751,7 +772,7 @@ def test_remove_excludes_points_and_survives_reload(
         queries, k=count + len(new), nprobe=3, high_accuracy=high_accuracy
     )
     assert not np.isin(ids, removed).any()
-    assert np.count_nonzero(ids[0] != np.iinfo(np.uint32).max) == count + len(new) - 4
+    assert np.count_nonzero(ids[0] != -1) == count + len(new) - 4
 
     # A reloaded index grows exactly like the original.
     expected_ids, expected_dists = idx.search(
@@ -784,7 +805,7 @@ def test_removing_every_point_leaves_a_searchable_index():
     idx, old, new, _ = _dynamic_index()
     assert idx.remove(np.arange(len(old))) == len(old)
     ids, dists = idx.search(new[:2], k=5, nprobe=3)
-    assert np.all(ids == np.iinfo(np.uint32).max)
+    assert np.all(ids == -1)
     assert np.all(np.isinf(dists))
 
 

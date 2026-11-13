@@ -45,7 +45,7 @@ class SymqgIndex {
     )
         : dim_(dim)
         , max_degree_(max_degree)
-        , metric_type_(metric_from_string(metric))
+        , metric_type_(index_metric_from_string(metric))
         , ef_construction_(ef_construction)
         , init_(init) {
         // Reject now what add would reject only after converting all the data.
@@ -77,7 +77,7 @@ class SymqgIndex {
         check_coordinates(x_ptr, count, dim_, "x");
     }
 
-    py::array_t<PID> add(py::handle data, std::optional<size_t> num_threads) {
+    py::array_t<int64_t> add(py::handle data, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         if (built()) {
             throw std::runtime_error(
@@ -89,8 +89,8 @@ class SymqgIndex {
         build_graph(data, *ef_construction_, num_threads.value_or(0), *init_, *seed_);
         // Point IDs are the row numbers of data.
         const size_t rows = index_->num_points();
-        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
-        std::iota(ids.mutable_data(), ids.mutable_data() + rows, PID{0});
+        auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
+        std::iota(ids.mutable_data(), ids.mutable_data() + rows, int64_t{0});
         return ids;
     }
 
@@ -124,12 +124,9 @@ class SymqgIndex {
         ensure_dimension(query_array, dim_, "query dimension does not match index dim");
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
-        const auto shape = std::vector<py::ssize_t>{
-            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
-        auto result_ids = py::array_t<PID>(shape);
-        auto distances = py::array_t<float>(shape);
-        auto* ids_data = result_ids.mutable_data();
-        auto* distances_data = distances.mutable_data();
+        auto output = unfilled_search_results(num_queries, k);
+        auto* ids_data = output.ids.data();
+        auto* distances_data = output.distances.mutable_data();
         const auto* queries_data = query_array.data();
         {
             py::gil_scoped_release release;
@@ -144,7 +141,7 @@ class SymqgIndex {
             );
         }
 
-        return py::make_tuple(result_ids, distances);
+        return output.to_python();
     }
 
     void save(py::handle path) const {
@@ -167,9 +164,14 @@ class SymqgIndex {
         wrapper.max_degree_ = wrapper.index_->degree_bound();
         wrapper.metric_type_ = wrapper.index_->metric_type();
         wrapper.quantization_bits_ = wrapper.index_->quantization_bits();
-        // Files store neither the seed nor the construction settings.
-        wrapper.ef_construction_.reset();
+        // Format-2 files record the seed and the construction settings; earlier files
+        // record neither.
+        wrapper.seed_ = wrapper.index_->seed();
+        wrapper.ef_construction_ = wrapper.index_->ef_construction();
         wrapper.init_.reset();
+        if (const auto init = wrapper.index_->initialization(); init.has_value()) {
+            wrapper.init_ = *init == symqg::QGInitialization::PiPNN ? "pipnn" : "random";
+        }
         return wrapper;
     }
 
@@ -314,7 +316,7 @@ class SymqgIndex {
     // Settings of the current graph, or of the next add; unknown after load.
     std::optional<size_t> ef_construction_ = kDefaultEfConstruction;
     std::optional<std::string> init_ = "pipnn";
-    std::optional<uint32_t> seed_;  // Unknown for loaded indexes.
+    std::optional<uint32_t> seed_;  // Unknown for files from releases up to 0.8.
     bool seed_given_ = false;       // The user chose the seed.
     mutable IndexAccess access_;
     std::unique_ptr<symqg::QuantizedGraph<float>> index_;
@@ -344,9 +346,9 @@ ef_construction : int, optional
     Default is 200.
 init : {'pipnn', 'random'}, optional
     Keyword-only. Graph initialization method. Default is 'pipnn'.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-    Vectors are not automatically normalized for cosine similarity.
+metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    Keyword-only. Squared L2, inner-product or cosine distance. Default is
+    'l2'. 'cosine' scales data and queries to unit length.
 seed : int, optional
     Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
     None (default) draws one at random; the seed property reports it.
@@ -394,16 +396,16 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n_queries, k)
+ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
+    Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+    1 - cos for cosine. These are distances, not similarity scores.
 
 Notes
 -----
 Returns (ids, distances), in that order. When the graph reaches fewer than k
-points, the remaining neighbors have ID 4294967295 and distance inf; test
+points, the remaining neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes and value ranges are
 checked at runtime, not by static type checkers.)doc";
 
@@ -469,7 +471,7 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n,)
+ids : ndarray of int64, shape (n,)
     Point IDs, the row numbers of data.
 
 Notes
@@ -510,7 +512,8 @@ path : str, bytes, bytearray, or os.PathLike
 
 Notes
 -----
-The saved state includes the rotation used to build the index.)doc"
+The saved state includes the rotation used to build the index and its seed;
+releases up to 0.8 cannot read the file.)doc"
         )
         .def_static(
             "load",
@@ -548,12 +551,12 @@ index : SymqgIndex
         .def_property_readonly(
             "ef_construction",
             &SymqgIndex::ef_construction,
-            R"doc(Construction search breadth of the current graph or the next add, or None for an index loaded from disk.)doc"
+            R"doc(Construction search breadth of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property_readonly(
             "init",
             &SymqgIndex::init,
-            R"doc(Graph initialization method of the current graph or the next add, or None for an index loaded from disk.)doc"
+            R"doc(Graph initialization method of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property_readonly(
             "num_points",
@@ -574,7 +577,9 @@ index : SymqgIndex
             R"doc(Always True: SymphonyQG needs no training.)doc"
         )
         .def_property_readonly(
-            "metric", &SymqgIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+            "metric",
+            &SymqgIndex::metric,
+            R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         )
         .def_property_readonly(
             "nbits",
@@ -585,6 +590,6 @@ index : SymqgIndex
         .def_property_readonly(
             "seed",
             &SymqgIndex::seed,
-            R"doc(Rotation and graph-construction seed, or None for an index loaded from disk.)doc"
+            R"doc(Rotation and graph-construction seed, or None for an index loaded from a file from a release up to 0.8.)doc"
         );
 }

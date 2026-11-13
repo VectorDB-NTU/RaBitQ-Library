@@ -28,9 +28,12 @@ interchange format for arbitrary architectures. Python also tests synthetic IVF-
 v1 headers around the frozen historical payload, unknown versions, and invalid
 padding. That header test is distinct from release-produced fixtures.
 
-The small IVF-RaBitQ fixtures use Flat centroid routing. Current round-trip and failure
-tests exercise explicit HNSW routing and its sidecar; historical auto-selected
-HNSW routing at 20,000 clusters is not represented by these small fixtures.
+The small IVF-RaBitQ fixtures use Flat centroid routing. The [v0.8.3](v0.8.3/README.md)
+set adds the last layouts before index format 2: IVF-RaBitQ with Flat RaBitQ and HNSW
+routing (with its `.hnsw` sidecar), HNSW-RaBitQ at 1, 5 and 9 bits, and SymphonyQG raw,
+4- and 8-bit with FHT/Kac and matrix rotation. Historical auto-selected HNSW routing at 20,000 clusters is
+not represented by fixtures; Python tests cover it with headers built around the
+v0.8.3 layout.
 
 ## Deliberate regeneration
 

@@ -54,8 +54,8 @@ def test_path_roundtrip(built_index, tmp_path, kind):
     assert filename.is_file()
     if isinstance(value, FilesystemPath):
         assert value.calls == 1
-    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
-        assert Path(str(filename) + ".hnsw").is_file()
+    # Index format 2 keeps the HNSW routing graph inside the index file.
+    assert not Path(str(filename) + ".hnsw").exists()
     restored = type(index).load(value)
     if isinstance(value, FilesystemPath):
         assert value.calls == 2
@@ -104,8 +104,7 @@ def test_path_preserves_undecodable_bytes(built_index, tmp_path):
     np.testing.assert_array_equal(
         restored.search(queries, 3, 32)[0], index.search(queries, 3, 32)[0]
     )
-    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
-        assert os.path.isfile(raw + b".hnsw")
+    assert not os.path.exists(raw + b".hnsw")
 
 
 @pytest.mark.parametrize("built_index", ["ivf_hnsw"], indirect=True)

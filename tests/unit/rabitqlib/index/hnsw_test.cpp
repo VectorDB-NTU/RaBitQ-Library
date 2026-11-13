@@ -21,6 +21,8 @@
 #include <utility>
 #include <vector>
 
+#include "cosine.hpp"
+#include "format2_file.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -907,7 +909,7 @@ TEST_F(HnswSaveTest, ReportsWriteOrCloseFailure) {
         index_.save("/dev/full");
         FAIL() << "Saving to a full destination must fail";
     } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "HNSW failed to write index file");
+        EXPECT_STREQ(error.what(), "HNSW index file cannot be written");
     }
 }
 
@@ -926,25 +928,181 @@ TEST_F(HnswSaveTest, SuccessfulSavePreservesSearchAfterLoading) {
 
 TEST_F(HnswSaveTest, RejectsPointCountLargerThanCapacity) {
     index_.save(path_.c_str());
-    {
-        std::fstream file(path_, std::ios::binary | std::ios::in | std::ios::out);
-        const size_t invalid_capacity = 1;
-        file.write(
-            reinterpret_cast<const char*>(&invalid_capacity), sizeof(invalid_capacity)
-        );
-        ASSERT_TRUE(file.good());
-    }
+    // The capacity is the first field of the graph parameters.
+    std::string params = rabitq_test::read_format2_section(
+        path_, rabitq_test::format2::IndexKind::Hnsw, rabitq_test::kHnswSections, 512
+    );
+    rabitq_test::format2::put_u64(reinterpret_cast<uint8_t*>(params.data()), 1);
+    rabitq_test::replace_format2_section(
+        path_,
+        rabitq_test::format2::IndexKind::Hnsw,
+        rabitq_test::kHnswSections,
+        512,
+        params
+    );
 
     HierarchicalNSW loaded;
     try {
         loaded.load(path_.c_str());
         FAIL() << "Invalid HNSW point count must be rejected";
     } catch (const std::runtime_error& error) {
-        EXPECT_NE(std::string(error.what()).find("HNSW"), std::string::npos);
+        EXPECT_STREQ(error.what(), "HNSW index file has invalid graph parameters");
     }
 }
 
-TEST_F(HnswSaveTest, RejectsTruncatedRotatorWithoutLosingExistingIndex) {
+// A graph with upper layers, saved in format 2 with a known seed.
+class HnswFormat2Test : public ::testing::Test {
+   protected:
+    static constexpr size_t kDim = 64;
+    static constexpr size_t kCount = 200;
+    static constexpr size_t kSeed = 9;
+    std::vector<float> data_{std::vector<float>(kCount * kDim)};
+    std::vector<float> centroids_{std::vector<float>(2 * kDim)};
+    std::vector<PID> cluster_ids_{std::vector<PID>(kCount)};
+    HierarchicalNSW index_{kCount, kDim, 5, 4, 16, kSeed, METRIC_IP};
+    std::string path_;
+
+    void SetUp() override {
+        path_ = ::testing::TempDir() + "rabitq_hnsw_format2_" +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".index";
+        std::mt19937 generator(3);
+        std::normal_distribution<float> normal;
+        for (auto& value : data_) {
+            value = normal(generator);
+        }
+        for (size_t i = 0; i < kCount; ++i) {
+            cluster_ids_[i] = static_cast<PID>(i % 2);
+        }
+        index_.construct(
+            2, centroids_.data(), kCount, data_.data(), cluster_ids_.data(), 1, false
+        );
+        const PID removed = 5;
+        index_.remove(&removed, 1);
+        index_.save(path_.c_str());
+    }
+
+    void TearDown() override { std::remove(path_.c_str()); }
+
+    [[nodiscard]] rabitq_test::Format2Contents contents() const {
+        return rabitq_test::read_format2_file(
+            path_, rabitq_test::format2::IndexKind::Hnsw, rabitq_test::kHnswSections
+        );
+    }
+
+    void expect_rejected(
+        const rabitq_test::Format2Contents& damaged, const std::string& message
+    ) {
+        rabitq_test::write_format2_file(path_, damaged);
+        HierarchicalNSW loaded;
+        try {
+            loaded.load(path_.c_str());
+            ADD_FAILURE() << "accepted: " << message;
+        } catch (const std::runtime_error& error) {
+            EXPECT_EQ(std::string(error.what()), message);
+        }
+    }
+};
+
+TEST_F(HnswFormat2Test, RoundTripsTheGraphAndRecordsTheSeed) {
+    const auto saved = contents();
+    EXPECT_EQ(saved.header.index_kind, rabitq_test::format2::IndexKind::Hnsw);
+    EXPECT_EQ(saved.header.metric, rabitq_test::format2::Metric::InnerProduct);
+    EXPECT_EQ(saved.header.code_bits, 5U);
+    EXPECT_EQ(saved.header.num_points, kCount);
+    ASSERT_TRUE(saved.header.seed.has_value());
+    EXPECT_EQ(*saved.header.seed, kSeed);
+    std::vector<uint32_t> kinds;
+    for (const auto& entry : saved.sections) {
+        kinds.push_back(entry.first.kind);
+    }
+    EXPECT_EQ(kinds, (std::vector<uint32_t>{1, 512, 513, 514, 515, 516}));
+    EXPECT_FALSE(rabitq_test::Format2Contents(saved).bytes(516).empty());  // upper layers
+
+    HierarchicalNSW loaded;
+    loaded.load(path_.c_str());
+    EXPECT_EQ(loaded.seed(), std::optional<uint64_t>(kSeed));
+    EXPECT_EQ(loaded.num_points(), kCount - 1);
+    EXPECT_EQ(loaded.max_elements(), kCount);
+    EXPECT_EQ(
+        loaded.search(data_.data(), 4, 5, 32, 1), index_.search(data_.data(), 4, 5, 32, 1)
+    );
+    const std::string first = rabitq_test::Format2Contents(saved).bytes(514);
+    loaded.save(path_.c_str());
+    EXPECT_EQ(contents().bytes(514), first);
+}
+
+TEST_F(HnswFormat2Test, RejectsContentsThatDoNotFitTheGraph) {
+    const auto saved = contents();
+    auto damaged = saved;
+    damaged.remove(515);
+    expect_rejected(damaged, "HNSW index file has no section kind 515");
+
+    damaged = saved;
+    damaged.bytes(516).pop_back();
+    const size_t upper_bytes = rabitq_test::Format2Contents(saved).bytes(516).size();
+    expect_rejected(
+        damaged,
+        "HNSW index file section kind 516 has " + std::to_string(upper_bytes - 1) +
+            " bytes; expected " + std::to_string(upper_bytes)
+    );
+
+    damaged = saved;
+    rabitq_test::format2::put_u32(
+        reinterpret_cast<uint8_t*>(damaged.bytes(515).data()), 1000
+    );
+    expect_rejected(damaged, "HNSW index file has a point above the maximum level");
+
+    damaged = saved;
+    rabitq_test::format2::put_u32(
+        reinterpret_cast<uint8_t*>(damaged.bytes(512).data()) + 60, 1
+    );
+    expect_rejected(damaged, "HNSW index file has invalid graph parameters");
+
+    damaged = saved;
+    damaged.bytes(515).resize(4 * (kCount - 1));
+    expect_rejected(
+        damaged,
+        "HNSW index file section kind 515 has " + std::to_string(4 * (kCount - 1)) +
+            " bytes; expected " + std::to_string(4 * kCount)
+    );
+
+    // A neighbor beyond the stored points, in the first base-layer record.
+    damaged = saved;
+    char* record = damaged.bytes(514).data();
+    rabitq_test::format2::put_u32(reinterpret_cast<uint8_t*>(record), 1);  // one neighbor
+    rabitq_test::format2::put_u32(reinterpret_cast<uint8_t*>(record) + 4, kCount);
+    expect_rejected(damaged, "HNSW index file is invalid or truncated");
+}
+
+TEST_F(HnswFormat2Test, UnknownReadOnlyFeaturesAllowSearchButNoChanges) {
+    rabitq_test::patch_format2_header(path_, 24, 1, 8);  // an unknown ro_compat bit
+    HierarchicalNSW loaded;
+    ASSERT_NO_THROW(loaded.load(path_.c_str()));
+    EXPECT_EQ(
+        loaded.search(data_.data(), 2, 5, 32, 1), index_.search(data_.data(), 2, 5, 32, 1)
+    );
+    const auto expect_refused = [](const auto& operation, const std::string& name) {
+        try {
+            operation();
+            ADD_FAILURE() << name << " was allowed";
+        } catch (const std::logic_error& error) {
+            EXPECT_EQ(
+                std::string(error.what()),
+                "HNSW index was loaded from a file with features this release cannot "
+                "update, so it cannot " +
+                    name
+            );
+        }
+    };
+    const PID label = 7;
+    expect_refused([&] { loaded.add(data_.data(), 1, &label, false, 1); }, "add");
+    expect_refused([&] { loaded.resize(kCount + 10); }, "resize");
+    expect_refused([&] { loaded.remove(&label, 1); }, "remove");
+    expect_refused([&] { loaded.save((path_ + ".copy").c_str()); }, "save");
+    EXPECT_EQ(loaded.num_points(), kCount - 1);
+}
+
+TEST_F(HnswSaveTest, RejectsTruncatedFileWithoutLosingExistingIndex) {
     index_.save(path_.c_str());
     HierarchicalNSW loaded;
     loaded.load(path_.c_str());
@@ -953,11 +1111,125 @@ TEST_F(HnswSaveTest, RejectsTruncatedRotatorWithoutLosingExistingIndex) {
     std::filesystem::resize_file(path_, std::filesystem::file_size(path_) - 1);
     try {
         loaded.load(path_.c_str());
-        FAIL() << "Truncated HNSW rotator must be rejected";
+        FAIL() << "A truncated HNSW file must be rejected";
     } catch (const std::runtime_error& error) {
         EXPECT_NE(std::string(error.what()).find("HNSW"), std::string::npos);
     }
     EXPECT_EQ(loaded.search(data_.data(), 1, 2, kCount, 1), expected);
+}
+
+TEST(HnswCosineTest, MatchesInnerProductOverNormalizedVectors) {
+    constexpr size_t kDim = 65, kCount = 200, kQueries = 4, kClusters = 4;
+    std::mt19937 generator(41);
+    std::normal_distribution<float> normal;
+    std::vector<float> raw((kCount + kQueries) * kDim);
+    for (auto& value : raw) {
+        value = normal(generator);
+    }
+    const auto rows = rabitq_test::rescaled_rows(raw, kDim);
+    const std::vector<float> points(rows.begin(), rows.begin() + kCount * kDim);
+    const std::vector<float> queries(rows.begin() + kCount * kDim, rows.end());
+    const auto unit_points = rabitq_test::normalized_rows(points, kDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDim);
+    auto cp = default_training_parameters(METRIC_COSINE, 7);
+    cp.num_threads = 1;
+    const rabitq_test::TempFile cosine_file("rabitq_hnsw_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_hnsw_cosine_ip.index");
+    const rabitq_test::TempFile damaged_file("rabitq_hnsw_cosine_damaged.index");
+    for (const size_t total_bits : {size_t{1}, size_t{5}}) {
+        SCOPED_TRACE(total_bits);
+        HierarchicalNSW cosine(kCount, kDim, total_bits, 8, 50, 7, METRIC_COSINE);
+        cosine.train(kClusters, kCount, points.data(), cp);
+        cosine.add(points.data(), kCount, nullptr, false, 1);
+        HierarchicalNSW ip(kCount, kDim, total_bits, 8, 50, 7, METRIC_IP);
+        ip.train(kClusters, kCount, unit_points.data(), cp);
+        ip.add(unit_points.data(), kCount, nullptr, false, 1);
+        EXPECT_EQ(cosine.metric_type(), METRIC_COSINE);
+
+        cosine.save(cosine_file.path().c_str());
+        ip.save(ip_file.path().c_str());
+        rabitq_test::expect_same_sections_except_metric(
+            cosine_file.path(),
+            ip_file.path(),
+            rabitq_test::format2::IndexKind::Hnsw,
+            rabitq_test::kHnswSections
+        );
+        HierarchicalNSW loaded;
+        loaded.load(cosine_file.path().c_str());
+        EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+        const auto expected = ip.search(unit_queries.data(), kQueries, 10, 64, 1);
+        EXPECT_EQ(cosine.search(queries.data(), kQueries, 10, 64, 1), expected);
+        EXPECT_EQ(loaded.search(queries.data(), kQueries, 10, 64, 2), expected);
+
+        // A failed load keeps the metric; loading an inner-product file replaces it.
+        {
+            std::ofstream damaged(damaged_file.path(), std::ios::binary);
+            damaged << "not an index";
+        }
+        EXPECT_THROW(loaded.load(damaged_file.path().c_str()), std::runtime_error);
+        EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+        loaded.load(ip_file.path().c_str());
+        EXPECT_EQ(loaded.metric_type(), METRIC_IP);
+        EXPECT_EQ(
+            loaded.search(queries.data(), kQueries, 10, 64, 1),
+            ip.search(queries.data(), kQueries, 10, 64, 1)
+        );
+    }
+
+    // construct normalizes its data too; the centroids are used as given.
+    std::vector<PID> cosine_ids(kCount, 0);
+    std::vector<PID> ip_ids(kCount, 0);
+    const std::vector<float> centroids(unit_points.begin(), unit_points.begin() + kDim);
+    HierarchicalNSW cosine(kCount, kDim, 5, 8, 50, 7, METRIC_COSINE);
+    cosine.construct(1, centroids.data(), kCount, points.data(), cosine_ids.data(), 1);
+    HierarchicalNSW ip(kCount, kDim, 5, 8, 50, 7, METRIC_IP);
+    ip.construct(1, centroids.data(), kCount, unit_points.data(), ip_ids.data(), 1);
+    EXPECT_EQ(
+        cosine.search(queries.data(), kQueries, 10, 64, 1),
+        ip.search(unit_queries.data(), kQueries, 10, 64, 1)
+    );
+}
+
+TEST(HnswCosineTest, ChecksTrainingDataAndEstimatesZeroVectors) {
+    constexpr size_t kDim = 64, kCount = 100;
+    std::mt19937 generator(45);
+    std::normal_distribution<float> normal;
+    std::vector<float> points(kCount * kDim);
+    for (auto& value : points) {
+        value = normal(generator);
+    }
+    auto bad = points;
+    bad[3] = std::numeric_limits<float>::infinity();
+    HierarchicalNSW untrained(kCount, kDim, 9, 8, 50, 7, METRIC_COSINE);
+    try {
+        untrained.train(
+            2, kCount, bad.data(), default_training_parameters(METRIC_COSINE, 7)
+        );
+        ADD_FAILURE() << "trained on an infinite value";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "HNSW training data must contain only finite values");
+    }
+
+    // Point 0 is zero. At 9 bits, estimates of its true distance 1 are close to 1.
+    std::fill(points.begin(), points.begin() + kDim, 0.0F);
+    HierarchicalNSW index(kCount, kDim, 9, 8, 50, 7, METRIC_COSINE);
+    index.train(2, kCount, points.data(), default_training_parameters(METRIC_COSINE, 7));
+    index.add(points.data(), kCount, nullptr, false, 1);
+    const std::vector<float> zero(kDim, 0.0F);
+    const auto from_zero = index.search(zero.data(), 1, 10, 64, 1);
+    ASSERT_EQ(from_zero[0].size(), 10U);
+    for (const auto& [distance, id] : from_zero[0]) {
+        EXPECT_NEAR(distance, 1.0F, 0.05F) << id;
+    }
+    const auto from_point = index.search(points.data() + kDim, 1, kCount, kCount, 1);
+    bool found = false;
+    for (const auto& [distance, id] : from_point[0]) {
+        if (id == 0) {
+            found = true;
+            EXPECT_NEAR(distance, 1.0F, 0.05F);
+        }
+    }
+    EXPECT_TRUE(found);
 }
 
 using Results = std::vector<std::vector<std::pair<float, PID>>>;

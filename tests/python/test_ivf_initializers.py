@@ -4,6 +4,7 @@ import struct
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import format2_file
 import numpy as np
 import pytest
 from rabitqlib import IvfIndex
@@ -79,7 +80,7 @@ def test_hnsw_concurrent_routing_windows_match_serial(tmp_path, metric):
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 @pytest.mark.parametrize("damage", ["entry", "neighbor", "level"])
-def test_hnsw_rejects_corrupt_sidecar(tmp_path, metric, damage):
+def test_hnsw_rejects_corrupt_routing_graph(tmp_path, metric, damage):
     count, dim = 64, 64
     data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
     index = IvfIndex(dim, count, nbits=4, metric=metric, initializer="hnsw")
@@ -88,8 +89,10 @@ def test_hnsw_rejects_corrupt_sidecar(tmp_path, metric, damage):
     expected = index.search(data[:2], 1, 4, num_threads=1)
     path = tmp_path / "centroids.index"
     index.save(str(path))
-    sidecar = Path(str(path) + ".hnsw")
-    original = sidecar.read_bytes()
+    saved = path.read_bytes()
+    # The graph is hnswlib's layout, in a section that has no checksum.
+    graph_offset, _ = format2_file.sections(saved)[format2_file.IVF_HNSW_ROUTING]
+    original = format2_file.section(saved, format2_file.IVF_HNSW_ROUTING)
     damaged = bytearray(original)
     # hnswlib writes native POD fields individually, with no inter-field padding.
     size_t_bytes = struct.calcsize("@N")
@@ -108,10 +111,12 @@ def test_hnsw_rejects_corrupt_sidecar(tmp_path, metric, damage):
         max_level = struct.unpack_from("@i", original, level_offset)[0]
         struct.pack_into("@i", damaged, level_offset, max_level + 1)
         message = "Invalid HNSW centroid level structure"
-    sidecar.write_bytes(damaged)
+    file = bytearray(saved)
+    file[graph_offset : graph_offset + len(damaged)] = damaged
+    path.write_bytes(file)
     with pytest.raises(RuntimeError, match=f"^{message}$"):
         IvfIndex.load(str(path))
-    sidecar.write_bytes(original)
+    path.write_bytes(saved)
     loaded = IvfIndex.load(str(path))
     actual = loaded.search(data[:2], 1, 4, num_threads=1)
     for left, right in zip(expected, actual):
@@ -147,16 +152,12 @@ def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     path = tmp_path / "索引.index"
     index.save(str(path))
     payload = path.read_bytes()
-    assert int.from_bytes(payload[8:12], "little") == 2
-    assert (
-        int.from_bytes(payload[24:28], "little")
-        == {
-            "flat": 1,
-            "flat_rabitq": 2,
-            "hnsw": 3,
-        }[resolved]
-    )
-    assert Path(str(path) + ".hnsw").exists() == (resolved == "hnsw")
+    assert payload[:8] == format2_file.MAGIC
+    params = format2_file.section(payload, format2_file.IVF_PARAMS)
+    stored = {"flat": 1, "flat_rabitq": 2, "hnsw": 3}[resolved]
+    assert int.from_bytes(params[8:12], "little") == stored
+    assert format2_file.IVF_ROUTING[stored] in format2_file.sections(payload)
+    assert not Path(str(path) + ".hnsw").exists()
     loaded = IvfIndex.load(str(path))
     assert loaded.initializer == resolved
     actual = loaded.search(queries, 3, 7, num_threads=2)
@@ -225,9 +226,17 @@ def test_legacy_formats_infer_historical_initializer(
     index, queries = historical_ivf
     path = tmp_path / "v1.index"
     index.save(str(path))
-    # v2 must honor the stored type even when today's Auto would choose differently.
+    # Format 2 honors the stored type even when today's Auto would choose differently.
     assert IvfIndex.load(str(path)).initializer == index.initializer
-    payload = bytearray(path.read_bytes())
+    # Build the earlier layouts from the RABQIDX1 version 2 layout of 0.8. HNSW
+    # routing, chosen from 20000 clusters, lives in the sidecar of all three.
+    main, sidecar = format2_file.to_rabqidx1(path.read_bytes())
+    if sidecar is not None:
+        Path(str(path) + ".hnsw").write_bytes(sidecar)
+    path.write_bytes(main)
+    # RABQIDX1 version 2 also records the routing type.
+    assert IvfIndex.load(str(path)).initializer == index.initializer
+    payload = bytearray(main)
     if format_version == "v1":
         # v1 has the same payload but no initializer field after padded_dim.
         del payload[24:28]
@@ -276,12 +285,31 @@ def test_initializer_rejects_invalid_persistence(tmp_path, damage):
     index.save(str(path))
     payload = bytearray(path.read_bytes())
     if damage in ("auto", "unknown"):
-        payload[24:28] = (0 if damage == "auto" else 99).to_bytes(4, "little")
+        offset, _ = format2_file.sections(payload)[format2_file.IVF_PARAMS]
+        value = 0 if damage == "auto" else 99
+        payload[offset + 8 : offset + 12] = value.to_bytes(4, "little")
+        format2_file.reseal(payload)
+        message = "IVF index file has invalid routing parameters"
     else:
-        # The rotator is followed by raw centroids, mean, and the physical code batch.
-        payload = payload[: 28 + 4 * 8 + 2 + 8 + 96 // 2 + 96 * 4 + 1]
+        # The routing data holds the centroids, the mean and the physical code batch.
+        offset, size = format2_file.sections(payload)[259]
+        payload = payload[: offset + size - 1]
+        message = "IVF index file section kind 259 lies outside the file"
     path.write_bytes(payload)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match=f"^{message}$"):
+        IvfIndex.load(str(path))
+
+    # The RABQIDX1 layout of earlier releases rejects the same damage.
+    index.save(str(path))
+    legacy = bytearray(format2_file.to_rabqidx1(path.read_bytes())[0])
+    if damage in ("auto", "unknown"):
+        legacy[24:28] = (0 if damage == "auto" else 99).to_bytes(4, "little")
+        message = "^Invalid IVF initializer type in index file$"
+    else:
+        legacy = legacy[: 28 + 4 * 8 + 2 + 8 + 96 // 2 + 96 * 4 + 1]
+        message = None  # the stream failure message depends on the standard library
+    path.write_bytes(legacy)
+    with pytest.raises(RuntimeError, match=message):
         IvfIndex.load(str(path))
 
 

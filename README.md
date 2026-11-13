@@ -41,8 +41,8 @@ Earlier versions: [all releases](https://github.com/VectorDB-NTU/RaBitQ-Library/
 ## Vector indexes
 
 Use the included indexes when you want construction, search, and save/load in one
-library. All three support L2 and inner product; normalize vectors for cosine
-search. Their structures, storage costs, and search parameters offer different
+library. All three support L2, inner product and cosine, which normalizes vectors
+for you. Their structures, storage costs, and search parameters offer different
 QPS–recall tradeoffs.
 
 | Index | Search approach | Storage and updates |

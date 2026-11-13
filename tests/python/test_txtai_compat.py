@@ -13,6 +13,9 @@ import numpy as np
 import pytest
 from rabitqlib import HnswIndex, IvfIndex
 
+# txtai's filter for missing results. Since 0.9 a missing result is -1, which this no
+# longer matches; these searches never leave slots unfilled. Follow txtai's filter once
+# its first compatible release exists (#213).
 SENTINEL = 0xFFFFFFFF
 
 

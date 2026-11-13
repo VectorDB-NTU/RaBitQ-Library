@@ -73,7 +73,7 @@ class IvfIndex {
         const std::string& initializer,
         const py::object& seed
     ) {
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         const auto initializer_type = initializer_from_string(initializer);
         const auto rotation_seed =
             seed.is_none() ? std::random_device{}()
@@ -102,7 +102,7 @@ class IvfIndex {
         const std::string& metric,
         const std::string& initializer
     ) {
-        const auto metric_type = metric_from_string(metric);
+        const auto metric_type = index_metric_from_string(metric);
         IvfIndex wrapper;
         wrapper.index_ = std::make_unique<ivf::IVF>(
             max_elements,
@@ -203,7 +203,7 @@ class IvfIndex {
         }
     }
 
-    py::array_t<PID> add(
+    py::array_t<int64_t> add(
         py::handle data,
         const py::object& cluster_ids,
         std::optional<size_t> num_threads,
@@ -237,10 +237,10 @@ class IvfIndex {
 
         const size_t first = index_->num_stored_points();
         // Allocate the returned IDs before committing any changes to the index.
-        auto ids = py::array_t<PID>(static_cast<py::ssize_t>(rows));
+        auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
         auto* ids_data = ids.mutable_data();
         for (size_t i = 0; i < rows; ++i) {
-            ids_data[i] = static_cast<PID>(first + i);
+            ids_data[i] = static_cast<int64_t>(first + i);
         }
 
         const auto* data_ptr = data_array.data();
@@ -322,7 +322,7 @@ class IvfIndex {
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         auto output = unfilled_search_results(num_queries, k);
-        auto* ids_data = output.ids.mutable_data();
+        auto* ids_data = output.ids.data();
         auto* distances_data = output.distances.mutable_data();
 
         const auto* queries_data = query_array.data();
@@ -340,7 +340,7 @@ class IvfIndex {
             );
         }
 
-        return py::make_tuple(output.ids, output.distances);
+        return output.to_python();
     }
 
     void save(py::handle path) const {
@@ -362,8 +362,12 @@ class IvfIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
         }
-        wrapper.cp_ = untrainable_parameters(wrapper.index_->metric_type());
         wrapper.builds_by_construct_ = true;
+        wrapper.seed_ = wrapper.index_->seed();  // recorded by format-2 files
+        wrapper.cp_ = default_training_parameters(
+            wrapper.index_->metric_type(),
+            wrapper.seed_.value_or(rabitqkmeans::RaBitQKMeansParameters{}.seed)
+        );
         return wrapper;
     }
 
@@ -461,7 +465,7 @@ class IvfIndex {
     mutable IndexAccess access_;
     std::unique_ptr<ivf::IVF> index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
-    std::optional<uint32_t> seed_;  // Unknown for point-count and loaded indexes.
+    std::optional<uint32_t> seed_;  // Unknown for point-count indexes and 0.8 files.
     // Point-count and loaded indexes build by construct, never by training.
     bool builds_by_construct_ = false;
 };
@@ -484,9 +488,9 @@ num_clusters : int
 nbits : int, optional
     Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
     float32 vectors with one-bit filtering and raw reranking. Default is 7.
-metric : {'l2', 'ip', 'innerproduct'}, optional
-    Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-    automatically normalized for cosine similarity.
+metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
+    scales data and queries to unit length.
 initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
     Centroid routing strategy. Default is 'auto'.
 seed : int, optional
@@ -535,7 +539,7 @@ fast_quantization : bool, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n,)
+ids : ndarray of int64, shape (n,)
     Assigned point IDs.
 
 Notes
@@ -726,16 +730,16 @@ num_threads : int, optional
 
 Returns
 -------
-ids : ndarray of uint32, shape (n_queries, k)
+ids : ndarray of int64, shape (n_queries, k)
     Point IDs of the selected neighbors.
 distances : ndarray of float32, shape (n_queries, k)
-    Lower values are better; squared L2 estimates for l2 and inner-product
-    distance estimates for ip. These are distances, not similarity scores.
+    Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+    1 - cos for cosine. These are distances, not similarity scores.
 
 Notes
 -----
 Requires a trained or loaded index. Returns (ids, distances), in that
-order. Missing neighbors have ID 4294967295 and distance inf; test
+order. Missing neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
         )
@@ -754,7 +758,7 @@ path : str, bytes, bytearray, or os.PathLike
 Notes
 -----
 A trained index without vectors raises RuntimeError; add vectors first.
-IVF with HNSW centroid routing also writes its required sidecar file.)doc"
+The one file includes HNSW centroid routing; releases up to 0.8 cannot read it.)doc"
         )
         .def_static(
             "load",
@@ -771,7 +775,12 @@ path : str, bytes, bytearray, or os.PathLike
 Returns
 -------
 index : IvfIndex
-    A trained index ready for search.)doc"
+    A trained index ready for search.
+
+Notes
+-----
+Files from releases up to 0.8 with HNSW centroid routing also need the
+accompanying ``<path>.hnsw`` file.)doc"
         )
         .def(
             "__repr__",
@@ -815,17 +824,19 @@ index : IvfIndex
         .def_property_readonly(
             "seed",
             &IvfIndex::seed,
-            R"doc(Rotation seed, or None for an index loaded from disk or created in the 0.7 form.)doc"
+            R"doc(Rotation seed, or None for an index loaded from a file from a release up to 0.8 or created in the 0.7 form.)doc"
         )
         .def_property(
             "cp",
             &IvfIndex::cp,
             &IvfIndex::set_cp,
             py::return_value_policy::reference_internal,
-            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed.)doc"
+            R"doc(Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the index seed.)doc"
         )
         .def_property_readonly(
-            "metric", &IvfIndex::metric, R"doc(Canonical metric name: 'l2' or 'ip'.)doc"
+            "metric",
+            &IvfIndex::metric,
+            R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         )
         .def_property_readonly(
             "initializer",

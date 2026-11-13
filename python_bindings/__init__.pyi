@@ -15,6 +15,7 @@ __version__: str
 
 __all__ = [
     "FinalAssignmentMode",
+    "FormatError",
     "HnswIndex",
     "IvfIndex",
     "QGKMeans",
@@ -28,11 +29,14 @@ __all__ = [
 
 _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
-_Metric: TypeAlias = Literal["l2", "ip", "innerproduct"]
+_Metric: TypeAlias = Literal["l2", "ip", "innerproduct", "cosine"]
 _Initializer: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
 _QGInit: TypeAlias = Literal["pipnn", "random"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
+
+class FormatError(ValueError, RuntimeError):
+    """A damaged or mismatched index file or serialized byte string, or one this release cannot read. A subclass of both ValueError and RuntimeError."""
 
 # pybind11 enums are not subclasses of enum.Enum.
 class FinalAssignmentMode:
@@ -85,9 +89,9 @@ class IvfIndex:
     nbits : int, optional
         Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
         float32 vectors with one-bit filtering and raw reranking. Default is 7.
-    metric : {'l2', 'ip', 'innerproduct'}, optional
-        Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-        automatically normalized for cosine similarity.
+    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
+        scales data and queries to unit length.
     initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
         Centroid routing strategy. Default is 'auto'.
     seed : int, optional
@@ -140,9 +144,9 @@ class IvfIndex:
         nbits : int, optional
             Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
             float32 vectors with one-bit filtering and raw reranking. Default is 7.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
-            automatically normalized for cosine similarity.
+        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+            Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
+            scales data and queries to unit length.
         initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
             Centroid routing strategy. Default is 'auto'.
         seed : int, optional
@@ -208,17 +212,17 @@ class IvfIndex:
 
     @property
     def seed(self) -> int | None:
-        """Rotation seed, or None for an index loaded from disk or created in the 0.7 form."""
+        """Rotation seed, or None for an index loaded from a file from a release up to 0.8 or created in the 0.7 form."""
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
-        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the index seed."""
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the index seed."""
 
     @cp.setter
     def cp(self, value: RaBitQKMeansParameters) -> None: ...
     @property
-    def metric(self) -> Literal["l2", "ip"]:
-        """Canonical metric name: 'l2' or 'ip'."""
+    def metric(self) -> Literal["l2", "ip", "cosine"]:
+        """Canonical metric name: 'l2', 'ip' or 'cosine'."""
 
     @property
     def nbits(self) -> int:
@@ -319,7 +323,7 @@ class IvfIndex:
         cluster_ids: _IntegerIds | None = None,
         num_threads: SupportsIndex | None = None,
         fast_quantization: bool | np.bool_ = False,
-    ) -> npt.NDArray[np.uint32]:
+    ) -> npt.NDArray[np.int64]:
         """Add vectors, training the index first if needed.
 
         Parameters
@@ -339,7 +343,7 @@ class IvfIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n,)
+        ids : ndarray of int64, shape (n,)
             Assigned point IDs.
 
         Notes
@@ -365,7 +369,7 @@ class IvfIndex:
         cluster_ids: _IntegerIds | None,
         num_threads: SupportsIndex = ...,
         fast_quantization: bool | np.bool_ = ...,
-    ) -> npt.NDArray[np.uint32]: ...
+    ) -> npt.NDArray[np.int64]: ...
     def remove(self, ids: _IntegerIds) -> int:
         """Exclude point IDs from subsequent search results.
 
@@ -392,7 +396,7 @@ class IvfIndex:
         nprobe: SupportsIndex | None = None,
         high_accuracy: bool | np.bool_ | None = None,
         num_threads: SupportsIndex | None = None,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
         Parameters
@@ -415,16 +419,16 @@ class IvfIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n_queries, k)
+        ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
+            Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+            1 - cos for cosine. These are distances, not similarity scores.
 
         Notes
         -----
         Requires a trained or loaded index. Returns (ids, distances), in that
-        order. Missing neighbors have ID 4294967295 and distance inf; test
+        order. Missing neighbors have ID -1 and distance inf; test
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
@@ -441,7 +445,7 @@ class IvfIndex:
         Notes
         -----
         A trained index without vectors raises RuntimeError; add vectors first.
-        IVF with HNSW centroid routing also writes its required sidecar file.
+        The one file includes HNSW centroid routing; releases up to 0.8 cannot read it.
         """
 
     @staticmethod
@@ -458,6 +462,11 @@ class IvfIndex:
         -------
         index : IvfIndex
             A trained index ready for search.
+
+        Notes
+        -----
+        Files from releases up to 0.8 with HNSW centroid routing also need the
+        accompanying ``<path>.hnsw`` file.
         """
 
     @property
@@ -497,9 +506,9 @@ class HnswIndex:
         2 * M edges. Default is 16.
     ef_construction : int, optional
         Keyword-only. Construction search breadth. Default is 200.
-    metric : {'l2', 'ip', 'innerproduct'}, optional
-        Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-        Vectors are not automatically normalized for cosine similarity.
+    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        Keyword-only. Squared L2, inner-product or cosine distance. Default is
+        'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
         Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
         32 bits). Default is 100.
@@ -560,9 +569,9 @@ class HnswIndex:
             2 * M edges. Default is 16.
         ef_construction : int, optional
             Keyword-only. Construction search breadth. Default is 200.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-            Vectors are not automatically normalized for cosine similarity.
+        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+            Keyword-only. Squared L2, inner-product or cosine distance. Default is
+            'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional
             Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
             32 bits). Default is 100.
@@ -643,17 +652,17 @@ class HnswIndex:
 
     @property
     def seed(self) -> int | None:
-        """Graph and rotation seed, or None for an index loaded from disk."""
+        """Graph and rotation seed, or None for an index loaded from a file from a release up to 0.8."""
 
     @property
     def cp(self) -> RaBitQKMeansParameters:
-        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product, and seed equal to the low 32 bits of the index seed."""
+        """Clustering parameters train uses, a RaBitQKMeansParameters. Defaults: niter 10, max_points_per_centroid 256, spherical for inner product and cosine, and seed equal to the low 32 bits of the index seed."""
 
     @cp.setter
     def cp(self, value: RaBitQKMeansParameters) -> None: ...
     @property
-    def metric(self) -> Literal["l2", "ip"]:
-        """Canonical metric name: 'l2' or 'ip'."""
+    def metric(self) -> Literal["l2", "ip", "cosine"]:
+        """Canonical metric name: 'l2', 'ip' or 'cosine'."""
 
     @property
     def nbits(self) -> int:
@@ -754,7 +763,7 @@ class HnswIndex:
         cluster_ids: _IntegerIds | None = None,
         num_threads: SupportsIndex | None = None,
         fast_quantization: bool | np.bool_ = False,
-    ) -> npt.NDArray[np.uint32]:
+    ) -> npt.NDArray[np.int64]:
         """Add vectors, training the index first if needed.
 
         Parameters
@@ -774,7 +783,7 @@ class HnswIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n,)
+        ids : ndarray of int64, shape (n,)
             Assigned point IDs.
 
         Notes
@@ -802,7 +811,7 @@ class HnswIndex:
         cluster_ids: _IntegerIds | None,
         num_threads: SupportsIndex = ...,
         fast_quantization: bool | np.bool_ = ...,
-    ) -> npt.NDArray[np.uint32]: ...
+    ) -> npt.NDArray[np.int64]: ...
     def remove(self, ids: _IntegerIds) -> int:
         """Exclude point IDs from subsequent search results.
 
@@ -828,7 +837,7 @@ class HnswIndex:
         k: SupportsIndex,
         ef: SupportsIndex | None = None,
         num_threads: SupportsIndex | None = None,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
         Parameters
@@ -848,16 +857,16 @@ class HnswIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n_queries, k)
+        ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
+            Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+            1 - cos for cosine. These are distances, not similarity scores.
 
         Notes
         -----
         Requires a trained or loaded index. Returns (ids, distances), in that
-        order. Missing neighbors have ID 4294967295 and distance inf; test
+        order. Missing neighbors have ID -1 and distance inf; test
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
@@ -874,7 +883,8 @@ class HnswIndex:
         Notes
         -----
         A trained index without vectors raises RuntimeError; add vectors first.
-        The saved state includes the rotation used to build the index.
+        The saved state includes the rotation used to build the index and its seed;
+        releases up to 0.8 cannot read the file.
         """
 
     @staticmethod
@@ -920,9 +930,9 @@ class SymqgIndex:
         Default is 200.
     init : {'pipnn', 'random'}, optional
         Keyword-only. Graph initialization method. Default is 'pipnn'.
-    metric : {'l2', 'ip', 'innerproduct'}, optional
-        Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-        Vectors are not automatically normalized for cosine similarity.
+    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        Keyword-only. Squared L2, inner-product or cosine distance. Default is
+        'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
         Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
         None (default) draws one at random; the seed property reports it.
@@ -981,9 +991,9 @@ class SymqgIndex:
             Default is 200.
         init : {'pipnn', 'random'}, optional
             Keyword-only. Graph initialization method. Default is 'pipnn'.
-        metric : {'l2', 'ip', 'innerproduct'}, optional
-            Keyword-only. Squared L2 or inner-product distance. Default is 'l2'.
-            Vectors are not automatically normalized for cosine similarity.
+        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+            Keyword-only. Squared L2, inner-product or cosine distance. Default is
+            'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional
             Keyword-only. Rotation and graph-construction seed in [0, 2**32 - 1].
             None (default) draws one at random; the seed property reports it.
@@ -1061,8 +1071,8 @@ class SymqgIndex:
         """Deprecated since 0.8: whether the index holds a graph; use len()."""
 
     @property
-    def metric(self) -> Literal["l2", "ip"]:
-        """Canonical metric name: 'l2' or 'ip'."""
+    def metric(self) -> Literal["l2", "ip", "cosine"]:
+        """Canonical metric name: 'l2', 'ip' or 'cosine'."""
 
     @property
     def max_degree(self) -> int:
@@ -1070,11 +1080,11 @@ class SymqgIndex:
 
     @property
     def ef_construction(self) -> int | None:
-        """Construction search breadth of the current graph or the next add, or None for an index loaded from disk."""
+        """Construction search breadth of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8."""
 
     @property
     def init(self) -> _QGInit | None:
-        """Graph initialization method of the current graph or the next add, or None for an index loaded from disk."""
+        """Graph initialization method of the current graph or the next add, or None for an index loaded from a file from a release up to 0.8."""
 
     @property
     def nbits(self) -> int:
@@ -1090,7 +1100,7 @@ class SymqgIndex:
 
     @property
     def seed(self) -> int | None:
-        """Rotation and graph-construction seed, or None for an index loaded from disk."""
+        """Rotation and graph-construction seed, or None for an index loaded from a file from a release up to 0.8."""
 
     def train(
         self, x: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
@@ -1115,7 +1125,7 @@ class SymqgIndex:
 
     def add(
         self, data: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
-    ) -> npt.NDArray[np.uint32]:
+    ) -> npt.NDArray[np.int64]:
         """Build the graph from all vectors.
 
         Parameters
@@ -1129,7 +1139,7 @@ class SymqgIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n,)
+        ids : ndarray of int64, shape (n,)
             Point IDs, the row numbers of data.
 
         Notes
@@ -1177,7 +1187,7 @@ class SymqgIndex:
         k: SupportsIndex,
         ef: SupportsIndex | None = None,
         num_threads: SupportsIndex | None = None,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
 
         Parameters
@@ -1197,16 +1207,16 @@ class SymqgIndex:
 
         Returns
         -------
-        ids : ndarray of uint32, shape (n_queries, k)
+        ids : ndarray of int64, shape (n_queries, k)
             Point IDs of the selected neighbors.
         distances : ndarray of float32, shape (n_queries, k)
-            Lower values are better; squared L2 estimates for l2 and inner-product
-            distance estimates for ip. These are distances, not similarity scores.
+            Lower values are better: squared L2 estimates for l2, 1 - dot for ip and
+            1 - cos for cosine. These are distances, not similarity scores.
 
         Notes
         -----
         Returns (ids, distances), in that order. When the graph reaches fewer than k
-        points, the remaining neighbors have ID 4294967295 and distance inf; test
+        points, the remaining neighbors have ID -1 and distance inf; test
         np.isfinite(distances) to find them. Array shapes and value ranges are
         checked at runtime, not by static type checkers.
         """
@@ -1218,7 +1228,7 @@ class SymqgIndex:
         k: SupportsIndex,
         ef: SupportsIndex,
         num_threads: SupportsIndex = 1,
-    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Deprecated since 0.8: the same as search(); use search()."""
 
     def save(self, path: _Path) -> None:
@@ -1232,7 +1242,8 @@ class SymqgIndex:
 
         Notes
         -----
-        The saved state includes the rotation used to build the index.
+        The saved state includes the rotation used to build the index and its seed;
+        releases up to 0.8 cannot read the file.
         """
 
     @staticmethod

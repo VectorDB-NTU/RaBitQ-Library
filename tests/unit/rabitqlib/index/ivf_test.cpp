@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -17,10 +18,14 @@
 #include <numeric>
 #include <optional>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "blob.hpp"
+#include "cosine.hpp"
+#include "format2_file.hpp"
 #include "ivf_search.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
@@ -48,6 +53,8 @@ struct IvfTestAccess {
     }
 
     static std::unique_ptr<Rotator<float>>& rotator(IVF& index) { return index.rotator_; }
+
+    static std::optional<uint32_t>& seed(IVF& index) { return index.seed_; }
 
     // Rotated centroid as the initializer routes with it.
     static std::vector<float> centroid(const IVF& index, PID i) {
@@ -544,7 +551,12 @@ TEST(IvfPersistenceTest, RejectsPointIdsUsingTheSearchBufferMarker) {
     file.close();
 
     IVF loaded;
-    EXPECT_THROW(loaded.load(path.c_str()), std::runtime_error);
+    try {
+        loaded.load(path.c_str());
+        ADD_FAILURE() << "a marked point ID was accepted";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "Invalid point ID in IVF index file");
+    }
 }
 
 // ── add / remove ────────────────────────────────────────────────────────────────────────
@@ -1687,7 +1699,9 @@ TEST(IvfPersistenceTest, RejectsTrailingBytesAndReportsUnopenableDestination) {
         loaded.load(path.c_str());
         ADD_FAILURE() << "trailing bytes were accepted";
     } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "IVF index file has unexpected trailing data");
+        const std::string message = error.what();
+        EXPECT_EQ(message.rfind("IVF index file is ", 0), 0U) << message;
+        EXPECT_NE(message.find(" bytes, but its sections end at "), std::string::npos);
     }
     // The failed load leaves the previously loaded index intact.
     EXPECT_EQ(loaded.num_points(), kCount);
@@ -1797,13 +1811,15 @@ TEST(IvfTrainTest, SetCentroidsAndAddMatchConstructByteForByte) {
                 << "metric=" << (metric == METRIC_L2 ? "l2" : "ip") << " bits=" << bits
             );
             IVF constructed(kCount, kDynDim, kDynNumClusters, bits, metric);
-            // Give the point-count constructor the rotation the seed selects.
+            // Give the point-count constructor the rotation the seed selects, and the
+            // seed itself, which the file records.
             IvfTestAccess::rotator(constructed)
                 .reset(
                     choose_rotator<float>(
                         kDynDim, RotatorType::FhtKacRotator, constructed.padded_dim(), kSeed
                     )
                 );
+            IvfTestAccess::seed(constructed) = kSeed;
             constructed.construct(
                 points.data(), centroids.data(), assigned.data(), false, 1
             );
@@ -1990,13 +2006,13 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
     for (auto& value : points) {
         value *= 10.0F;  // Means of these points are far from unit norm.
     }
-    for (auto metric : {METRIC_L2, METRIC_IP}) {
-        SCOPED_TRACE(metric == METRIC_L2 ? "l2" : "ip");
+    for (auto metric : {METRIC_L2, METRIC_IP, METRIC_COSINE}) {
+        SCOPED_TRACE(static_cast<int>(metric));
         const auto cp = default_training_parameters(metric, 5);
         EXPECT_EQ(cp.niter, 10U);
         EXPECT_EQ(cp.max_points_per_centroid, 256U);
         EXPECT_EQ(cp.seed, 5U);
-        EXPECT_EQ(cp.spherical, metric == METRIC_IP);
+        EXPECT_EQ(cp.spherical, metric != METRIC_L2);
 
         IVF index(kDynDim, kDynNumClusters, 4, metric, 5);
         index.train(kCount, points.data(), cp);
@@ -2007,7 +2023,7 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
             for (const float value : centroid) {
                 norm_sqr += static_cast<double>(value) * value;
             }
-            if (metric == METRIC_IP) {
+            if (metric != METRIC_L2) {
                 EXPECT_NEAR(std::sqrt(norm_sqr), 1.0, 1e-3);
             } else {
                 EXPECT_GT(std::sqrt(norm_sqr), 2.0);
@@ -2016,10 +2032,527 @@ TEST(IvfTrainTest, DefaultsUseSphericalKMeansForInnerProduct) {
     }
 }
 
+TEST(IvfCosineTest, MatchesInnerProductOverNormalizedVectors) {
+    constexpr size_t kCount = 300;
+    constexpr size_t kQueries = 4;
+    const auto points = rabitq_test::rescaled_rows(random_rows(kCount, 31), kDynDim);
+    const auto queries = rabitq_test::rescaled_rows(random_rows(kQueries, 32), kDynDim);
+    const auto unit_points = rabitq_test::normalized_rows(points, kDynDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDynDim);
+    const rabitq_test::TempFile cosine_file("rabitq_ivf_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_ivf_cosine_ip.index");
+    const rabitq_test::TempFile damaged_file("rabitq_ivf_cosine_damaged.index");
+    for (const size_t total_bits : {size_t{1}, size_t{5}, size_t{32}}) {
+        for (const auto initializer : {InitializerType::Flat, InitializerType::HNSW}) {
+            SCOPED_TRACE(
+                std::to_string(total_bits) + " bits, initializer " +
+                std::to_string(static_cast<int>(initializer))
+            );
+            // One thread, so that the HNSW routing graph is reproducible.
+            auto cp = default_training_parameters(METRIC_COSINE, 7);
+            cp.num_threads = 1;
+            IVF cosine(
+                kDynDim,
+                kDynNumClusters,
+                total_bits,
+                METRIC_COSINE,
+                7,
+                RotatorType::FhtKacRotator,
+                initializer
+            );
+            cosine.train(kCount, points.data(), cp);
+            cosine.add(points.data(), kCount, nullptr, false, 1);
+            IVF ip(
+                kDynDim,
+                kDynNumClusters,
+                total_bits,
+                METRIC_IP,
+                7,
+                RotatorType::FhtKacRotator,
+                initializer
+            );
+            ip.train(kCount, unit_points.data(), cp);
+            ip.add(unit_points.data(), kCount, nullptr, false, 1);
+            EXPECT_EQ(cosine.metric_type(), METRIC_COSINE);
+
+            // The files differ only in the metric field.
+            cosine.save(cosine_file.path().c_str());
+            ip.save(ip_file.path().c_str());
+            rabitq_test::expect_same_sections_except_metric(
+                cosine_file.path(),
+                ip_file.path(),
+                rabitq_test::format2::IndexKind::Ivf,
+                rabitq_test::kIvfSections
+            );
+
+            IVF loaded;
+            loaded.load(cosine_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+            for (size_t q = 0; q < kQueries; ++q) {
+                const auto expected =
+                    search_everything(ip, unit_queries.data() + q * kDynDim);
+                for (const IVF* index : {&cosine, &loaded}) {
+                    const auto actual =
+                        search_everything(*index, queries.data() + q * kDynDim);
+                    EXPECT_EQ(actual.ids, expected.ids);
+                    EXPECT_EQ(actual.distances, expected.distances);
+                }
+            }
+            std::vector<PID> ids(kQueries * 5);
+            std::vector<PID> expected_ids(ids.size());
+            std::vector<float> distances(ids.size());
+            std::vector<float> expected_distances(ids.size());
+            loaded.search_batch(
+                queries.data(),
+                kQueries,
+                5,
+                kDynNumClusters,
+                ids.data(),
+                distances.data(),
+                {},
+                2
+            );
+            ip.search_batch(
+                unit_queries.data(),
+                kQueries,
+                5,
+                kDynNumClusters,
+                expected_ids.data(),
+                expected_distances.data()
+            );
+            EXPECT_EQ(ids, expected_ids);
+            EXPECT_EQ(distances, expected_distances);
+
+            // A failed load keeps the metric; loading an inner-product file replaces it.
+            {
+                std::ofstream damaged(damaged_file.path(), std::ios::binary);
+                damaged << "not an index";
+            }
+            EXPECT_THROW(loaded.load(damaged_file.path().c_str()), std::runtime_error);
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+            loaded.load(ip_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_IP);
+            const auto reloaded = search_everything(loaded, queries.data());
+            EXPECT_EQ(reloaded.distances, search_everything(ip, queries.data()).distances);
+        }
+    }
+}
+
+TEST(IvfCosineTest, ChecksTrainingDataBeforeNormalizing) {
+    auto points = random_rows(40, 35);
+    points[7] = std::numeric_limits<float>::quiet_NaN();
+    IVF index(kDynDim, kDynNumClusters, 4, METRIC_COSINE, 7);
+    try {
+        index.train(40, points.data(), default_training_parameters(METRIC_COSINE, 7));
+        ADD_FAILURE() << "trained on a NaN";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "IVF training data must contain only finite values");
+    }
+    EXPECT_FALSE(index.is_trained());
+}
+
+TEST(IvfCosineTest, ZeroVectorsHaveDistanceOne) {
+    constexpr size_t kCount = 40;
+    auto points = random_rows(kCount, 33);
+    std::fill(points.begin(), points.begin() + kDynDim, 0.0F);  // point 0 is zero
+    const auto centroids = random_rows(kDynNumClusters, 34);
+    const std::vector<PID> assigned(kCount, 0);
+    // Raw reranking returns exact distances.
+    IVF index(kCount, kDynDim, kDynNumClusters, 32, METRIC_COSINE);
+    index.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const std::vector<float> zero(kDynDim, 0.0F);
+    const auto from_zero = search_everything(index, zero.data());
+    EXPECT_EQ(from_zero.distances, std::vector<float>(kCount, 1.0F));
+    const auto from_point = search_everything(index, points.data() + kDynDim);
+    EXPECT_EQ(from_point.ids.front(), 1U);
+    EXPECT_NEAR(from_point.distances.front(), 0.0F, 1e-6F);
+    const auto zero_rank = std::find(from_point.ids.begin(), from_point.ids.end(), 0U);
+    ASSERT_NE(zero_rank, from_point.ids.end());
+    EXPECT_EQ(from_point.distances[zero_rank - from_point.ids.begin()], 1.0F);
+}
+
+uint32_t get_size(const std::string& bytes, size_t offset) {
+    uint32_t value = 0;
+    std::memcpy(&value, bytes.data() + offset, sizeof(value));
+    return value;
+}
+
+// ── index format 2 ──────────────────────────────────────────────────────────────────
+
+using rabitq_test::format2::IndexKind;
+namespace f2 = rabitq_test::format2;
+
+// An index of 33 points over four clusters, with point 3 removed, saved at `path`.
+std::unique_ptr<IVF> saved_format2_index(
+    const std::string& path,
+    size_t total_bits,
+    MetricType metric,
+    InitializerType initializer,
+    RotatorType rotator = RotatorType::FhtKacRotator
+) {
+    constexpr size_t kCount = 33;
+    const auto points = random_rows(kCount, 951);
+    const auto centroids = random_rows(kDynNumClusters, 952);
+    const auto assigned = nearest_centroids(centroids, points.data(), kCount, metric);
+    auto index = std::make_unique<IVF>(
+        kCount, kDynDim, kDynNumClusters, total_bits, metric, rotator, initializer
+    );
+    index->construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    const PID removed = 3;
+    index->remove(&removed, 1);
+    index->save(path.c_str());
+    return index;
+}
+
+TEST(IvfFormat2Test, WritesOneFileWithTheSpecifiedHeaderAndSections) {
+    const rabitq_test::TempFile path_file("rabitq_ivf_format2_layout.index");
+    const std::string& path = path_file.path();
+    const struct {
+        size_t total_bits;
+        MetricType metric;
+        InitializerType initializer;
+        f2::Metric stored_metric;
+        uint32_t code_bits;
+        f2::RawType raw_type;
+        uint32_t routing;
+        bool rerank;
+    } cases[] = {
+        {5,
+         METRIC_L2,
+         InitializerType::HNSW,
+         f2::Metric::L2,
+         5,
+         f2::RawType::None,
+         260,
+         true},
+        {1,
+         METRIC_IP,
+         InitializerType::Flat,
+         f2::Metric::InnerProduct,
+         1,
+         f2::RawType::None,
+         258,
+         false},
+        {32,
+         METRIC_L2,
+         InitializerType::FlatRaBitQ,
+         f2::Metric::L2,
+         1,
+         f2::RawType::Float32,
+         259,
+         true},
+    };
+    for (const auto& c : cases) {
+        const auto index = saved_format2_index(path, c.total_bits, c.metric, c.initializer);
+        EXPECT_FALSE(std::filesystem::exists(path + ".hnsw"));
+        const auto contents =
+            rabitq_test::read_format2_file(path, IndexKind::Ivf, rabitq_test::kIvfSections);
+        const f2::Header& header = contents.header;
+        EXPECT_EQ(header.metric, c.stored_metric);
+        EXPECT_EQ(header.dim, kDynDim);
+        EXPECT_EQ(header.padded_dim, 96U);
+        EXPECT_EQ(header.code_bits, c.code_bits);
+        EXPECT_EQ(header.raw_type, c.raw_type);
+        EXPECT_EQ(header.id_bits, 32U);
+        EXPECT_FALSE(header.seed.has_value());
+        EXPECT_EQ(header.num_points, 33U);
+        std::vector<uint32_t> kinds;
+        for (const auto& entry : contents.sections) {
+            kinds.push_back(entry.first.kind);
+        }
+        std::vector<uint32_t> expected = {1, 256, 257, c.routing, 261};
+        if (c.rerank) {
+            expected.push_back(262);
+        }
+        expected.push_back(263);
+        EXPECT_EQ(kinds, expected);
+
+        IVF loaded;
+        loaded.load(path.c_str());
+        EXPECT_EQ(loaded.initializer_type(), c.initializer);
+        EXPECT_EQ(loaded.num_points(), 32U);
+        std::vector<PID> expected_ids(5), ids(5);
+        std::vector<float> expected_distances(5), distances(5);
+        const auto query = random_rows(1, 953);
+        index->search(
+            query.data(), 5, kDynNumClusters, expected_ids.data(), expected_distances.data()
+        );
+        loaded.search(query.data(), 5, kDynNumClusters, ids.data(), distances.data());
+        EXPECT_EQ(ids, expected_ids);
+        EXPECT_EQ(distances, expected_distances);
+    }
+}
+
+TEST(IvfFormat2Test, RejectsContentsThatDoNotFitAnIvfIndex) {
+    const rabitq_test::TempFile path_file("rabitq_ivf_format2_reject.index");
+    const std::string& path = path_file.path();
+    saved_format2_index(path, 5, METRIC_L2, InitializerType::HNSW);
+    const auto original =
+        rabitq_test::read_format2_file(path, IndexKind::Ivf, rabitq_test::kIvfSections);
+    IVF loaded;
+    loaded.load(path.c_str());
+
+    const auto expect_rejected =
+        [&](const char* name, auto edit, const std::string& message) {
+            SCOPED_TRACE(name);
+            auto contents = original;
+            edit(contents);
+            rabitq_test::write_format2_file(path, contents);
+            try {
+                loaded.load(path.c_str());
+                ADD_FAILURE() << "accepted";
+            } catch (const std::runtime_error& error) {
+                EXPECT_EQ(std::string(error.what()), message);
+            }
+            EXPECT_EQ(loaded.num_points(), 32U);  // the failed load keeps the loaded index
+        };
+    const auto set_u32 = [](std::string& bytes, size_t offset, uint32_t value) {
+        std::memcpy(bytes.data() + offset, &value, sizeof(value));
+    };
+    expect_rejected(
+        "64-bit IDs",
+        [](auto& c) { c.header.id_bits = 64; },
+        "IVF index file has 64-bit IDs; IVF-RaBitQ stores 32 bits"
+    );
+    expect_rejected(
+        "uint8 raw vectors",
+        [](auto& c) { c.header.raw_type = f2::RawType::Uint8; },
+        "IVF index file has uint8 raw vectors, which IVF-RaBitQ lacks"
+    );
+    expect_rejected(
+        "raw vectors with extra bits",
+        [](auto& c) { c.header.raw_type = f2::RawType::Float32; },
+        "IVF index file has 5 code bits, which its raw vectors do not allow"
+    );
+    expect_rejected(
+        "no points",
+        [](auto& c) { c.header.num_points = 0; },
+        "IVF index file has an invalid point count 0"
+    );
+    expect_rejected(
+        "missing codes",
+        [](auto& c) { c.remove(261); },
+        "IVF index file has no section kind 261"
+    );
+    expect_rejected(
+        "short parameters",
+        [](auto& c) { c.bytes(256).pop_back(); },
+        "IVF index file section kind 256 has 15 bytes; expected 16"
+    );
+    expect_rejected(
+        "unknown routing",
+        [&](auto& c) { set_u32(c.bytes(256), 8, 9); },
+        "IVF index file has invalid routing parameters"
+    );
+    expect_rejected(
+        "cluster sizes above the point count",
+        [&](auto& c) { set_u32(c.bytes(257), 0, get_size(c.bytes(257), 0) + 1); },
+        "IVF index file cluster sizes exceed its point count"
+    );
+    expect_rejected(
+        "cluster sizes below the point count",
+        [&](auto& c) {
+            std::string& sizes = c.bytes(257);
+            for (size_t offset = 0; offset < sizes.size(); offset += sizeof(uint64_t)) {
+                if (get_size(sizes, offset) != 0) {
+                    set_u32(sizes, offset, get_size(sizes, offset) - 1);
+                    break;
+                }
+            }
+        },
+        "IVF index file cluster sizes do not add up to its point count"
+    );
+    expect_rejected(
+        "routing of another initializer",
+        [](auto& c) {
+            f2::Section flat;
+            flat.kind = 258;
+            flat.flags = f2::kSectionRequired;
+            c.sections.insert(
+                c.sections.begin() + 4, {flat, std::string(4 * 4 * 96, '\0')}
+            );
+        },
+        "IVF index file has routing data of another initializer"
+    );
+    expect_rejected(
+        "corrupt rotator",
+        [](auto& c) { c.bytes(1)[70] ^= 1; },
+        "IVF index file has an invalid rotator (data checksum mismatch (corrupt blob))"
+    );
+    expect_rejected(
+        "rotator of another dimension",
+        [](auto& c) {
+            const std::unique_ptr<Rotator<float>> other(
+                choose_rotator<float>(64, RotatorType::FhtKacRotator, 96, 1)
+            );
+            std::string blob(
+                rabitqlib::detail::rotator_blob_bytes(RotatorType::FhtKacRotator, 64, 96),
+                '\0'
+            );
+            rabitqlib::detail::encode_rotator_blob(
+                *other,
+                RotatorType::FhtKacRotator,
+                64,
+                std::nullopt,
+                reinterpret_cast<uint8_t*>(blob.data())
+            );
+            c.bytes(1) = blob;
+        },
+        "IVF index file rotator does not match its dimensions"
+    );
+    expect_rejected(
+        "point ID out of range",
+        [&](auto& c) { set_u32(c.bytes(263), 0, 33); },
+        "Invalid point ID in IVF index file"
+    );
+    expect_rejected(
+        "missing rerank data",
+        [](auto& c) { c.remove(262); },
+        "IVF index file has no section kind 262"
+    );
+    expect_rejected(
+        "short IDs",
+        [](auto& c) { c.bytes(263).resize(128); },
+        "IVF index file section kind 263 has 128 bytes; expected 132"
+    );
+    expect_rejected(
+        "reserved routing field",
+        [&](auto& c) { set_u32(c.bytes(256), 12, 1); },
+        "IVF index file has invalid routing parameters"
+    );
+
+    // One-bit codes have no rerank data, so a rerank section is rejected.
+    saved_format2_index(path, 1, METRIC_L2, InitializerType::Flat);
+    auto one_bit =
+        rabitq_test::read_format2_file(path, IndexKind::Ivf, rabitq_test::kIvfSections);
+    f2::Section rerank;
+    rerank.kind = 262;
+    rerank.flags = f2::kSectionRequired;
+    one_bit.sections.insert(one_bit.sections.end() - 1, {rerank, std::string(64, '\0')});
+    rabitq_test::write_format2_file(path, one_bit);
+    try {
+        loaded.load(path.c_str());
+        ADD_FAILURE() << "accepted";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(
+            error.what(), "IVF index file has rerank data that its code bits do not use"
+        );
+    }
+}
+
+TEST(IvfFormat2Test, UnknownReadOnlyFeaturesAllowSearchButNoChanges) {
+    const rabitq_test::TempFile path_file("rabitq_ivf_format2_read_only.index");
+    const std::string& path = path_file.path();
+    const auto index = saved_format2_index(path, 5, METRIC_L2, InitializerType::Flat);
+    rabitq_test::patch_format2_header(path, 24, 1, 8);  // an unknown ro_compat bit
+    IVF loaded;
+    ASSERT_NO_THROW(loaded.load(path.c_str()));
+    const auto query = random_rows(1, 954);
+    std::vector<PID> expected_ids(5), ids(5);
+    std::vector<float> distances(5);
+    index->search(query.data(), 5, kDynNumClusters, expected_ids.data(), distances.data());
+    loaded.search(query.data(), 5, kDynNumClusters, ids.data(), distances.data());
+    EXPECT_EQ(ids, expected_ids);
+
+    const auto expect_refused = [](const auto& operation, const std::string& name) {
+        try {
+            operation();
+            ADD_FAILURE() << name << " was allowed";
+        } catch (const std::logic_error& error) {
+            EXPECT_EQ(
+                std::string(error.what()),
+                "IVF index was loaded from a file with features this release cannot "
+                "update, so it cannot " +
+                    name
+            );
+        }
+    };
+    const auto row = random_rows(1, 955);
+    const PID cluster = 0;
+    const PID removed = 0;
+    expect_refused([&] { loaded.add(row.data(), 1, &cluster, false, 1); }, "add");
+    expect_refused([&] { loaded.reserve(0, 64); }, "reserve");
+    expect_refused([&] { loaded.remove(&removed, 1); }, "remove");
+    expect_refused([&] { loaded.save((path + ".copy").c_str()); }, "save");
+    EXPECT_EQ(loaded.num_points(), 32U);
+
+    // Rebuilding replaces the data the unknown features described, so it is writable.
+    const auto points = random_rows(33, 951);
+    const auto centroids = random_rows(kDynNumClusters, 952);
+    const auto assigned = nearest_centroids(centroids, points.data(), 33, METRIC_L2);
+    loaded.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    EXPECT_NO_THROW(loaded.save(path.c_str()));
+
+    // An unknown incompatible feature is rejected outright.
+    rabitq_test::patch_format2_header(path, 16, 2, 8);
+    try {
+        loaded.load(path.c_str());
+        ADD_FAILURE() << "an unknown incompatible feature was accepted";
+    } catch (const std::runtime_error& error) {
+        EXPECT_EQ(
+            std::string(error.what()),
+            std::string(
+                "IVF index file uses incompatible features 0x2 that this release "
+                "does not know; written by rabitqlib "
+            ) + RABITQ_TEST_LIBRARY_VERSION
+        );
+    }
+}
+
+TEST(IvfFormat2Test, RecordsTheWriterAndSkipsUnknownOptionalSections) {
+    const rabitq_test::TempFile path_file("rabitq_ivf_format2_optional.index");
+    const std::string& path = path_file.path();
+    const auto index = saved_format2_index(path, 4, METRIC_IP, InitializerType::FlatRaBitQ);
+    auto contents =
+        rabitq_test::read_format2_file(path, IndexKind::Ivf, rabitq_test::kIvfSections);
+    EXPECT_EQ(contents.writer_version, RABITQ_TEST_LIBRARY_VERSION);
+    // A later release may add an optional section; this one skips it.
+    f2::Section future;
+    future.kind = 900;
+    contents.sections.emplace_back(future, std::string(100, 'x'));
+    rabitq_test::write_format2_file(path, contents);
+    IVF loaded;
+    ASSERT_NO_THROW(loaded.load(path.c_str()));
+    const auto query = random_rows(1, 956);
+    std::vector<PID> expected_ids(5), ids(5);
+    std::vector<float> distances(5);
+    index->search(query.data(), 5, kDynNumClusters, expected_ids.data(), distances.data());
+    loaded.search(query.data(), 5, kDynNumClusters, ids.data(), distances.data());
+    EXPECT_EQ(ids, expected_ids);
+    // save drops the section it does not know.
+    loaded.save(path.c_str());
+    std::vector<uint32_t> kinds = rabitq_test::kIvfSections;
+    kinds.push_back(900);
+    const auto resaved = rabitq_test::read_format2_file(path, IndexKind::Ivf, kinds);
+    EXPECT_EQ(resaved.sections.size(), contents.sections.size() - 1);
+    EXPECT_THROW(
+        static_cast<void>(rabitq_test::Format2Contents(resaved).bytes(900)),
+        std::runtime_error
+    );
+}
+
+TEST(IvfFormat2Test, FailedWriteReportsAnErrorAndKeepsTheIndex) {
+    if (!std::filesystem::exists("/dev/full")) {
+        GTEST_SKIP() << "Requires a device that rejects writes";
+    }
+    const rabitq_test::TempFile path_file("rabitq_ivf_format2_write_failure.index");
+    const std::string& path = path_file.path();
+    for (const auto initializer :
+         {InitializerType::Flat, InitializerType::FlatRaBitQ, InitializerType::HNSW}) {
+        const auto index = saved_format2_index(path, 5, METRIC_L2, initializer);
+        // /dev/full is not a regular file, so save writes it in place and the write fails.
+        EXPECT_ANY_THROW(index->save("/dev/full"));
+        index->save(path.c_str());
+        IVF loaded;
+        ASSERT_NO_THROW(loaded.load(path.c_str()));
+        EXPECT_EQ(loaded.num_points(), 32U);
+    }
+}
+
 }  // namespace
 }  // namespace rabitqlib::ivf
 
-TEST(IvfSidecarValidationTest, RejectsMismatchedVectorStorage) {
+TEST(IvfRoutingGraphValidationTest, RejectsMismatchedVectorStorage) {
     using namespace rabitqlib;
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         for (const size_t sidecar_dim : {64U, 128U}) {
@@ -2034,12 +2567,19 @@ TEST(IvfSidecarValidationTest, RejectsMismatchedVectorStorage) {
             original.save(path.c_str());
             ivf::HNSWInitializer other(sidecar_dim, 1, metric);
             other.add_vectors(center.data(), 1);
-            std::ofstream ignored;
-            other.save(ignored, path.c_str());
+            std::ostringstream graph;
+            other.write(graph);
+            rabitq_test::replace_format2_section(
+                path,
+                rabitq_test::format2::IndexKind::Ivf,
+                rabitq_test::kIvfSections,
+                260,
+                graph.str()
+            );
             ivf::IVF loaded;
             try {
                 loaded.load(path.c_str());
-                FAIL() << "mismatched sidecar must be rejected";
+                FAIL() << "mismatched routing graph must be rejected";
             } catch (const std::runtime_error& error) {
                 EXPECT_STREQ(
                     error.what(), "HNSW centroid layout does not match IVF dimension"

@@ -45,7 +45,7 @@ print(ids[0])
 The first `add` on an untrained index trains it on the added vectors, as
 `index.train(data)` would, then adds them. Training uses the settings in
 `index.cp`: 10 k-means iterations on at most 256 sampled vectors per centroid,
-spherical k-means for `metric="ip"`, and the index `seed`. Change `index.cp`
+spherical k-means for `metric="ip"` and `"cosine"`, and the index `seed`. Change `index.cp`
 before the first `add` to tune them, call `index.train(sample)` first to train on a
 sample, or call `index.set_centroids(centroids)` to use centroids you computed
 elsewhere. `train` and `add` use every available CPU by default, capped by
@@ -66,11 +66,12 @@ not exact distances to the original vectors.
 
 A search may return fewer than `k` valid neighbors, for example when `k` exceeds the
 number of points, after removals, or when the probed IVF-RaBitQ clusters contain too
-few points. Unfilled slots contain ID `2**32 - 1` and distance `+inf`. Filter them with
+few points. IDs are `int64`; unfilled slots contain ID `-1` and distance `+inf`. Filter them with
 `valid = np.isfinite(distances)` before using IDs to index your data.
 
-The `metric` argument accepts `"l2"` and `"ip"` (also `"innerproduct"`). For
-cosine search, normalize database and query vectors first and use `metric="ip"`.
+The `metric` argument accepts `"l2"`, `"ip"` (also `"innerproduct"`) and `"cosine"`.
+`metric="cosine"` scales database and query vectors to unit length and returns
+`1 - cos`; the saved file records it, so a loaded index keeps normalizing.
 
 ## Measure recall
 
@@ -122,9 +123,9 @@ with TemporaryDirectory() as directory:
     np.testing.assert_allclose(loaded_distances, distances)
 ```
 
-The loaded index owns its data and restores the saved rotation. IVF-RaBitQ indexes using
-HNSW centroid routing also need the accompanying `.hnsw` file; keep it with the
-main index. This small example uses Flat routing and has no sidecar.
+The loaded index owns its data and restores the saved rotation. IVF-RaBitQ saves one
+file, including its HNSW centroid routing; files from releases up to 0.8 with HNSW
+routing also need the accompanying `.hnsw` file.
 See [file compatibility](index/usage.md#index-file-compatibility) before downgrading.
 
 ## Next steps

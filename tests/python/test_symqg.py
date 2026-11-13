@@ -3,8 +3,8 @@
 import inspect
 import os
 import re
-import struct
 
+import format2_file
 import numpy as np
 import pytest
 from conftest import DIM, N_QUERIES, N_VECTORS, brute_force_knn, recall_at_k
@@ -47,7 +47,7 @@ def test_properties(built_symqg):
 def test_search_output_contract(built_symqg, query_data, nq, k):
     ids, dists = built_symqg.search(query_data[:nq], k=k, ef=_EF)
     assert ids.shape == dists.shape == (nq, k)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     assert dists.dtype == np.float32
     assert np.all(ids < N_VECTORS)
     assert np.isfinite(dists).all()
@@ -246,7 +246,7 @@ def test_save_load_roundtrip(built_symqg, query_data, tmp_path):
 
 @pytest.mark.parametrize("bits", [4, 8])
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-def test_code_only_build_preserves_v1_format(bits, metric, tmp_path):
+def test_code_only_build_saves_the_specified_layout(bits, metric, tmp_path):
     rng = np.random.default_rng(851)
     data = rng.normal(size=(65, 65)).astype(np.float32)
     queries = rng.normal(size=(3, 65)).astype(np.float32)
@@ -256,12 +256,19 @@ def test_code_only_build_preserves_v1_format(bits, metric, tmp_path):
     path = tmp_path / "code_only.index"
     index.save(str(path))
     payload = path.read_bytes()
-    assert struct.unpack_from("<QI", payload) == (0x5147524142495451, 1)
-    # Existing v1 header, centroid, ExDataMap row, neighbor batches/IDs, FHT state.
+    assert payload[:8] == format2_file.MAGIC
+    # Format-2 sections: the FHT/Kac rotator blob, the centroid, and per vertex its
+    # single-code record, neighbor batches and neighbor IDs.
     padded = 96
-    assert struct.unpack_from("<Q", payload, 36)[0] == padded
+    assert format2_file.padded_dim(payload) == padded
     row_bytes = padded * bits // 8 + 8 + padded * 4 + 256 + 128
-    assert len(payload) == 58 + padded * 4 + 65 * row_bytes + padded // 2
+    sizes = {kind: size for kind, (_, size) in format2_file.sections(payload).items()}
+    assert sizes == {
+        format2_file.ROTATOR: 64 + padded // 2,
+        format2_file.QG_PARAMS: 32,
+        format2_file.QG_CENTROID: padded * 4,
+        format2_file.QG_RECORDS: 65 * row_bytes,
+    }
     ids, distances = index.search(queries, 10, 64)
     assert np.isfinite(distances).all()
     assert all(len(set(row)) == 10 for row in ids)

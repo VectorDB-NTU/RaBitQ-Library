@@ -1,5 +1,6 @@
 """Portable kernels preserve metric, padded-domain, and persistence contracts."""
 
+import format2_file
 import numpy as np
 import pytest
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
@@ -58,18 +59,8 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
     path = tmp_path / "portable.index"
     index.save(str(path))
     payload = path.read_bytes()
-    if kind == "ivf":
-        assert payload[:8] == b"RABQIDX1"
-        multiple = 32
-        stored_padded = int.from_bytes(payload[16:24], "little")
-    elif kind == "qg":
-        multiple = 32
-        offset = (12 if bits else 0) + 3 * np.dtype(np.uintp).itemsize
-        stored_padded = int.from_bytes(payload[offset : offset + 8], "little")
-    else:
-        multiple = 32
-        stored_padded = int.from_bytes(payload[24:32], "little")
-    assert stored_padded == (dim + multiple - 1) // multiple * multiple
+    assert payload[:8] == format2_file.MAGIC
+    assert format2_file.padded_dim(payload) == (dim + 31) // 32 * 32
     loaded = type(index).load(str(path))
     assert loaded.dim == dim
     assert loaded.metric == metric
@@ -122,15 +113,15 @@ def test_rejects_development_only_padding(tmp_path, kind, bits):
     check_index_round_trip(tmp_path, "l2", 65, kind, bits)
     path = tmp_path / "portable.index"
     payload = bytearray(path.read_bytes())
-    offset = {"ivf": 16, "hnsw": 24, "qg": 12 + 3 * np.dtype(np.uintp).itemsize}[kind]
     # 80 is a valid pad16 dimension but unsupported by the pad32 kernels.
-    payload[offset : offset + 8] = (80).to_bytes(8, "little")
+    payload[56:64] = (80).to_bytes(8, "little")
+    format2_file.reseal(payload)
     path.write_bytes(payload)
     cls = {"ivf": IvfIndex, "hnsw": HnswIndex, "qg": SymqgIndex}[kind]
-    message = {
-        "ivf": "Invalid padded dimension in IVF index file",
-        "hnsw": "HNSW index file is invalid or truncated",
-        "qg": "QuantizedGraph file has an invalid padded dimension",
-    }[kind]
+    component = {"ivf": "IVF", "hnsw": "HNSW", "qg": "QuantizedGraph"}[kind]
+    message = (
+        f"{component} index file has padded dimension 80, which must be a multiple of "
+        "32 from the dimension 65 to 65536"
+    )
     with pytest.raises(RuntimeError, match=f"^{message}$"):
         cls.load(str(path))

@@ -1,6 +1,7 @@
 #include "rabitqlib/index/hnsw/hnsw.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <cmath>
@@ -14,6 +15,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <queue>
 #include <random>
 #include <stdexcept>
@@ -22,7 +24,10 @@
 #include <utility>
 #include <vector>
 
+#include "../core/blob.hpp"
+#include "cosine.hpp"
 #include "file_replacement.hpp"
+#include "format2.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
@@ -35,6 +40,7 @@
 #include "rabitqlib/index/detail/hnsw_dispatch.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/detail/visited_pool.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/hnsw/hnsw_quant.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
@@ -44,6 +50,16 @@
 #include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::hnsw {
+
+namespace {
+// Index format 2 sections of HNSW-RaBitQ (docs/formats.md, "Section kinds").
+constexpr uint32_t kParamsSection = 512;
+constexpr uint32_t kCentroidsSection = 513;
+constexpr uint32_t kRecordsSection = 514;
+constexpr uint32_t kLevelsSection = 515;
+constexpr uint32_t kUpperLinksSection = 516;
+constexpr size_t kParamsBytes = 72;
+}  // namespace
 
 HierarchicalNSW::HierarchicalNSW() = default;
 HierarchicalNSW::~HierarchicalNSW() = default;
@@ -68,17 +84,18 @@ HierarchicalNSW::HierarchicalNSW(
     size_t random_seed,
     MetricType metric_type
 )
-    : metric_type_(metric_type)
+    : metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE)
     , link_list_locks_(max_elements)
     , element_levels_(max_elements)
     , raw_dist_func_(
-          (metric_type == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
+          (metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>
       ) {
     static_assert(
         buffer::kSearchBufferMaxPointCount <= kRemovedMask,
         "cluster IDs must leave the removal bit free"
     );
-    validate_metric_type(metric_type);
+    validate_metric_type(metric_type_);
     if (M < 2) {
         throw std::invalid_argument("HNSW M must be at least 2");
     }
@@ -118,6 +135,7 @@ HierarchicalNSW::HierarchicalNSW(
     );
 
     level_generator_.seed(random_seed);
+    seed_ = random_seed;
 
     visited_set_pool_ = std::make_unique<VisitedSetPool>(1, max_elements_);
 
@@ -149,69 +167,107 @@ void HierarchicalNSW::save(const char* filename) const {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("HNSW index filename must not be empty");
     }
+    check_writable("save");
     index_detail::save_replacing(filename, {}, [this](const std::string& path) {
         write_file(path.c_str());
     });
 }
 
 void HierarchicalNSW::write_file(const char* filename) const {
+    namespace f2 = index_detail::format2;
     std::ofstream output(io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("HNSW cannot open index file for writing");
     }
+    const size_t element_count = num_stored_points_.load();
 
-    // Serialize one count value rather than the bytes of the atomic object.
-    const size_t num_stored_points = num_stored_points_.load();
-    output.write(reinterpret_cast<const char*>(&max_elements_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&num_stored_points), sizeof(size_t));
+    f2::Header header;
+    header.index_kind = f2::IndexKind::Hnsw;
+    header.metric = f2::header_metric(metric_type());
+    header.dim = dim_;
+    header.padded_dim = padded_dim_;
+    header.code_bits = static_cast<uint32_t>(ex_bits_ + 1);
+    header.id_bits = 32;
+    header.seed = seed_;
+    header.num_points = element_count;
 
-    output.write(reinterpret_cast<const char*>(&dim_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&padded_dim_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&num_clusters_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&ex_bits_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&metric_type_), sizeof(metric_type_));
-
-    output.write(reinterpret_cast<const char*>(&bin_data_bytes_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&ex_data_bytes_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&level0_links_bytes_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&bin_data_offset_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&ex_data_offset_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&label_offset_), sizeof(PID));
-    output.write(reinterpret_cast<const char*>(&level0_record_bytes_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&upper_layer_links_bytes_), sizeof(size_t));
-
-    output.write(reinterpret_cast<const char*>(&max_level_), sizeof(int));
-    output.write(reinterpret_cast<const char*>(&entry_point_id_), sizeof(PID));
-
-    output.write(reinterpret_cast<const char*>(&M_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&upper_layer_max_degree_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&base_layer_max_degree_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&level_multiplier_), sizeof(double));
-    output.write(reinterpret_cast<const char*>(&ef_construction_), sizeof(size_t));
-
-    output.write(
-        reinterpret_cast<const char*>(centroids_memory_.get()),
-        static_cast<std::streamsize>(num_clusters_ * padded_dim_ * sizeof(float))
+    // The rotation was drawn from the low 32 bits of the seed.
+    std::vector<uint8_t> rotator(
+        rabitqlib::detail::rotator_blob_bytes(RotatorType::FhtKacRotator, dim_, padded_dim_)
     );
-
-    output.write(
-        reinterpret_cast<const char*>(data_level0_memory_.get()),
-        static_cast<std::streamsize>(num_stored_points * level0_record_bytes_)
+    rabitqlib::detail::encode_rotator_blob(
+        *rotator_,
+        RotatorType::FhtKacRotator,
+        dim_,
+        seed_.has_value() ? std::optional<uint32_t>(static_cast<uint32_t>(*seed_))
+                          : std::nullopt,
+        rotator.data()
     );
-
-    for (size_t i = 0; i < num_stored_points; ++i) {
-        uint32_t link_list_bytes =
-            element_levels_[i] > 0 ? upper_layer_links_bytes_ * element_levels_[i] : 0;
-        output.write(reinterpret_cast<const char*>(&link_list_bytes), sizeof(uint32_t));
-        if (link_list_bytes != 0) {
-            output.write(link_lists_[i].get(), link_list_bytes);
-        }
+    std::array<uint8_t, kParamsBytes> params{};
+    f2::put_u64(params.data(), max_elements_);
+    f2::put_u64(params.data() + 8, num_clusters_);
+    f2::put_u64(params.data() + 16, M_);
+    f2::put_u64(params.data() + 24, upper_layer_max_degree_);
+    f2::put_u64(params.data() + 32, base_layer_max_degree_);
+    f2::put_u64(params.data() + 40, ef_construction_);
+    uint64_t multiplier_bits = 0;
+    std::memcpy(&multiplier_bits, &level_multiplier_, sizeof(multiplier_bits));
+    f2::put_u64(params.data() + 48, multiplier_bits);
+    f2::put_u32(
+        params.data() + 56, static_cast<uint32_t>(static_cast<int32_t>(max_level_))
+    );
+    f2::put_u64(params.data() + 64, entry_point_id_);
+    std::vector<uint8_t> levels(sizeof(uint32_t) * element_count);
+    uint64_t upper_bytes = 0;
+    for (size_t i = 0; i < element_count; ++i) {
+        f2::put_u32(levels.data() + (sizeof(uint32_t) * i), element_levels_[i]);
+        upper_bytes += uint64_t(element_levels_[i]) * upper_layer_links_bytes_;
     }
 
-    rotator_->save(output);
+    const auto bytes = [](const auto& buffer) {
+        return
+            [&buffer](f2::SectionSink& sink) { sink.write(buffer.data(), buffer.size()); };
+    };
+    const std::vector<f2::SectionWrite> sections = {
+        {f2::kRotatorSection, f2::kSectionRequired, rotator.size(), bytes(rotator)},
+        {kParamsSection,
+         f2::kSectionRequired | f2::kSectionChecksummed,
+         params.size(),
+         bytes(params)},
+        {kCentroidsSection,
+         f2::kSectionRequired,
+         sizeof(float) * num_clusters_ * padded_dim_,
+         [this](f2::SectionSink& sink) {
+             sink.write(
+                 centroids_memory_.get(), sizeof(float) * num_clusters_ * padded_dim_
+             );
+         }},
+        {kRecordsSection,
+         f2::kSectionRequired,
+         element_count * level0_record_bytes_,
+         [&](f2::SectionSink& sink) {
+             sink.write(data_level0_memory_.get(), element_count * level0_record_bytes_);
+         }},
+        {kLevelsSection, f2::kSectionRequired, levels.size(), bytes(levels)},
+        {kUpperLinksSection,
+         f2::kSectionRequired,
+         upper_bytes,
+         [&](f2::SectionSink& sink) {
+             for (size_t i = 0; i < element_count; ++i) {
+                 if (element_levels_[i] > 0) {
+                     sink.write(
+                         link_lists_[i].get(),
+                         static_cast<size_t>(element_levels_[i]) * upper_layer_links_bytes_
+                     );
+                 }
+             }
+         }},
+    };
+    // write_file checks the stream after flushing; close reports a late failure.
+    f2::write_file(output, header, sections, RABITQ_LIBRARY_VERSION);
     output.close();
     if (!output) {
-        throw std::runtime_error("HNSW failed to write index file");
+        throw std::runtime_error("HNSW index file cannot be written");
     }
 }
 
@@ -224,8 +280,69 @@ void HierarchicalNSW::load(const char* filename) {
         throw std::runtime_error("HNSW cannot open index file");
     }
 
+    // Keep the current index intact until the complete file has been validated.
+    HierarchicalNSW loaded;
+    if (index_detail::format2::has_magic(input, index_detail::format2::IndexKind::Hnsw)) {
+        loaded.read_format2(input);
+    } else {
+        loaded.read_legacy(input);
+    }
+
+    loaded.visited_set_pool_ = std::make_unique<VisitedSetPool>(1, loaded.max_elements_);
+    loaded.raw_dist_func_ =
+        (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
+    loaded.ip_func_ = select_excode_ipfunc(loaded.ex_bits_);
+    loaded.query_config_ =
+        quant::faster_config(loaded.padded_dim_, SplitSingleQuery<float>::kNumBits);
+
+    // All swaps below are non-allocating. The temporary releases the old state.
+    using std::swap;
+    swap(construction_data_, loaded.construction_data_);
+    swap(max_elements_, loaded.max_elements_);
+    const size_t old_count = num_stored_points_.load();
+    num_stored_points_ = loaded.num_stored_points_.load();
+    loaded.num_stored_points_ = old_count;
+    swap(num_removed_, loaded.num_removed_);
+    swap(level0_record_bytes_, loaded.level0_record_bytes_);
+    swap(upper_layer_links_bytes_, loaded.upper_layer_links_bytes_);
+    swap(M_, loaded.M_);
+    swap(upper_layer_max_degree_, loaded.upper_layer_max_degree_);
+    swap(base_layer_max_degree_, loaded.base_layer_max_degree_);
+    swap(ef_construction_, loaded.ef_construction_);
+    swap(metric_type_, loaded.metric_type_);
+    swap(cosine_, loaded.cosine_);
+    swap(level_multiplier_, loaded.level_multiplier_);
+    swap(max_level_, loaded.max_level_);
+    link_list_locks_.swap(loaded.link_list_locks_);
+    swap(entry_point_id_, loaded.entry_point_id_);
+    swap(level0_links_bytes_, loaded.level0_links_bytes_);
+    swap(bin_data_offset_, loaded.bin_data_offset_);
+    swap(ex_data_offset_, loaded.ex_data_offset_);
+    swap(label_offset_, loaded.label_offset_);
+    swap(bin_data_bytes_, loaded.bin_data_bytes_);
+    swap(ex_data_bytes_, loaded.ex_data_bytes_);
+    swap(ex_bits_, loaded.ex_bits_);
+    swap(data_level0_memory_, loaded.data_level0_memory_);
+    swap(link_lists_, loaded.link_lists_);
+    element_levels_.swap(loaded.element_levels_);
+    swap(num_clusters_, loaded.num_clusters_);
+    swap(dim_, loaded.dim_);
+    swap(padded_dim_, loaded.padded_dim_);
+    swap(centroids_memory_, loaded.centroids_memory_);
+    label_lookup_.swap(loaded.label_lookup_);
+    swap(visited_set_pool_, loaded.visited_set_pool_);
+    swap(ip_func_, loaded.ip_func_);
+    swap(rotator_, loaded.rotator_);
+    swap(query_config_, loaded.query_config_);
+    swap(raw_dist_func_, loaded.raw_dist_func_);
+    swap(seed_, loaded.seed_);
+    swap(read_only_, loaded.read_only_);
+}
+
+// The unversioned layout of releases up to 0.8.
+void HierarchicalNSW::read_legacy(std::ifstream& input) {
     auto invalid_file = []() -> void {
-        throw std::runtime_error("HNSW index file is invalid or truncated");
+        throw FormatError("HNSW index file is invalid or truncated");
     };
     auto read_header = [&](auto& value) {
         input.read(reinterpret_cast<char*>(&value), sizeof(value));
@@ -240,74 +357,65 @@ void HierarchicalNSW::load(const char* filename) {
         return left * right;
     };
 
-    // Keep the current index intact until the complete file has been validated.
-    HierarchicalNSW loaded;
     size_t element_count = 0;
     PID label_offset = 0;
-    read_header(loaded.max_elements_);
+    read_header(max_elements_);
     read_header(element_count);
-    read_header(loaded.dim_);
-    read_header(loaded.padded_dim_);
-    read_header(loaded.num_clusters_);
-    read_header(loaded.ex_bits_);
-    read_header(loaded.metric_type_);
-    read_header(loaded.bin_data_bytes_);
-    read_header(loaded.ex_data_bytes_);
-    read_header(loaded.level0_links_bytes_);
-    read_header(loaded.bin_data_offset_);
-    read_header(loaded.ex_data_offset_);
+    read_header(dim_);
+    read_header(padded_dim_);
+    read_header(num_clusters_);
+    read_header(ex_bits_);
+    read_header(metric_type_);
+    read_header(bin_data_bytes_);
+    read_header(ex_data_bytes_);
+    read_header(level0_links_bytes_);
+    read_header(bin_data_offset_);
+    read_header(ex_data_offset_);
     read_header(label_offset);
-    loaded.label_offset_ = label_offset;
-    read_header(loaded.level0_record_bytes_);
-    read_header(loaded.upper_layer_links_bytes_);
-    read_header(loaded.max_level_);
-    read_header(loaded.entry_point_id_);
-    read_header(loaded.M_);
-    read_header(loaded.upper_layer_max_degree_);
-    read_header(loaded.base_layer_max_degree_);
-    read_header(loaded.level_multiplier_);
-    read_header(loaded.ef_construction_);
+    label_offset_ = label_offset;
+    read_header(level0_record_bytes_);
+    read_header(upper_layer_links_bytes_);
+    read_header(max_level_);
+    read_header(entry_point_id_);
+    read_header(M_);
+    read_header(upper_layer_max_degree_);
+    read_header(base_layer_max_degree_);
+    read_header(level_multiplier_);
+    read_header(ef_construction_);
 
-    if (loaded.max_elements_ == 0 ||
-        loaded.max_elements_ > buffer::kSearchBufferMaxPointCount ||
-        element_count > loaded.max_elements_ ||
-        loaded.num_clusters_ > buffer::kSearchBufferMaxPointCount ||
-        (element_count != 0 && loaded.num_clusters_ == 0) || loaded.dim_ < 64 ||
-        loaded.dim_ > rotator_impl::FhtKacRotator::kMaxDim ||
-        loaded.padded_dim_ < loaded.dim_ || loaded.padded_dim_ % 32 != 0 ||
-        loaded.padded_dim_ > rotator_impl::FhtKacRotator::kMaxDim || loaded.ex_bits_ > 8 ||
-        (loaded.metric_type_ != METRIC_L2 && loaded.metric_type_ != METRIC_IP) ||
-        loaded.M_ < 2 || loaded.M_ > kMaxM || loaded.upper_layer_max_degree_ != loaded.M_ ||
-        loaded.base_layer_max_degree_ != 2 * loaded.M_ ||
-        loaded.ef_construction_ < loaded.M_ ||
-        (element_count == 0 &&
-         (loaded.max_level_ != -1 || loaded.entry_point_id_ != kPidMax)) ||
-        (element_count != 0 &&
-         (loaded.max_level_ < 0 || loaded.entry_point_id_ >= element_count))) {
+    if (max_elements_ == 0 || max_elements_ > buffer::kSearchBufferMaxPointCount ||
+        element_count > max_elements_ ||
+        num_clusters_ > buffer::kSearchBufferMaxPointCount ||
+        (element_count != 0 && num_clusters_ == 0) || dim_ < 64 ||
+        dim_ > rotator_impl::FhtKacRotator::kMaxDim || padded_dim_ < dim_ ||
+        padded_dim_ % 32 != 0 || padded_dim_ > rotator_impl::FhtKacRotator::kMaxDim ||
+        ex_bits_ > 8 || (metric_type_ != METRIC_L2 && metric_type_ != METRIC_IP) ||
+        M_ < 2 || M_ > kMaxM || upper_layer_max_degree_ != M_ ||
+        base_layer_max_degree_ != 2 * M_ || ef_construction_ < M_ ||
+        (element_count == 0 && (max_level_ != -1 || entry_point_id_ != kPidMax)) ||
+        (element_count != 0 && (max_level_ < 0 || entry_point_id_ >= element_count))) {
         invalid_file();
     }
 
     // The stored layout must be the one the validated parameters derive.
-    const auto stored_layout = loaded.record_layout();
-    loaded.set_record_layout();
-    if (loaded.record_layout() != stored_layout ||
-        !std::isfinite(loaded.level_multiplier_) || loaded.level_multiplier_ <= 0.0) {
+    const auto stored_layout = record_layout();
+    set_record_layout();
+    if (record_layout() != stored_layout || !std::isfinite(level_multiplier_) ||
+        level_multiplier_ <= 0.0) {
         invalid_file();
     }
 
-    const size_t centroids_bytes = checked_product(
-        checked_product(loaded.num_clusters_, loaded.padded_dim_), sizeof(float)
-    );
-    const size_t data_capacity_bytes =
-        checked_product(loaded.max_elements_, loaded.level0_record_bytes_);
-    const size_t data_bytes = checked_product(element_count, loaded.level0_record_bytes_);
+    const size_t centroids_bytes =
+        checked_product(checked_product(num_clusters_, padded_dim_), sizeof(float));
+    const size_t data_capacity_bytes = checked_product(max_elements_, level0_record_bytes_);
+    const size_t data_bytes = checked_product(element_count, level0_record_bytes_);
     // Validate pointer-table capacity before allocating it.
-    (void)checked_product(loaded.max_elements_, sizeof(LinkStorage));
+    (void)checked_product(max_elements_, sizeof(LinkStorage));
     const size_t link_headers_bytes = checked_product(element_count, sizeof(uint32_t));
-    loaded.rotator_ = rotator_impl::make_rotator_for_loading(
-        loaded.dim_, RotatorType::FhtKacRotator, loaded.padded_dim_
+    rotator_ = rotator_impl::make_rotator_for_loading(
+        dim_, RotatorType::FhtKacRotator, padded_dim_
     );
-    const size_t rotator_bytes = loaded.rotator_->dump_bytes();
+    const size_t rotator_bytes = rotator_->dump_bytes();
 
     const auto payload_start = input.tellg();
     input.seekg(0, std::ios::end);
@@ -337,107 +445,44 @@ void HierarchicalNSW::load(const char* filename) {
     };
 
     if (centroids_bytes != 0) {
-        loaded.centroids_memory_.reset(memory::huge_page_allocate<char>(centroids_bytes));
-        read_payload(loaded.centroids_memory_.get(), centroids_bytes);
+        centroids_memory_.reset(memory::huge_page_allocate<char>(centroids_bytes));
+        read_payload(centroids_memory_.get(), centroids_bytes);
     }
-    loaded.data_level0_memory_.reset(memory::huge_page_allocate<char>(data_capacity_bytes));
-    read_payload(loaded.data_level0_memory_.get(), data_bytes);
+    data_level0_memory_.reset(memory::huge_page_allocate<char>(data_capacity_bytes));
+    read_payload(data_level0_memory_.get(), data_bytes);
 
-    loaded.element_levels_ = std::vector<int>(loaded.max_elements_);
-    loaded.link_list_locks_ = std::vector<std::mutex>(loaded.max_elements_);
-    loaded.link_lists_.reserve(loaded.max_elements_);
-    loaded.link_lists_.resize(element_count);
+    element_levels_ = std::vector<int>(max_elements_);
+    link_list_locks_ = std::vector<std::mutex>(max_elements_);
+    link_lists_.reserve(max_elements_);
+    link_lists_.resize(element_count);
     for (size_t i = 0; i < element_count; ++i) {
-        const char* row =
-            loaded.data_level0_memory_.get() + i * loaded.level0_record_bytes_;
-        PID cluster_id = 0;
-        PID label = 0;
-        uint16_t level0_degree = 0;
-        std::memcpy(&level0_degree, row, sizeof(level0_degree));
-        std::memcpy(&cluster_id, row + loaded.level0_links_bytes_, sizeof(cluster_id));
-        std::memcpy(&label, row + loaded.label_offset_, sizeof(label));
-        if ((cluster_id & ~kRemovedMask) >= loaded.num_clusters_ ||
-            level0_degree > loaded.base_layer_max_degree_) {
-            invalid_file();
-        }
-        loaded.num_removed_ += (cluster_id & kRemovedMask) != 0;
-        for (size_t edge = 0; edge < level0_degree; ++edge) {
-            PID neighbor = 0;
-            std::memcpy(&neighbor, row + sizeof(PID) + edge * sizeof(PID), sizeof(PID));
-            if (neighbor >= element_count) {
-                invalid_file();
-            }
-        }
-        if (!loaded.label_lookup_.emplace(label, static_cast<PID>(i)).second) {
-            invalid_file();
-        }
-
         uint32_t link_list_bytes = 0;
         read_payload(reinterpret_cast<char*>(&link_list_bytes), sizeof(link_list_bytes));
         if (link_list_bytes != 0) {
-            if (link_list_bytes % loaded.upper_layer_links_bytes_ != 0 ||
-                link_list_bytes / loaded.upper_layer_links_bytes_ >
-                    static_cast<size_t>(loaded.max_level_) ||
+            if (link_list_bytes % upper_layer_links_bytes_ != 0 ||
+                link_list_bytes / upper_layer_links_bytes_ >
+                    static_cast<size_t>(max_level_) ||
                 link_list_bytes > remaining) {
                 invalid_file();
             }
-            loaded.link_lists_[i].reset(static_cast<char*>(std::malloc(link_list_bytes)));
-            if (loaded.link_lists_[i] == nullptr) {
+            link_lists_[i].reset(static_cast<char*>(std::malloc(link_list_bytes)));
+            if (link_lists_[i] == nullptr) {
                 throw std::bad_alloc();
             }
-            loaded.element_levels_[i] =
-                static_cast<int>(link_list_bytes / loaded.upper_layer_links_bytes_);
+            element_levels_[i] =
+                static_cast<int>(link_list_bytes / upper_layer_links_bytes_);
         }
-        loaded.num_stored_points_ = i + 1;
+        num_stored_points_ = i + 1;
         if (link_list_bytes != 0) {
-            read_payload(loaded.link_lists_[i].get(), link_list_bytes);
-            for (int level = 0; level < loaded.element_levels_[i]; ++level) {
-                const char* link =
-                    loaded.link_lists_[i].get() + level * loaded.upper_layer_links_bytes_;
-                uint16_t degree = 0;
-                std::memcpy(&degree, link, sizeof(degree));
-                if (degree > loaded.upper_layer_max_degree_) {
-                    invalid_file();
-                }
-                for (size_t edge = 0; edge < degree; ++edge) {
-                    PID neighbor = 0;
-                    std::memcpy(
-                        &neighbor, link + sizeof(PID) + edge * sizeof(PID), sizeof(PID)
-                    );
-                    if (neighbor >= element_count) {
-                        invalid_file();
-                    }
-                }
-            }
+            read_payload(link_lists_[i].get(), link_list_bytes);
         }
     }
-    for (size_t i = 0; i < element_count; ++i) {
-        for (int level = 1; level <= loaded.element_levels_[i]; ++level) {
-            const char* link =
-                loaded.link_lists_[i].get() +
-                (static_cast<size_t>(level) - 1) * loaded.upper_layer_links_bytes_;
-            uint16_t degree = 0;
-            std::memcpy(&degree, link, sizeof(degree));
-            for (size_t edge = 0; edge < degree; ++edge) {
-                PID neighbor = 0;
-                std::memcpy(
-                    &neighbor, link + sizeof(PID) + edge * sizeof(PID), sizeof(PID)
-                );
-                if (loaded.element_levels_[neighbor] < level) {
-                    invalid_file();
-                }
-            }
-        }
-    }
-    if (element_count != 0 &&
-        loaded.element_levels_[loaded.entry_point_id_] != loaded.max_level_) {
-        invalid_file();
-    }
+    validate_graph();
 
     if (rotator_bytes > remaining) {
         invalid_file();
     }
-    loaded.rotator_->load(input);
+    rotator_->load(input);
     if (!input) {
         invalid_file();
     }
@@ -445,53 +490,234 @@ void HierarchicalNSW::load(const char* filename) {
     if (remaining != 0) {
         invalid_file();
     }
+}
 
-    loaded.visited_set_pool_ = std::make_unique<VisitedSetPool>(1, loaded.max_elements_);
-    loaded.raw_dist_func_ =
-        (loaded.metric_type_ == METRIC_IP) ? dot_product_dis<float> : euclidean_sqr<float>;
-    loaded.ip_func_ = select_excode_ipfunc(loaded.ex_bits_);
-    loaded.query_config_ =
-        quant::faster_config(loaded.padded_dim_, SplitSingleQuery<float>::kNumBits);
+void HierarchicalNSW::read_format2(std::istream& input) {
+    namespace f2 = index_detail::format2;
+    const std::vector<uint32_t> known_kinds = {
+        f2::kRotatorSection,
+        kParamsSection,
+        kCentroidsSection,
+        kRecordsSection,
+        kLevelsSection,
+        kUpperLinksSection};
+    f2::Reader reader(
+        input, f2::IndexKind::Hnsw, known_kinds, [](const f2::Header& header) {
+            if (header.id_bits != 32 || header.raw_type != f2::RawType::None) {
+                throw f2::FormatError("HNSW index file stores 64-bit IDs or raw vectors");
+            }
+            if (header.code_bits == 0 || header.dim < 64) {
+                throw f2::FormatError(
+                    "HNSW index file has an invalid code width or dimension"
+                );
+            }
+            if (header.num_points == 0 ||
+                header.num_points > buffer::kSearchBufferMaxPointCount) {
+                throw f2::FormatError(
+                    "HNSW index file has an invalid point count " +
+                    std::to_string(header.num_points)
+                );
+            }
+        }
+    );
+    const f2::Header& header = reader.header();
+    metric_type_ = index_detail::stored_metric(f2::metric_type(header.metric));
+    cosine_ = header.metric == f2::Metric::Cosine;
+    dim_ = static_cast<size_t>(header.dim);
+    padded_dim_ = static_cast<size_t>(header.padded_dim);
+    ex_bits_ = header.code_bits - 1;
+    seed_ = header.seed;
+    const auto element_count = static_cast<size_t>(header.num_points);
 
-    // All swaps below are non-allocating. The temporary releases the old state.
-    using std::swap;
-    swap(construction_data_, loaded.construction_data_);
-    swap(max_elements_, loaded.max_elements_);
-    const size_t old_count = num_stored_points_.load();
-    num_stored_points_ = loaded.num_stored_points_.load();
-    loaded.num_stored_points_ = old_count;
-    swap(num_removed_, loaded.num_removed_);
-    swap(level0_record_bytes_, loaded.level0_record_bytes_);
-    swap(upper_layer_links_bytes_, loaded.upper_layer_links_bytes_);
-    swap(M_, loaded.M_);
-    swap(upper_layer_max_degree_, loaded.upper_layer_max_degree_);
-    swap(base_layer_max_degree_, loaded.base_layer_max_degree_);
-    swap(ef_construction_, loaded.ef_construction_);
-    swap(metric_type_, loaded.metric_type_);
-    swap(level_multiplier_, loaded.level_multiplier_);
-    swap(max_level_, loaded.max_level_);
-    link_list_locks_.swap(loaded.link_list_locks_);
-    swap(entry_point_id_, loaded.entry_point_id_);
-    swap(level0_links_bytes_, loaded.level0_links_bytes_);
-    swap(bin_data_offset_, loaded.bin_data_offset_);
-    swap(ex_data_offset_, loaded.ex_data_offset_);
-    swap(label_offset_, loaded.label_offset_);
-    swap(bin_data_bytes_, loaded.bin_data_bytes_);
-    swap(ex_data_bytes_, loaded.ex_data_bytes_);
-    swap(ex_bits_, loaded.ex_bits_);
-    swap(data_level0_memory_, loaded.data_level0_memory_);
-    swap(link_lists_, loaded.link_lists_);
-    element_levels_.swap(loaded.element_levels_);
-    swap(num_clusters_, loaded.num_clusters_);
-    swap(dim_, loaded.dim_);
-    swap(padded_dim_, loaded.padded_dim_);
-    swap(centroids_memory_, loaded.centroids_memory_);
-    label_lookup_.swap(loaded.label_lookup_);
-    swap(visited_set_pool_, loaded.visited_set_pool_);
-    swap(ip_func_, loaded.ip_func_);
-    swap(rotator_, loaded.rotator_);
-    swap(query_config_, loaded.query_config_);
-    swap(raw_dist_func_, loaded.raw_dist_func_);
+    const auto require = [&reader](uint32_t kind, std::optional<uint64_t> size) {
+        const f2::Section* section = reader.find(kind);
+        if (section == nullptr) {
+            throw f2::FormatError(
+                "HNSW index file has no section kind " + std::to_string(kind)
+            );
+        }
+        if (size.has_value() && section->size != *size) {
+            throw f2::FormatError(
+                "HNSW index file section kind " + std::to_string(kind) + " has " +
+                std::to_string(section->size) + " bytes; expected " + std::to_string(*size)
+            );
+        }
+        return section;
+    };
+    const auto read_all = [&reader](const f2::Section& section) {
+        std::vector<uint8_t> bytes(static_cast<size_t>(section.size));
+        reader.read(section, 0, bytes.data(), bytes.size());
+        return bytes;
+    };
+
+    const std::vector<uint8_t> params = read_all(*require(kParamsSection, kParamsBytes));
+    max_elements_ = static_cast<size_t>(f2::get_u64(params.data()));
+    num_clusters_ = static_cast<size_t>(f2::get_u64(params.data() + 8));
+    M_ = static_cast<size_t>(f2::get_u64(params.data() + 16));
+    upper_layer_max_degree_ = static_cast<size_t>(f2::get_u64(params.data() + 24));
+    base_layer_max_degree_ = static_cast<size_t>(f2::get_u64(params.data() + 32));
+    ef_construction_ = static_cast<size_t>(f2::get_u64(params.data() + 40));
+    const uint64_t multiplier_bits = f2::get_u64(params.data() + 48);
+    std::memcpy(&level_multiplier_, &multiplier_bits, sizeof(level_multiplier_));
+    max_level_ = static_cast<int>(static_cast<int32_t>(f2::get_u32(params.data() + 56)));
+    const uint64_t entry_point = f2::get_u64(params.data() + 64);
+    if (max_elements_ < element_count ||
+        max_elements_ > buffer::kSearchBufferMaxPointCount || num_clusters_ == 0 ||
+        num_clusters_ > buffer::kSearchBufferMaxPointCount || M_ < 2 || M_ > kMaxM ||
+        upper_layer_max_degree_ != M_ || base_layer_max_degree_ != 2 * M_ ||
+        ef_construction_ < M_ || !std::isfinite(level_multiplier_) ||
+        level_multiplier_ <= 0.0 || max_level_ < 0 || entry_point >= element_count ||
+        f2::get_u32(params.data() + 60) != 0) {
+        throw f2::FormatError("HNSW index file has invalid graph parameters");
+    }
+    entry_point_id_ = static_cast<PID>(entry_point);
+    set_record_layout();
+
+    const std::vector<uint8_t> blob = read_all(*require(f2::kRotatorSection, std::nullopt));
+    rabitqlib::detail::DecodedRotator rotator;
+    try {
+        rotator = rabitqlib::detail::decode_rotator_blob(blob.data(), blob.size());
+    } catch (const std::invalid_argument& error) {
+        throw f2::FormatError(
+            std::string("HNSW index file has an invalid rotator (") + error.what() + ")"
+        );
+    }
+    if (rotator.type != RotatorType::FhtKacRotator || rotator.dim != dim_ ||
+        rotator.padded_dim != padded_dim_) {
+        throw f2::FormatError("HNSW index file rotator does not match its dimensions");
+    }
+    rotator_ = std::move(rotator.rotator);
+
+    const size_t centroids_bytes = sizeof(float) * num_clusters_ * padded_dim_;
+    const f2::Section* centroids = require(kCentroidsSection, centroids_bytes);
+    const f2::Section* records =
+        require(kRecordsSection, element_count * level0_record_bytes_);
+    const std::vector<uint8_t> levels =
+        read_all(*require(kLevelsSection, sizeof(uint32_t) * element_count));
+    uint64_t upper_bytes = 0;
+    element_levels_ = std::vector<int>(max_elements_);
+    for (size_t i = 0; i < element_count; ++i) {
+        const uint32_t level = f2::get_u32(levels.data() + (sizeof(uint32_t) * i));
+        if (level > static_cast<uint32_t>(max_level_)) {
+            throw f2::FormatError("HNSW index file has a point above the maximum level");
+        }
+        element_levels_[i] = static_cast<int>(level);
+        // Guard the sum, so that a wrapped total cannot match the section size.
+        const uint64_t bytes = uint64_t{level} * upper_layer_links_bytes_;
+        if (bytes > std::numeric_limits<uint64_t>::max() - upper_bytes) {
+            throw f2::FormatError("HNSW index file has an invalid level structure");
+        }
+        upper_bytes += bytes;
+    }
+    const f2::Section* upper = require(kUpperLinksSection, upper_bytes);
+
+    centroids_memory_.reset(memory::huge_page_allocate<char>(centroids_bytes));
+    f2::SectionInput centroids_input = reader.open(*centroids);
+    centroids_input.read(centroids_memory_.get(), centroids_bytes);
+    data_level0_memory_.reset(
+        memory::huge_page_allocate<char>(max_elements_ * level0_record_bytes_)
+    );
+    f2::SectionInput records_input = reader.open(*records);
+    records_input.read(data_level0_memory_.get(), element_count * level0_record_bytes_);
+    link_list_locks_ = std::vector<std::mutex>(max_elements_);
+    link_lists_.reserve(max_elements_);
+    link_lists_.resize(element_count);
+    f2::SectionInput upper_input = reader.open(*upper);
+    for (size_t i = 0; i < element_count; ++i) {
+        const size_t bytes =
+            static_cast<size_t>(element_levels_[i]) * upper_layer_links_bytes_;
+        if (bytes == 0) {
+            continue;
+        }
+        link_lists_[i].reset(static_cast<char*>(std::malloc(bytes)));
+        if (link_lists_[i] == nullptr) {
+            throw std::bad_alloc();
+        }
+        upper_input.read(link_lists_[i].get(), bytes);
+    }
+    num_stored_points_ = element_count;
+    validate_graph();
+    read_only_ = reader.read_only();
+}
+
+void HierarchicalNSW::check_writable(const char* operation) const {
+    if (read_only_) {
+        throw std::logic_error(
+            std::string(
+                "HNSW index was loaded from a file with features this release "
+                "cannot update, so it cannot "
+            ) +
+            operation
+        );
+    }
+}
+
+void HierarchicalNSW::validate_graph() {
+    const auto invalid = []() -> void {
+        throw FormatError("HNSW index file is invalid or truncated");
+    };
+    const size_t element_count = num_stored_points_;
+    for (size_t i = 0; i < element_count; ++i) {
+        const char* row = data_level0_memory_.get() + i * level0_record_bytes_;
+        PID cluster_id = 0;
+        PID label = 0;
+        uint16_t level0_degree = 0;
+        std::memcpy(&level0_degree, row, sizeof(level0_degree));
+        std::memcpy(&cluster_id, row + level0_links_bytes_, sizeof(cluster_id));
+        std::memcpy(&label, row + label_offset_, sizeof(label));
+        if ((cluster_id & ~kRemovedMask) >= num_clusters_ ||
+            level0_degree > base_layer_max_degree_) {
+            invalid();
+        }
+        num_removed_ += (cluster_id & kRemovedMask) != 0;
+        for (size_t edge = 0; edge < level0_degree; ++edge) {
+            PID neighbor = 0;
+            std::memcpy(&neighbor, row + sizeof(PID) + edge * sizeof(PID), sizeof(PID));
+            if (neighbor >= element_count) {
+                invalid();
+            }
+        }
+        if (!label_lookup_.emplace(label, static_cast<PID>(i)).second) {
+            invalid();
+        }
+        for (int level = 0; level < element_levels_[i]; ++level) {
+            const char* link = link_lists_[i].get() + level * upper_layer_links_bytes_;
+            uint16_t degree = 0;
+            std::memcpy(&degree, link, sizeof(degree));
+            if (degree > upper_layer_max_degree_) {
+                invalid();
+            }
+            for (size_t edge = 0; edge < degree; ++edge) {
+                PID neighbor = 0;
+                std::memcpy(
+                    &neighbor, link + sizeof(PID) + edge * sizeof(PID), sizeof(PID)
+                );
+                if (neighbor >= element_count) {
+                    invalid();
+                }
+            }
+        }
+    }
+    for (size_t i = 0; i < element_count; ++i) {
+        for (int level = 1; level <= element_levels_[i]; ++level) {
+            const char* link = link_lists_[i].get() +
+                               (static_cast<size_t>(level) - 1) * upper_layer_links_bytes_;
+            uint16_t degree = 0;
+            std::memcpy(&degree, link, sizeof(degree));
+            for (size_t edge = 0; edge < degree; ++edge) {
+                PID neighbor = 0;
+                std::memcpy(
+                    &neighbor, link + sizeof(PID) + edge * sizeof(PID), sizeof(PID)
+                );
+                if (element_levels_[neighbor] < level) {
+                    invalid();
+                }
+            }
+        }
+    }
+    if (element_count != 0 && element_levels_[entry_point_id_] != max_level_) {
+        invalid();
+    }
 }
 
 void HierarchicalNSW::construct(
@@ -526,6 +752,11 @@ void HierarchicalNSW::construct(
     }
     check_coordinates(data, num_points * dim_, dim_, "HNSW construction data");
     check_coordinates(centroids, num_clusters * dim_, dim_, "HNSW construction centroids");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
+        data = normalized.data();
+    }
 
     try {
         num_clusters_ = num_clusters;
@@ -640,7 +871,14 @@ void HierarchicalNSW::train(
         throw std::invalid_argument("HNSW training data exceeds addressable storage");
     }
     // k-means checks the data for finite, in-range coordinates in parallel with
-    // the bound check_coordinates uses; set_centroids checks its centroids.
+    // the bound check_coordinates uses; set_centroids checks its centroids. The cosine
+    // metric checks the data before normalizing it, as add does.
+    std::vector<float> normalized;
+    if (cosine_) {
+        check_coordinates(data, num_points * dim_, dim_, "HNSW training data");
+        normalized = index_detail::normalized_rows(data, num_points, dim_, cp.num_threads);
+        data = normalized.data();
+    }
     rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters, cp);
     kmeans.train_centroids(num_points, data);
     set_centroids(num_clusters, kmeans.centroids.data());
@@ -1014,7 +1252,14 @@ std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
         num_threads,
         [&](size_t index, size_t /*thread*/) {
             std::vector<float> rotated_query(padded_dim_);
-            rotator_->rotate(queries + (index * dim_), rotated_query.data());
+            const float* query = queries + (index * dim_);
+            std::vector<float> normalized_query;
+            if (cosine_) {
+                normalized_query.resize(dim_);
+                index_detail::normalize_vector(query, normalized_query.data(), dim_);
+                query = normalized_query.data();
+            }
+            rotator_->rotate(query, rotated_query.data());
             results[index] = detail::search_knn_sorted(
                 *this, rotated_query.data(), k, std::max(ef_search, k)
             );
@@ -1112,6 +1357,7 @@ size_t HierarchicalNSW::remove(const PID* labels, size_t num_points) {
         rotator_ == nullptr || num_clusters_ == 0) {
         throw std::logic_error("HNSW index must be constructed or loaded before remove");
     }
+    check_writable("remove");
     if (num_points == 0) {
         return 0;
     }
@@ -1319,6 +1565,7 @@ void HierarchicalNSW::resize(size_t new_max_elements) {
     if (level0_record_bytes_ == 0) {
         throw std::logic_error("HNSW index must be initialized before resize");
     }
+    check_writable("resize");
     if (new_max_elements == 0) {
         throw std::invalid_argument("HNSW resize capacity must be greater than zero");
     }
@@ -1379,6 +1626,7 @@ std::vector<PID> HierarchicalNSW::add(
             "HNSW index must be trained, constructed or loaded before add"
         );
     }
+    check_writable("add");
     if (num_points == 0) {
         return {};
     }
@@ -1392,6 +1640,11 @@ std::vector<PID> HierarchicalNSW::add(
         throw std::invalid_argument("HNSW add point count exceeds the supported ID range");
     }
     check_coordinates(data, num_points * dim_, dim_, "HNSW add data");
+    std::vector<float> normalized;
+    if (cosine_) {
+        normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
+        data = normalized.data();
+    }
     std::vector<PID> labels(num_points);
     // Either the caller names the cluster of every point, or each one goes to its
     // nearest centroid, ordered the way a query is routed.

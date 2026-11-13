@@ -124,7 +124,7 @@ def test_train_only_checks_its_input(base_data):
 def test_add_builds_once_and_search_finds_the_vectors(nbits, base_data, tmp_path):
     index = SymqgIndex(DIM, nbits=nbits, ef_construction=60, seed=5)
     ids = index.add(base_data)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     np.testing.assert_array_equal(ids, np.arange(N_VECTORS))
     assert len(index) == index.num_points == N_VECTORS
     ids, distances = index.search(base_data[:20], 1)
@@ -136,8 +136,8 @@ def test_add_builds_once_and_search_finds_the_vectors(nbits, base_data, tmp_path
     index.save(tmp_path / "graph.index")
     loaded = SymqgIndex.load(tmp_path / "graph.index")
     assert loaded.nbits == nbits
-    # Files store neither the seed nor the construction settings.
-    assert (loaded.seed, loaded.ef_construction, loaded.init) == (None, None, None)
+    # Format-2 files record the seed and the construction settings.
+    assert (loaded.seed, loaded.ef_construction, loaded.init) == (5, 60, "pipnn")
     assert loaded.is_trained
     with pytest.raises(RuntimeError, match=message):
         loaded.add(base_data)
@@ -196,5 +196,5 @@ def test_search_pads_k_beyond_the_points(base_data):
     ids, distances = index.search(base_data[:2], 45)
     assert np.isfinite(distances).sum(axis=1).tolist() == [40, 40]
     np.testing.assert_array_equal(np.sort(ids[0, :40]), np.arange(40))
-    np.testing.assert_array_equal(ids[:, 40:], np.full((2, 5), 2**32 - 1))
+    np.testing.assert_array_equal(ids[:, 40:], np.full((2, 5), -1))
     assert np.isinf(distances[:, 40:]).all()

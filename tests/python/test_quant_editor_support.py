@@ -71,6 +71,13 @@ def test_module_docs_and_exports():
         n.name for n in tree.body if isinstance(n, (ast.ClassDef, ast.FunctionDef))
     }
     declared.update(n.target.id for n in tree.body if isinstance(n, ast.AnnAssign))
+    declared.update(  # explicit re-exports such as FormatError
+        alias.asname
+        for n in tree.body
+        if isinstance(n, ast.ImportFrom)
+        for alias in n.names
+        if alias.asname == alias.name
+    )
     assert set(quant.__all__) == declared
     for name in quant.__all__:
         assert hasattr(quant, name), name
@@ -98,8 +105,18 @@ def test_function_signatures_and_docs(name):
 
 
 def test_classes_match_runtime():
-    classes = {n.name: n for n in installed_stub().body if isinstance(n, ast.ClassDef)}
-    assert set(classes) == {"FormatError", "Query", "Rotator"}
+    stub = installed_stub().body
+    classes = {n.name: n for n in stub if isinstance(n, ast.ClassDef)}
+    assert set(classes) == {"Query", "Rotator"}
+    # FormatError is rabitqlib.FormatError, which the stub re-exports.
+    assert quant.FormatError is rabitqlib.FormatError
+    reexports = {
+        alias.name: alias.asname
+        for node in stub
+        if isinstance(node, ast.ImportFrom) and node.module == "rabitqlib"
+        for alias in node.names
+    }
+    assert reexports.get("FormatError") == "FormatError"
     for name, cls in classes.items():
         runtime = getattr(quant, name)
         assert runtime.__module__ == "rabitqlib.quant"

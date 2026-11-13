@@ -3,10 +3,11 @@
 import inspect
 import warnings
 
+import format2_file
 import numpy as np
 import pytest
 from conftest import DIM, N_VECTORS, brute_force_knn, recall_at_k
-from rabitqlib import HnswIndex, IvfIndex, RaBitQKMeans
+from rabitqlib import HnswIndex, IvfIndex, RaBitQKMeans, SymqgIndex
 
 KINDS = ["ivf", "hnsw"]
 
@@ -207,7 +208,8 @@ def test_retraining_is_allowed_only_while_empty(kind, base_data, tmp_path):
     index.save(tmp_path / "trained.index")
     loaded = type(index).load(tmp_path / "trained.index")
     assert loaded.is_trained
-    assert loaded.seed is None
+    assert loaded.seed == index.seed  # format-2 files record it
+    assert loaded.cp.seed == index.seed & 0xFFFFFFFF  # as for a new index
     with pytest.raises(RuntimeError, match=message):
         loaded.set_centroids(base_data[:4])
 
@@ -285,16 +287,32 @@ def test_search_pads_k_beyond_the_stored_points(kind, base_data):
     index = new_index(kind)
     index.train(base_data)
     ids, distances = search(index, base_data[:1], 3)
-    np.testing.assert_array_equal(ids, np.full((1, 3), 2**32 - 1))
+    np.testing.assert_array_equal(ids, np.full((1, 3), -1))
     assert np.isinf(distances).all()
     index.add(base_data[:10])
     index.add(base_data[10:11])
     ids, distances = search(index, base_data[:1], 13)
     assert np.isfinite(distances).sum() == 11
     np.testing.assert_array_equal(np.sort(ids[np.isfinite(distances)]), np.arange(11))
-    np.testing.assert_array_equal(ids[~np.isfinite(distances)], [2**32 - 1] * 2)
+    np.testing.assert_array_equal(ids[~np.isfinite(distances)], [-1] * 2)
     with pytest.raises(ValueError, match=r"^k must be between 1 and 2\*\*31$"):
         search(index, base_data[:1], 0)
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_int64_ids_round_trip_from_add_and_search_to_remove(kind, base_data):
+    index = new_index(kind)
+    added = index.add(base_data[:10])
+    assert added.dtype == np.int64
+    ids, _ = search(index, base_data[:1], 12)
+    assert ids.dtype == np.int64
+    assert (ids == -1).sum() == 2
+    # The missing marker is not a point, so passing it to remove changes nothing.
+    with pytest.raises(ValueError, match=r"^ids must be in \[0, num_stored_points\)$"):
+        index.remove(ids[0])
+    assert len(index) == 10
+    assert index.remove(ids[0][ids[0] >= 0][:3]) == 3
+    assert len(index) == 7
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -496,9 +514,11 @@ def test_ivf_first_add_keeps_every_setting(options, base_data, tmp_path):
         return index
 
     implicit = make()
-    implicit.add(base_data, num_threads=1)
+    implicit.add(base_data, num_threads=1)  # trains with the add's single thread
     explicit = make()
-    explicit.train(base_data)
+    # The saved file includes HNSW routing, whose graph is reproducible only when
+    # it is built with one thread.
+    explicit.train(base_data, num_threads=1)
     explicit.add(base_data, num_threads=1)
     assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
         explicit, tmp_path / "explicit.index"
@@ -541,3 +561,33 @@ def test_empty_first_add_requires_training(kind, base_data):
     ):
         index.add(base_data[:0])
     assert not index.is_trained
+
+
+@pytest.mark.parametrize("kind", KINDS + ["qg"])
+def test_unknown_read_only_features_allow_search_only(kind, base_data, tmp_path):
+    if kind == "qg":
+        index = SymqgIndex(DIM, ef_construction=40, seed=2)
+        index.add(base_data)
+    else:
+        index = new_index(kind)
+        index.add(base_data, num_threads=1)
+    path = tmp_path / "read_only.index"
+    index.save(path)
+    payload = bytearray(path.read_bytes())
+    payload[24:32] = (1).to_bytes(8, "little")  # an unknown ro_compat feature bit
+    format2_file.reseal(payload)
+    path.write_bytes(payload)
+
+    loaded = type(index).load(path)
+    np.testing.assert_array_equal(
+        search(loaded, base_data[:5], 3)[0], search(index, base_data[:5], 3)[0]
+    )
+    message = "cannot update, so it cannot save$"
+    with pytest.raises(RuntimeError, match=message):
+        loaded.save(tmp_path / "copy.index")
+    if kind != "qg":
+        # HNSW-RaBitQ grows its capacity before adding, which is refused first.
+        with pytest.raises(
+            RuntimeError, match="cannot update, so it cannot (add|resize)$"
+        ):
+            loaded.add(base_data[:1])

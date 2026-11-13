@@ -70,7 +70,7 @@ see [C++ integration](../cpp_integration.md).
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
 | `num_clusters` | Python keyword, default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
-| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` is also supported. `seed` was called `random_seed` before 0.8. |
+| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` was called `random_seed` before 0.8. |
 | `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
 | `k`, `ef` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. Omitted, `None` or zero `ef` uses `max(k, 64)` in Python, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
 
@@ -82,7 +82,7 @@ available CPU, so **default builds are not reproducible**: pass `num_threads=1` 
 still change results. Loading restores the saved rotation.
 
 Results use squared L2 or `1 - dot` estimates, ordered from smallest to largest.
-Python fills missing results with ID `2**32 - 1` and distance `+inf`; C++ returns
+Python returns `int64` IDs and fills missing results with ID `-1` and distance `+inf`; C++ returns
 only the available pairs. See [result handling](../quick_start.md#read-the-results)
 and the shared [input, count and concurrency contracts](usage.md).
 
@@ -271,8 +271,8 @@ removed = index.remove(new_ids[:10])   # IDs in [0, num_stored_points)
 A removed point keeps its codes, its links, and its place in the graph. Search
 still walks through it and `add` may link new points to it, which keeps the graph
 connected, as in hnswlib. Search never returns it, so a query can get fewer than
-`k` results once points are removed: in Python the missing slots hold `kPidMax`
-(`2**32 - 1`) with an infinite distance. Removed points still count in
+`k` results once points are removed: in Python the missing slots hold ID `-1`
+with an infinite distance. Removed points still count in
 `num_stored_points()` and cannot be restored. Removal requires the same
 exclusive access as other updates.
 
@@ -315,6 +315,10 @@ A file that has removals cannot be read by earlier releases. Releases 0.3.7
 through 0.5.1 check every cluster ID on `load` and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.
+
+`save` writes [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2), which also records the construction seed, so
+`seed` survives a reload. Releases up to 0.8 cannot read these files; every earlier
+file still loads, without a recorded seed, and saving it writes format 2.
 
 New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
 Loading preserves the saved padded dimension and rotation, so older indexes

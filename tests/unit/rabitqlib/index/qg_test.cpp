@@ -23,6 +23,8 @@
 #include <utility>
 #include <vector>
 
+#include "cosine.hpp"
+#include "format2_file.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/rotator.hpp"
@@ -36,6 +38,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/exact_nn.hpp"
 #include "rabitqlib/index/detail/visited_set.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/symqg/detail/pipnn.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
 #include "rabitqlib/index/types.hpp"
@@ -1398,6 +1401,304 @@ TEST(QgConfigurationTest, RejectsOutOfRangeEntryPoint) {
     EXPECT_EQ(graph.entry_point(), 32U);
 }
 
+TEST(QgFormat2Test, RecordsTheSeedAndConstructionSettings) {
+    constexpr size_t kCount = 65, kDim = 64, kDegree = 32;
+    std::vector<float> data(kCount * kDim);
+    std::mt19937 generator(5);
+    std::normal_distribution<float> normal;
+    for (auto& value : data) {
+        value = normal(generator);
+    }
+    const rabitq_test::TempFile path_file("rabitq_qg_format2.index");
+    const std::string& path = path_file.path();
+    for (const size_t bits : {0UL, 4UL, 8UL}) {
+        SCOPED_TRACE(bits);
+        QuantizedGraph<float> source(
+            kCount, kDim, kDegree, METRIC_L2, RotatorType::FhtKacRotator, bits, 7
+        );
+        QGBuilder builder(source, 40, data.data(), 1, QGInitialization::Random, 7);
+        builder.build();
+        source.save(path.c_str());
+
+        const auto saved = rabitq_test::read_format2_file(
+            path, rabitq_test::format2::IndexKind::SymphonyQg, rabitq_test::kQgSections
+        );
+        EXPECT_EQ(saved.header.code_bits, bits);
+        EXPECT_EQ(
+            saved.header.raw_type,
+            bits == 0 ? rabitq_test::format2::RawType::Float32
+                      : rabitq_test::format2::RawType::None
+        );
+        std::vector<uint32_t> kinds;
+        for (const auto& entry : saved.sections) {
+            kinds.push_back(entry.first.kind);
+        }
+        const std::vector<uint32_t> expected_kinds =
+            bits == 0 ? std::vector<uint32_t>{1, 768, 770}
+                      : std::vector<uint32_t>{1, 768, 769, 770};
+        EXPECT_EQ(kinds, expected_kinds);
+
+        QuantizedGraph<float> loaded;
+        loaded.load(path.c_str());
+        EXPECT_EQ(loaded.seed(), std::optional<uint32_t>(7));
+        EXPECT_EQ(loaded.ef_construction(), std::optional<size_t>(40));
+        EXPECT_EQ(loaded.initialization(), std::optional(QGInitialization::Random));
+        EXPECT_EQ(loaded.quantization_bits(), bits);
+        std::vector<PID> expected(5), actual(5);
+        std::vector<float> expected_distances(5), actual_distances(5);
+        source.set_ef(64);
+        loaded.set_ef(64);
+        source.search(data.data(), 5, expected.data(), expected_distances.data());
+        loaded.search(data.data(), 5, actual.data(), actual_distances.data());
+        EXPECT_EQ(actual, expected);
+        EXPECT_EQ(actual_distances, expected_distances);
+
+        // A graph without a builder or a recorded seed stores them as unknown.
+        QuantizedGraph<float> unknown;
+        EXPECT_FALSE(unknown.seed().has_value());
+        EXPECT_FALSE(unknown.ef_construction().has_value());
+        EXPECT_FALSE(unknown.initialization().has_value());
+    }
+}
+
+TEST(QgCosineTest, MatchesInnerProductOverNormalizedVectors) {
+    constexpr size_t kCount = 130, kDim = 65, kDegree = 32, kQueries = 4, kTopK = 10;
+    std::vector<float> raw((kCount + kQueries) * kDim);
+    std::mt19937 generator(43);
+    std::normal_distribution<float> normal;
+    for (auto& value : raw) {
+        value = normal(generator);
+    }
+    const auto rows = rabitq_test::rescaled_rows(raw, kDim);
+    const std::vector<float> points(rows.begin(), rows.begin() + kCount * kDim);
+    const std::vector<float> queries(rows.begin() + kCount * kDim, rows.end());
+    const auto unit_points = rabitq_test::normalized_rows(points, kDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDim);
+    const rabitq_test::TempFile cosine_file("rabitq_qg_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_qg_cosine_ip.index");
+    const rabitq_test::TempFile damaged_file("rabitq_qg_cosine_damaged.index");
+    for (const size_t bits : {0UL, 4UL, 8UL}) {
+        for (const auto init : {QGInitialization::PiPNN, QGInitialization::Random}) {
+            SCOPED_TRACE(std::to_string(bits) + " bits, init " + std::to_string(int(init)));
+            QuantizedGraph<float> cosine(
+                kCount, kDim, kDegree, METRIC_COSINE, RotatorType::FhtKacRotator, bits, 7
+            );
+            QGBuilder(cosine, 40, points.data(), 1, init, 7).build();
+            QuantizedGraph<float> ip(
+                kCount, kDim, kDegree, METRIC_IP, RotatorType::FhtKacRotator, bits, 7
+            );
+            QGBuilder(ip, 40, unit_points.data(), 1, init, 7).build();
+            EXPECT_EQ(cosine.metric_type(), METRIC_COSINE);
+
+            cosine.save(cosine_file.path().c_str());
+            ip.save(ip_file.path().c_str());
+            rabitq_test::expect_same_sections_except_metric(
+                cosine_file.path(),
+                ip_file.path(),
+                rabitq_test::format2::IndexKind::SymphonyQg,
+                rabitq_test::kQgSections
+            );
+            QuantizedGraph<float> loaded;
+            loaded.load(cosine_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+
+            std::vector<PID> expected(kQueries * kTopK);
+            std::vector<float> expected_distances(expected.size());
+            ip.search_batch_with_ef(
+                unit_queries.data(),
+                kQueries,
+                kTopK,
+                expected.data(),
+                expected_distances.data(),
+                64,
+                1
+            );
+            for (QuantizedGraph<float>* index : {&cosine, &loaded}) {
+                std::vector<PID> ids(expected.size());
+                std::vector<float> distances(expected.size());
+                index->search_batch_with_ef(
+                    queries.data(), kQueries, kTopK, ids.data(), distances.data(), 64, 2
+                );
+                EXPECT_EQ(ids, expected);
+                EXPECT_EQ(distances, expected_distances);
+                index->set_ef(64);
+                index->search(queries.data(), kTopK, ids.data(), distances.data());
+                EXPECT_TRUE(std::equal(ids.begin(), ids.begin() + kTopK, expected.begin()));
+                EXPECT_TRUE(
+                    std::equal(
+                        distances.begin(),
+                        distances.begin() + kTopK,
+                        expected_distances.begin()
+                    )
+                );
+            }
+
+            // A failed load keeps the metric; loading an inner-product file replaces it.
+            {
+                std::ofstream damaged(damaged_file.path(), std::ios::binary);
+                damaged << "not an index";
+            }
+            EXPECT_THROW(loaded.load(damaged_file.path().c_str()), std::runtime_error);
+            EXPECT_EQ(loaded.metric_type(), METRIC_COSINE);
+            loaded.load(ip_file.path().c_str());
+            EXPECT_EQ(loaded.metric_type(), METRIC_IP);
+        }
+    }
+}
+
+TEST(QgCosineTest, ZeroQueryHasDistanceOne) {
+    constexpr size_t kCount = 65, kDim = 64, kDegree = 32;
+    std::vector<float> data(kCount * kDim);
+    std::mt19937 generator(44);
+    std::normal_distribution<float> normal;
+    for (auto& value : data) {
+        value = normal(generator);
+    }
+    // Raw vectors give exact distances.
+    QuantizedGraph<float> index(
+        kCount, kDim, kDegree, METRIC_COSINE, RotatorType::FhtKacRotator, 0, 7
+    );
+    QGBuilder(index, 40, data.data(), 1, QGInitialization::Random, 7).build();
+    const std::vector<float> zero(kDim, 0.0F);
+    std::vector<PID> ids(10);
+    std::vector<float> distances(10);
+    index.search_batch_with_ef(zero.data(), 1, 10, ids.data(), distances.data(), 64, 1);
+    EXPECT_EQ(distances, std::vector<float>(10, 1.0F));
+}
+
+TEST(QgFormat2Test, RejectsContentsThatDoNotFitTheGraph) {
+    constexpr size_t kCount = 65, kDim = 64, kDegree = 32;
+    std::vector<float> data(kCount * kDim, 0.5F);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = static_cast<float>((i * 13) % 17) / 8.0F;
+    }
+    const rabitq_test::TempFile path_file("rabitq_qg_format2_reject.index");
+    const std::string& path = path_file.path();
+    QuantizedGraph<float> source(
+        kCount, kDim, kDegree, METRIC_IP, RotatorType::FhtKacRotator, 4, 3
+    );
+    QGBuilder builder(source, 40, data.data(), 1, QGInitialization::PiPNN, 3);
+    builder.build();
+    source.save(path.c_str());
+    const auto saved = rabitq_test::read_format2_file(
+        path, rabitq_test::format2::IndexKind::SymphonyQg, rabitq_test::kQgSections
+    );
+    QuantizedGraph<float> target;
+    target.load(path.c_str());
+    const auto expect_rejected =
+        [&](const char* name, auto edit, const std::string& message) {
+            SCOPED_TRACE(name);
+            auto damaged = saved;
+            edit(damaged);
+            rabitq_test::write_format2_file(path, damaged);
+            try {
+                target.load(path.c_str());
+                ADD_FAILURE() << "accepted";
+            } catch (const std::runtime_error& error) {
+                EXPECT_EQ(std::string(error.what()), message);
+            }
+            EXPECT_EQ(target.num_vertices(), kCount);
+        };
+    const auto params = [](auto& c) {
+        return reinterpret_cast<uint8_t*>(c.bytes(768).data());
+    };
+    expect_rejected(
+        "missing centroid",
+        [](auto& c) { c.remove(769); },
+        "QuantizedGraph index file has no section kind 769"
+    );
+    expect_rejected(
+        "raw vectors with a centroid",
+        [](auto& c) {
+            c.header.code_bits = 0;
+            c.header.raw_type = rabitq_test::format2::RawType::Float32;
+        },
+        "QuantizedGraph index file has a centroid but stores raw vectors"
+    );
+    expect_rejected(
+        "unknown initialization",
+        [&](auto& c) { rabitq_test::format2::put_u32(params(c) + 24, 3); },
+        "QuantizedGraph index file has invalid graph parameters"
+    );
+    expect_rejected(
+        "entry point out of range",
+        [&](auto& c) { rabitq_test::format2::put_u64(params(c) + 8, kCount); },
+        "QuantizedGraph index file has invalid graph parameters"
+    );
+    expect_rejected(
+        "degree bound",
+        [&](auto& c) { rabitq_test::format2::put_u64(params(c), 48); },
+        "QuantizedGraph index file is invalid: QuantizedGraph degree bound must be a "
+        "positive multiple of 32"
+    );
+    expect_rejected(
+        "seed above 32 bits",
+        [](auto& c) { c.header.seed = uint64_t{1} << 40; },
+        "QuantizedGraph index file has a seed above 32 bits"
+    );
+    expect_rejected(
+        "short records",
+        [](auto& c) { c.bytes(770).pop_back(); },
+        "QuantizedGraph index file section kind 770 has " +
+            std::to_string(rabitq_test::Format2Contents(saved).bytes(770).size() - 1) +
+            " bytes; expected " +
+            std::to_string(rabitq_test::Format2Contents(saved).bytes(770).size())
+    );
+    expect_rejected(
+        "neighbor out of range",
+        [&](auto& c) {
+            std::string& records = c.bytes(770);
+            // The last 4 bytes are the last vertex's last neighbor ID.
+            rabitq_test::format2::put_u32(
+                reinterpret_cast<uint8_t*>(records.data()) + records.size() - 4, kCount
+            );
+        },
+        "QuantizedGraph neighbor ID is invalid"
+    );
+    expect_rejected(
+        "1-bit codes",
+        [](auto& c) { c.header.code_bits = 1; },
+        "QuantizedGraph index file stores neither raw vectors nor 4- or 8-bit codes with "
+        "32-bit IDs"
+    );
+}
+
+TEST(QgFormat2Test, UnknownReadOnlyFeaturesAllowSearchUntilRebuilt) {
+    constexpr size_t kCount = 65, kDim = 64, kDegree = 32;
+    std::vector<float> data(kCount * kDim);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = static_cast<float>((i * 7) % 23) / 8.0F;
+    }
+    const rabitq_test::TempFile path_file("rabitq_qg_format2_read_only.index");
+    const std::string& path = path_file.path();
+    QuantizedGraph<float> source(
+        kCount, kDim, kDegree, METRIC_L2, RotatorType::FhtKacRotator, 8, 2
+    );
+    QGBuilder(source, 40, data.data(), 1, QGInitialization::PiPNN, 2).build();
+    source.save(path.c_str());
+    rabitq_test::patch_format2_header(path, 24, 1, 8);  // an unknown ro_compat bit
+
+    QuantizedGraph<float> loaded;
+    ASSERT_NO_THROW(loaded.load(path.c_str()));
+    std::vector<PID> ids(5);
+    std::vector<float> distances(5);
+    loaded.set_ef(64);
+    ASSERT_NO_THROW(loaded.search(data.data(), 5, ids.data(), distances.data()));
+    try {
+        loaded.save(path.c_str());
+        ADD_FAILURE() << "save was allowed";
+    } catch (const std::logic_error& error) {
+        EXPECT_STREQ(
+            error.what(),
+            "QuantizedGraph was loaded from a file with features this release cannot "
+            "update, so it cannot save"
+        );
+    }
+    // A builder replaces the data the unknown features described.
+    QGBuilder(loaded, 40, data.data(), 1, QGInitialization::PiPNN, 2).build();
+    EXPECT_NO_THROW(loaded.save(path.c_str()));
+}
+
 TEST(QgPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget) {
     constexpr size_t kCount = 33;
     constexpr size_t kDim = 64;
@@ -1419,38 +1720,57 @@ TEST(QgPersistenceTest, RejectsMalformedPayloadWithoutChangingTarget) {
     EXPECT_EQ(target.num_vertices(), 65U);
     EXPECT_EQ(target.metric_type(), METRIC_IP);
 
-    source.save(path.c_str());
-    {
-        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
-        ASSERT_TRUE(file.is_open());
-        constexpr std::streamoff kPaddedDimensionOffset =
-            sizeof(uint64_t) + sizeof(uint32_t) + (3 * sizeof(size_t));
-        file.seekp(kPaddedDimensionOffset);
-        const size_t invalid_padded_dim = kDim * 2;
-        file.write(
-            reinterpret_cast<const char*>(&invalid_padded_dim), sizeof(invalid_padded_dim)
-        );
-        ASSERT_TRUE(file.good());
-    }
-    EXPECT_THROW(target.load(path.c_str()), std::runtime_error);
-    EXPECT_EQ(target.num_vertices(), 65U);
-    EXPECT_EQ(target.metric_type(), METRIC_IP);
+    // Format-2 header fields that do not fit the graph; the earlier layout's are covered
+    // by the historical persistence tests.
+    const auto expect_rejected =
+        [&](size_t offset, uint64_t value, const std::string& message) {
+            source.save(path.c_str());
+            rabitq_test::patch_format2_header(path, offset, value, sizeof(uint64_t));
+            try {
+                target.load(path.c_str());
+                ADD_FAILURE() << "accepted: " << message;
+            } catch (const std::runtime_error& error) {
+                EXPECT_EQ(std::string(error.what()), message);
+            }
+            EXPECT_EQ(target.num_vertices(), 65U);
+            EXPECT_EQ(target.metric_type(), METRIC_IP);
+        };
+    expect_rejected(
+        56, kDim * 2, "QuantizedGraph index file rotator does not match its dimensions"
+    );
+    expect_rejected(
+        88,
+        uint64_t{1} << 32,
+        "QuantizedGraph index file is invalid: QuantizedGraph point count exceeds the "
+        "search-buffer ID limit"
+    );
 
+    // Settings within their limits whose records exceed size_t: 2**31 points with a
+    // degree bound of 2**30.
     source.save(path.c_str());
-    {
-        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
-        ASSERT_TRUE(file.is_open());
-        constexpr std::streamoff kPointCountOffset = sizeof(uint64_t) + sizeof(uint32_t);
-        file.seekp(kPointCountOffset);
-        const size_t invalid_point_count = std::numeric_limits<size_t>::max();
-        file.write(
-            reinterpret_cast<const char*>(&invalid_point_count), sizeof(invalid_point_count)
+    std::string params = rabitq_test::read_format2_section(
+        path, rabitq_test::format2::IndexKind::SymphonyQg, rabitq_test::kQgSections, 768
+    );
+    rabitq_test::format2::put_u64(
+        reinterpret_cast<uint8_t*>(params.data()), uint64_t{1} << 30
+    );
+    rabitq_test::replace_format2_section(
+        path,
+        rabitq_test::format2::IndexKind::SymphonyQg,
+        rabitq_test::kQgSections,
+        768,
+        params
+    );
+    rabitq_test::patch_format2_header(path, 88, uint64_t{1} << 31, sizeof(uint64_t));
+    try {
+        target.load(path.c_str());
+        ADD_FAILURE() << "accepted records too large to address";
+    } catch (const FormatError& error) {
+        EXPECT_STREQ(
+            error.what(), "QuantizedGraph index file describes records too large to address"
         );
-        ASSERT_TRUE(file.good());
     }
-    EXPECT_THROW(target.load(path.c_str()), std::invalid_argument);
     EXPECT_EQ(target.num_vertices(), 65U);
-    EXPECT_EQ(target.metric_type(), METRIC_IP);
 
     if (std::filesystem::exists("/dev/full")) {
         EXPECT_THROW(source.save("/dev/full"), std::ios_base::failure);

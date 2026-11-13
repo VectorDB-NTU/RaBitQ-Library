@@ -50,10 +50,13 @@ namespace py = pybind11;
 namespace rabitqlib::python_bindings {
 namespace {
 
-// Raised for corrupt or incompatible serialized bytes; a ValueError in Python.
+// Raised for corrupt or incompatible serialized bytes; rabitqlib.FormatError in Python.
 struct FormatError : std::invalid_argument {
     using std::invalid_argument::invalid_argument;
 };
+
+// rabitqlib.FormatError, owned by the parent module.
+PyObject* quant_format_error_type = nullptr;
 
 // The blob format and both rotation methods share the FHT/Kac limit.
 constexpr size_t kMaxRotatorDim = rotator_impl::FhtKacRotator::kMaxDim;
@@ -1823,11 +1826,20 @@ void register_quant(py::module_& m) {
         "_quant",
         "Native backend of rabitqlib.quant. Import rabitqlib.quant instead of this module."
     );
-    py::register_exception<FormatError>(
-        quant, "FormatError", py::module_::import("builtins").attr("ValueError")
-    );
-    quant.attr("FormatError").attr("__doc__") =
-        "Corrupt or incompatible serialized bytes. A subclass of ValueError.";
+    // Rejected bytes raise rabitqlib.FormatError, which the parent module created.
+    quant.attr("FormatError") = m.attr("FormatError");
+    quant_format_error_type = m.attr("FormatError").ptr();
+    // pybind11 translators take std::exception_ptr by value.
+    // NOLINTNEXTLINE(performance-unnecessary-value-param)
+    py::register_exception_translator([](std::exception_ptr exception) {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const FormatError& error) {
+            PyErr_SetString(quant_format_error_type, error.what());
+        }
+    });
 
     quant.attr("FACTORS_DTYPE") = factors_dtype();
     quant.attr("ESTIMATE_DTYPE") = estimate_dtype();

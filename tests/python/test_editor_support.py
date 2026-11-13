@@ -212,7 +212,7 @@ def test_documented_search_result_types(kind):
             result = index.search(data[:2], 3, ef=20)
     ids, distances = result
     assert ids.shape == distances.shape == (2, 3)
-    assert ids.dtype == np.uint32
+    assert ids.dtype == np.int64
     assert distances.dtype == np.float32
 
 

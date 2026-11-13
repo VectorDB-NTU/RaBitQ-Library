@@ -84,6 +84,7 @@ endfunction()
 
 set(RABITQ_CORE_SOURCES
     src/core/api.cpp
+    src/core/blob.cpp
     src/core/fast_scale_table.cpp
     src/core/provisional.cpp
     src/utils/cpu_features.cpp
@@ -247,6 +248,7 @@ if(RABITQ_BUILD_FASTSCAN)
 endif()
 if(RABITQ_BUILD_INDEX)
     add_library(rabitq_index STATIC
+        src/index/format2.cpp
         src/index/hnsw.cpp
         src/index/ivf.cpp
         src/index/ivf_initializer.cpp
@@ -261,6 +263,10 @@ if(RABITQ_BUILD_INDEX)
     )
     add_library(rabitqlib::index ALIAS rabitq_index)
     target_link_libraries(rabitq_index PUBLIC rabitq_fastscan)
+    # Index files record the library version that wrote them.
+    target_compile_definitions(rabitq_index PRIVATE
+        RABITQ_LIBRARY_VERSION="${PROJECT_VERSION}"
+    )
     set_target_properties(rabitq_index PROPERTIES
         EXPORT_NAME index
         POSITION_INDEPENDENT_CODE ON

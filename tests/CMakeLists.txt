@@ -40,9 +40,16 @@ add_executable(rabitq_tests
     ${UNIT_TESTS}
 )
 target_include_directories(rabitq_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/common)
+target_include_directories(rabitq_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/core)
+target_compile_definitions(rabitq_tests PRIVATE
+    RABITQ_TEST_LIBRARY_VERSION="${PROJECT_VERSION}"
+)
 if(RABITQ_BUILD_INDEX)
     target_include_directories(rabitq_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/index)
 endif()
+set_source_files_properties(unit/rabitqlib/utils/blob_test.cpp
+    PROPERTIES COMPILE_DEFINITIONS
+    "RABITQ_QUANT_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/python/fixtures/quant\"")
 set_source_files_properties(unit/rabitqlib/index/historical_persistence_test.cpp
     PROPERTIES COMPILE_DEFINITIONS
     "RABITQ_TEST_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence\"")

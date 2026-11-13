@@ -13,10 +13,12 @@ single-point cluster, a full FastScan batch and a partial tail batch. Point 0 is
 removed. The `.expected` files hold reference results of a search that probes
 every cluster.
 
-The tests load each file, compare search results, and require that saving it
-again reproduces the original bytes. Because the clusters differ in size, a
-reader or writer that orders the batch data, extra-bit data and IDs differently
-from the shared-buffer layout fails these checks.
+The tests load each file and compare search results. Until index format 2, they also
+required that saving it again reproduces the original bytes; saving now writes format
+2, and the tests require that the migrated file gives the same results and that saving
+it again reproduces it. Because the clusters differ in size, a reader that orders the
+batch data, extra-bit data and IDs differently from the shared-buffer layout fails
+these checks.
 
 ## Deliberate regeneration
 

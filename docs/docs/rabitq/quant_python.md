@@ -1,7 +1,7 @@
 # Python quantization building blocks
 
 !!! warning "Provisional"
-    `rabitqlib.quant` is provisional in the sense of [PEP 411](https://peps.python.org/pep-0411/): any minor release may change or remove part of its API, with a note in the release notes, until it is declared stable. Byte formats are versioned from the first release, and bytes of an unknown version raise `quant.FormatError` instead of giving wrong results.
+    `rabitqlib.quant` is provisional in the sense of [PEP 411](https://peps.python.org/pep-0411/): any minor release may change or remove part of its API, with a note in the release notes, until it is declared stable. Byte formats are versioned from the first release, and bytes of an unknown version raise `quant.FormatError` instead of giving wrong results. It is `rabitqlib.FormatError`, which index loads also raise, a subclass of both `ValueError` and `RuntimeError`.
 
 `rabitqlib.quant` exposes the pieces the indexes are built from: rotation, quantization, correction factors, packed codes and distance estimation. Use it to store RaBitQ codes in your own database or file format and to score them with your own selection logic. For a ready-made index, use [IVF-RaBitQ](../index/ivf.md), [HNSW-RaBitQ](../index/hnsw.md) or [SymphonyQG](../index/qg.md) instead.
 

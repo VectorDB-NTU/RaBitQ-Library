@@ -27,6 +27,30 @@ accepts working dimensions from 2, with multiples of 32 required for `SplitPacke
 C++ [MatrixRotator](../rabitq/rotator.md) has separate dimension and storage requirements;
 the Python indexes do not expose a rotator choice.
 
+## The cosine metric
+
+With `metric="cosine"` (C++ `METRIC_COSINE`), every index scales data and queries to
+unit length, stores the inner-product codes of the scaled vectors, and returns
+`1 - cos` as the distance, the inner-product distance `1 - dot` of unit vectors.
+Results equal those of a `metric="ip"` index built from the same vectors after this
+scaling. A zero vector stays zero, as in hnswlib and Faiss: its true distance to every
+vector is 1, which quantized storage estimates like any other distance. Centroids
+passed to `set_centroids` or C++ `construct` are used as given; `train`, and the first
+`add` that trains, compute them from the scaled vectors with spherical k-means.
+
+The index checks the original coordinates first, as above. Because it then trains on
+scaled copies, invalid training data is reported as `IVF training data ...` or
+`HNSW training data ...` rather than with the k-means message of the other metrics.
+`train`, `add` and construction scale a copy of their whole input, so they briefly
+need memory for one more float32 copy of it. To bound that for very large data, call
+`train` on a sample and `add` the data in several calls. Queries are scaled one at a
+time.
+
+The metric is stored in the [index file](#index-file-compatibility), so a loaded index
+keeps scaling its inputs. Releases up to 0.8 have no cosine metric: there, normalize
+vectors yourself and use `metric="ip"`. The core quantization APIs, FastScan queries
+and clustering reject `METRIC_COSINE`.
+
 ## Index counts
 
 The unified count properties below are introduced in **0.7.0**. In particular,
@@ -126,7 +150,7 @@ A conflicting call immediately raises
 It does not wait or queue an update. Access protection includes Python input
 conversion and is released when the operation returns or raises an exception.
 Different index objects can operate independently. Concurrent saves must use
-different output paths, including any sidecar files.
+different output paths.
 
 Search parameters such as `ef`, `nprobe`, precision, and `num_threads` belong to
 each call. When using a Python thread pool, consider `num_threads=1` to avoid
@@ -158,24 +182,33 @@ C++ paths use UTF-8 on Windows and native path bytes on POSIX.
 Python `save`/`load` accept strings, `pathlib.Path` and `os.PathLike` objects;
 existing `bytes` and `bytearray` paths remain supported. POSIX paths preserve native
 bytes, but non-UTF-8 filenames require filesystem support. Windows byte paths use
-UTF-8. Embedded null characters are rejected before file access. IVF HNSW sidecars
-use the same path conversion.
+UTF-8. Embedded null characters are rejected before file access. The HNSW sidecars
+of IVF files from earlier releases use the same path conversion.
 
 `save` writes a temporary file beside the destination and renames it into place, so a
 failed save leaves an existing index unchanged. A replaced file keeps its permission
 bits, but not its owner or other hard links. Symbolic links and other non-regular
-destinations are written in place. IVF renames its HNSW sidecar before the index file;
-a failure between the two renames can leave a new sidecar beside the old index.
+destinations are written in place. IVF-RaBitQ writes one file that includes its HNSW
+routing graph.
 
 ## Index file compatibility
 
-The compatibility suite loads frozen files written by v0.5.2, compares search
-IDs and distances, and verifies save/load migration and rejection of truncated
-or unsupported versions. See the
+The compatibility suite loads frozen files written by v0.5.2 and v0.8.3, compares
+search IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. Every index saves in
+[index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2),
+which releases up to 0.8 cannot read, and which records the construction seed. See the
 [fixture provenance and coverage](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence).
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before
 downgrading the library.
+
+A truncated, corrupt, mismatched or unsupported file raises `rabitqlib.FormatError`,
+a subclass of both `ValueError` and `RuntimeError`, so `except RuntimeError`
+handlers still catch it. A file that cannot be opened raises a plain `RuntimeError`;
+a read that fails after opening looks like truncation and raises `FormatError`.
+C++ loaders throw `rabitqlib::FormatError` from `rabitqlib/index/format_error.hpp`,
+a subclass of `std::runtime_error`.
 
 Index files are trusted input. Loaders validate structure and reject truncated,
 inconsistent, or unsupported files so that mistakes are reported, but they are

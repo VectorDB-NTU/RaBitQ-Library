@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -90,11 +91,16 @@ class IVF {
     size_t num_clusters_ = 0;
     bool raw_reranking_ = false;  // raw vectors replace extra-bit codes
     bool ready_ = false;          // centroids set, construction or loading completed
-    size_t ex_bits_ = 0;          // total bits = ex_bits_ + 1; 0 with raw reranking
+    // Loaded from a file with read-only-compatible features this release does not know:
+    // search works, but add, reserve, remove and save refuse the index.
+    bool read_only_ = false;
+    std::optional<uint32_t> seed_;  // the construction seed, when known
+    size_t ex_bits_ = 0;            // total bits = ex_bits_ + 1; 0 with raw reranking
     RotatorType rotator_type_ = RotatorType::FhtKacRotator;
     std::unique_ptr<Rotator<float>> rotator_;
     std::vector<Cluster> clusters_;
-    MetricType metric_type_ = METRIC_L2;
+    MetricType metric_type_ = METRIC_L2;  // METRIC_IP for the cosine metric
+    bool cosine_ = false;  // normalize data and queries; metric_type_ is METRIC_IP
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
     static constexpr uint64_t kRawFormatMagic = 0x3157415251464252ULL;
@@ -190,8 +196,21 @@ class IVF {
         const float* query, size_t k, size_t nprobe, const PID* result_ids
     ) const;
 
-    // Write the index file, and any initializer sidecar, at exactly this path.
+    // Write the index file in format 2 at exactly this path.
     void write_file(const char* filename) const;
+
+    // Load a format-2 file into this freshly created index.
+    void read_format2(std::istream& input);
+
+    // Bytes of Flat or FlatRaBitQ routing data; HNSW routing has no fixed size.
+    [[nodiscard]] size_t flat_routing_bytes() const;
+
+    // Check the stored IDs, create the cluster views, count removed points and mark the
+    // index ready: the end of loading in every format.
+    void complete_load(const std::vector<size_t>& cluster_sizes);
+
+    // Refuse an operation that would modify or save a read-only index.
+    void check_writable(const char* operation) const;
 
    public:
     explicit IVF() noexcept;
@@ -246,7 +265,12 @@ class IVF {
     [[nodiscard]] size_t num_stored_points() const { return ready_ ? max_elements_ : 0; }
     [[nodiscard]] size_t dimension() const { return dim_; }
     [[nodiscard]] size_t nbits() const { return raw_reranking_ ? 32 : ex_bits_ + 1; }
-    [[nodiscard]] MetricType metric_type() const { return metric_type_; }
+    [[nodiscard]] MetricType metric_type() const {
+        return cosine_ ? METRIC_COSINE : metric_type_;
+    }
+    // The rotation seed of the seeded constructor, or no value when it is unknown: the
+    // point-count constructor draws one, and files from releases up to 0.8 omit it.
+    [[nodiscard]] std::optional<uint32_t> seed() const { return seed_; }
     [[nodiscard]] RotatorType rotator_type() const { return rotator_type_; }
     [[nodiscard]] InitializerType initializer_type() const { return initializer_type_; }
     // Centroids are set, by train, set_centroids, construct or load.
@@ -372,7 +396,7 @@ class IVF {
     void load(const char* filename);
 
     // Automatically use HACC for 4-9 quantized bits; use standard FastScan otherwise.
-    // Distances estimate squared L2 or 1 - dot according to the index metric.
+    // Distances estimate squared L2, 1 - dot or 1 - cos according to the index metric.
     // k may exceed the point count; slots without a result get kPidMax and +inf.
     void search(
         const float* query,
