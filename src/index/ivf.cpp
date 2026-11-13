@@ -1177,11 +1177,27 @@ void IVF::search(
     std::vector<AnnCandidate<float>> centroid_candidates(nprobe);
     initializer_->centroids_distances(rotated_query.data(), nprobe, centroid_candidates);
 
+    search_with_candidates(
+        query, rotated_query.data(), k, centroid_candidates, result_ids, distances, use_hacc
+    );
+}
+
+void IVF::search_with_candidates(
+    const float* query,
+    const float* rotated_query,
+    size_t k,
+    const std::vector<AnnCandidate<float>>& centroid_candidates,
+    PID* result_ids,
+    float* distances,
+    bool use_hacc
+) const {
+    const size_t nprobe = centroid_candidates.size();
+
     // The pool never needs more slots than points; the rest of k is padded.
     buffer::SearchBuffer result_pool(std::min(k, max_elements_));
 
     SplitBatchQuery<float> query_wrapper(
-        rotated_query.data(), padded_dim_, ex_bits_, metric_type_, use_hacc
+        rotated_query, padded_dim_, ex_bits_, metric_type_, use_hacc
     );
 
     for (size_t i = 0; i < nprobe; ++i) {
@@ -1193,10 +1209,10 @@ void IVF::search(
             query_wrapper.set_g_add(dist);
         } else {
             const float residual_norm = std::sqrt(euclidean_sqr(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             ));
             auto query_centroid_ip = dot_product<float>(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             );
             query_wrapper.set_g_add(residual_norm, query_centroid_ip);
         }
@@ -1238,6 +1254,49 @@ void IVF::search_batch(
         num_queries == 1 || num_threads == 1
             ? 1
             : std::min(resolve_num_threads(num_threads), num_queries);
+    if (initializer_type_ == InitializerType::Flat && num_queries > 1) {
+        const size_t max_block_bytes = size_t{128} << 20;
+        const size_t row_bytes = sizeof(float) * padded_dim_ +
+                                 sizeof(PID) * nprobe + sizeof(float) * nprobe;
+        const size_t block_rows = std::max<size_t>(
+            1, std::min(num_queries, max_block_bytes / std::max<size_t>(row_bytes, 1))
+        );
+        const auto* centroids = initializer_->centroid(0);
+        for (size_t first = 0; first < num_queries; first += block_rows) {
+            const size_t rows = std::min(block_rows, num_queries - first);
+            std::vector<float> rotated(rows * padded_dim_);
+            index_detail::parallel_for(
+                0, rows, num_threads, [&](size_t row, size_t /*thread*/) {
+                    rotator_->rotate(
+                        queries + (first + row) * dim_, rotated.data() + row * padded_dim_
+                    );
+                }
+            );
+            std::vector<PID> routes(rows * nprobe);
+            std::vector<float> route_distances(rows * nprobe);
+            clustering::detail::exact_assign_topn(
+                rotated.data(), centroids, rows, padded_dim_, num_clusters_, nprobe,
+                metric_type_ == METRIC_IP, static_cast<uint32_t>(num_workers), routes.data(),
+                route_distances.data()
+            );
+            index_detail::parallel_for(
+                0, rows, num_threads, [&](size_t row, size_t /*thread*/) {
+                    std::vector<AnnCandidate<float>> candidates(nprobe);
+                    for (size_t i = 0; i < nprobe; ++i) {
+                        candidates[i] = AnnCandidate<float>(
+                            routes[row * nprobe + i], route_distances[row * nprobe + i]
+                        );
+                    }
+                    search_with_candidates(
+                        queries + (first + row) * dim_, rotated.data() + row * padded_dim_, k,
+                        candidates, result_ids + (first + row) * k,
+                        distances == nullptr ? nullptr : distances + (first + row) * k, hacc
+                    );
+                }
+            );
+        }
+        return;
+    }
     if (num_workers == 1) {
         for (size_t i = 0; i < num_queries; ++i) {
             search(

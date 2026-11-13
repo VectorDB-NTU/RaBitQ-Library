@@ -175,6 +175,16 @@ class IVF {
         const float* query
     ) const;
 
+    void search_with_candidates(
+        const float* query,
+        const float* rotated_query,
+        size_t k,
+        const std::vector<AnnCandidate<float>>& centroid_candidates,
+        PID* result_ids,
+        float* distances,
+        bool use_hacc
+    ) const;
+
     inline void scan_one_batch(
         const char* batch_data,
         const char* rerank_data,

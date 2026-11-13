@@ -78,7 +78,7 @@ TEST(IvfSearchTest, BatchSearchMatchesIndividualQueries) {
             index.construct(data.data(), centroids.data(), labels.data(), false, 1);
             std::array<PID, kNumQueries * kTopK> expected{}, actual{}, ids_only{};
             std::array<float, kNumQueries * kTopK> expected_distances{}, actual_distances{};
-            for (size_t nprobe : {1U, 99U}) {
+            for (size_t nprobe : {1U, 2U, 3U, 99U}) {
                 for (std::optional<bool> hacc :
                      {std::optional<bool>{},
                       std::optional<bool>(false),

@@ -222,6 +222,114 @@ inline void exact_assign(
     failure.rethrow();
 }
 
+// Assign each row to its exact nearest `nprobe` centroids. Matrix products
+// screen centroid tiles for a block of rows; distances near the current top-n
+// boundary are recomputed in double precision before updating the result.
+// Output IDs and distances are row-major and sorted by distance, then ID.
+inline void exact_assign_topn(
+    const float* x,
+    const float* centroids,
+    size_t n,
+    size_t d,
+    size_t k,
+    size_t nprobe,
+    bool spherical,
+    uint32_t num_workers,
+    PID* assignments,
+    float* distances
+) {
+    if (n == 0 || nprobe == 0) {
+        return;
+    }
+    constexpr size_t kPointBlock = 32;
+    constexpr size_t kCentroidBlock = 256;
+    const double error_scale = 8.0 * static_cast<double>(d) *
+                               static_cast<double>(std::numeric_limits<float>::epsilon());
+    const double error_floor = 8.0 * static_cast<double>(d) *
+                                   std::numeric_limits<float>::min() +
+                               8.0 * std::numeric_limits<double>::epsilon();
+    const size_t blocks = 1 + (n - 1) / kPointBlock;
+    index_detail::parallel_for(
+        0, blocks, num_workers, [&](size_t block, size_t /*thread*/) {
+            const size_t first = block * kPointBlock;
+            const size_t rows = std::min(kPointBlock, n - first);
+            std::vector<float> dots(rows * std::min(k, kCentroidBlock));
+            std::vector<double> point_norms(rows);
+            std::vector<std::vector<AnnCandidate<double>>> best(rows);
+            const auto exact_distance = [d, spherical](const float* vector,
+                                                       const float* centroid) {
+                return spherical ? static_cast<double>(dot_product_dis(vector, centroid, d))
+                                 : static_cast<double>(euclidean_sqr(vector, centroid, d));
+            };
+            for (size_t row = 0; row < rows; ++row) {
+                point_norms[row] = l2norm_sqr_f64(x + (first + row) * d, d);
+                best[row].reserve(nprobe);
+            }
+            std::vector<double> norms(k);
+            for (size_t c = 0; c < k; ++c) {
+                norms[c] = l2norm_sqr_f64(centroids + c * d, d);
+            }
+            for (size_t first_cluster = 0; first_cluster < k;
+                 first_cluster += kCentroidBlock) {
+                const size_t cols = std::min(kCentroidBlock, k - first_cluster);
+                simd::matrix_product_transposed(
+                    x + first * d, centroids + first_cluster * d, dots.data(), rows, d, cols
+                );
+                for (size_t row = 0; row < rows; ++row) {
+                    const float* vector = x + (first + row) * d;
+                    auto& candidates = best[row];
+                    for (size_t col = 0; col < cols; ++col) {
+                        const size_t cluster = first_cluster + col;
+                        const double norm_sum = point_norms[row] + norms[cluster];
+                        const double dot = dots[row * cols + col];
+                        const double estimate = spherical ? 1.0 - dot : norm_sum - 2.0 * dot;
+                        const double error = error_scale * norm_sum + error_floor;
+                        const double worst = candidates.size() < nprobe
+                                                 ? std::numeric_limits<double>::infinity()
+                                                 : candidates.back().distance;
+                        if (estimate > worst + error) {
+                            continue;
+                        }
+                        AnnCandidate<double> candidate(
+                            static_cast<PID>(cluster),
+                            exact_distance(vector, centroids + cluster * d)
+                        );
+                        const auto position = std::lower_bound(
+                            candidates.begin(), candidates.end(), candidate,
+                            [](const auto& lhs, const auto& rhs) {
+                                return lhs.distance < rhs.distance ||
+                                       (lhs.distance == rhs.distance && lhs.id < rhs.id);
+                            }
+                        );
+                        if (position == candidates.end() && candidates.size() == nprobe) {
+                            continue;
+                        }
+                        candidates.insert(position, candidate);
+                        if (candidates.size() > nprobe) {
+                            candidates.pop_back();
+                        }
+                    }
+                }
+            }
+            for (size_t row = 0; row < rows; ++row) {
+                auto& candidates = best[row];
+                std::sort(candidates.begin(), candidates.end(), [](const auto& lhs,
+                                                                    const auto& rhs) {
+                    return lhs.distance < rhs.distance ||
+                           (lhs.distance == rhs.distance && lhs.id < rhs.id);
+                });
+                for (size_t i = 0; i < nprobe; ++i) {
+                    assignments[(first + row) * nprobe + i] = candidates[i].id;
+                    distances[(first + row) * nprobe + i] = static_cast<float>(
+                        spherical ? candidates[i].distance
+                                  : std::sqrt(candidates[i].distance)
+                    );
+                }
+            }
+        }
+    );
+}
+
 // Returns count sorted, distinct row indices in [0, n). The seed sequence keeps
 // this stream independent of the centroid initialization stream.
 [[nodiscard]] inline std::vector<size_t> sample_training_points(
