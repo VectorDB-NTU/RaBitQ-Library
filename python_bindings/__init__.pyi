@@ -252,7 +252,9 @@ class IvfIndex:
         raises RuntimeError afterwards. A failed call leaves the index unchanged.
         """
 
-    def set_centroids(self, centroids: npt.ArrayLike) -> None:
+    def set_centroids(
+        self, centroids: npt.ArrayLike, *, num_threads: SupportsIndex | None = None
+    ) -> None:
         """Use the given centroids instead of training.
 
         Parameters
@@ -260,6 +262,11 @@ class IvfIndex:
         centroids : array_like of float, shape (num_clusters, dim)
             Centroids in the original, unpadded coordinates. Converted to
             contiguous float32; a copy may be made.
+        num_threads : int, optional
+            Keyword-only. Worker count for rotating the centroids and building the
+            centroid routing. None (default) and 0 select the available CPU count,
+            capped by OMP_NUM_THREADS. Only the HNSW routing graph varies with it:
+            build it with 1 thread and a fixed seed for a reproducible graph.
 
         Notes
         -----
