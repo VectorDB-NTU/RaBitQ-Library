@@ -5,7 +5,7 @@ import warnings
 
 import numpy as np
 import pytest
-from conftest import DIM, N_VECTORS
+from conftest import DIM, N_CLUSTERS, N_VECTORS
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 
 
@@ -315,3 +315,162 @@ def test_symqg_build_draws_a_new_seed_unless_one_was_given(base_data):
     for _ in range(2):
         quietly(lambda: seeded.build(base_data, 50))
         assert seeded.seed == 3
+
+
+# Moved from test_input_boundaries.py (#214): build's row count has no 0.8 form.
+@pytest.mark.parametrize("index_kind,rows", [("ivf", 79), ("hnsw", 0)])
+def test_build_row_count_diagnostics(index_kind, rows):
+    if index_kind == "ivf":
+        index = quietly(lambda: IvfIndex(64, 80, 1, 4))
+        expected = "number of data rows must match index max_elements; expected 80, got shape (79, 64)"
+    else:
+        # HNSW capacity grows, so only an empty build is rejected.
+        index = quietly(lambda: HnswIndex(64, 80))
+        expected = "number of data rows must be at least 1; got shape (0, 64)"
+    with pytest.raises(ValueError) as error:
+        quietly(
+            lambda: index.build(
+                np.zeros((rows, 64)),
+                np.zeros((1, 64)),
+                np.zeros(rows, dtype=np.uint32),
+            )
+        )
+    assert str(error.value) == expected
+
+
+# Moved from test_symqg.py (#214): build replacing a graph has no 0.8 form.
+@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+@pytest.mark.parametrize("replacement_points", [0, 32])
+def test_symqg_failed_rebuild_preserves_index(
+    base_data, query_data, tmp_path, bits, metric, replacement_points
+):
+    data = base_data[:40]
+    queries = query_data[:3]
+    index = quietly(
+        lambda: SymqgIndex(DIM, max_degree=32, metric=metric, quantization_bits=bits)
+    )
+    quietly(lambda: index.build(data, ef_construction=50))
+    expected_ids, expected_distances = index.search(queries, k=5, ef=50)
+    before_path = tmp_path / "before.index"
+    index.save(str(before_path))
+
+    with pytest.raises(
+        ValueError,
+        match="QuantizedGraph degree bound must be smaller than the number of points",
+    ):
+        quietly(lambda: index.build(data[:replacement_points], ef_construction=50))
+
+    assert quietly(lambda: index.is_built)
+    assert index.num_points == len(data)
+    assert index.dim == DIM
+    assert index.max_degree == 32
+    assert index.metric == metric
+    assert quietly(lambda: index.quantization_bits) == bits
+    ids, distances = index.search(queries, k=5, ef=50)
+    np.testing.assert_array_equal(ids, expected_ids)
+    np.testing.assert_array_equal(distances, expected_distances)
+
+    after_path = tmp_path / "after.index"
+    index.save(str(after_path))
+    assert after_path.read_bytes() == before_path.read_bytes()
+    restored = SymqgIndex.load(str(after_path))
+    assert restored.num_points == len(data)
+    restored_ids, restored_distances = restored.search(queries, k=5, ef=50)
+    np.testing.assert_array_equal(restored_ids, expected_ids)
+    np.testing.assert_array_equal(restored_distances, expected_distances)
+
+
+# Moved from test_symqg.py (#214).
+@pytest.mark.parametrize("bits", [0, 4, 8])
+def test_symqg_successful_rebuild_replaces_index(base_data, tmp_path, bits):
+    # Seeded, and build uses one thread, so every self-query below must succeed.
+    index = quietly(
+        lambda: SymqgIndex(DIM, max_degree=32, quantization_bits=bits, seed=42)
+    )
+    quietly(lambda: index.build(base_data[:40], ef_construction=50))
+    replacement = base_data[40:88] + 10
+    quietly(lambda: index.build(replacement, ef_construction=50))
+
+    assert quietly(lambda: index.is_built)
+    assert index.num_points == len(replacement)
+    assert quietly(lambda: index.quantization_bits) == bits
+    ids, distances = index.search(replacement[:3], k=1, ef=50)
+    np.testing.assert_array_equal(ids[:, 0], np.arange(3))
+
+    path = str(tmp_path / "rebuilt.index")
+    index.save(path)
+    restored = SymqgIndex.load(path)
+    assert restored.num_points == len(replacement)
+    restored_ids, restored_distances = restored.search(replacement[:3], k=1, ef=50)
+    np.testing.assert_array_equal(restored_ids, ids)
+    np.testing.assert_array_equal(restored_distances, distances)
+
+
+# Moved from test_symqg.py (#214).
+def test_symqg_build_defaults_to_pipnn():
+    assert inspect.signature(SymqgIndex.build).parameters["init"].default == "pipnn"
+
+
+# Moved from test_hnsw.py (#214): build on a built index has no 0.8 form.
+@pytest.mark.parametrize("reload", [False, True])
+def test_hnsw_rejected_rebuild_preserves_index(base_data, clusters, tmp_path, reload):
+    idx = quietly(lambda: HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4))
+    centroids, cluster_ids = clusters
+    quietly(lambda: idx.build(base_data, centroids, cluster_ids))
+    if reload:
+        path = str(tmp_path / "hnsw.index")
+        idx.save(path)
+        idx = HnswIndex.load(path)
+    before = idx.search(base_data[:10], k=3, ef=50)
+    with pytest.raises(
+        RuntimeError, match="^HNSW index is already trained, constructed or loaded$"
+    ):
+        quietly(
+            lambda: idx.build(
+                base_data, centroids[:1], np.zeros(N_VECTORS, dtype=np.uint32)
+            )
+        )
+    assert quietly(lambda: idx.is_built)
+    assert idx.num_clusters == N_CLUSTERS
+    after = idx.search(base_data[:10], k=3, ef=50)
+    for actual, expected in zip(after, before, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+
+
+# Moved from test_hnsw.py (#214): the 0.8 constructor takes no max_elements.
+def test_hnsw_zero_capacity_raises():
+    with pytest.raises(
+        ValueError, match="^HNSW max_elements must be greater than zero$"
+    ):
+        quietly(lambda: HnswIndex(max_elements=0, dim=64))
+
+
+# Moved from test_ivf.py (#214): build on a loaded index rebuilds it, which has no
+# 0.8 form. C++ IvfConstructionTest covers the same encoding.
+@pytest.mark.parametrize("bits", [1, 4, 32])
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_ivf_rebuild_matches_incremental_encoding_with_empty_clusters(
+    tmp_path, bits, metric
+):
+    rng = np.random.default_rng(731)
+    data = rng.standard_normal((130, 65), dtype=np.float32)
+    centers = rng.standard_normal((4, 65), dtype=np.float32)
+    labels = np.full(130, 3, dtype=np.uint32)
+    labels[0] = 1
+    labels[1:33] = 2
+    incremental = quietly(lambda: IvfIndex(65, 1, 4, nbits=bits, metric=metric))
+    quietly(lambda: incremental.build(data[:1], centers, labels[:1], num_threads=1))
+    incremental.add(data[1:], cluster_ids=labels[1:], num_threads=1)
+    path = tmp_path / "incremental.index"
+    incremental.save(str(path))
+    expected_bytes = path.read_bytes()
+    expected_ids, expected_distances = incremental.search(data[:3], k=10, nprobe=4)
+    rebuilt = IvfIndex.load(str(path))
+    for threads in (1, 4):
+        quietly(lambda: rebuilt.build(data, centers, labels, num_threads=threads))
+        rebuilt.save(str(path))
+        assert path.read_bytes() == expected_bytes
+        ids, distances = rebuilt.search(data[:3], k=10, nprobe=4)
+        np.testing.assert_array_equal(ids, expected_ids)
+        np.testing.assert_array_equal(distances, expected_distances)

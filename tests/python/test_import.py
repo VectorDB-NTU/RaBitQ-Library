@@ -9,21 +9,21 @@ from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
     [
         (
             IvfIndex,
-            (64, 500, 5),
+            (64, 5),
             {"nbits": 4, "metric": "l2"},
             {"num_clusters": 5, "nbits": 4, "metric": "l2"},
         ),
-        (IvfIndex, (64, 500, 5), {"nbits": 4, "metric": "ip"}, {"metric": "ip"}),
-        (HnswIndex, (64, 500), {}, {}),
+        (IvfIndex, (64, 5), {"nbits": 4, "metric": "ip"}, {"metric": "ip"}),
+        (HnswIndex, (64,), {}, {}),
         (
             HnswIndex,
-            (64, 500),
+            (64,),
             {
                 "M": 8,
                 "ef_construction": 50,
                 "nbits": 4,
                 "metric": "ip",
-                "random_seed": 7,
+                "seed": 7,
             },
             {"metric": "ip", "nbits": 4},
         ),
@@ -34,7 +34,7 @@ from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
 def test_constructor_contract(cls, args, kwargs, expected):
     idx = cls(*args, **kwargs)
     assert idx.dim == 64
-    assert not idx.is_built
+    assert len(idx) == 0
     for name, value in expected.items():
         assert getattr(idx, name) == value
 
@@ -42,9 +42,9 @@ def test_constructor_contract(cls, args, kwargs, expected):
 @pytest.mark.parametrize(
     "cls,args",
     [
-        (IvfIndex, (64, 500, 5, 4)),
-        (HnswIndex, (64, 500)),
-        (SymqgIndex, (64, 16)),
+        (IvfIndex, (64, 5)),
+        (HnswIndex, (64,)),
+        (SymqgIndex, (64,)),
     ],
 )
 def test_invalid_metric_raises(cls, args):
