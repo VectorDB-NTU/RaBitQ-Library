@@ -16,9 +16,7 @@ def test_hnsw_parallel_build_routes_and_reloads(tmp_path, metric, threads):
     data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
     data /= np.linalg.norm(data, axis=1, keepdims=True)
     index = IvfIndex(dim, count, nbits=4, metric=metric, initializer="hnsw")
-    # set_centroids builds the routing graph with every CPU; `threads` applies to
-    # add and search.
-    index.set_centroids(data)
+    index.set_centroids(data, num_threads=threads)
     index.add(data, cluster_ids=np.arange(count, dtype=np.uint32), num_threads=threads)
     # A parallel build may leave a centroid unreachable in the routing graph, so
     # check the aggregate self-recall of every point (one point per cluster).
@@ -35,6 +33,24 @@ def test_hnsw_parallel_build_routes_and_reloads(tmp_path, metric, threads):
         loaded.search(queries, 1, 8, num_threads=threads), expected
     ):
         np.testing.assert_array_equal(actual, reference)
+
+
+@pytest.mark.parametrize("metric", ["l2", "ip"])
+def test_single_thread_set_centroids_builds_reproducible_hnsw_routing(tmp_path, metric):
+    count, dim = 1024, 64
+    data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
+    saved = []
+    for run in range(2):
+        index = IvfIndex(dim, count, nbits=1, metric=metric, initializer="hnsw", seed=7)
+        index.set_centroids(data, num_threads=1)
+        index.add(data, cluster_ids=np.arange(count, dtype=np.uint32), num_threads=4)
+        path = tmp_path / f"run-{run}.index"
+        index.save(str(path))
+        sidecar = Path(str(path) + ".hnsw")  # absent once the file embeds routing
+        saved.append(
+            path.read_bytes() + (sidecar.read_bytes() if sidecar.exists() else b"")
+        )
+    assert saved[0] == saved[1]
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])

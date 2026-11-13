@@ -83,3 +83,35 @@ assert _default_thread_count() == expected, (_default_thread_count(), expected)
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_default_set_centroids_respects_omp_num_threads(tmp_path):
+    # IVF set_centroids used to build HNSW routing with every CPU, whatever the
+    # OpenMP limit. With one OpenMP thread, two default builds must agree.
+    code = """
+import sys
+from pathlib import Path
+import numpy as np
+from rabitqlib import IvfIndex
+data = np.random.default_rng(42).standard_normal((1024, 64)).astype(np.float32)
+saved = []
+for run in range(2):
+    index = IvfIndex(64, 1024, nbits=1, initializer="hnsw", seed=7)
+    index.set_centroids(data)
+    index.add(data[:1], cluster_ids=[0], num_threads=1)
+    path = Path(sys.argv[1]) / f"run-{run}.index"
+    index.save(str(path))
+    sidecar = Path(str(path) + ".hnsw")
+    saved.append(path.read_bytes() + (sidecar.read_bytes() if sidecar.exists() else b""))
+assert saved[0] == saved[1]
+"""
+    env = os.environ.copy()
+    env["OMP_NUM_THREADS"] = "1"
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(tmp_path)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

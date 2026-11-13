@@ -132,14 +132,14 @@ class IvfIndex {
         index_->train(rows, x_ptr, cp);
     }
 
-    void set_centroids(py::handle centroids) {
+    void set_centroids(py::handle centroids, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
         check_trainable();
         check_centroid_shape(centroids_array, index_->num_clusters(), index_->dimension());
         const auto* centroids_ptr = centroids_array.data();
         py::gil_scoped_release release;
-        index_->set_centroids(centroids_ptr);
+        index_->set_centroids(centroids_ptr, num_threads.value_or(0));
     }
 
     // Deprecated: the 0.7 build. A point-count index is constructed; any other
@@ -617,6 +617,8 @@ raises RuntimeError afterwards. A failed call leaves the index unchanged.)doc"
             "set_centroids",
             &IvfIndex::set_centroids,
             py::arg("centroids"),
+            py::kw_only(),
+            py::arg("num_threads") = py::none(),
             R"doc(Use the given centroids instead of training.
 
 Parameters
@@ -624,6 +626,11 @@ Parameters
 centroids : array_like of float, shape (num_clusters, dim)
     Centroids in the original, unpadded coordinates. Converted to
     contiguous float32; a copy may be made.
+num_threads : int, optional
+    Keyword-only. Worker count for rotating the centroids and building the
+    centroid routing. None (default) and 0 select the available CPU count,
+    capped by OMP_NUM_THREADS. Only the HNSW routing graph varies with it:
+    build it with 1 thread and a fixed seed for a reproducible graph.
 
 Notes
 -----

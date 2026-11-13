@@ -516,17 +516,16 @@ def test_hnsw_centroid_routing_roundtrip(tmp_path):
     count, dim = 128, 64
     centroids = rng.standard_normal((count, dim)).astype(np.float32)
     labels = np.arange(count, dtype=np.uint32)
-    idx = _built(
-        centroids, centroids, labels, nbits=1, num_threads=4, initializer="hnsw"
-    )
-    # set_centroids builds the routing graph with every CPU, and a parallel build may
-    # leave a centroid unreachable: check every centroid's self-recall in aggregate.
-    every, every_distances = idx.search(centroids, k=1, nprobe=4, num_threads=4)
-    found = every[:, 0] == labels
-    assert np.count_nonzero(found) >= 0.97 * count
-    np.testing.assert_allclose(every_distances[found], 0, rtol=0, atol=1e-5)
-    queries = centroids[[0, 17, 63, count - 1]]
+    idx = IvfIndex(dim, count, nbits=1, initializer="hnsw", seed=7)
+    # A seeded single-thread routing build gives the same graph on every run; a
+    # parallel build may leave a centroid unreachable (#216).
+    idx.set_centroids(centroids, num_threads=1)
+    idx.add(centroids, cluster_ids=labels, num_threads=4)
+    selected = np.array([0, 17, 63, count - 1])
+    queries = centroids[selected]
     ids, distances = idx.search(queries, k=1, nprobe=4, num_threads=4)
+    np.testing.assert_array_equal(ids[:, 0], selected)
+    np.testing.assert_allclose(distances, 0, rtol=0, atol=1e-5)
 
     path = str(tmp_path / "hnsw_centroid.index")
     idx.save(path)
