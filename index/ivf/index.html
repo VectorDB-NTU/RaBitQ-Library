@@ -463,6 +463,8 @@
       
         
       
+        
+      
     
     
     
@@ -504,6 +506,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.5 (unreleased)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2464,12 +2494,12 @@ points and five centroids.</p>
 <td>Python <code>"l2"</code> or <code>"ip"</code>; defaults to <code>"l2"</code>.</td>
 </tr>
 <tr>
-<td><code>initializer</code></td>
-<td>Defaults to <code>"auto"</code>; see <a href="#centroid-routing">centroid routing</a>.</td>
+<td><code>routing</code></td>
+<td>Defaults to <code>"auto"</code>; see <a href="#centroid-routing">centroid routing</a>. Named <code>initializer</code> before 0.8.5; the old name still works, with a <code>DeprecationWarning</code>, until 0.9.</td>
 </tr>
 <tr>
 <td><code>k</code>, <code>nprobe</code></td>
-<td>Positive result count and cluster probe count. <code>k</code> may exceed the stored point count; missing results are padded with <code>kPidMax</code> (<code>2**32 - 1</code> in Python) and <code>+inf</code>. Python's <code>nprobe</code> defaults to <code>num_clusters / 16</code>, rounded and at least 1, when omitted, <code>None</code> or 0; C++ requires a positive <code>nprobe</code>.</td>
+<td>Positive result count and cluster probe count. <code>k</code> may exceed the stored point count; missing results are padded with <code>kPidMax</code> (<code>2**32 - 1</code> in Python) and <code>+inf</code>. Python's <code>nprobe</code> defaults to <code>num_clusters / 16</code>, rounded and at least 1, when omitted or <code>None</code> (0 does the same and is deprecated since 0.8.5); C++ requires a positive <code>nprobe</code>.</td>
 </tr>
 <tr>
 <td><code>high_accuracy</code></td>
@@ -2530,9 +2560,9 @@ accepts total quantized bit widths from 1 through 9, or <code>total_bits=32</cod
 <h3 id="centroid-routing">Centroid routing<a class="headerlink" href="#centroid-routing" title="Permanent link">&para;</a></h3>
 <p>The optional final C++ constructor argument selects <code>InitializerType::Auto</code>,
 <code>Flat</code>, <code>FlatRaBitQ</code>, or <code>HNSW</code> from the <code>rabitqlib::ivf</code> namespace. Python accepts
-<code>initializer="auto"</code>, <code>"flat"</code>, <code>"flat_rabitq"</code>, or <code>"hnsw"</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">index</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">num_clusters</span><span class="p">,</span> <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">initializer</span><span class="o">=</span><span class="s2">"flat_rabitq"</span><span class="p">)</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">initializer</span><span class="p">)</span>  <span class="c1"># resolved routing type</span>
+<code>routing="auto"</code>, <code>"flat"</code>, <code>"flat_rabitq"</code>, or <code>"hnsw"</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">index</span> <span class="o">=</span> <span class="n">IvfIndex</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">num_clusters</span><span class="p">,</span> <span class="n">nbits</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">routing</span><span class="o">=</span><span class="s2">"flat_rabitq"</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">routing</span><span class="p">)</span>  <span class="c1"># resolved routing type</span>
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">index_type</span><span class="w"> </span><span class="nf">ivf</span><span class="p">(</span><span class="n">num_points</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">num_clusters</span><span class="p">,</span><span class="w"> </span><span class="n">total_bits</span><span class="p">,</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span><span class="p">,</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">               </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">RotatorType</span><span class="o">::</span><span class="n">FhtKacRotator</span><span class="p">,</span>
@@ -2571,7 +2601,7 @@ clusters. The 5,000–19,999 range changes from exact to approximate selection.
 To retain the earlier policy when rebuilding, choose <code>flat</code> below 20,000 clusters
 and <code>hnsw</code> otherwise. Loading an old index preserves its historical routing.</p>
 <p>Routing is fixed for an index and is also used by <code>add</code> when cluster IDs are
-omitted. <code>initializer_type()</code> (Python <code>initializer</code>) reports the resolved type,
+omitted. <code>initializer_type()</code> (Python <code>routing</code>) reports the resolved type,
 including after loading; loading never re-runs the current <code>auto</code> policy for a
 new-format file.</p>
 <p>Finally, call the construct API:</p>
@@ -2620,7 +2650,7 @@ centroid (<code>max_points_per_centroid</code>), spherical k-means for <code>met
 <li>Training or setting centroids again replaces them while the index stores no
   vectors; once it stores any (including removed ones), both raise
   <code>RuntimeError</code>. A failed call leaves the index unchanged.</li>
-<li>Before training, <code>add</code> with <code>cluster_ids</code>, <code>search</code>, <code>remove</code>, <code>reserve</code> and
+<li>Before training, <code>add</code> with <code>cluster_ids</code>, <code>search</code>, <code>remove</code>, <code>reserve_cluster</code> and
   <code>save</code> raise <code>RuntimeError</code>; <code>add</code> without <code>cluster_ids</code> trains first, except
   on an index created with <code>max_elements</code>, which <code>build</code> fills. If that
   first <code>add</code> fails, the index stays untrained and empty; an empty first <code>add</code>
@@ -2764,8 +2794,10 @@ or loaded index without the original dataset; C++ also adds to a
 <a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="c1"># To choose clusters explicitly, use this instead of the call above:</span>
 <a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># new_ids = index.add(vectors, cluster_ids=labels)</span>
 <a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">removed</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_ids</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="n">index</span><span class="o">.</span><span class="n">reserve</span><span class="p">(</span><span class="n">cluster_id</span><span class="p">,</span> <span class="n">num_points</span><span class="p">)</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="n">index</span><span class="o">.</span><span class="n">reserve_cluster</span><span class="p">(</span><span class="n">cluster_id</span><span class="p">,</span> <span class="n">num_points</span><span class="p">)</span>
 </code></pre></div>
+<p>Python names this method <code>reserve_cluster</code> since 0.8.5; <code>reserve</code> still works, with a
+<code>DeprecationWarning</code>, until 0.9.</p>
 <p>Python <code>vectors</code> has shape <code>(n, index.dim)</code> and is converted to contiguous float32.
 <code>add()</code> returns a uint32 array of the new IDs. Optional <code>cluster_ids</code> must be a
 one-dimensional integer array or sequence with one valid cluster ID per vector;
@@ -2789,7 +2821,7 @@ index is unchanged if <code>add</code> throws. As a result:</p>
   time.</strong></li>
 </ul>
 <p>A rebuilt cluster gets exactly the room it needs. To grow a cluster without
-copying it, call <code>reserve</code> first: later <code>add</code> calls then write into the reserved
+copying it, call <code>reserve</code> (Python <code>reserve_cluster</code>) first: later <code>add</code> calls then write into the reserved
 room in place until the cluster outgrows it. The reserved room is memory the index
 holds but does not use yet. It is not saved, so a loaded index has none.</p>
 <p>Measure update latency and peak memory with your index size, bit width and batch

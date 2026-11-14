@@ -463,6 +463,8 @@
       
         
       
+        
+      
     
     
     
@@ -504,6 +506,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.5 (unreleased)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2094,7 +2124,8 @@ the Python indexes do not expose a rotator choice.</p>
 HNSW-RaBitQ's <code>num_points</code> now excludes removed records; see the
 <a href="../../modular_migration/#unified-index-counts">count migration guide</a> when upgrading.</p>
 <p>IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
-(C++ uses the same names with <code>()</code>):</p>
+(C++ uses the same names with <code>()</code>, and <code>max_elements()</code> for the capacity of all
+three indexes):</p>
 <table>
 <thead>
 <tr>
@@ -2104,10 +2135,6 @@ HNSW-RaBitQ's <code>num_points</code> now excludes removed records; see the
 </thead>
 <tbody>
 <tr>
-<td><code>max_elements</code></td>
-<td>Logical record capacity, excluding SIMD padding</td>
-</tr>
-<tr>
 <td><code>num_points</code></td>
 <td>Nonremoved points</td>
 </tr>
@@ -2115,9 +2142,17 @@ HNSW-RaBitQ's <code>num_points</code> now excludes removed records; see the
 <td><code>num_stored_points</code></td>
 <td>Stored records, including removed ones</td>
 </tr>
+<tr>
+<td><code>capacity</code> (HNSW-RaBitQ only)</td>
+<td>Logical record capacity, excluding SIMD padding</td>
+</tr>
 </tbody>
 </table>
-<p><code>0 &lt;= num_points &lt;= num_stored_points &lt;= max_elements</code>. Before vectors are
+<p><code>0 &lt;= num_points &lt;= num_stored_points</code>, and <code>num_stored_points &lt;= capacity</code> for
+HNSW-RaBitQ. Before 0.8.5 Python named the capacity <code>max_elements</code> on all three
+classes; that property is deprecated and is removed in 0.9. On <code>IvfIndex</code> and
+<code>SymqgIndex</code> it equals <code>num_stored_points</code>, except on an <code>IvfIndex</code> created in the
+0.7 form before <code>build</code>, where it is the declared row count. Before vectors are
 added, both point counts are zero; configured capacity may be nonzero. For
 all three indexes, <code>len(index)</code> equals <code>num_points</code>. <code>is_trained</code> reports
 whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by <code>train</code>, <code>set_centroids</code>,
@@ -2126,12 +2161,12 @@ the first <code>add</code>, or <code>load</code>), and is always <code>True</cod
 start at the previous <code>num_stored_points</code>. Use this stored count for ID bounds,
 and <code>num_points</code> for a live count. Counts survive save/load.</p>
 <p>IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
-HNSW-RaBitQ's Python <code>add</code> grows its capacity geometrically, and <code>resize</code> changes
-only capacity, for example to preallocate it. SymphonyQG has no incremental
-updates: <code>add</code> builds the graph once, and all three counts are equal afterwards.</p>
+HNSW-RaBitQ's Python <code>add</code> grows its capacity geometrically, and <code>reserve</code> preallocates
+it (<code>resize</code> before 0.8.5). SymphonyQG has no incremental
+updates: <code>add</code> builds the graph once, and both counts are equal afterwards.</p>
 <p><code>repr(index)</code> shows dimension, metric, quantization bits and live point count,
 plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
-the resolved initializer, and SymphonyQG includes its degree bound. The summary
+the resolved routing strategy, and SymphonyQG includes its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.</p>
 <h2 id="estimate-storage">Estimate storage<a class="headerlink" href="#estimate-storage" title="Permanent link">&para;</a></h2>
 <p>The following estimates describe the main float32 index storage, not total process
@@ -2213,7 +2248,7 @@ construction, updates, and file I/O. The following contract applies to
 <td>May run together</td>
 </tr>
 <tr>
-<td><code>train</code>, <code>set_centroids</code>, <code>build</code>, <code>add</code>, <code>remove</code>, <code>reserve</code>, <code>resize</code>, and setting <code>cp</code>, where available</td>
+<td><code>train</code>, <code>set_centroids</code>, <code>build</code>, <code>add</code>, <code>remove</code>, <code>reserve</code>, <code>reserve_cluster</code>, <code>resize</code>, and setting <code>cp</code>, where available</td>
 <td>Require exclusive access, except SymphonyQG's <code>train</code>, which only checks its input and may run with reads</td>
 </tr>
 </tbody>
@@ -2224,7 +2259,7 @@ It does not wait or queue an update. Access protection includes Python input
 conversion and is released when the operation returns or raises an exception.
 Different index objects can operate independently. Concurrent saves must use
 different output paths, including any sidecar files.</p>
-<p>Search parameters such as <code>ef</code>, <code>nprobe</code>, precision, and <code>num_threads</code> belong to
+<p>Search parameters such as <code>ef_search</code>, <code>nprobe</code>, precision, and <code>num_threads</code> belong to
 each call. When using a Python thread pool, consider <code>num_threads=1</code> to avoid
 starting multiple native worker pools. Keep input arrays and any shared backing
 storage unchanged for the entire call; do not resize or modify them from another

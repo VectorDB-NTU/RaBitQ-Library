@@ -463,6 +463,8 @@
       
         
       
+        
+      
     
     
     
@@ -504,6 +506,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.5 (unreleased)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1642,10 +1672,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#choosing-ef-after-removals" class="md-nav__link">
+  <a href="#choosing-ef_search-after-removals" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing ef after removals
+        Choosing ef_search after removals
       
     </span>
   </a>
@@ -2341,10 +2371,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#choosing-ef-after-removals" class="md-nav__link">
+  <a href="#choosing-ef_search-after-removals" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing ef after removals
+        Choosing ef_search after removals
       
     </span>
   </a>
@@ -2519,7 +2549,7 @@ degree, and index parameters.</p>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">index</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">M</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># nbits=7 by default</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># trains 16 centroids, then links; 1 thread is reproducible</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>  <span class="c1"># ef defaults to max(k, 64)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>  <span class="c1"># ef_search defaults to max(k, 64)</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"hnsw.index"</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"hnsw.index"</span><span class="p">)</span>
 </code></pre></div>
@@ -2581,15 +2611,15 @@ see <a href="../../cpp_integration/">C++ integration</a>.</p>
 </tr>
 <tr>
 <td><code>metric</code>, <code>seed</code></td>
-<td>Python defaults are <code>"l2"</code> and 100; <code>"ip"</code> is also supported. <code>seed</code> was called <code>random_seed</code> before 0.8.</td>
+<td>Python defaults are <code>"l2"</code> and 100; <code>"ip"</code> is also supported. <code>seed</code> was called <code>random_seed</code> before 0.8. A seed is in <code>[0, 2**32 - 1]</code>; larger values are deprecated since 0.8.5, and 0.9 draws a seed when it is omitted.</td>
 </tr>
 <tr>
-<td><code>max_elements</code></td>
-<td>Python reports the current capacity, which <code>add</code> grows geometrically (at least doubling) and <code>resize</code> can preallocate. C++ <code>add</code> never grows it.</td>
+<td><code>capacity</code> (C++ <code>max_elements()</code>)</td>
+<td>Python reports the current capacity, which <code>add</code> grows geometrically (at least doubling) and <code>reserve</code> can preallocate; they were named <code>max_elements</code> and <code>resize</code> before 0.8.5. C++ <code>add</code> never grows it.</td>
 </tr>
 <tr>
-<td><code>k</code>, <code>ef</code></td>
-<td>Positive result count and search window. <code>k</code> may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. Omitted, <code>None</code> or zero <code>ef</code> uses <code>max(k, 64)</code> in Python, positive <code>ef</code> is raised to at least <code>k</code>, and <code>ef</code> above the stored point count is clamped to it.</td>
+<td><code>k</code>, <code>ef_search</code></td>
+<td>Positive result count and search window. <code>k</code> may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. An omitted or <code>None</code> <code>ef_search</code> uses <code>max(k, 64)</code> in Python (0 does the same and is deprecated since 0.8.5), a smaller value is raised to at least <code>k</code>, and a value above the stored point count is clamped to it. Python named it <code>ef</code> before 0.8.5.</td>
 </tr>
 </tbody>
 </table>
@@ -2683,7 +2713,7 @@ index, then add the points:</p>
 different <code>ef_search</code> values and separate outputs while the index is unchanged.
 Python follows the shared <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <h2 id="updating-an-index">Updating an index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
-<p>A constructed or loaded index supports <code>add()</code>, <code>resize()</code>,
+<p>A constructed or loaded index supports <code>add()</code>, <code>resize()</code> (Python <code>reserve</code>),
 and <code>remove()</code> without the original data; C++ also adds to a
 <a href="#training-centroids-in-c">trained</a> index. Adding points and resizing preserve
 the index file format; files with removals have
@@ -2730,8 +2760,9 @@ retrying, or rebuild to restore full reachability.</p>
 records still occupy capacity.</p>
 <p>C++ <code>add</code> never grows the index: it rejects a whole batch whose size exceeds
 <code>max_elements() - num_stored_points()</code>, and <code>resize</code> is the only way to raise
-that. Python <code>add</code> calls <code>resize</code> first when the batch does not fit, to at least
-double the capacity. Reserving capacity avoids reallocating and copying the whole base-layer record storage during <code>add</code>.
+that. Python <code>add</code> grows the capacity first when the batch does not fit, to at least
+double it, and <code>reserve(num_points)</code> preallocates it (since 0.8.5; <code>resize</code> still works,
+with a <code>DeprecationWarning</code>, until 0.9, and <code>capacity</code> replaces <code>max_elements</code>). Reserving capacity avoids reallocating and copying the whole base-layer record storage during <code>add</code>.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.</p>
 <p><code>resize</code> rebuilds the base-layer storage and copies it, so it needs memory for
@@ -2763,11 +2794,11 @@ connected, as in hnswlib. Search never returns it, so a query can get fewer than
 (<code>2**32 - 1</code>) with an infinite distance. Removed points still count in
 <code>num_stored_points()</code> and cannot be restored. Removal requires the same
 exclusive access as other updates.</p>
-<h4 id="choosing-ef-after-removals">Choosing <code>ef</code> after removals<a class="headerlink" href="#choosing-ef-after-removals" title="Permanent link">&para;</a></h4>
+<h4 id="choosing-ef_search-after-removals">Choosing <code>ef_search</code> after removals<a class="headerlink" href="#choosing-ef_search-after-removals" title="Permanent link">&para;</a></h4>
 <p>Removed points still take slots in the <code>ef_search</code> candidate set, so a search with
 <code>ef_search</code> close to <code>k</code> finds fewer live points as removals accumulate. C++ search
 uses <code>max(ef_search, k)</code>, clamped to <code>num_stored_points()</code>. Python uses <code>max(k, 64)</code>
-when <code>ef</code> is omitted or zero; an explicit positive <code>ef</code> is also raised to at least <code>k</code>,
+when <code>ef_search</code> is omitted (it was named <code>ef</code> before 0.8.5); an explicit value is also raised to at least <code>k</code>,
 and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points (search clamps the result to

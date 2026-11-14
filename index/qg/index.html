@@ -463,6 +463,8 @@
       
         
       
+        
+      
     
     
     
@@ -504,6 +506,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.8.5/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8.5 (unreleased)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2280,7 +2310,7 @@ step. The degree-32 example requires at least 33 data points.</p>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">SymqgIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"qg_example.index"</span><span class="p">)</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">ef_search</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 </code></pre></div>
 <p>SymphonyQG follows the same <code>train</code> → <code>add</code> → <code>search</code> workflow as the other
 indexes, but has nothing to train: <code>train(x)</code> only checks <code>x</code> as <code>add</code> would,
@@ -2350,8 +2380,8 @@ See <a href="../../cpp_integration/">C++ integration</a> for build setup.</p>
 <td>Python keyword: rotation and graph-construction seed in <code>[0, 2**32 - 1]</code>. The default <code>None</code> draws one at random; <code>index.seed</code> reports it, and passing it back with <code>num_threads=1</code> rebuilds the same graph from the same data.</td>
 </tr>
 <tr>
-<td><code>k</code>, <code>ef</code></td>
-<td><code>k</code> is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID <code>2**32 - 1</code> and distance <code>+inf</code>. Omitted or zero <code>ef</code> uses <code>max(k, 64)</code> in Python, and smaller values are raised to <code>k</code>, as for HNSW-RaBitQ.</td>
+<td><code>k</code>, <code>ef_search</code></td>
+<td><code>k</code> is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID <code>2**32 - 1</code> and distance <code>+inf</code>. An omitted <code>ef_search</code> uses <code>max(k, 64)</code> in Python, and smaller values are raised to <code>k</code>, as for HNSW-RaBitQ. Python named it <code>ef</code> before 0.8.5.</td>
 </tr>
 <tr>
 <td><code>num_threads</code></td>
@@ -2436,13 +2466,13 @@ buffers are required and contain <code>num_queries * k</code> elements. Empty C+
 do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 <code>set_ef()</code> while searches are running.</p>
-<p>Python <code>search(queries, k, ef=None, num_threads=None)</code> accepts a two-dimensional
+<p>Python <code>search(queries, k, ef_search=None, *, num_threads=None)</code> accepts a two-dimensional
 query array and returns <code>(ids, distances)</code> arrays of shape <code>(num_queries, k)</code>,
 including empty batches. It defaults to one worker; <code>num_threads=0</code> selects the
 available logical CPU count, capped by the number of queries. The 0.7 name
 <code>search_batch</code> still works in 0.8 with a <code>DeprecationWarning</code>.
 Queries use the original dimension, including when the internal rotation pads it.</p>
-<p>Python searches use per-call <code>ef</code> values. For access rules, see the
+<p>Python searches use per-call <code>ef_search</code> values. For access rules, see the
 <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <p>For C++, use
 <code>search_batch_with_ef(queries, num_queries, k, result_ids, distances, ef_search, num_threads=1)</code>
