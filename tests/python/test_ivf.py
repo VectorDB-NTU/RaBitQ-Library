@@ -15,11 +15,31 @@ _NPROBE_ALL = N_CLUSTERS  # probe every cluster → deterministic coverage
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 
+def _built(
+    data,
+    centroids,
+    cluster_ids,
+    nbits,
+    num_threads=1,
+    fast_quantization=False,
+    **options,
+):
+    """An index over data with the given centroids and cluster assignments."""
+    index = IvfIndex(data.shape[1], len(centroids), nbits=nbits, **options)
+    index.set_centroids(centroids)
+    index.add(
+        data,
+        cluster_ids=cluster_ids,
+        num_threads=num_threads,
+        fast_quantization=fast_quantization,
+    )
+    return index
+
+
 @pytest.fixture(scope="module")
 def built_ivf(base_data, clusters):
-    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
     centroids, cluster_ids = clusters
-    idx.build(base_data, centroids, cluster_ids)
+    idx = _built(base_data, centroids, cluster_ids, nbits=4)
     return idx
 
 
@@ -27,7 +47,7 @@ def built_ivf(base_data, clusters):
 
 
 def test_properties(built_ivf):
-    assert built_ivf.is_built
+    assert len(built_ivf) == N_VECTORS
     assert built_ivf.dim == DIM
     assert built_ivf.num_clusters == N_CLUSTERS
     assert built_ivf.nbits == 4
@@ -62,8 +82,7 @@ def test_batch_search_matches_individual_queries(bits, metric):
     queries = rng.standard_normal((13, 65)).astype(np.float32)
     centroids = data[:4].copy()
     labels = np.arange(len(data), dtype=np.uint32) % 3
-    index = IvfIndex(65, len(data), 4, bits, metric=metric)
-    index.build(data, centroids, labels)
+    index = _built(data, centroids, labels, nbits=bits, metric=metric)
     for hacc in [None, False, True]:
         for nprobe in [1, 99]:
             kwargs = dict(k=7, nprobe=nprobe, high_accuracy=hacc)
@@ -94,8 +113,7 @@ def test_unfilled_results_use_sentinels():
     data[1:] = 100.0
     centroids = np.stack((data[0], data[1]))
     cluster_ids = np.array([0, 1, 1, 1], dtype=np.uint32)
-    idx = IvfIndex(DIM, 4, 2, nbits=4)
-    idx.build(data, centroids, cluster_ids)
+    idx = _built(data, centroids, cluster_ids, nbits=4)
 
     ids, dists = idx.search(data[:1], k=3, nprobe=1)
     assert ids[0, 0] == 0
@@ -111,10 +129,9 @@ def test_self_retrieval(built_ivf, base_data, clusters, fast_quantization):
     """Probing all clusters: each database vector must be its own nearest neighbor."""
     idx = built_ivf
     if fast_quantization:
-        idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
         centroids, cluster_ids = clusters
-        idx.build(base_data, centroids, cluster_ids, fast_quantization=True)
-    assert idx.is_built
+        idx = _built(base_data, centroids, cluster_ids, nbits=4, fast_quantization=True)
+    assert len(idx) == N_VECTORS
     probes = base_data[:10]
     ids, _ = idx.search(probes, k=1, nprobe=_NPROBE_ALL)
     for i in range(10):
@@ -139,8 +156,7 @@ def test_inner_product_routing_uses_inner_product():
     query = np.zeros((1, DIM), dtype=np.float32)
     query[0, 0] = 1.0
 
-    idx = IvfIndex(DIM, 2, 2, nbits=32, metric="ip")
-    idx.build(data, centroids, cluster_ids, num_threads=1)
+    idx = _built(data, centroids, cluster_ids, nbits=32, metric="ip")
     ids, distances = idx.search(query, k=1, nprobe=1, num_threads=1)
 
     assert ids[0, 0] == 1
@@ -158,13 +174,8 @@ def test_full_quantization_centroid_distances_roundtrip(nbits, metric, tmp_path)
     data = rng.standard_normal((33, 129)).astype(np.float32)
     data[0] = 0
     centroid = np.zeros((1, 129), dtype=np.float32)
-    idx = IvfIndex(129, len(data), 1, nbits=nbits, metric=metric)
-    idx.build(
-        data,
-        centroid,
-        np.zeros(len(data), dtype=np.uint32),
-        fast_quantization=False,
-        num_threads=1,
+    idx = _built(
+        data, centroid, np.zeros(len(data), dtype=np.uint32), nbits=nbits, metric=metric
     )
 
     ids, distances = idx.search(centroid, k=len(data), nprobe=1, num_threads=1)
@@ -190,8 +201,9 @@ def test_full_quantization_centroid_distances_roundtrip(nbits, metric, tmp_path)
 
 
 def test_wrong_data_dim_raises(clusters):
-    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
+    idx = IvfIndex(DIM, N_CLUSTERS, nbits=4)
     centroids, cluster_ids = clusters
+    idx.set_centroids(centroids)
     bad_data = np.zeros((N_VECTORS, DIM + 1), dtype=np.float32)
     with pytest.raises(
         ValueError,
@@ -201,33 +213,34 @@ def test_wrong_data_dim_raises(clusters):
         )
         + "$",
     ):
-        idx.build(bad_data, centroids, cluster_ids)
+        idx.add(bad_data, cluster_ids=cluster_ids, num_threads=1)
 
 
-def test_wrong_centroid_dim_raises(base_data, clusters):
-    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
-    _, cluster_ids = clusters
+def test_wrong_centroid_dim_raises():
+    idx = IvfIndex(DIM, N_CLUSTERS, nbits=4)
     bad_centroids = np.zeros((N_CLUSTERS, DIM + 1), dtype=np.float32)
     with pytest.raises(
         ValueError,
         match="^"
         + re.escape(
-            f"centroid dimension does not match index dim; expected last dimension {DIM}, got shape {bad_centroids.shape}"
+            "centroids must have shape (num_clusters, dim); "
+            f"expected ({N_CLUSTERS}, {DIM}), got shape {bad_centroids.shape}"
         )
         + "$",
     ):
-        idx.build(base_data, bad_centroids, cluster_ids)
+        idx.set_centroids(bad_centroids)
 
 
 def test_wrong_cluster_ids_length_raises(base_data, clusters):
-    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
+    idx = IvfIndex(DIM, N_CLUSTERS, nbits=4)
     centroids, _ = clusters
+    idx.set_centroids(centroids)
     bad_ids = np.zeros(N_VECTORS + 5, dtype=np.uint32)
     with pytest.raises(
         ValueError,
         match=f"^cluster_ids length must match number of rows in data; expected {N_VECTORS} IDs, got {len(bad_ids)}$",
     ):
-        idx.build(base_data, centroids, bad_ids)
+        idx.add(base_data, cluster_ids=bad_ids, num_threads=1)
 
 
 def test_wrong_query_dim_raises(built_ivf):
@@ -244,7 +257,7 @@ def test_wrong_query_dim_raises(built_ivf):
 
 
 def test_search_before_build_raises(query_data):
-    idx = IvfIndex(DIM, N_VECTORS, N_CLUSTERS, nbits=4)
+    idx = IvfIndex(DIM, N_CLUSTERS, nbits=4)
     with pytest.raises(
         RuntimeError, match="^IvfIndex must be trained or loaded before search$"
     ):
@@ -259,7 +272,7 @@ def test_save_load_roundtrip(built_ivf, query_data, tmp_path):
     built_ivf.save(path)
 
     loaded = IvfIndex.load(path)
-    assert loaded.is_built
+    assert len(loaded) == len(built_ivf)
     assert loaded.dim == built_ivf.dim
     assert loaded.num_clusters == built_ivf.num_clusters
     assert loaded.nbits == built_ivf.nbits
@@ -281,14 +294,15 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     data = rng.standard_normal((65, dim)).astype(np.float32)
     data[0] = 0  # zero residual, padded dimension, and tail batches
     queries = rng.standard_normal((3, dim)).astype(np.float32)
-    idx = IvfIndex(dim, len(data), 3, 32, metric)
     cluster_ids = np.arange(len(data), dtype=np.uint32) % 2  # empty third cluster
-    idx.build(
+    idx = _built(
         data,
         np.zeros((3, dim), dtype=np.float32),
         cluster_ids,
-        fast_quantization=fast_quantization,
+        nbits=32,
+        metric=metric,
         num_threads=2,
+        fast_quantization=fast_quantization,
     )
     # Use a wider oracle: float32 BLAS reduction error near cancellation can
     # exceed the tolerance even when the returned float32 distance is accurate.
@@ -329,8 +343,13 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     )
     order = np.argsort(cluster_ids, kind="stable")
     np.testing.assert_array_equal(stored.reshape(original.shape), original[order])
-    one_bit = IvfIndex(dim, len(data), 3, 1, metric)
-    one_bit.build(original, np.zeros((3, dim), dtype=np.float32), cluster_ids)
+    one_bit = _built(
+        original,
+        np.zeros((3, dim), dtype=np.float32),
+        cluster_ids,
+        nbits=1,
+        metric=metric,
+    )
     one_bit_path = tmp_path / "one-bit.index"
     one_bit.save(str(one_bit_path))
     assert len(payload) - one_bit_path.stat().st_size == raw_bytes
@@ -397,8 +416,7 @@ def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded, nonzero_dista
 )
 def test_raw_index_rejects_invalid_files(tmp_path, damage):
     data = np.zeros((2, 65), dtype=np.float32)
-    idx = IvfIndex(65, 2, 1, 32)
-    idx.build(data, data[:1], np.zeros(2, dtype=np.uint32))
+    idx = _built(data, data[:1], np.zeros(2, dtype=np.uint32), nbits=32)
     path = tmp_path / "invalid.index"
     idx.save(str(path))
     payload = bytearray(path.read_bytes())
@@ -433,7 +451,7 @@ def test_raw_index_rejects_invalid_files(tmp_path, damage):
 @pytest.mark.parametrize("nbits", [0, 10, 31, 33])
 def test_invalid_ivf_bits(nbits):
     with pytest.raises(ValueError, match="IVF bits must be in"):
-        IvfIndex(3, 2, 1, nbits)
+        IvfIndex(3, 1, nbits=nbits)
 
 
 @pytest.mark.parametrize("nbits", [1, 2, 3, 4, 5, 6, 7, 8, 9, 32])
@@ -441,9 +459,11 @@ def test_automatic_high_accuracy(nbits, tmp_path):
     rng = np.random.default_rng(29)
     data = rng.standard_normal((65, 65)).astype(np.float32)
     queries = rng.standard_normal((3, 65)).astype(np.float32)
-    index = IvfIndex(65, len(data), 1, nbits)
-    index.build(
-        data, np.zeros((1, 65), dtype=np.float32), np.zeros(len(data), dtype=np.uint32)
+    index = _built(
+        data,
+        np.zeros((1, 65), dtype=np.float32),
+        np.zeros(len(data), dtype=np.uint32),
+        nbits=nbits,
     )
     path = tmp_path / "auto.index"
     index.save(str(path))
@@ -463,8 +483,9 @@ def test_hnsw_sidecar_save_failures(tmp_path, failure):
         pytest.skip("requires a device that rejects writes")
     data = np.zeros((2, 64), dtype=np.float32)
     data[1, 0] = 1
-    idx = IvfIndex(64, 2, 2, nbits=32, initializer="hnsw")
-    idx.build(data, data, np.arange(2, dtype=np.uint32))
+    idx = _built(
+        data, data, np.arange(2, dtype=np.uint32), nbits=32, initializer="hnsw"
+    )
     expected = idx.search(data, 1, 1)
     path = tmp_path / "sidecar_failure.index"
     sidecar = Path(str(path) + ".hnsw")
@@ -495,8 +516,11 @@ def test_hnsw_centroid_routing_roundtrip(tmp_path):
     count, dim = 128, 64
     centroids = rng.standard_normal((count, dim)).astype(np.float32)
     labels = np.arange(count, dtype=np.uint32)
-    idx = IvfIndex(dim, count, count, nbits=1, initializer="hnsw")
-    idx.build(centroids, centroids, labels, num_threads=4)
+    idx = IvfIndex(dim, count, nbits=1, initializer="hnsw", seed=7)
+    # A seeded single-thread routing build gives the same graph on every run; a
+    # parallel build may leave a centroid unreachable (#216).
+    idx.set_centroids(centroids, num_threads=1)
+    idx.add(centroids, cluster_ids=labels, num_threads=4)
     selected = np.array([0, 17, 63, count - 1])
     queries = centroids[selected]
     ids, distances = idx.search(queries, k=1, nprobe=4, num_threads=4)
@@ -519,8 +543,17 @@ def test_hnsw_inner_product_routing_roundtrip(tmp_path):
     data = centroids[:1].copy()
     query = np.zeros((4, dim), dtype=np.float32)
     query[:, 0] = 1.0
-    idx = IvfIndex(dim, 1, count, nbits=32, metric="ip", initializer="hnsw")
-    idx.build(data, centroids, np.array([0], dtype=np.uint32), num_threads=4)
+    # Centroid 0 is every other centroid's nearest under IP, so the routing graph's
+    # pruning always keeps it and every query reaches it.
+    idx = _built(
+        data,
+        centroids,
+        np.array([0], dtype=np.uint32),
+        nbits=32,
+        num_threads=4,
+        metric="ip",
+        initializer="hnsw",
+    )
 
     path = str(tmp_path / "hnsw_ip_centroid.index")
     ids, distances = idx.search(query, k=1, nprobe=1, num_threads=4)
@@ -547,8 +580,7 @@ def _dynamic_index(nbits=4, metric="l2", count=120, dim=65, clusters=3, seed=61)
         gap = data[:, None, :] - centroids[None, :, :]
         assigned = np.argmin(np.einsum("ncd,ncd->nc", gap, gap), axis=1)
     assigned = assigned.astype(np.uint32)
-    idx = IvfIndex(dim, count, clusters, nbits, metric)
-    idx.build(data[:count], centroids, assigned[:count])
+    idx = _built(data[:count], centroids, assigned[:count], nbits=nbits, metric=metric)
     return idx, data[:count], data[count:], assigned[count:]
 
 
@@ -593,10 +625,10 @@ def test_add_chunks_match_a_single_add(tmp_path):
     base = tmp_path / "base.index"
     idx.save(str(base))
     whole = IvfIndex.load(str(base))
-    whole.add(new, assigned)
+    whole.add(new, cluster_ids=assigned)
     parts = IvfIndex.load(str(base))
     for chunk in np.array_split(np.arange(len(new)), [1, 33, 34, 90]):
-        ids = parts.add(new[chunk], assigned[chunk])
+        ids = parts.add(new[chunk], cluster_ids=assigned[chunk])
         assert len(ids) == len(chunk)
     a, b = tmp_path / "a.index", tmp_path / "b.index"
     whole.save(str(a))
@@ -610,12 +642,12 @@ def test_reserved_adds_match_a_single_add(tmp_path, nbits):
     base = tmp_path / "base.index"
     idx.save(str(base))
     whole = IvfIndex.load(str(base))
-    whole.add(new, assigned)
+    whole.add(new, cluster_ids=assigned)
     parts = IvfIndex.load(str(base))
     for cluster in range(parts.num_clusters):
         parts.reserve(cluster, len(old) + len(new))
     for chunk in np.array_split(np.arange(len(new)), [1, 33, 34, 90]):
-        parts.add(new[chunk], assigned[chunk])
+        parts.add(new[chunk], cluster_ids=assigned[chunk])
     a, b = tmp_path / "a.index", tmp_path / "b.index"
     whole.save(str(a))
     parts.save(str(b))
@@ -634,7 +666,7 @@ def test_reserve_rejects_invalid_arguments():
     idx.reserve(0, 0)
     assert idx.max_elements == len(old)
 
-    unbuilt = IvfIndex(65, 4, 1, 4)
+    unbuilt = IvfIndex(65, 1, nbits=4)
     with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.reserve(0, 1)
 
@@ -654,17 +686,18 @@ def test_add_rejects_invalid_arguments():
     with pytest.raises(ValueError, match="2D"):
         idx.add(new[0])
     with pytest.raises(ValueError, match="length"):
-        idx.add(new, assigned[:-1])
+        idx.add(new, cluster_ids=assigned[:-1])
     for bad in (-1, 3, 2**32):  # 2**32 would wrap to cluster 0 if cast to uint32 first
         cluster_ids = assigned.astype(np.int64)
         cluster_ids[0] = bad
         with pytest.raises(ValueError, match="cluster_ids"):
-            idx.add(new, cluster_ids)
+            idx.add(new, cluster_ids=cluster_ids)
     assert idx.max_elements == len(old)
 
-    unbuilt = IvfIndex(65, 4, 1, 4)
+    # Without cluster IDs, the first add trains the index; with them, it needs centroids.
+    unbuilt = IvfIndex(65, 1, nbits=4)
     with pytest.raises(RuntimeError, match="trained or loaded"):
-        unbuilt.add(new[:2])
+        unbuilt.add(new[:2], cluster_ids=[0, 0])
 
 
 # IvfRemoveTest owns the full width x metric x scan-path matrix in C++.
@@ -742,7 +775,7 @@ def test_remove_rejects_invalid_ids_without_removing_anything():
     np.testing.assert_array_equal(before[0], after[0])
     np.testing.assert_array_equal(before[1], after[1])
 
-    unbuilt = IvfIndex(65, 4, 1, 4)
+    unbuilt = IvfIndex(65, 1, nbits=4)
     with pytest.raises(RuntimeError, match="trained or loaded"):
         unbuilt.remove([0])
 
@@ -790,31 +823,3 @@ def test_remove_and_add_accept_any_integer_dtype_and_empty_input():
     assert idx.remove(np.array([5], dtype=np.int16)) == 1
     assert len(idx.add(new[:3], cluster_ids=[0, 1, 2])) == 3
     assert len(idx.add(new[:3], cluster_ids=np.array([0, 1, 2], dtype=np.uint16))) == 3
-
-
-@pytest.mark.parametrize("bits", [1, 4, 32])
-@pytest.mark.parametrize("metric", ["l2", "ip"])
-def test_rebuild_matches_incremental_encoding_with_empty_clusters(
-    tmp_path, bits, metric
-):
-    rng = np.random.default_rng(731)
-    data = rng.standard_normal((130, 65), dtype=np.float32)
-    centers = rng.standard_normal((4, 65), dtype=np.float32)
-    labels = np.full(130, 3, dtype=np.uint32)
-    labels[0] = 1
-    labels[1:33] = 2
-    incremental = IvfIndex(65, 1, 4, nbits=bits, metric=metric)
-    incremental.build(data[:1], centers, labels[:1], num_threads=1)
-    incremental.add(data[1:], cluster_ids=labels[1:], num_threads=1)
-    path = tmp_path / "incremental.index"
-    incremental.save(str(path))
-    expected_bytes = path.read_bytes()
-    expected_ids, expected_distances = incremental.search(data[:3], k=10, nprobe=4)
-    rebuilt = IvfIndex.load(str(path))
-    for threads in (1, 4):
-        rebuilt.build(data, centers, labels, num_threads=threads)
-        rebuilt.save(str(path))
-        assert path.read_bytes() == expected_bytes
-        ids, distances = rebuilt.search(data[:3], k=10, nprobe=4)
-        np.testing.assert_array_equal(ids, expected_ids)
-        np.testing.assert_array_equal(distances, expected_distances)
