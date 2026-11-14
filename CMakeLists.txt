@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(RaBitQLib VERSION 0.8.4 LANGUAGES CXX)
+project(RaBitQLib VERSION 0.8.5 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
