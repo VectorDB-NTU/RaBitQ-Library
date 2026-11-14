@@ -699,15 +699,14 @@ its upper and base layers use `upper_layer_max_degree_` and
 of 32. These settings are not interchangeable.
 
 Public names and Python keywords are compatibility contracts. For example,
-`Cluster::num()`, the protected `Initializer::num_cluster_`, QG's
-`degree_bound()`/`set_ef()` and `QGKMeansParameters::ef_build`
-retain their existing spellings, as do the Python vocabulary `random_seed`/`seed`,
-`train`/`build`, `obj`, `nsplit`, `final_obj` and `niter`. Python's search breadth is
-`ef_search` since 0.8.5; `ef` is deprecated and removed in 0.9 (#232). Python's `QGKMeans`
-and `QGKMeansParameters` take `nbits`, `max_degree` and `ef_construction` since 0.8.5;
-`quantization_bits`, `graph_degree` and `ef_build` are deprecated there and removed in
-0.9 (#233), while the C++ struct keeps them until 0.9. C++ parameter names may be clarified without
-changing types, order or defaults. Keep declarations, definitions and comments
+`Cluster::num()`, the protected `Initializer::num_cluster_` and QG's
+`degree_bound()`/`set_ef()` retain their existing spellings, as do the Python
+vocabulary `seed`, `train`, `obj`, `nsplit`, `final_obj` and `niter`. Since 0.9, Python
+spells each concept one way on the index and k-means classes: `ef_search`,
+`ef_construction`, `max_degree`, `nbits` (32 for raw storage), `routing` and `capacity`
+(#232, #233). `QGKMeansParameters` has the same field names in C++, converting
+`nbits == 32` to the 0 that `QGAssigner` and QG take as `quantization_bits`. C++ parameter
+names may be clarified without changing types, order or defaults. Keep declarations, definitions and comments
 in agreement; do not rename methods or literals by textual substitution.
 
 Storage-mode parameters also retain their contracts: IVF/HNSW use `nbits()`
@@ -730,8 +729,9 @@ public and protected names, Python keywords, field order and numerical operation
   integer accumulation outputs. Retain `lut` in compact local kernels where its
   role is clear.
 - Clustering's private state uses `dim_`, `num_points_`, `num_clusters_`,
-  `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and graph parameter
-  names compatible. The private graph iteration count is `graph_build_iterations_`.
+  `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and the graph parameter
+  names (`ef_search`, `graph_build_iterations` and, since 0.9, `max_degree`,
+  `ef_construction` and `nbits`) compatible. The private graph iteration count is `graph_build_iterations_`.
   Per-point centroid IDs are `assignments` (arrays) and `cluster_id` (scalars);
   `label` stays reserved for HNSW's caller-visible labels.
 - FHT backend arguments use `rotated_data`, `padded_dim`, `trunc_dim` and
@@ -876,9 +876,8 @@ checked-bit manipulation independently.
 ### Ownership during construction
 
 Some index builders retain non-owning access to input vectors only during synchronous construction.
-Do not extend such a pointer's lifetime without introducing explicit ownership. The HNSW Python
-wrapper copies cluster IDs before calling the mutable C++ construction API; preserve that boundary
-unless the C++ contract becomes const-correct.
+Do not extend such a pointer's lifetime without introducing explicit ownership. The Python
+wrappers pass `add` an owned, validated copy of the cluster IDs.
 
 ### Removal markers and search
 

@@ -401,6 +401,15 @@ inline void check_k(size_t k) {
     }
 }
 
+// A graph search breadth given explicitly is at least 1; None selects the default.
+inline void check_ef_search(std::optional<size_t> ef_search) {
+    if (ef_search == size_t{0}) {
+        throw std::invalid_argument(
+            "ef_search must be at least 1; pass None for the default"
+        );
+    }
+}
+
 inline SearchResults unfilled_search_results(size_t num_queries, size_t k) {
     const auto shape = std::vector<py::ssize_t>{
         static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
@@ -459,10 +468,7 @@ inline std::vector<PID> checked_removal_ids(
 
 // Validate before narrowing, and own the result for APIs that mutate assignments.
 inline std::vector<PID> checked_cluster_ids(
-    py::handle value,
-    size_t rows,
-    size_t clusters,
-    const char* range_error = "cluster_ids must be in [0, num_clusters)"
+    py::handle value, size_t rows, size_t clusters
 ) {
     const auto checked_copy = [&](const auto& ids) {
         if (static_cast<size_t>(ids.shape(0)) != rows) {
@@ -482,7 +488,7 @@ inline std::vector<PID> checked_cluster_ids(
             if (id < 0 || static_cast<uint64_t>(id) >= clusters ||
                 static_cast<uint64_t>(id) > std::numeric_limits<PID>::max()) {
                 throw std::invalid_argument(
-                    std::string(range_error) + "; expected [0, " +
+                    "cluster_ids must be in [0, num_clusters); expected [0, " +
                     std::to_string(clusters) + "), invalid entry at index " +
                     std::to_string(i)
                 );

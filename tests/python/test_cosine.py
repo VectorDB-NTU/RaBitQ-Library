@@ -78,7 +78,7 @@ def test_cosine_distance_of_a_zero_vector_is_one(kind, nbits, vectors):
     index.add(data, num_threads=1)
     _, distances = index.search(np.zeros((1, DIM), dtype=np.float32), 10)
     np.testing.assert_array_equal(distances, np.ones((1, 10), dtype=np.float32))
-    breadth = {"nprobe": 4} if kind == "ivf" else {"ef": COUNT}
+    breadth = {"nprobe": 4} if kind == "ivf" else {"ef_search": COUNT}
     ids, distances = index.search(data[1:2], COUNT, **breadth)
     assert distances[0, list(ids[0]).index(0)] == 1.0
 

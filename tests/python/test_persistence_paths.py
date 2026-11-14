@@ -19,11 +19,11 @@ def test_unicode_path_round_trip(tmp_path, kind, unicode_directory):
 
     if kind.startswith("qg"):
         index.add(data, num_threads=1)
-        search_args = {"ef": 64}
+        search_args = {"ef_search": 64}
     else:
         index.set_centroids(data.mean(axis=0, keepdims=True))
         index.add(data, cluster_ids=np.zeros(64, np.uint32), num_threads=1)
-        search_args = {"nprobe": 1} if kind.startswith("ivf") else {"ef": 64}
+        search_args = {"nprobe": 1} if kind.startswith("ivf") else {"ef_search": 64}
 
     directory = tmp_path / "\u6d4b\u8bd5_\U0001f680" if unicode_directory else tmp_path
     directory.mkdir(exist_ok=True)

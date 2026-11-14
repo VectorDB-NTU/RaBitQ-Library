@@ -51,8 +51,8 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only `nbits` defaults to 7; C++ requires it. |
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"`, `"ip"` or `"cosine"`; defaults to `"l2"`. See [the cosine metric](usage.md#the-cosine-metric). |
-| `routing` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). Named `initializer` before 0.8.5; the old name still works, with a `DeprecationWarning`, until 0.9. |
-| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted or `None` (0 does the same and is deprecated since 0.8.5); C++ requires a positive `nprobe`. |
+| `routing` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). It replaces `initializer`, which 0.9 removed. |
+| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted or `None` (0 raises `ValueError`); C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
@@ -230,8 +230,7 @@ index.add(vectors)
   vectors; once it stores any (including removed ones), both raise
   `RuntimeError`. A failed call leaves the index unchanged.
 - Before training, `add` with `cluster_ids`, `search`, `remove`, `reserve_cluster` and
-  `save` raise `RuntimeError`; `add` without `cluster_ids` trains first, except
-  on an index created with `max_elements`, which `build` fills. If that
+  `save` raise `RuntimeError`; `add` without `cluster_ids` trains first. If that
   first `add` fails, the index stays untrained and empty; an empty first `add`
   raises `RuntimeError`. A trained index without
   vectors cannot be saved, and its `search` returns only padded results; add
@@ -398,8 +397,7 @@ removed = index.remove(new_ids[:10])
 index.reserve_cluster(cluster_id, num_points)
 ```
 
-Python names this method `reserve_cluster` since 0.8.5; `reserve` still works, with a
-`DeprecationWarning`, until 0.9.
+Python names this method `reserve_cluster`; it replaces `reserve`, which 0.9 removed.
 
 Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float32.
 `add()` returns a uint32 array of the new IDs. Optional `cluster_ids` must be a

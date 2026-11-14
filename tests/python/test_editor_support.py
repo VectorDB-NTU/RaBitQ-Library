@@ -2,7 +2,6 @@
 
 import ast
 import doctest
-import inspect
 import re
 from pathlib import Path
 
@@ -54,9 +53,6 @@ def test_installed_public_declarations():
             if isinstance(node, ast.AnnAssign):
                 assert isinstance(node.target, ast.Name)
                 members.add(node.target.id)
-        if name == "FinalAssignmentMode":
-            assert {"Approximate", "SymphonyQG", "Exact", "name", "value"} <= members
-            continue
         public = {key for key in vars(runtime) if not key.startswith("_")}
         assert public <= members, (name, public - members)
         for member in members - {"d", "k", "cp"}:
@@ -85,15 +81,6 @@ def test_editor_docs_match_runtime_help():
             assert normalized(documentation) in normalized(actual), (name, node.name)
 
 
-def is_deprecated(node):
-    return any(
-        isinstance(d, ast.Call)
-        and isinstance(d.func, ast.Name)
-        and d.func.id == "deprecated"
-        for d in node.decorator_list
-    )
-
-
 def stub_parameters(node):
     """Names, keyword-only names and literal defaults declared in the stub."""
     args = node.args
@@ -114,14 +101,7 @@ def stub_parameters(node):
 
 
 def runtime_parameters(member):
-    """The same, from a Python replacement's signature or pybind11's first doc line."""
-    if inspect.isfunction(member):
-        parameters = inspect.signature(member).parameters.values()
-        return (
-            [p.name for p in parameters],
-            [p.name for p in parameters if p.kind is inspect.Parameter.KEYWORD_ONLY],
-            {p.name: p.default for p in parameters if p.default is not p.empty},
-        )
+    """The same, from pybind11's first doc line."""
     signature = member.__doc__.splitlines()[0]
     names = re.findall(r"(?:\(|, )([A-Za-z_]\w*):", signature)
     _, star, keyword_part = signature.partition(", *, ")
@@ -138,9 +118,7 @@ def test_native_signature_names_and_defaults(name):
     cls = declarations()[name]
     runtime = getattr(rabitqlib, name)
     for node in cls.body:
-        if not isinstance(node, ast.FunctionDef) or is_deprecated(node):
-            # Deprecated overloads describe the 0.7 forms the compatibility layer
-            # accepts; the runtime signature documents only the current form.
+        if not isinstance(node, ast.FunctionDef):
             continue
         if any(
             (isinstance(d, ast.Name) and d.id == "property")
@@ -157,23 +135,13 @@ def test_native_signature_names_and_defaults(name):
 def test_clustering_keyword_defaults(name):
     cls = declarations()[name]
     init = next(
-        n
-        for n in cls.body
-        if isinstance(n, ast.FunctionDef)
-        and n.name == "__init__"
-        and not is_deprecated(n)
+        n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "__init__"
     )
     instance = getattr(rabitqlib, name)(64, 40)
     for arg, default in zip(init.args.kwonlyargs, init.args.kw_defaults):
         assert default is not None, (name, arg.arg)
         expected = ast.literal_eval(default)
-        actual = getattr(instance.cp, arg.arg)
-        if arg.arg == "final_assignment":
-            # Reads back as the enum member until 0.9: compare with what passing
-            # the declared default explicitly gives.
-            explicit = getattr(rabitqlib, name)(64, 40, final_assignment=expected)
-            expected = explicit.cp.final_assignment
-        assert actual == expected
+        assert getattr(instance.cp, arg.arg) == expected
     for name in (
         "centroids",
         "assignments",
@@ -240,7 +208,7 @@ def test_documented_training_result_types(name):
     assert isinstance(model.final_obj, float)
 
 
-def test_numpy_scalar_inputs_and_enum_members():
+def test_numpy_scalar_inputs():
     import runpy
 
     fixture = Path(__file__).parent / "typing" / "public_api.py"

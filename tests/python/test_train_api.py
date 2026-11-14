@@ -1,7 +1,4 @@
-"""The 0.8 train / set_centroids / add / search workflow of IvfIndex and HnswIndex."""
-
-import inspect
-import warnings
+"""The train / set_centroids / add / search workflow of IvfIndex and HnswIndex."""
 
 import format2_file
 import numpy as np
@@ -13,8 +10,8 @@ KINDS = ["ivf", "hnsw"]
 
 
 def new_index(kind, metric="l2", **kwargs):
+    kwargs.setdefault("seed", 7)
     if kind == "ivf":
-        kwargs.setdefault("seed", 7)
         return IvfIndex(
             DIM, kwargs.pop("num_clusters", 4), nbits=4, metric=metric, **kwargs
         )
@@ -38,58 +35,37 @@ def saved_bytes(index, path):
     return path.read_bytes()
 
 
-@pytest.fixture(autouse=True)
-def no_deprecations():
-    # The 0.8 API must never go through the compatibility layer.
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", DeprecationWarning)
-        yield
-
-
 def test_constructor_options_are_keyword_only():
-    ivf = inspect.signature(IvfIndex.__init__).parameters
-    hnsw = inspect.signature(HnswIndex.__init__).parameters
-    keyword = inspect.Parameter.KEYWORD_ONLY
-    assert [p for p in ivf if ivf[p].kind is not keyword] == [
-        "self",
-        "dim",
-        "num_clusters",
-    ]
-    assert [p for p in hnsw if hnsw[p].kind is not keyword] == ["self", "dim"]
-    assert ivf["nbits"].default == 7
-    assert hnsw["nbits"].default == 7
-    assert IvfIndex(DIM, 4).nbits == HnswIndex(DIM).nbits == 7
-    assert ivf["seed"].default is None
-    assert hnsw["seed"].default == 100
-    assert hnsw["num_clusters"].default == 16
+    with pytest.raises(TypeError, match="incompatible constructor arguments"):
+        IvfIndex(DIM, 4, 4)
+    with pytest.raises(TypeError, match="incompatible constructor arguments"):
+        HnswIndex(DIM, 4)
+    ivf, hnsw = IvfIndex(DIM, 4), HnswIndex(DIM)
+    assert ivf.nbits == hnsw.nbits == 7
+    assert hnsw.num_clusters == 16
     for cls in (IvfIndex, HnswIndex):
-        add = inspect.signature(cls.add).parameters
-        assert [p for p in add if add[p].kind is not keyword] == ["self", "data"]
-        assert add["num_threads"].default is None
-        # train is native; pybind11 documents its signature on the first line.
+        # pybind11 documents each signature on the first line.
+        assert ", data: object, *, cluster_ids:" in cls.add.__doc__.splitlines()[0]
         assert ", x: object, *, num_threads:" in cls.train.__doc__.splitlines()[0]
         assert cls.train.__doc__.splitlines()[0].endswith("= None) -> None")
 
 
-@pytest.mark.parametrize(
-    "make,message",
-    [
-        (
-            lambda: IvfIndex(DIM, 4, nbits=4, max_degree=8),
-            r"^IvfIndex\(\) got an unexpected keyword argument 'max_degree'$",
-        ),
-    ],
-)
-def test_constructor_argument_errors(make, message):
-    with pytest.raises(TypeError, match=message):
-        make()
+def test_unknown_constructor_keyword_raises_type_error():
+    with pytest.raises(TypeError, match="incompatible constructor arguments"):
+        IvfIndex(DIM, 4, nbits=4, max_degree=8)
 
 
-def test_positional_nbits_is_read_as_the_old_form_and_explained():
+def test_hnsw_seed_is_drawn_like_the_other_indexes():
+    drawn = [HnswIndex(DIM).seed for _ in range(4)]
+    assert all(isinstance(seed, int) and 0 <= seed < 2**32 for seed in drawn)
+    assert len(set(drawn)) > 1
+    for accepted in (0, 2**32 - 1, np.uint32(7)):
+        index = HnswIndex(DIM, seed=accepted)
+        assert index.seed == index.cp.seed == accepted
     with pytest.raises(
-        TypeError, match=r"missing a required argument: 'nbits' \(read as the 0\.7 form"
+        ValueError, match=r"^seed must be an integer in \[0, 4294967295\]$"
     ):
-        IvfIndex(DIM, 4, 4)
+        HnswIndex(DIM, seed=2**32)
 
 
 @pytest.mark.parametrize("cls", [IvfIndex, HnswIndex])
@@ -337,19 +313,6 @@ def test_same_seed_reproduces_an_ivf_index(base_data, tmp_path):
     )
 
 
-def test_ivf_point_count_index_cannot_be_trained(base_data):
-    with pytest.warns(DeprecationWarning):
-        index = IvfIndex(DIM, N_VECTORS, 4, 4)
-    message = r"^IvfIndex created with max_elements is filled by build; create IvfIndex\(dim, num_clusters, nbits=\.\.\.\) to train or set centroids$"
-    with pytest.raises(RuntimeError, match=message):
-        index.train(base_data)
-    with pytest.raises(RuntimeError, match=message):
-        index.set_centroids(base_data[:4])
-    assert index.num_stored_points == 0
-    with pytest.warns(DeprecationWarning):
-        assert index.max_elements == N_VECTORS  # the declared row count is kept
-
-
 def test_hnsw_capacity_grows_and_reserve_preallocates(base_data):
     index = HnswIndex(DIM, nbits=4, num_clusters=4)
     assert index.capacity == 1
@@ -393,23 +356,6 @@ def test_hnsw_failed_add_keeps_the_capacity(base_data):
 def test_hnsw_num_clusters_is_validated():
     with pytest.raises(ValueError, match=r"^num_clusters must be in \[1, "):
         HnswIndex(DIM, nbits=4, num_clusters=0)
-
-
-def test_hnsw_first_add_matches_deprecated_build(base_data, clusters, tmp_path):
-    # The first add into an empty index links like the 0.7 build, so the two
-    # paths give the same bytes when single-threaded.
-    centroids, cluster_ids = clusters
-    added = HnswIndex(
-        DIM, nbits=4, num_clusters=len(centroids), M=8, ef_construction=50
-    )
-    added.set_centroids(centroids)
-    added.add(base_data, cluster_ids=cluster_ids, num_threads=1)
-    with pytest.warns(DeprecationWarning):
-        built = HnswIndex(DIM, N_VECTORS, M=8, ef_construction=50, nbits=4)
-        built.build(base_data, centroids, cluster_ids)
-    assert saved_bytes(added, tmp_path / "a.index") == saved_bytes(
-        built, tmp_path / "b.index"
-    )
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -539,12 +485,25 @@ def test_ivf_first_add_uses_the_drawn_seed(base_data, tmp_path):
     )
 
 
-def test_hnsw_first_add_keeps_a_preallocated_capacity(base_data, tmp_path):
+def test_hnsw_first_add_uses_the_drawn_seed(base_data, tmp_path):
     implicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
+    seed = implicit.seed
+    implicit.add(base_data, num_threads=1)
+    assert implicit.seed == implicit.cp.seed == seed
+    explicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50, seed=seed)
+    explicit.train(base_data)
+    explicit.add(base_data, num_threads=1)
+    assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(
+        explicit, tmp_path / "explicit.index"
+    )
+
+
+def test_hnsw_first_add_keeps_a_preallocated_capacity(base_data, tmp_path):
+    implicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50, seed=7)
     implicit.reserve(2 * N_VECTORS)
     implicit.add(base_data, num_threads=1)
     assert implicit.capacity == 2 * N_VECTORS
-    explicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
+    explicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50, seed=7)
     explicit.reserve(2 * N_VECTORS)
     explicit.train(base_data)
     explicit.add(base_data, num_threads=1)

@@ -24,7 +24,7 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
             metric=metric,
             seed=42,
         )
-        search_args = {"ef": 96}
+        search_args = {"ef_search": 96}
     else:
         # Seeded and single-threaded, so every self-query below must succeed (#216).
         index = SymqgIndex(
@@ -35,7 +35,7 @@ def check_index_round_trip(tmp_path, metric, dim, kind, bits):
             metric=metric,
             seed=42,
         )
-        search_args = {"ef": 96}
+        search_args = {"ef_search": 96}
     if kind == "qg":
         index.add(data, num_threads=1)
     else:

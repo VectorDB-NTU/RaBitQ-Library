@@ -26,10 +26,10 @@ int run_demo() {
 
     rabitqlib::qgkmeans::QGKMeansParameters parameters;
     parameters.niter = 5;
-    parameters.graph_degree = 32;
-    parameters.ef_build = 64;
+    parameters.max_degree = 32;
+    parameters.ef_construction = 64;
     parameters.ef_search = 32;
-    parameters.quantization_bits = 8;
+    parameters.nbits = 8;
     parameters.verbose = true;
 
     rabitqlib::qgkmeans::QGKMeans clustering(kDimension, kNumClusters, parameters);

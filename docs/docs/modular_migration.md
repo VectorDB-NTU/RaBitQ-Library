@@ -168,14 +168,15 @@ in C++ and Python.
 
 Compared with the 0.6.0 Python API, IVF-RaBitQ adds `num_points` and `num_stored_points`,
 HNSW-RaBitQ adds `num_stored_points`, and SymphonyQG adds `max_elements` and
-`num_stored_points`.
+`num_stored_points`. 0.9 removes the Python `max_elements` property; see the
+[migration guide](python_migration.md#from-08-to-09).
 
 **HNSW-RaBitQ `num_points` now excludes removed records.** Use `num_stored_points` for
 ID bounds, append offsets, and minimum resize capacity. Use `num_points` for a
 live count, without subtracting a separate deletion counter.
 
 The IVF-RaBitQ constructor keyword `max_elements` still specifies the required initial
-build size; 0.8 deprecates it (see [Migrating to 0.8](python_migration.md)). SymphonyQG's C++ `num_vertices()` still returns the configured graph
+build size; 0.8 deprecates it and 0.9 removes it (see the [migration guide](python_migration.md)). SymphonyQG's C++ `num_vertices()` still returns the configured graph
 size for builders. Existing index files need no conversion: loading recovers
 counts from their removal markers.
 

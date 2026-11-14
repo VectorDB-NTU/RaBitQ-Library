@@ -29,7 +29,6 @@
 namespace rabitqlib::qgkmeans {
 
 using clustering::FinalAssignmentMode;
-using QGKMeansIterationStats = clustering::KMeansIterationStats;
 
 namespace detail {
 
@@ -52,20 +51,25 @@ struct QGKMeansParameters {
     FinalAssignmentMode final_assignment = FinalAssignmentMode::Approximate;
 
     // SymphonyQG assignment parameters.
-    uint32_t graph_degree = 32;
-    uint32_t ef_build = 240;
+    uint32_t max_degree = 32;
+    uint32_t ef_construction = 240;
     uint32_t ef_search = 16;
     // Graph-building passes after PiPNN initialization; the last refines the graph.
     uint32_t graph_build_iterations = 1;
     uint32_t num_threads = 0;
-    // Centroid storage in QG: 0 for raw float32, or 4/8-bit RaBitQ.
-    uint32_t quantization_bits = 0;
+    // Centroid storage in QG: 32 for raw float32, or 4/8-bit RaBitQ.
+    uint32_t nbits = 32;
     // When positive, train on a random sample of k * max_points_per_centroid
     // vectors if there are more, then assign all vectors; 0 trains on all vectors.
     size_t max_points_per_centroid = 0;
 };
 
 namespace detail {
+
+// QG's own storage argument, which is 0 for raw float32.
+inline uint32_t qg_quantization_bits(const QGKMeansParameters& cp) {
+    return cp.nbits == 32 ? 0 : cp.nbits;
+}
 
 // One training call owns the storage; the public assign adapter can instead
 // borrow caller storage for one batch. State is read-only while workers run.
@@ -136,8 +140,8 @@ class QGAssigner {
     QGAssigner(
         size_t d,
         size_t k,
-        uint32_t graph_degree,
-        uint32_t ef_build,
+        uint32_t max_degree,
+        uint32_t ef_construction,
         uint32_t ef_search,
         uint32_t graph_build_iterations,
         uint32_t num_threads = 0,
@@ -147,8 +151,8 @@ class QGAssigner {
     )
         : dim_(d)
         , num_clusters_(k)
-        , graph_degree_(graph_degree)
-        , ef_build_(ef_build)
+        , max_degree_(max_degree)
+        , ef_construction_(ef_construction)
         , ef_search_(ef_search)
         , graph_build_iterations_(graph_build_iterations)
         , seed_(seed) {
@@ -158,7 +162,7 @@ class QGAssigner {
         graph_ = std::make_unique<symqg::QuantizedGraph<float>>(
             num_clusters_,
             dim_,
-            graph_degree_,
+            max_degree_,
             metric_type,
             RotatorType::FhtKacRotator,
             quantization_bits,
@@ -170,7 +174,7 @@ class QGAssigner {
         for (uint32_t thread = 0; thread < num_workers_; ++thread) {
             scratch_.emplace_back(
                 std::make_unique<symqg::detail::SearchScratch>(
-                    graph_->padded_dim(), graph_degree_, ef_search_, 1
+                    graph_->padded_dim(), max_degree_, ef_search_, 1
                 )
             );
         }
@@ -207,7 +211,7 @@ class QGAssigner {
             );
             builder_ = std::make_unique<symqg::QGBuilder>(
                 *graph_,
-                ef_build_,
+                ef_construction_,
                 centroids,
                 build_threads,
                 symqg::QGInitialization::PiPNN,
@@ -284,7 +288,7 @@ class QGAssigner {
         for (uint32_t thread = 0; thread < num_workers_; ++thread) {
             scratch.emplace_back(
                 std::make_unique<symqg::detail::SearchScratch>(
-                    graph_->padded_dim(), graph_degree_, ef_search_, 1
+                    graph_->padded_dim(), max_degree_, ef_search_, 1
                 )
             );
         }
@@ -367,18 +371,18 @@ class QGAssigner {
                 "QGKMeans currently requires dimensions in the range [64, 65536]"
             );
         }
-        if (graph_degree_ == 0 || graph_degree_ % fastscan::kBatchSize != 0) {
+        if (max_degree_ == 0 || max_degree_ % fastscan::kBatchSize != 0) {
             throw std::invalid_argument(
-                "QGKMeans graph degree must be a positive multiple of 32"
+                "QGKMeans max_degree must be a positive multiple of 32"
             );
         }
-        if (num_clusters_ <= graph_degree_) {
-            throw std::invalid_argument(
-                "QGKMeans requires more centroids than the graph degree"
-            );
+        if (num_clusters_ <= max_degree_) {
+            throw std::invalid_argument("QGKMeans requires more centroids than max_degree");
         }
-        if (ef_build_ == 0 || ef_search_ == 0) {
-            throw std::invalid_argument("QGKMeans ef_build and ef_search must be positive");
+        if (ef_construction_ == 0 || ef_search_ == 0) {
+            throw std::invalid_argument(
+                "QGKMeans ef_construction and ef_search must be positive"
+            );
         }
         if (graph_build_iterations_ == 0) {
             throw std::invalid_argument("QGKMeans graph_build_iterations must be positive");
@@ -387,8 +391,8 @@ class QGAssigner {
 
     size_t dim_;
     size_t num_clusters_;
-    uint32_t graph_degree_;
-    uint32_t ef_build_;
+    uint32_t max_degree_;
+    uint32_t ef_construction_;
     uint32_t ef_search_;
     uint32_t graph_build_iterations_;
     uint32_t num_workers_ = 0;
@@ -416,14 +420,14 @@ class CentroidGraphCache {
             , assigner(
                   d,
                   k,
-                  cp.graph_degree,
-                  cp.ef_build,
+                  cp.max_degree,
+                  cp.ef_construction,
                   cp.ef_search,
                   cp.graph_build_iterations,
                   cp.num_threads,
                   cp.seed,
                   cp.spherical ? METRIC_IP : METRIC_L2,
-                  cp.quantization_bits
+                  qg_quantization_bits(cp)
               ) {
             // The builder borrows this copy, which lives as long as the graph.
             assigner.rebuild_centroid_graph(centroids.data());
@@ -436,11 +440,10 @@ class CentroidGraphCache {
             return centroids.size() == k * d &&
                    std::equal(centroids.begin(), centroids.end(), source) &&
                    p.spherical == cp.spherical && p.seed == cp.seed &&
-                   p.graph_degree == cp.graph_degree && p.ef_build == cp.ef_build &&
-                   p.ef_search == cp.ef_search &&
+                   p.max_degree == cp.max_degree &&
+                   p.ef_construction == cp.ef_construction && p.ef_search == cp.ef_search &&
                    p.graph_build_iterations == cp.graph_build_iterations &&
-                   p.num_threads == cp.num_threads &&
-                   p.quantization_bits == cp.quantization_bits;
+                   p.num_threads == cp.num_threads && p.nbits == cp.nbits;
         }
     };
 
@@ -513,9 +516,8 @@ class QGAssignment {
     static constexpr const char* kName = "QGKMeans";
 
     static void validate_parameters(size_t, const QGKMeansParameters& cp) {
-        if (cp.quantization_bits != 0 && cp.quantization_bits != 4 &&
-            cp.quantization_bits != 8) {
-            throw std::invalid_argument("QGKMeans quantization_bits must be 0, 4, or 8");
+        if (cp.nbits != 4 && cp.nbits != 8 && cp.nbits != 32) {
+            throw std::invalid_argument("QGKMeans nbits must be 4, 8, or 32");
         }
     }
 
@@ -532,18 +534,18 @@ class QGAssignment {
         , num_points_(n)
         , num_workers_(num_workers)
         , metric_type_(cp.spherical ? METRIC_IP : METRIC_L2)
-        , quantized_(cp.quantization_bits != 0)
+        , quantized_(cp.nbits != 32)
         , assigner_(
               d,
               k,
-              cp.graph_degree,
-              cp.ef_build,
+              cp.max_degree,
+              cp.ef_construction,
               cp.ef_search,
               cp.graph_build_iterations,
               cp.num_threads,
               cp.seed,
               metric_type_,
-              cp.quantization_bits
+              qg_quantization_bits(cp)
           )
         , query_sums_(assigner_.graph_->padded_dim(), cp) {}
 

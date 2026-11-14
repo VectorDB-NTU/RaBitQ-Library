@@ -68,11 +68,9 @@ three indexes):
 | `capacity` (HNSW-RaBitQ only) | Logical record capacity, excluding SIMD padding |
 
 `0 <= num_points <= num_stored_points`, and `num_stored_points <= capacity` for
-HNSW-RaBitQ. Before 0.8.5 Python named the capacity `max_elements` on all three
-classes; that property is deprecated and is removed in 0.9. On `IvfIndex` and
-`SymqgIndex` it equals `num_stored_points`, except on an `IvfIndex` created in the
-0.7 form before `build`, where it is the declared row count. Before vectors are
-added, both point counts are zero; configured capacity may be nonzero. For
+HNSW-RaBitQ. Python's `max_elements` property, which 0.9 removed, was this capacity
+on `HnswIndex` and equal to `num_stored_points` on the other two classes. Before
+vectors are added, both point counts are zero; configured capacity may be nonzero. For
 all three indexes, `len(index)` equals `num_points`. `is_trained` reports
 whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by `train`, `set_centroids`,
 the first `add`, or `load`), and is always `True` for SymphonyQG.
@@ -83,12 +81,12 @@ and `num_points` for a live count. Counts survive save/load.
 
 IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
 HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `reserve` preallocates
-it (`resize` before 0.8.5). SymphonyQG has no incremental
+it. SymphonyQG has no incremental
 updates: `add` builds the graph once, and both counts are equal afterwards.
 
 `repr(index)` shows dimension, metric, quantization bits and live point count,
-plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
-the resolved routing strategy, and SymphonyQG includes its degree bound. The summary
+plus the training state for IVF/HNSW. IVF/HNSW also show stored count and centroid count; HNSW includes
+its capacity, IVF the resolved routing strategy, and SymphonyQG its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.
 
 ## Estimate storage
@@ -147,8 +145,8 @@ construction, updates, and file I/O. The following contract applies to
 
 | Operation on the same index | Concurrent access |
 | --- | --- |
-| `search`, `search_batch`, `save`, `repr`, and property reads | May run together |
-| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `reserve_cluster`, `resize`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input and may run with reads |
+| `search`, `save`, `repr`, and property reads | May run together |
+| `train`, `set_centroids`, `add`, `remove`, `reserve`, `reserve_cluster`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input, and an HNSW-RaBitQ `reserve` within the current capacity, which changes nothing; both may run with reads |
 
 A conflicting call immediately raises
 `RuntimeError("Index is busy: conflicting operation in progress")`.
@@ -174,12 +172,11 @@ example Faiss or PyTorch wheels) can crash when more than one of them starts
 worker threads in the same process; set `OMP_NUM_THREADS=1` before the first
 native call, or pass `num_threads=1`, in such processes.
 `train` and `add` on every index, and IVF-RaBitQ `set_centroids`, default to all
-CPUs (`None` or `0`); the clustering classes default to `0`. `search` defaults to one thread (`None` or `1`),
-as do the deprecated `build`, which requires an integer, and `search_batch`.
+CPUs (`None` or `0`); the clustering classes default to `0`. `search` defaults to one thread (`None` or `1`).
 Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, and so
 does a multithreaded build of IVF-RaBitQ's HNSW centroid routing by `train`,
-`set_centroids` or the first `add`; pass `num_threads=1` when a build must be
-reproducible.
+`set_centroids` or the first `add`; pass `num_threads=1`, and `seed=` to the
+constructor, when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.
 

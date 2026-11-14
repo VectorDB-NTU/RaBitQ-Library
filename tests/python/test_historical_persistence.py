@@ -32,7 +32,7 @@ def reference(name):
         if name.startswith("ivf")
         else (HnswIndex if name.startswith("hnsw") else SymqgIndex)
     )
-    options = {"nprobe": 1} if name.startswith("ivf") else {"ef": 64}
+    options = {"nprobe": 1} if name.startswith("ivf") else {"ef_search": 64}
     return path, cls, count, queries, ids, distances, options
 
 
@@ -67,7 +67,8 @@ def test_historical_load_search_and_resave(name, tmp_path):
         assert index.metric == name.rsplit("_", 1)[1]
         assert index.num_stored_points == count
         assert index.num_points == count - (0 if cls is SymqgIndex else 1)
-        assert index.max_elements >= index.num_stored_points
+        if cls is HnswIndex:
+            assert index.capacity >= index.num_stored_points
         actual_ids, actual_distances = index.search(queries, 5, **options)
         np.testing.assert_array_equal(actual_ids, ids)
         # Distances may differ across AVX2, AVX-512, NEON, and compiler reductions.
@@ -108,10 +109,9 @@ def test_ivf_v1_header_uses_historical_payload_and_padding(name, tmp_path):
     destination = tmp_path / "ivf-v1.index"
     destination.write_bytes(header + payload)
     index = cls.load(str(destination))
-    assert index.initializer == "flat"
+    assert index.routing == "flat"
     assert index.num_stored_points == count
     assert index.num_points == count - 1
-    assert index.max_elements == count
     actual_ids, actual_distances = index.search(queries, 5, **options)
     np.testing.assert_array_equal(actual_ids, ids)
     np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
@@ -150,7 +150,7 @@ def test_v083_ivf_loads_and_migrates_without_loss(name, initializer, tmp_path):
     distances = results[:, 1].astype(np.float32).reshape(nq, k)
 
     index = IvfIndex.load(str(path))
-    assert index.initializer == initializer
+    assert index.routing == initializer
     assert index.num_stored_points == count
     assert index.num_points == count - 1
     destination = tmp_path / "migrated.index"
@@ -199,7 +199,7 @@ def test_v083_graphs_load_and_migrate(name, tmp_path):
         assert index.num_stored_points == count
         assert index.num_points == count - (1 if cls is HnswIndex else 0)
         assert index.seed is None
-        actual_ids, actual_distances = index.search(queries, k, ef=64)
+        actual_ids, actual_distances = index.search(queries, k, ef_search=64)
         np.testing.assert_array_equal(actual_ids, ids)
         np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
 

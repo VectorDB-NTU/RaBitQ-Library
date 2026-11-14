@@ -23,14 +23,13 @@
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/training.hpp"
 #include "rabitqlib/index/types.hpp"
-#include "rabitqlib/utils/input_checks.hpp"
 
 namespace py = pybind11;
 
 namespace rabitqlib::python_bindings {
 
 namespace {
-ivf::InitializerType initializer_from_string(const std::string& value) {
+ivf::InitializerType routing_from_string(const std::string& value) {
     if (value == "auto") {
         return ivf::InitializerType::Auto;
     }
@@ -43,12 +42,10 @@ ivf::InitializerType initializer_from_string(const std::string& value) {
     if (value == "hnsw") {
         return ivf::InitializerType::HNSW;
     }
-    throw std::invalid_argument(
-        "initializer must be 'auto', 'flat', 'flat_rabitq', or 'hnsw'"
-    );
+    throw std::invalid_argument("routing must be 'auto', 'flat', 'flat_rabitq', or 'hnsw'");
 }
 
-std::string initializer_to_string(ivf::InitializerType type) {
+std::string routing_to_string(ivf::InitializerType type) {
     switch (type) {
         case ivf::InitializerType::Auto:
             return "auto";
@@ -70,11 +67,11 @@ class IvfIndex {
         size_t num_clusters,
         size_t nbits,
         const std::string& metric,
-        const std::string& initializer,
+        const std::string& routing,
         const py::object& seed
     ) {
         const auto metric_type = index_metric_from_string(metric);
-        const auto initializer_type = initializer_from_string(initializer);
+        const auto initializer_type = routing_from_string(routing);
         const auto rotation_seed =
             seed.is_none() ? std::random_device{}()
                            : static_cast<uint32_t>(
@@ -91,31 +88,6 @@ class IvfIndex {
         );
         seed_ = rotation_seed;
         cp_ = default_training_parameters(metric_type, rotation_seed);
-    }
-
-    // The 0.7 point-count form, which build fills with construct.
-    static IvfIndex with_point_count(
-        size_t dim,
-        size_t max_elements,
-        size_t num_clusters,
-        size_t nbits,
-        const std::string& metric,
-        const std::string& initializer
-    ) {
-        const auto metric_type = index_metric_from_string(metric);
-        IvfIndex wrapper;
-        wrapper.index_ = std::make_unique<ivf::IVF>(
-            max_elements,
-            dim,
-            num_clusters,
-            nbits,
-            metric_type,
-            RotatorType::FhtKacRotator,
-            initializer_from_string(initializer)
-        );
-        wrapper.cp_ = untrainable_parameters(metric_type);
-        wrapper.builds_by_construct_ = true;
-        return wrapper;
     }
 
     void train(py::handle x, std::optional<size_t> num_threads) {
@@ -142,67 +114,6 @@ class IvfIndex {
         index_->set_centroids(centroids_ptr, num_threads.value_or(0));
     }
 
-    // Deprecated: the 0.7 build. A point-count index is constructed; any other
-    // index sets the centroids and adds the data.
-    void build(
-        py::handle data,
-        py::handle centroids,
-        py::handle cluster_ids,
-        size_t num_threads,
-        bool fast_quantization
-    ) {
-        const auto operation = access_.write();
-        auto data_array = ensure_2d_array<float>(data, "data");
-        auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
-
-        ensure_dimension(
-            data_array, index_->dimension(), "data dimension does not match index dim"
-        );
-        if (builds_by_construct_ &&
-            static_cast<size_t>(data_array.shape(0)) != index_->max_elements()) {
-            throw std::invalid_argument(
-                "number of data rows must match index max_elements; expected " +
-                std::to_string(index_->max_elements()) + ", got shape " +
-                array_shape(data_array)
-            );
-        }
-        ensure_dimension(
-            centroids_array,
-            index_->dimension(),
-            "centroid dimension does not match index dim"
-        );
-        if (static_cast<size_t>(centroids_array.shape(0)) != index_->num_clusters()) {
-            throw std::invalid_argument(
-                "number of centroid rows must match index num_clusters; expected " +
-                std::to_string(index_->num_clusters()) + ", got shape " +
-                array_shape(centroids_array)
-            );
-        }
-        const auto rows = static_cast<size_t>(data_array.shape(0));
-        auto cluster_ids_vec =
-            checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
-        if (!builds_by_construct_) {
-            check_trainable();
-        }
-
-        const auto* data_ptr = data_array.data();
-        const auto* centroids_ptr = centroids_array.data();
-        const auto* cluster_ids_ptr = cluster_ids_vec.data();
-        py::gil_scoped_release release;
-        if (builds_by_construct_) {
-            index_->construct(
-                data_ptr, centroids_ptr, cluster_ids_ptr, fast_quantization, num_threads
-            );
-        } else {
-            // Check the data before replacing the centroids, so that invalid input
-            // leaves the index unchanged; add repeats the check.
-            const size_t dim = index_->dimension();
-            check_coordinates(data_ptr, rows * dim, dim, "IVF add data");
-            index_->set_centroids(centroids_ptr, num_threads);
-            index_->add(data_ptr, rows, cluster_ids_ptr, fast_quantization, num_threads);
-        }
-    }
-
     py::array_t<int64_t> add(
         py::handle data,
         const py::object& cluster_ids,
@@ -211,9 +122,10 @@ class IvfIndex {
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
-        // The first add on an untrained 0.8-form index trains it on the same data.
-        const bool trains = !index_->is_trained() && !builds_by_construct_ &&
-                            cluster_ids.is_none() && data_array.shape(0) > 0;
+        // The first add on an untrained index trains it on the same data. A loaded
+        // index is trained, so an untrained one knows its seed.
+        const bool trains =
+            !index_->is_trained() && cluster_ids.is_none() && data_array.shape(0) > 0;
         if (!trains) {
             check_trained("add");
         }
@@ -279,9 +191,9 @@ class IvfIndex {
         return ids;
     }
 
-    void reserve(int64_t cluster_id, int64_t num_points) {
+    void reserve_cluster(int64_t cluster_id, int64_t num_points) {
         const auto operation = access_.write();
-        check_trained("reserve");
+        check_trained("reserve_cluster");
         if (cluster_id < 0 || static_cast<uint64_t>(cluster_id) >= index_->num_clusters()) {
             throw std::invalid_argument("cluster_id must be in [0, num_clusters)");
         }
@@ -315,10 +227,14 @@ class IvfIndex {
             query_array, index_->dimension(), "query dimension does not match index dim"
         );
         check_k(k);
-        // None and 0 probe num_clusters / 16 clusters, rounded, and at least one.
+        if (nprobe == size_t{0}) {
+            throw std::invalid_argument(
+                "nprobe must be at least 1; pass None for the default"
+            );
+        }
+        // None probes num_clusters / 16 clusters, rounded, and at least one.
         const size_t num_probes =
-            nprobe.value_or(0) == 0 ? std::max<size_t>(1, (index_->num_clusters() + 8) / 16)
-                                    : *nprobe;
+            nprobe.value_or(std::max<size_t>(1, (index_->num_clusters() + 8) / 16));
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         auto output = unfilled_search_results(num_queries, k);
@@ -362,7 +278,6 @@ class IvfIndex {
             py::gil_scoped_release release;
             wrapper.index_->load(filename.c_str());
         }
-        wrapper.builds_by_construct_ = true;
         wrapper.seed_ = wrapper.index_->seed();  // recorded by format-2 files
         wrapper.cp_ = default_training_parameters(
             wrapper.index_->metric_type(),
@@ -378,19 +293,14 @@ class IvfIndex {
                "', nbits=" + std::to_string(index_->nbits()) +
                ", num_points=" + std::to_string(index_->num_points()) +
                ", num_stored_points=" + std::to_string(index_->num_stored_points()) +
-               ", max_elements=" + std::to_string(index_->max_elements()) +
-               ", num_clusters=" + std::to_string(index_->num_clusters()) +
-               ", initializer='" + initializer_to_string(index_->initializer_type()) +
+               ", num_clusters=" + std::to_string(index_->num_clusters()) + ", routing='" +
+               routing_to_string(index_->initializer_type()) +
                "', is_trained=" + (index_->is_trained() ? "True" : "False") + ")";
     }
 
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
         return index_->dimension();
-    }
-    [[nodiscard]] size_t max_elements() const {
-        const auto operation = access_.read();
-        return index_->max_elements();
     }
     [[nodiscard]] size_t num_points() const {
         const auto operation = access_.read();
@@ -416,9 +326,9 @@ class IvfIndex {
         const auto operation = access_.read();
         return seed_;
     }
-    [[nodiscard]] std::string initializer() const {
+    [[nodiscard]] std::string routing() const {
         const auto operation = access_.read();
-        return initializer_to_string(index_->initializer_type());
+        return routing_to_string(index_->initializer_type());
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
@@ -435,13 +345,6 @@ class IvfIndex {
    private:
     IvfIndex() = default;
 
-    // Parameters of an index that cannot be trained; the k-means default seed.
-    static rabitqkmeans::RaBitQKMeansParameters untrainable_parameters(MetricType metric) {
-        return default_training_parameters(
-            metric, rabitqkmeans::RaBitQKMeansParameters{}.seed
-        );
-    }
-
     void check_trained(const char* operation) const {
         if (!index_->is_trained()) {
             throw std::runtime_error(
@@ -454,20 +357,12 @@ class IvfIndex {
         if (index_->num_stored_points() != 0) {
             throw std::runtime_error("IvfIndex cannot be trained once it stores points");
         }
-        if (builds_by_construct_) {
-            throw std::runtime_error(
-                "IvfIndex created with max_elements is filled by build; create "
-                "IvfIndex(dim, num_clusters, nbits=...) to train or set centroids"
-            );
-        }
     }
 
     mutable IndexAccess access_;
     std::unique_ptr<ivf::IVF> index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
-    std::optional<uint32_t> seed_;  // Unknown for point-count indexes and 0.8 files.
-    // Point-count and loaded indexes build by construct, never by training.
-    bool builds_by_construct_ = false;
+    std::optional<uint32_t> seed_;  // Unknown for files from releases up to 0.8.
 };
 
 }  // namespace rabitqlib::python_bindings
@@ -491,7 +386,7 @@ nbits : int, optional
 metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
     Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
     scales data and queries to unit length.
-initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
     Centroid routing strategy. Default is 'auto'.
 seed : int, optional
     Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
@@ -505,9 +400,6 @@ centroids. Loaded indexes are already trained. Concurrent reads are
 supported; an overlapping mutation raises RuntimeError.
 Data, centroids and queries must be finite float32 values within the index
 coordinate range; other values raise ValueError.
-The 0.7 form IvfIndex(dim, max_elements, num_clusters, nbits, ...) and
-build() still work in 0.8, raise DeprecationWarning, and will be removed in
-0.9.
 
 Examples
 --------
@@ -529,7 +421,7 @@ data : array_like of float, shape (n, dim)
     float32; a copy may be made.
 cluster_ids : array_like of int, shape (n,), optional
     Keyword-only. Existing centroid IDs. None routes each vector using the
-    index's configured centroid initializer; routing may be approximate.
+    index's configured routing strategy, which may be approximate.
     Centroids do not move.
 num_threads : int, optional
     Keyword-only. Worker count. None (default) and 0 select the available
@@ -548,11 +440,9 @@ On an untrained index, add first trains num_clusters centroids on data,
 as train(data) does, so data needs at least num_clusters rows, and an
 empty first add raises RuntimeError; with
 num_threads None, training uses cp.num_threads. Passing cluster_ids to an
-untrained index raises RuntimeError, as does add on an index created with
-max_elements, which build fills. If the call fails, the index stays
+untrained index raises RuntimeError. If the call fails, the index stays
 untrained and empty. Batch additions to reduce repeated cluster copying;
-reserve can preallocate room. Passing the options positionally is
-deprecated.)doc";
+reserve_cluster can preallocate room.)doc";
 
     py::class_<IvfIndex>(m, "IvfIndex", kIndexDoc)
         .def(
@@ -568,29 +458,9 @@ deprecated.)doc";
             py::kw_only(),
             py::arg("nbits") = 7,
             py::arg("metric") = "l2",
-            py::arg("initializer") = "auto",
+            py::arg("routing") = "auto",
             py::arg("seed") = py::none(),
             kIndexDoc
-        )
-        // Private to the 0.8 compatibility layer in rabitqlib/__init__.py.
-        .def(
-            py::init([](size_t dim,
-                        size_t num_clusters,
-                        size_t nbits,
-                        const std::string& metric,
-                        const std::string& initializer,
-                        size_t max_elements) {
-                return IvfIndex::with_point_count(
-                    dim, max_elements, num_clusters, nbits, metric, initializer
-                );
-            }),
-            py::arg("dim"),
-            py::arg("num_clusters"),
-            py::kw_only(),
-            py::arg("nbits"),
-            py::arg("metric"),
-            py::arg("initializer"),
-            py::arg("_max_elements")
         )
         .def(
             "train",
@@ -643,15 +513,6 @@ while the index stores no vectors and raises RuntimeError afterwards. A
 failed call leaves the index unchanged.)doc"
         )
         .def(
-            "_build",
-            &IvfIndex::build,
-            py::arg("data"),
-            py::arg("centroids"),
-            py::arg("cluster_ids"),
-            py::arg("num_threads"),
-            py::arg("fast_quantization")
-        )
-        .def(
             "add",
             &IvfIndex::add,
             py::arg("data"),
@@ -662,8 +523,8 @@ failed call leaves the index unchanged.)doc"
             kAddDoc
         )
         .def(
-            "reserve",
-            &IvfIndex::reserve,
+            "reserve_cluster",
+            &IvfIndex::reserve_cluster,
             py::arg("cluster_id"),
             py::arg("num_points"),
             R"doc(Preallocate storage for a cluster.
@@ -673,7 +534,8 @@ Parameters
 cluster_id : int
     Cluster ID in [0, num_clusters).
 num_points : int
-    Nonnegative capacity to reserve for this cluster.
+    Nonnegative capacity to reserve for this cluster: the total number of
+    points it can hold, including its current ones.
 
 Notes
 -----
@@ -706,6 +568,7 @@ Removal does not reclaim storage and cannot be undone.)doc"
             py::arg("queries"),
             py::arg("k"),
             py::arg("nprobe") = py::none(),
+            py::kw_only(),
             py::arg("high_accuracy") = py::none(),
             py::arg("num_threads") = py::none(),
             R"doc(Search a batch of query vectors.
@@ -719,14 +582,15 @@ k : int
     Number of neighbors requested, at least 1. It may exceed the number of
     points; slots without a neighbor are padded as described below.
 nprobe : int, optional
-    Number of clusters to probe, capped at num_clusters. None (default) and
-    0 select num_clusters / 16, rounded to the nearest integer and at least 1.
+    Number of clusters to probe, at least 1 and capped at num_clusters. None
+    (default) selects num_clusters / 16, rounded to the nearest integer and
+    at least 1.
 high_accuracy : bool, optional
-    Enable HACC. None (default) selects it for 4-9 bits and standard
-    FastScan otherwise. Raw storage uses standard FastScan.
+    Keyword-only. Enable HACC. None (default) selects it for 4-9 bits and
+    standard FastScan otherwise. Raw storage uses standard FastScan.
 num_threads : int, optional
-    Worker count. None (default) selects 1; 0 selects the available CPU
-    count, capped by OMP_NUM_THREADS.
+    Keyword-only. Worker count. None (default) selects 1; 0 selects the
+    available CPU count, capped by OMP_NUM_THREADS.
 
 Returns
 -------
@@ -794,11 +658,6 @@ accompanying ``<path>.hnsw`` file.)doc"
         )
         .def_property_readonly("dim", &IvfIndex::dim, R"doc(Original vector dimension.)doc")
         .def_property_readonly(
-            "max_elements",
-            &IvfIndex::max_elements,
-            R"doc(Logical capacity: stored points, or the build row count of a 0.7-form index before build.)doc"
-        )
-        .def_property_readonly(
             "num_points",
             &IvfIndex::num_points,
             R"doc(Number of live, searchable points.)doc"
@@ -819,12 +678,12 @@ accompanying ``<path>.hnsw`` file.)doc"
         .def_property_readonly(
             "is_trained",
             &IvfIndex::is_trained,
-            R"doc(Whether centroids are set, by train, set_centroids, the first add, build or load.)doc"
+            R"doc(Whether centroids are set, by train, set_centroids, the first add or load.)doc"
         )
         .def_property_readonly(
             "seed",
             &IvfIndex::seed,
-            R"doc(Rotation seed, or None for an index loaded from a file from a release up to 0.8 or created in the 0.7 form.)doc"
+            R"doc(Rotation seed, or None for an index loaded from a file from a release up to 0.8.)doc"
         )
         .def_property(
             "cp",
@@ -839,8 +698,8 @@ accompanying ``<path>.hnsw`` file.)doc"
             R"doc(Canonical metric name: 'l2', 'ip' or 'cosine'.)doc"
         )
         .def_property_readonly(
-            "initializer",
-            &IvfIndex::initializer,
-            R"doc(Resolved centroid routing strategy.)doc"
+            "routing",
+            &IvfIndex::routing,
+            R"doc(Resolved centroid routing strategy, never 'auto'.)doc"
         );
 }

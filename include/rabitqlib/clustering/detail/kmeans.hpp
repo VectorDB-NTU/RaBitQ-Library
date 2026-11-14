@@ -32,7 +32,6 @@ namespace rabitqlib::clustering {
 
 enum class FinalAssignmentMode : uint8_t {
     Approximate = 0,
-    SymphonyQG = Approximate,  // Compatibility name for the graph assignment path.
     Exact = 1,
 };
 

@@ -25,7 +25,6 @@
 namespace rabitqlib::rabitqkmeans {
 
 using clustering::FinalAssignmentMode;
-using RaBitQKMeansIterationStats = clustering::KMeansIterationStats;
 
 struct RaBitQKMeansParameters {
     // Number of clustering iterations.

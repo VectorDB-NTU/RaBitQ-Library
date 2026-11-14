@@ -20,7 +20,7 @@ per centroid; the classes below default to training on every vector.
 | Class | Assignment | Recommended use | Cluster count |
 | --- | --- | --- | --- |
 | [RaBitQKMeans](#rabitqkmeans) | Flat RaBitQ scan | Small cluster counts | `n >= k >= 1` |
-| [QGKMeans](#qgkmeans) | SymphonyQG centroid graph | Larger cluster counts | `n >= k > max_degree` (C++ `graph_degree`; default 32) |
+| [QGKMeans](#qgkmeans) | SymphonyQG centroid graph | Larger cluster counts | `n >= k > max_degree` (default 32) |
 
 ## Python
 
@@ -164,15 +164,14 @@ encodes new vectors around it.
 
 Each iteration compares every training point with every centroid. The batch size of 32
 is not a cluster-count limit. This method uses one-bit point codes throughout;
-it has no graph parameters or `nbits` (C++ `quantization_bits`) setting.
+it has no graph parameters or `nbits` setting.
 
 ### QGKMeans
 
 QGKMeans builds a SymphonyQG graph over the centroids and uses previous
-assignments as search hints. Its additional parameters are below, under their Python
-names since 0.8.5. C++ and Python before 0.8.5 name the first three
-`quantization_bits` (with `0` for raw storage), `graph_degree` and `ef_build`; in
-Python those names still work, with a `DeprecationWarning`, until 0.9.
+assignments as search hints. Its additional parameters are below; C++ and Python use
+the same names. Before 0.9 the first three were `quantization_bits` (with `0` for raw
+storage), `graph_degree` and `ef_build`.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
@@ -213,15 +212,15 @@ kmeans = RaBitQKMeans(d, 16, final_assignment="exact")
 kmeans.train(x)
 ```
 
-Python takes the strings `'approximate'` and `'exact'` since 0.8.5. The
-`FinalAssignmentMode` members `Approximate`, `Exact` and the legacy alias `SymphonyQG`
-are still accepted until 0.9, and `cp.final_assignment` reads back as a member
-until then; importing `FinalAssignmentMode` raises a `DeprecationWarning`.
+Python takes the strings `'approximate'` and `'exact'`, and `cp.final_assignment`
+reads back as one of them. 0.9 removed the `FinalAssignmentMode` enum from the Python
+package.
 
 In C++, set `parameters.final_assignment` to
 `rabitqlib::rabitqkmeans::FinalAssignmentMode::Exact` or
 `rabitqlib::qgkmeans::FinalAssignmentMode::Exact`; both names refer to the same
-enum. Training still uses the selected approximate assignment algorithm.
+enum, whose values are `Approximate` and `Exact` (0.9 removed the alias
+`SymphonyQG`). Training still uses the selected approximate assignment algorithm.
 
 Exact final assignment screens all centroids with blocked GEMM and refines
 possible winners in float64; ties select the smallest centroid index. Returned

@@ -1,20 +1,9 @@
-"""The 0.8 train / add / search workflow of SymqgIndex."""
-
-import inspect
-import warnings
+"""The train / add / search workflow of SymqgIndex."""
 
 import numpy as np
 import pytest
 from conftest import DIM, N_VECTORS
 from rabitqlib import SymqgIndex
-
-
-@pytest.fixture(autouse=True)
-def no_deprecations():
-    # The 0.8 API must never go through the compatibility layer.
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", DeprecationWarning)
-        yield
 
 
 def saved_bytes(index, path):
@@ -23,29 +12,16 @@ def saved_bytes(index, path):
 
 
 def test_constructor_options_are_keyword_only_with_defaults():
-    parameters = inspect.signature(SymqgIndex.__init__).parameters
-    keyword = inspect.Parameter.KEYWORD_ONLY
-    assert [p for p in parameters if parameters[p].kind is not keyword] == [
-        "self",
-        "dim",
-    ]
-    defaults = {name: p.default for name, p in parameters.items() if name != "self"}
-    assert defaults == {
-        "dim": inspect.Parameter.empty,
-        "nbits": 32,
-        "max_degree": 32,
-        "ef_construction": 200,
-        "init": "pipnn",
-        "metric": "l2",
-        "seed": None,
-    }
+    with pytest.raises(TypeError, match="incompatible constructor arguments"):
+        SymqgIndex(DIM, 32)
     index = SymqgIndex(DIM)
-    assert (index.nbits, index.max_degree, index.ef_construction, index.init) == (
-        32,
-        32,
-        200,
-        "pipnn",
-    )
+    assert (
+        index.nbits,
+        index.max_degree,
+        index.ef_construction,
+        index.init,
+        index.metric,
+    ) == (32, 32, 200, "pipnn", "l2")
     assert index.is_trained
     assert len(index) == 0
 
@@ -85,10 +61,8 @@ def test_constructor_options_are_keyword_only_with_defaults():
     ],
 )
 def test_constructor_argument_errors(make, error, message):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        with pytest.raises(error, match=message):
-            make()
+    with pytest.raises(error, match=message):
+        make()
 
 
 def test_seed_is_drawn_once_and_reproduces_the_index(base_data, tmp_path):
@@ -144,15 +118,39 @@ def test_add_builds_once_and_search_finds_the_vectors(nbits, base_data, tmp_path
 
 
 def test_add_uses_the_constructor_settings(base_data, tmp_path):
-    for init in ("pipnn", "random"):
-        added = SymqgIndex(DIM, ef_construction=60, init=init, seed=9)
-        added.add(base_data, num_threads=1)
-        with pytest.warns(DeprecationWarning):
-            built = SymqgIndex(DIM, seed=9)
-            built.build(base_data, 60, 1, init)
-        assert saved_bytes(added, tmp_path / "a.index") == saved_bytes(
-            built, tmp_path / "b.index"
+    # The file records both settings, so compare what the graphs return, not bytes.
+    found = {}
+    for init, ef_construction in (("pipnn", 33), ("pipnn", 400), ("random", 33)):
+        index = SymqgIndex(DIM, ef_construction=ef_construction, init=init, seed=9)
+        index.add(base_data, num_threads=1)
+        found[init, ef_construction] = index.search(base_data, 10, 10)[0]
+        index.save(tmp_path / "graph.index")
+        loaded = SymqgIndex.load(tmp_path / "graph.index")
+        assert (loaded.ef_construction, loaded.init, loaded.seed) == (
+            ef_construction,
+            init,
+            9,
         )
+    assert not np.array_equal(found["pipnn", 33], found["pipnn", 400])
+    assert not np.array_equal(found["pipnn", 33], found["random", 33])
+
+
+def test_failed_add_leaves_the_index_empty(base_data):
+    index = SymqgIndex(DIM, max_degree=32, ef_construction=60, seed=9)
+    with pytest.raises(
+        ValueError,
+        match="^QuantizedGraph degree bound must be smaller than the number of points$",
+    ):
+        index.add(base_data[:32])
+    assert len(index) == index.num_stored_points == 0
+    # A later failure, raised after the graph object exists.
+    bad = base_data.copy()
+    bad[7, 1] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        index.add(bad)
+    assert len(index) == index.num_stored_points == 0
+    np.testing.assert_array_equal(index.add(base_data), np.arange(N_VECTORS))
+    assert len(index) == N_VECTORS
 
 
 def test_search_ef_defaults_to_max_of_k_and_64_and_is_raised_to_k(base_data):
@@ -186,7 +184,8 @@ def test_operations_before_add_raise(tmp_path, base_data):
 def test_type_errors_list_only_the_public_constructor():
     with pytest.raises(TypeError) as error:
         SymqgIndex(DIM, nbits="four")
-    assert "_quantization_bits" not in str(error.value)
+    assert "\n    1. " in str(error.value)
+    assert "\n    2. " not in str(error.value)
 
 
 def test_search_pads_k_beyond_the_points(base_data):

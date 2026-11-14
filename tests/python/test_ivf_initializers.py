@@ -16,7 +16,7 @@ def test_hnsw_parallel_build_routes_and_reloads(tmp_path, metric, threads):
     count, dim = 1024, 65
     data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
     data /= np.linalg.norm(data, axis=1, keepdims=True)
-    index = IvfIndex(dim, count, nbits=4, metric=metric, initializer="hnsw")
+    index = IvfIndex(dim, count, nbits=4, metric=metric, routing="hnsw")
     index.set_centroids(data, num_threads=threads)
     index.add(data, cluster_ids=np.arange(count, dtype=np.uint32), num_threads=threads)
     # A parallel build may leave a centroid unreachable in the routing graph, so
@@ -42,7 +42,7 @@ def test_single_thread_set_centroids_builds_reproducible_hnsw_routing(tmp_path, 
     data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
     saved = []
     for run in range(2):
-        index = IvfIndex(dim, count, nbits=1, metric=metric, initializer="hnsw", seed=7)
+        index = IvfIndex(dim, count, nbits=1, metric=metric, routing="hnsw", seed=7)
         index.set_centroids(data, num_threads=1)
         index.add(data, cluster_ids=np.arange(count, dtype=np.uint32), num_threads=4)
         path = tmp_path / f"run-{run}.index"
@@ -60,7 +60,7 @@ def test_hnsw_concurrent_routing_windows_match_serial(tmp_path, metric):
     rng = np.random.default_rng(42)
     data = rng.standard_normal((count, dim)).astype(np.float32)
     queries = rng.standard_normal((4, dim)).astype(np.float32)
-    index = IvfIndex(dim, count, nbits=1, metric=metric, initializer="hnsw")
+    index = IvfIndex(dim, count, nbits=1, metric=metric, routing="hnsw")
     index.set_centroids(data)
     index.add(data, cluster_ids=np.arange(count, dtype=np.uint32), num_threads=1)
     probes = (1, 16, 400, 500)
@@ -83,7 +83,7 @@ def test_hnsw_concurrent_routing_windows_match_serial(tmp_path, metric):
 def test_hnsw_rejects_corrupt_routing_graph(tmp_path, metric, damage):
     count, dim = 64, 64
     data = np.random.default_rng(42).standard_normal((count, dim)).astype(np.float32)
-    index = IvfIndex(dim, count, nbits=4, metric=metric, initializer="hnsw")
+    index = IvfIndex(dim, count, nbits=4, metric=metric, routing="hnsw")
     index.set_centroids(data)
     index.add(data, cluster_ids=np.arange(count, dtype=np.uint32), num_threads=1)
     expected = index.search(data[:2], 1, 4, num_threads=1)
@@ -139,9 +139,9 @@ def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     dim, count = 65, 33
     data = rng.standard_normal((count + 1, dim)).astype(np.float32)
     data /= np.linalg.norm(data, axis=1, keepdims=True)
-    index = IvfIndex(dim, count, nbits=bits, metric=metric, initializer=initializer)
+    index = IvfIndex(dim, count, nbits=bits, metric=metric, routing=initializer)
     resolved = "flat" if initializer == "auto" else initializer
-    assert index.initializer == resolved
+    assert index.routing == resolved
     index.set_centroids(data[:count])
     index.add(
         data[:count], cluster_ids=np.arange(count, dtype=np.uint32), num_threads=2
@@ -159,7 +159,7 @@ def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     assert format2_file.IVF_ROUTING[stored] in format2_file.sections(payload)
     assert not Path(str(path) + ".hnsw").exists()
     loaded = IvfIndex.load(str(path))
-    assert loaded.initializer == resolved
+    assert loaded.routing == resolved
     actual = loaded.search(queries, 3, 7, num_threads=2)
     for left, right in zip(expected, actual):
         np.testing.assert_array_equal(left, right)
@@ -168,11 +168,11 @@ def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     for obj in (index, loaded):
         obj.add(data[count:], num_threads=2)
         obj.remove(np.array([0], dtype=np.uint32))
-        assert obj.initializer == resolved
+        assert obj.routing == resolved
     for left, right in zip(index.search(queries, 3, 7), loaded.search(queries, 3, 7)):
         np.testing.assert_array_equal(left, right)
     loaded.save(str(path))
-    assert IvfIndex.load(str(path)).initializer == resolved
+    assert IvfIndex.load(str(path)).routing == resolved
 
 
 @pytest.mark.parametrize(
@@ -187,9 +187,9 @@ def test_initializer_roundtrip_and_updates(tmp_path, metric, bits, initializer):
     ],
 )
 def test_auto_initializer_thresholds(clusters, expected):
-    assert IvfIndex(64, clusters, nbits=1).initializer == expected
+    assert IvfIndex(64, clusters, nbits=1).routing == expected
     for mode in ("flat", "flat_rabitq", "hnsw"):
-        assert IvfIndex(64, clusters, nbits=1, initializer=mode).initializer == mode
+        assert IvfIndex(64, clusters, nbits=1, routing=mode).routing == mode
 
 
 # Historical routing depends only on the cluster count, and both storage widths'
@@ -213,7 +213,7 @@ def historical_ivf(request):
         np.random.default_rng(43).standard_normal((clusters, 64)).astype(np.float32)
     )
     historical = "flat" if clusters < 20000 else "hnsw"
-    index = IvfIndex(64, clusters, nbits=bits, initializer=historical)
+    index = IvfIndex(64, clusters, nbits=bits, routing=historical)
     index.set_centroids(centroids)
     index.add(centroids[:3], cluster_ids=np.arange(3, dtype=np.uint32), num_threads=2)
     return index, centroids[:3].copy()
@@ -227,7 +227,7 @@ def test_legacy_formats_infer_historical_initializer(
     path = tmp_path / "v1.index"
     index.save(str(path))
     # Format 2 honors the stored type even when today's Auto would choose differently.
-    assert IvfIndex.load(str(path)).initializer == index.initializer
+    assert IvfIndex.load(str(path)).routing == index.routing
     # Build the earlier layouts from the RABQIDX1 version 2 layout of 0.8. HNSW
     # routing, chosen from 20000 clusters, lives in the sidecar of all three.
     main, sidecar = format2_file.to_rabqidx1(path.read_bytes())
@@ -235,7 +235,7 @@ def test_legacy_formats_infer_historical_initializer(
         Path(str(path) + ".hnsw").write_bytes(sidecar)
     path.write_bytes(main)
     # RABQIDX1 version 2 also records the routing type.
-    assert IvfIndex.load(str(path)).initializer == index.initializer
+    assert IvfIndex.load(str(path)).routing == index.routing
     payload = bytearray(main)
     if format_version == "v1":
         # v1 has the same payload but no initializer field after padded_dim.
@@ -248,7 +248,7 @@ def test_legacy_formats_infer_historical_initializer(
             payload = b"RBFQRAW1" + (1).to_bytes(4, "little") + payload
     path.write_bytes(payload)
     loaded = IvfIndex.load(str(path))
-    assert loaded.initializer == index.initializer
+    assert loaded.routing == index.routing
     for left, right in zip(index.search(queries, 1, 2), loaded.search(queries, 1, 2)):
         np.testing.assert_array_equal(left, right)
 
@@ -262,14 +262,14 @@ def test_initializer_rejects_invalid_argument():
 def test_explicit_flat_routing_above_historical_threshold(tmp_path, initializer):
     centroids = np.zeros((20000, 64), dtype=np.float32)
     centroids[17, 0] = 1
-    index = IvfIndex(64, len(centroids), nbits=32, initializer=initializer)
+    index = IvfIndex(64, len(centroids), nbits=32, routing=initializer)
     index.set_centroids(centroids)
     index.add(centroids[17:18], cluster_ids=np.array([17], np.uint32), num_threads=2)
     path = tmp_path / "large.index"
     index.save(str(path))
     assert not Path(str(path) + ".hnsw").exists()
     for obj in (index, IvfIndex.load(str(path))):
-        assert obj.initializer == initializer
+        assert obj.routing == initializer
         ids, distances = obj.search(centroids[17:18], 1, 1)
         np.testing.assert_array_equal(ids, [[0]])
         np.testing.assert_array_equal(distances, [[0]])
@@ -278,7 +278,7 @@ def test_explicit_flat_routing_above_historical_threshold(tmp_path, initializer)
 @pytest.mark.parametrize("damage", ["auto", "unknown", "truncated_initializer"])
 def test_initializer_rejects_invalid_persistence(tmp_path, damage):
     data = np.zeros((3, 65), dtype=np.float32)
-    index = IvfIndex(65, 1, nbits=1, initializer="flat_rabitq")
+    index = IvfIndex(65, 1, nbits=1, routing="flat_rabitq")
     index.set_centroids(data[:1])
     index.add(data, cluster_ids=np.zeros(3, dtype=np.uint32), num_threads=1)
     path = tmp_path / "bad.index"
@@ -324,7 +324,7 @@ def test_auto_flat_rabitq_persists_actual_routing(tmp_path, clusters):
     index.save(str(path))
     assert not Path(str(path) + ".hnsw").exists()
     for obj in (index, IvfIndex.load(str(path))):
-        assert obj.initializer == "flat_rabitq"
+        assert obj.routing == "flat_rabitq"
         ids, distances = obj.search(centroids[17:18], 1, 1)
         np.testing.assert_array_equal(ids, [[0]])
         np.testing.assert_array_equal(distances, [[0]])

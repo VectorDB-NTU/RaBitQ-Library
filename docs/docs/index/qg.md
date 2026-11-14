@@ -71,13 +71,13 @@ qg.save("qg_example.index");
 | Parameter | Contract |
 | --- | --- |
 | `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `nbits` / C++ `quantization_bits` | Python keyword: 32 (default) for owned raw vectors, or 4/8 for quantized storage. C++ uses 0 for raw vectors, as Python's `quantization_bits` did before 0.8. |
+| `nbits` / C++ `quantization_bits` | Python keyword: 32 (default) for owned raw vectors, or 4/8 for quantized storage. C++ uses 0 for raw vectors. |
 | `max_degree` | Python keyword, default 32: a positive multiple of 32, strictly smaller than the point count. It is a hard degree bound, unlike HNSW-RaBitQ's `M`. |
 | `ef_construction` | Python keyword, default 200: positive construction search window used by `add`. |
 | `init` | Python keyword: `"pipnn"` (default) or `"random"`. |
 | `metric` | Python keyword: `"l2"` (default), `"ip"` or [`"cosine"`](usage.md#the-cosine-metric). |
 | `seed` | Python keyword: rotation and graph-construction seed in `[0, 2**32 - 1]`. The default `None` draws one at random; `index.seed` reports it, and passing it back with `num_threads=1` rebuilds the same graph from the same data. |
-| `k`, `ef_search` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `-1` in Python (`kPidMax` in C++) and distance `+inf`. An omitted `ef_search` uses `max(k, 64)` in Python, and smaller values are raised to `k`, as for HNSW-RaBitQ. Python named it `ef` before 0.8.5. |
+| `k`, `ef_search` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `-1` in Python (`kPidMax` in C++) and distance `+inf`. An omitted or `None` `ef_search` uses `max(k, 64)` in Python (0 raises `ValueError`), and smaller values are raised to `k`, as for HNSW-RaBitQ. It replaces `ef`, which 0.9 removed. |
 | `num_threads` | Python `add` defaults to every available logical CPU, capped by `OMP_NUM_THREADS`, and `search` to 1; `None` selects these defaults. |
 
 Python search returns `(ids, distances)` arrays. Distances are squared
@@ -183,8 +183,7 @@ Concurrent searches need separate outputs; do not modify the index or call
 Python `search(queries, k, ef_search=None, *, num_threads=None)` accepts a two-dimensional
 query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. It defaults to one worker; `num_threads=0` selects the
-available logical CPU count, capped by the number of queries. The 0.7 name
-`search_batch` still works in 0.8 with a `DeprecationWarning`.
+available logical CPU count, capped by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.
 
 Python searches use per-call `ef_search` values. For access rules, see the
