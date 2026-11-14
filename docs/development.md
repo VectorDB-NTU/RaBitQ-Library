@@ -692,9 +692,10 @@ of 32. These settings are not interchangeable.
 
 Public names and Python keywords are compatibility contracts. For example,
 `Cluster::num()`, the protected `Initializer::num_cluster_`, QG's
-`degree_bound()`/`set_ef()`, Python's `ef`, and `QGKMeansParameters::ef_build`
+`degree_bound()`/`set_ef()` and `QGKMeansParameters::ef_build`
 retain their existing spellings, as do the Python vocabulary `random_seed`/`seed`,
-`train`/`build`, `obj`, `nsplit`, `final_obj` and `niter`. C++ parameter names may be clarified without
+`train`/`build`, `obj`, `nsplit`, `final_obj` and `niter`. Python's search breadth is
+`ef_search` since 0.8.5; `ef` is deprecated and removed in 0.9 (#232). C++ parameter names may be clarified without
 changing types, order or defaults. Keep declarations, definitions and comments
 in agreement; do not rename methods or literals by textual substitution.
 

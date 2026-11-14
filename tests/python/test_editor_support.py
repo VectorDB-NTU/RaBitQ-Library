@@ -198,7 +198,7 @@ def test_documented_search_result_types(kind):
     if kind == "symqg":
         index = rabitqlib.SymqgIndex(64, ef_construction=40)
         index.add(data)
-        result = index.search(data[:2], 3, ef=20)
+        result = index.search(data[:2], 3, ef_search=20)
     else:
         if kind == "ivf":
             index = rabitqlib.IvfIndex(64, 2, nbits=4)
@@ -209,7 +209,7 @@ def test_documented_search_result_types(kind):
         if isinstance(index, rabitqlib.IvfIndex):
             result = index.search(data[:2], 3, nprobe=2)
         else:
-            result = index.search(data[:2], 3, ef=20)
+            result = index.search(data[:2], 3, ef_search=20)
     ids, distances = result
     assert ids.shape == distances.shape == (2, 3)
     assert ids.dtype == np.uint32

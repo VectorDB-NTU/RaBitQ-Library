@@ -58,8 +58,10 @@ def test_static_public_usage(tmp_path):
     assert error_lines == expected_lines, result.stdout
 
 
-# Each 0.7 call form the compatibility layer accepts is marked deprecated in the
-# stubs, so editors flag it while it still type-checks.
+# Each 0.7 call form the compatibility layer accepts, and each 0.8 spelling that 0.9
+# renames, is marked deprecated in the stubs, so editors flag it while it still
+# type-checks. Deprecations that depend on a value (a breadth of 0, a seed above
+# 2**32 - 1) cannot be declared and are documented in the docstrings only.
 DEPRECATED_USAGE = """\
 import numpy as np
 from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
@@ -79,6 +81,18 @@ graph.build(x, 40)
 graph.search_batch(x, 5, 32)
 bits = graph.quantization_bits
 built = graph.is_built
+routed = IvfIndex(64, 1, initializer="flat")
+strategy = routed.initializer
+stored = routed.max_elements
+routed.reserve(0, 8)
+routed.search(x, 5, 1, None)
+capacity = seeded.max_elements
+seeded.resize(128)
+seeded.search(x, 5, ef=32)
+seeded.search(x, 5, 32, 1)
+count = graph.max_elements
+graph.search(x, 5, ef=32)
+graph.search(x, 5, 32, 1)
 """
 
 
@@ -108,4 +122,4 @@ def test_deprecated_forms_are_flagged(tmp_path):
             rf"{re.escape(str(usage))}:(\d+): error: .*\[deprecated\]", result.stdout
         )
     }
-    assert flagged == set(range(6, 19)), result.stdout
+    assert flagged == set(range(6, 31)), result.stdout

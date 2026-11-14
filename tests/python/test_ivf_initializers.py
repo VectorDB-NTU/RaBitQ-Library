@@ -245,8 +245,8 @@ def test_legacy_formats_infer_historical_initializer(
 
 
 def test_initializer_rejects_invalid_argument():
-    with pytest.raises(ValueError, match="initializer must be"):
-        IvfIndex(64, 1, nbits=1, initializer="unknown")
+    with pytest.raises(ValueError, match="^routing must be"):
+        IvfIndex(64, 1, nbits=1, routing="unknown")
 
 
 @pytest.mark.parametrize("initializer", ["flat", "flat_rabitq"])
