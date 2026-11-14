@@ -449,7 +449,8 @@ cluster_ids : array_like of int, shape (n,), optional
 num_threads : int, optional
     Keyword-only. Worker count. None (default) and 0 select the available
     CPU count, capped by OMP_NUM_THREADS; more than one thread links
-    nondeterministically, so pass 1 for a reproducible graph.
+    nondeterministically, so pass 1, and a seed to the constructor, for a
+    reproducible graph.
 fast_quantization : bool, optional
     Keyword-only. Use faster quantizer configuration. Default is False.
 
