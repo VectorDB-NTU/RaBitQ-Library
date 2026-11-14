@@ -141,7 +141,7 @@ def build_index(cfg, base, path):
             "assignment": "add routing",
         }
     elif method == "rabitq-hnsw":
-        from rabitqlib import FinalAssignmentMode, HnswIndex, RaBitQKMeans
+        from rabitqlib import HnswIndex, RaBitQKMeans
 
         cluster_count = cfg["hnsw_clusters"]
         kmeans = RaBitQKMeans(
@@ -152,7 +152,7 @@ def build_index(cfg, base, path):
             spherical=cfg["metric"] == "ip",
             seed=42,
             min_points_per_centroid=1,
-            final_assignment=FinalAssignmentMode.Exact,
+            final_assignment="exact",
         )
         stage_start = time.perf_counter()
         kmeans.train(base)

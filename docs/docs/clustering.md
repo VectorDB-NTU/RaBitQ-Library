@@ -20,7 +20,7 @@ per centroid; the classes below default to training on every vector.
 | Class | Assignment | Recommended use | Cluster count |
 | --- | --- | --- | --- |
 | [RaBitQKMeans](#rabitqkmeans) | Flat RaBitQ scan | Small cluster counts | `n >= k >= 1` |
-| [QGKMeans](#qgkmeans) | SymphonyQG centroid graph | Larger cluster counts | `n >= k > graph_degree` (default 32) |
+| [QGKMeans](#qgkmeans) | SymphonyQG centroid graph | Larger cluster counts | `n >= k > max_degree` (C++ `graph_degree`; default 32) |
 
 ## Python
 
@@ -101,7 +101,7 @@ Set Python keyword arguments or fields of the corresponding C++ parameter type:
 | `min_points_per_centroid` | `39` | Warn below this training-points-per-centroid ratio when verbose. |
 | `max_points_per_centroid` | `0` | When positive, train on a random sample above `k * max_points_per_centroid` vectors; `0` trains on all vectors. See [sampling](#training-set-sampling). |
 | `verbose` | `false` | Print training progress and warnings. |
-| `final_assignment` | `Approximate` | Use the selected method for final labels, or `Exact` for nearest-centroid labels. |
+| `final_assignment` | `'approximate'` (C++ `Approximate`) | Use the selected method for final labels, or `'exact'` (C++ `Exact`) for nearest-centroid labels. |
 
 `num_threads` sets an upper limit, not a fixed worker count for every stage.
 QGKMeans may use fewer workers to build small centroid graphs. That additional
@@ -164,18 +164,21 @@ encodes new vectors around it.
 
 Each iteration compares every training point with every centroid. The batch size of 32
 is not a cluster-count limit. This method uses one-bit point codes throughout;
-it has no graph parameters or `quantization_bits` setting.
+it has no graph parameters or `nbits` (C++ `quantization_bits`) setting.
 
 ### QGKMeans
 
 QGKMeans builds a SymphonyQG graph over the centroids and uses previous
-assignments as search hints. Its additional parameters are:
+assignments as search hints. Its additional parameters are below, under their Python
+names since 0.8.5. C++ and Python before 0.8.5 name the first three
+`quantization_bits` (with `0` for raw storage), `graph_degree` and `ef_build`; in
+Python those names still work, with a `DeprecationWarning`, until 0.9.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `quantization_bits` | `0` | Graph centroid storage: raw, or `4`/`8` bits. |
-| `graph_degree` | `32` | A positive multiple of 32, strictly smaller than `k`. |
-| `ef_build`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes. |
+| `nbits` | `32` | Graph centroid storage: `32` for raw vectors, or `4`/`8` bits. |
+| `max_degree` | `32` | A positive multiple of 32, strictly smaller than `k`. |
+| `ef_construction`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes. |
 | `graph_build_iterations` | `1` | PiPNN initialization followed by one refinement; values ≥2 request that many graph passes, ending in refinement. Independent of `niter`. |
 
 The seed also controls fallback neighbors; PiPNN uses fixed internal seeds.
@@ -194,9 +197,8 @@ their sum (WCSS); spherical mode sums `1 - inner_product`. `obj` and
 `iteration_stats` record objectives before each centroid update; Python
 `train()` returns the last such objective.
 
-`FinalAssignmentMode.Approximate` (default) uses the selected class's assignment
-algorithm. The legacy name `FinalAssignmentMode.SymphonyQG` remains an alias for
-`Approximate`. Labels need not identify the exact nearest centroids, but reported
+`final_assignment='approximate'` (default) uses the selected class's assignment
+algorithm. Labels need not identify the exact nearest centroids, but reported
 distances and WCSS remain exact for those labels. Without sampling, quantized
 QGKMeans final assignment retains a point's last-iteration label when it is
 closer. After sampling, most points have no such label, so every point uses the
@@ -205,11 +207,16 @@ same graph search. Approximate training objectives need not decrease monotonical
 To require exact nearest-centroid **final** assignments with either class:
 
 ```python
-from rabitqlib import FinalAssignmentMode, RaBitQKMeans
+from rabitqlib import RaBitQKMeans
 
-kmeans = RaBitQKMeans(d, 16, final_assignment=FinalAssignmentMode.Exact)
+kmeans = RaBitQKMeans(d, 16, final_assignment="exact")
 kmeans.train(x)
 ```
+
+Python takes the strings `'approximate'` and `'exact'` since 0.8.5. The
+`FinalAssignmentMode` members `Approximate`, `Exact` and the legacy alias `SymphonyQG`
+are still accepted until 0.9, and `cp.final_assignment` reads back as a member
+until then; importing `FinalAssignmentMode` raises a `DeprecationWarning`.
 
 In C++, set `parameters.final_assignment` to
 `rabitqlib::rabitqkmeans::FinalAssignmentMode::Exact` or
@@ -240,7 +247,7 @@ C++ callers that change `centroids` or graph parameters cause one rebuild on
 the next call. Each call still validates the `k * d` centroid coordinates.
 
 For the training vectors, `assign` reproduces `assignments` and `distances`
-with `FinalAssignmentMode.Exact`, for RaBitQKMeans, and whenever training
+with exact final assignment, for RaBitQKMeans, and whenever training
 sampled the input, because the sampled final pass is the same assignment.
 Unsampled approximate QGKMeans training also uses previous labels as graph
 search hints, so its final labels can differ.

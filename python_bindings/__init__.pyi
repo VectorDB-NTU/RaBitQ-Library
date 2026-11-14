@@ -17,6 +17,7 @@ __all__ = [
     "FinalAssignmentMode",
     "HnswIndex",
     "IvfIndex",
+    "KMeansIterationStats",
     "QGKMeans",
     "QGKMeansIterationStats",
     "QGKMeansParameters",
@@ -31,10 +32,15 @@ _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 _Metric: TypeAlias = Literal["l2", "ip", "innerproduct"]
 _Routing: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
 _QGInit: TypeAlias = Literal["pipnn", "random"]
+_FinalAssignment: TypeAlias = Literal["approximate", "exact"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
 
 # pybind11 enums are not subclasses of enum.Enum.
+@deprecated(
+    "FinalAssignmentMode is deprecated since 0.8.5; pass 'approximate' or 'exact' "
+    "as final_assignment"
+)
 class FinalAssignmentMode:
     """Final centroid assignment policy.
 
@@ -55,7 +61,7 @@ class FinalAssignmentMode:
     def __int__(self) -> int: ...
     def __index__(self) -> int: ...
 
-class QGKMeansIterationStats:
+class KMeansIterationStats:
     """Read-only statistics for one completed clustering iteration."""
 
     @property
@@ -71,7 +77,9 @@ class QGKMeansIterationStats:
     def nsplit(self) -> int:
         """Number of empty centroids repaired by splitting."""
 
-RaBitQKMeansIterationStats = QGKMeansIterationStats
+# The two 0.8 names of KMeansIterationStats; deprecated since 0.8.5.
+QGKMeansIterationStats = KMeansIterationStats
+RaBitQKMeansIterationStats = KMeansIterationStats
 
 class IvfIndex:
     """An approximate nearest-neighbor index using IVF.
@@ -1376,7 +1384,7 @@ class QGKMeans:
     d : int
         Original vector dimension, from 64 through 65536.
     k : int
-        Number of centroids; greater than graph_degree and no more than the
+        Number of centroids; greater than max_degree and no more than the
         number of training vectors.
     niter : int, optional
         Maximum number of clustering iterations. Default is 25.
@@ -1400,22 +1408,24 @@ class QGKMeans:
     num_threads : int, optional
         Worker count; 0 selects the available CPU count,
         capped by OMP_NUM_THREADS. Default is 0.
-    final_assignment : FinalAssignmentMode, optional
-        Approximate uses the training assignment method; Exact uses exhaustive
-        assignment against final centroids. Default is
-        FinalAssignmentMode.Approximate.
-    graph_degree : int, optional
-        Centroid graph degree; a positive multiple of 32. Default is 32.
-    ef_build : int, optional
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' uses the training assignment method; 'exact' uses exhaustive
+        assignment against final centroids. Default is 'approximate'. A
+        FinalAssignmentMode member is still accepted until 0.9.
+    max_degree : int, optional
+        Centroid graph degree; a positive multiple of 32. Default is 32. Named
+        graph_degree before 0.8.5.
+    ef_construction : int, optional
         Positive centroid-graph construction search breadth. Default is 240.
+        Named ef_build before 0.8.5.
     ef_search : int, optional
         Positive centroid-graph assignment search breadth. Default is 16.
     graph_build_iterations : int, optional
         Positive number of graph-building passes after initialization. Default
         is 1.
-    quantization_bits : int, optional
-        Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is
-        0.
+    nbits : int, optional
+        Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is
+        32. Named quantization_bits, with 0 for raw float32, before 0.8.5.
 
     Notes
     -----
@@ -1434,6 +1444,7 @@ class QGKMeans:
     k: int
     cp: QGKMeansParameters
 
+    @overload
     def __init__(
         self,
         d: SupportsIndex,
@@ -1447,12 +1458,12 @@ class QGKMeans:
         max_points_per_centroid: SupportsIndex = 0,
         early_stop_threshold: float = 0.0,
         num_threads: SupportsIndex = 0,
-        final_assignment: FinalAssignmentMode = FinalAssignmentMode.Approximate,
-        graph_degree: SupportsIndex = 32,
-        ef_build: SupportsIndex = 240,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 240,
         ef_search: SupportsIndex = 16,
         graph_build_iterations: SupportsIndex = 1,
-        quantization_bits: SupportsIndex = 0,
+        nbits: SupportsIndex = 32,
     ) -> None:
         """Cluster vectors using SymphonyQG graph assignment.
 
@@ -1461,7 +1472,7 @@ class QGKMeans:
         d : int
             Original vector dimension, from 64 through 65536.
         k : int
-            Number of centroids; greater than graph_degree and no more than the
+            Number of centroids; greater than max_degree and no more than the
             number of training vectors.
         niter : int, optional
             Maximum number of clustering iterations. Default is 25.
@@ -1485,22 +1496,24 @@ class QGKMeans:
         num_threads : int, optional
             Worker count; 0 selects the available CPU count,
             capped by OMP_NUM_THREADS. Default is 0.
-        final_assignment : FinalAssignmentMode, optional
-            Approximate uses the training assignment method; Exact uses exhaustive
-            assignment against final centroids. Default is
-            FinalAssignmentMode.Approximate.
-        graph_degree : int, optional
-            Centroid graph degree; a positive multiple of 32. Default is 32.
-        ef_build : int, optional
+        final_assignment : {'approximate', 'exact'}, optional
+            'approximate' uses the training assignment method; 'exact' uses exhaustive
+            assignment against final centroids. Default is 'approximate'. A
+            FinalAssignmentMode member is still accepted until 0.9.
+        max_degree : int, optional
+            Centroid graph degree; a positive multiple of 32. Default is 32. Named
+            graph_degree before 0.8.5.
+        ef_construction : int, optional
             Positive centroid-graph construction search breadth. Default is 240.
+            Named ef_build before 0.8.5.
         ef_search : int, optional
             Positive centroid-graph assignment search breadth. Default is 16.
         graph_build_iterations : int, optional
             Positive number of graph-building passes after initialization. Default
             is 1.
-        quantization_bits : int, optional
-            Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is
-            0.
+        nbits : int, optional
+            Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is
+            32. Named quantization_bits, with 0 for raw float32, before 0.8.5.
 
         Notes
         -----
@@ -1515,6 +1528,79 @@ class QGKMeans:
         kinds of objective are not directly comparable.
         """
 
+    @overload
+    @deprecated(
+        "QGKMeans(quantization_bits=...) is deprecated since 0.8.5; use nbits=, with 32 instead of 0 for raw vectors"
+    )
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        quantization_bits: SupportsIndex,
+        niter: SupportsIndex = 25,
+        verbose: bool | np.bool_ = False,
+        spherical: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        min_points_per_centroid: SupportsIndex = 39,
+        max_points_per_centroid: SupportsIndex = 0,
+        early_stop_threshold: float = 0.0,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+        graph_degree: SupportsIndex = ...,
+        ef_build: SupportsIndex = ...,
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 240,
+    ) -> None: ...
+    @overload
+    @deprecated("QGKMeans(graph_degree=...) is deprecated since 0.8.5; use max_degree=")
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        graph_degree: SupportsIndex,
+        niter: SupportsIndex = 25,
+        verbose: bool | np.bool_ = False,
+        spherical: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        min_points_per_centroid: SupportsIndex = 39,
+        max_points_per_centroid: SupportsIndex = 0,
+        early_stop_threshold: float = 0.0,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+        ef_build: SupportsIndex = ...,
+        ef_construction: SupportsIndex = 240,
+        nbits: SupportsIndex = 32,
+    ) -> None: ...
+    @overload
+    @deprecated(
+        "QGKMeans(ef_build=...) is deprecated since 0.8.5; use ef_construction="
+    )
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        ef_build: SupportsIndex,
+        niter: SupportsIndex = 25,
+        verbose: bool | np.bool_ = False,
+        spherical: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        min_points_per_centroid: SupportsIndex = 39,
+        max_points_per_centroid: SupportsIndex = 0,
+        early_stop_threshold: float = 0.0,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+        max_degree: SupportsIndex = 32,
+        nbits: SupportsIndex = 32,
+    ) -> None: ...
     def train(self, x: npt.ArrayLike) -> float:
         """Train centroids and retain the final assignments.
 
@@ -1594,7 +1680,7 @@ class QGKMeans:
         """Objective for the final assignments of all n vectors, or None before training."""
 
     @property
-    def iteration_stats(self) -> list[QGKMeansIterationStats] | None:
+    def iteration_stats(self) -> list[KMeansIterationStats] | None:
         """Per-iteration statistics over the vectors used for iterations, or None before training."""
 
 class QGKMeansParameters:
@@ -1645,19 +1731,44 @@ class QGKMeansParameters:
         """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
     @num_threads.setter
     def num_threads(self, value: SupportsIndex) -> None: ...
-
-    final_assignment: FinalAssignmentMode
-    """Approximate uses the training assignment method; Exact uses exhaustive assignment against final centroids. Default is FinalAssignmentMode.Approximate."""
-
     @property
+    def final_assignment(self) -> FinalAssignmentMode:
+        """'approximate' uses the training assignment method; 'exact' uses exhaustive assignment against final centroids. Default is 'approximate'. Until 0.9 it reads back as the FinalAssignmentMode member, which is still accepted."""
+    @final_assignment.setter
+    def final_assignment(
+        self, value: _FinalAssignment | FinalAssignmentMode
+    ) -> None: ...
+    @property
+    def max_degree(self) -> int:
+        """Centroid graph degree; a positive multiple of 32. Default is 32. Named graph_degree before 0.8.5."""
+    @max_degree.setter
+    def max_degree(self, value: SupportsIndex) -> None: ...
+    @property
+    @deprecated(
+        "QGKMeansParameters.graph_degree is deprecated since 0.8.5; use max_degree"
+    )
     def graph_degree(self) -> int:
-        """Centroid graph degree; a positive multiple of 32. Default is 32."""
+        """Deprecated since 0.8.5: use max_degree."""
     @graph_degree.setter
+    @deprecated(
+        "QGKMeansParameters.graph_degree is deprecated since 0.8.5; use max_degree"
+    )
     def graph_degree(self, value: SupportsIndex) -> None: ...
     @property
+    def ef_construction(self) -> int:
+        """Positive centroid-graph construction search breadth. Default is 240. Named ef_build before 0.8.5."""
+    @ef_construction.setter
+    def ef_construction(self, value: SupportsIndex) -> None: ...
+    @property
+    @deprecated(
+        "QGKMeansParameters.ef_build is deprecated since 0.8.5; use ef_construction"
+    )
     def ef_build(self) -> int:
-        """Positive centroid-graph construction search breadth. Default is 240."""
+        """Deprecated since 0.8.5: use ef_construction."""
     @ef_build.setter
+    @deprecated(
+        "QGKMeansParameters.ef_build is deprecated since 0.8.5; use ef_construction"
+    )
     def ef_build(self, value: SupportsIndex) -> None: ...
     @property
     def ef_search(self) -> int:
@@ -1670,9 +1781,20 @@ class QGKMeansParameters:
     @graph_build_iterations.setter
     def graph_build_iterations(self, value: SupportsIndex) -> None: ...
     @property
+    def nbits(self) -> int:
+        """Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is 32. Named quantization_bits, with 0 for raw float32, before 0.8.5."""
+    @nbits.setter
+    def nbits(self, value: SupportsIndex) -> None: ...
+    @property
+    @deprecated(
+        "QGKMeansParameters.quantization_bits is deprecated since 0.8.5; use nbits"
+    )
     def quantization_bits(self) -> int:
-        """Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is 0."""
+        """Deprecated since 0.8.5: use nbits."""
     @quantization_bits.setter
+    @deprecated(
+        "QGKMeansParameters.quantization_bits is deprecated since 0.8.5; use nbits"
+    )
     def quantization_bits(self, value: SupportsIndex) -> None: ...
     def __init__(self) -> None:
         """Create parameters with their documented defaults."""
@@ -1708,10 +1830,10 @@ class RaBitQKMeans:
     num_threads : int, optional
         Worker count; 0 selects the available CPU count,
         capped by OMP_NUM_THREADS. Default is 0.
-    final_assignment : FinalAssignmentMode, optional
-        Approximate uses the training assignment method; Exact uses exhaustive
-        assignment against final centroids. Default is
-        FinalAssignmentMode.Approximate.
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' uses the training assignment method; 'exact' uses exhaustive
+        assignment against final centroids. Default is 'approximate'. A
+        FinalAssignmentMode member is still accepted until 0.9.
 
     Notes
     -----
@@ -1753,7 +1875,7 @@ class RaBitQKMeans:
         max_points_per_centroid: SupportsIndex = 0,
         early_stop_threshold: float = 0.0,
         num_threads: SupportsIndex = 0,
-        final_assignment: FinalAssignmentMode = FinalAssignmentMode.Approximate,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
     ) -> None:
         """Cluster vectors using flat RaBitQ assignment.
 
@@ -1785,10 +1907,10 @@ class RaBitQKMeans:
         num_threads : int, optional
             Worker count; 0 selects the available CPU count,
             capped by OMP_NUM_THREADS. Default is 0.
-        final_assignment : FinalAssignmentMode, optional
-            Approximate uses the training assignment method; Exact uses exhaustive
-            assignment against final centroids. Default is
-            FinalAssignmentMode.Approximate.
+        final_assignment : {'approximate', 'exact'}, optional
+            'approximate' uses the training assignment method; 'exact' uses exhaustive
+            assignment against final centroids. Default is 'approximate'. A
+            FinalAssignmentMode member is still accepted until 0.9.
 
         Notes
         -----
@@ -1892,7 +2014,7 @@ class RaBitQKMeans:
         """Objective for the final assignments of all n vectors, or None before training."""
 
     @property
-    def iteration_stats(self) -> list[QGKMeansIterationStats] | None:
+    def iteration_stats(self) -> list[KMeansIterationStats] | None:
         """Per-iteration statistics over the vectors used for iterations, or None before training."""
 
 class RaBitQKMeansParameters:
@@ -1943,9 +2065,12 @@ class RaBitQKMeansParameters:
         """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
     @num_threads.setter
     def num_threads(self, value: SupportsIndex) -> None: ...
-
-    final_assignment: FinalAssignmentMode
-    """Approximate uses the training assignment method; Exact uses exhaustive assignment against final centroids. Default is FinalAssignmentMode.Approximate."""
-
+    @property
+    def final_assignment(self) -> FinalAssignmentMode:
+        """'approximate' uses the training assignment method; 'exact' uses exhaustive assignment against final centroids. Default is 'approximate'. Until 0.9 it reads back as the FinalAssignmentMode member, which is still accepted."""
+    @final_assignment.setter
+    def final_assignment(
+        self, value: _FinalAssignment | FinalAssignmentMode
+    ) -> None: ...
     def __init__(self) -> None:
         """Create parameters with their documented defaults."""

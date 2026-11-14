@@ -1,7 +1,7 @@
 import argparse
 from time import time
 
-from rabitqlib import FinalAssignmentMode, QGKMeans, RaBitQKMeans
+from rabitqlib import QGKMeans, RaBitQKMeans
 from utils.io import read_fvecs, write_fvecs, write_ivecs
 
 if __name__ == "__main__":
@@ -45,7 +45,7 @@ if __name__ == "__main__":
         dim,
         K,
         spherical=metric == "ip",
-        final_assignment=FinalAssignmentMode.Exact,
+        final_assignment="exact",
         verbose=True,
     )
     kmeans.train(X)

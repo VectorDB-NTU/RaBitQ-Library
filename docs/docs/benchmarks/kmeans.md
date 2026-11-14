@@ -49,7 +49,7 @@ search. Centroids are not normalized.
 
 | Method | Additional settings |
 | --- | --- |
-| `rabitqlib.QGKMeans` | `quantization_bits=0`, degree 32, `ef_build=240`, `ef_search=16`, one graph refinement, `early_stop_threshold=0`, `FinalAssignmentMode.Exact` |
+| `rabitqlib.QGKMeans` | raw centroid storage (`nbits=32`; `quantization_bits=0` before 0.8.5), degree 32, `ef_construction=240` (`ef_build` before 0.8.5), `ef_search=16`, one graph refinement, `early_stop_threshold=0`, exact final assignment |
 | `faiss.Kmeans` | CPU, `nredo=1`, `max_points_per_centroid=N`, `spherical=False`, `early_stop_threshold=0`; exact final `index.search(x, 1)` |
 | `superkmeans.SuperKMeans` | v0.2.0, `quantizer="f32"`, `hierarchical=False`, `sampling_fraction=1`, `angular=False`, `use_blas_only=False`, `early_termination=True`, `tol=1e-4`; exact final `assign(x, centroids)` |
 
