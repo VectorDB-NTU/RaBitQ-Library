@@ -25,10 +25,10 @@ def test_build_and_search_thread_counts(kind, metric, build_threads):
         index = HnswIndex(
             64, num_clusters=1, M=16, ef_construction=96, nbits=8, metric=metric
         )
-        search_args = {"ef": 96}
+        search_args = {"ef_search": 96}
     else:
         index = SymqgIndex(64, max_degree=32, ef_construction=96, metric=metric)
-        search_args = {"ef": 96}
+        search_args = {"ef_search": 96}
     if kind == "qg":
         index.add(data, num_threads=build_threads)
     else:
@@ -96,7 +96,7 @@ from rabitqlib import IvfIndex
 data = np.random.default_rng(42).standard_normal((1024, 64)).astype(np.float32)
 saved = []
 for run in range(2):
-    index = IvfIndex(64, 1024, nbits=1, initializer="hnsw", seed=7)
+    index = IvfIndex(64, 1024, nbits=1, routing="hnsw", seed=7)
     index.set_centroids(data)
     index.add(data[:1], cluster_ids=[0], num_threads=1)
     path = Path(sys.argv[1]) / f"run-{run}.index"

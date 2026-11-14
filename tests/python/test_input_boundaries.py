@@ -28,7 +28,7 @@ def built_index(request):
     else:
         if request.param.startswith("ivf"):
             initializer = "hnsw" if request.param == "ivf_hnsw" else "flat"
-            index = IvfIndex(64, 1, nbits=4, initializer=initializer)
+            index = IvfIndex(64, 1, nbits=4, routing=initializer)
         else:
             index = HnswIndex(64, nbits=4, num_clusters=1)
         index.set_centroids(data.mean(axis=0, keepdims=True))
@@ -70,7 +70,7 @@ def test_save_replaces_existing_files_without_leftovers(built_index, tmp_path):
     filename = tmp_path / "replaced.index"
     filename.write_bytes(b"stale")
     expected_files = {filename.name}
-    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
+    if isinstance(index, IvfIndex) and index.routing == "hnsw":
         Path(str(filename) + ".hnsw").write_bytes(b"stale")
         expected_files.add(filename.name + ".hnsw")
     for _ in range(2):
@@ -202,6 +202,32 @@ def test_query_rank_diagnostics(built_index, shape):
     assert str(error.value) == f"queries must be a 2D NumPy array; got shape {shape}"
 
 
+def test_query_dimension_is_reported_before_k_and_breadth(built_index):
+    index, queries = built_index
+    narrow = queries[:, :-1]
+    for call in (
+        lambda: index.search(narrow, 0),
+        lambda: index.search(narrow, 1, 0),
+    ):
+        with pytest.raises(
+            ValueError, match="^query dimension does not match index dim"
+        ):
+            call()
+
+
+def test_negative_search_options_raise_type_error(built_index):
+    index, queries = built_index
+    breadth = "nprobe" if isinstance(index, IvfIndex) else "ef_search"
+    for call in (
+        lambda: index.search(queries, -1),
+        lambda: index.search(queries, 1, -1),
+        lambda: index.search(queries, 1, **{breadth: -1}),
+        lambda: index.search(queries, 1, num_threads=-1),
+    ):
+        with pytest.raises(TypeError, match="incompatible function arguments"):
+            call()
+
+
 @pytest.mark.parametrize("built_index", ["ivf_hnsw", "hnsw", "symqg"], indirect=True)
 def test_path_callback_runs_before_access_guard(built_index, tmp_path):
     index, queries = built_index
@@ -209,9 +235,11 @@ def test_path_callback_runs_before_access_guard(built_index, tmp_path):
     class UpdatingPath:
         def __fspath__(self):
             if isinstance(index, IvfIndex):
-                index.reserve(0, index.num_stored_points)
+                index.reserve_cluster(0, index.num_stored_points)
             elif isinstance(index, HnswIndex):
-                index.resize(index.max_elements)
+                # An empty add still takes the write guard; a reserve within the
+                # capacity would only read.
+                index.add(np.empty((0, 64), dtype=np.float32))
             else:
                 # add is SymphonyQG's only write. It takes the write guard and then
                 # refuses a built graph; a guard still held would raise "busy".

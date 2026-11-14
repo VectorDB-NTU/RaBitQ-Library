@@ -156,7 +156,6 @@ def test_query_timing_handles_unchanged_clock(kind, elapsed, monkeypatch, capsys
         return ids, np.zeros((2, 1))
 
     index = SimpleNamespace(dim=2, num_clusters=2, search=search)
-    index.search_batch = index.search
     index_name = {"ivf": "IvfIndex", "hnsw": "HnswIndex", "symqg": "SymqgIndex"}[kind]
     monkeypatch.setattr(module, index_name, SimpleNamespace(load=lambda path: index))
     monkeypatch.setattr(module, "read_fvecs", lambda path: queries)
@@ -294,10 +293,8 @@ def test_separate_clustering_and_indexing(
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 @pytest.mark.parametrize("kind", ["ivf", "hnsw"])
 def test_indexing_trains_without_a_clustering_file(
-    tmp_path, example_data, metric, kind, monkeypatch
+    tmp_path, example_data, metric, kind
 ):
-    # The samples teach the 0.8 API, so they must not hit the compatibility layer.
-    monkeypatch.setenv("PYTHONWARNINGS", "error::DeprecationWarning")
     data_path, data = example_data
     output = run_example(
         f"{kind}_rabitq_indexing.py",
@@ -379,16 +376,12 @@ def test_clustering_default_requires_graph_compatible_cluster_count(monkeypatch)
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    with pytest.raises(ValueError, match="more centroids than the graph degree"):
+    with pytest.raises(ValueError, match="more centroids than max_degree"):
         module.cluster_data(np.zeros((65, 64), dtype=np.float32), 2, "l2", 1)
 
 
 @pytest.mark.parametrize("metric", ["l2", "ip"])
-def test_symqg_examples_do_not_import_faiss(
-    tmp_path, example_data, metric, monkeypatch
-):
-    # The samples teach the 0.8 API, so they must not hit the compatibility layer.
-    monkeypatch.setenv("PYTHONWARNINGS", "error::DeprecationWarning")
+def test_symqg_examples_do_not_import_faiss(tmp_path, example_data, metric):
     data_path, data = example_data
     run_example(
         "symqg_indexing.py",

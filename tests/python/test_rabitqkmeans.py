@@ -3,11 +3,10 @@
 import numpy as np
 import pytest
 from rabitqlib import (
-    FinalAssignmentMode,
+    KMeansIterationStats,
     QGKMeans,
     QGKMeansParameters,
     RaBitQKMeans,
-    RaBitQKMeansIterationStats,
     RaBitQKMeansParameters,
 )
 
@@ -19,7 +18,7 @@ def test_flat_parameters_and_outputs():
     assert parameters.niter == 25
     assert parameters.min_points_per_centroid == 39
     assert parameters.early_stop_threshold == 0.0
-    assert parameters.final_assignment == FinalAssignmentMode.Approximate
+    assert parameters.final_assignment == "approximate"
     model = RaBitQKMeans(65, 33, niter=2, num_threads=1, seed=123)
     assert model.cp.seed == 123
     assert model.centroids is None
@@ -35,17 +34,17 @@ def test_flat_parameters_and_outputs():
     assert model.obj.shape == (1,)
     assert objective == model.obj[-1]
     assert model.final_obj == model.distances.sum(dtype=np.float64)
-    assert isinstance(model.iteration_stats[0], RaBitQKMeansIterationStats)
+    assert isinstance(model.iteration_stats[0], KMeansIterationStats)
 
 
 @pytest.mark.parametrize(
     "parameter",
     [
-        "graph_degree",
-        "ef_build",
+        "max_degree",
+        "ef_construction",
         "ef_search",
         "graph_build_iterations",
-        "quantization_bits",
+        "nbits",
     ],
 )
 def test_flat_rejects_graph_only_parameters(parameter):
@@ -80,7 +79,7 @@ def test_flat_train_refit_and_return_exact_selected_distances(
 ):
     rng = np.random.default_rng(573)
     x = rng.standard_normal((97, 65), dtype=np.float32)
-    mode = FinalAssignmentMode.Exact if exact else FinalAssignmentMode.Approximate
+    mode = "exact" if exact else "approximate"
     parameters = dict(
         niter=3,
         num_threads=2,
@@ -133,7 +132,7 @@ def test_flat_duplicates_and_zero(clusters, spherical):
             num_threads=2,
             spherical=spherical,
             min_points_per_centroid=1,
-            final_assignment=FinalAssignmentMode.Approximate,
+            final_assignment="approximate",
         )
         model.train(x)
         np.testing.assert_array_equal(model.centroids, x[:clusters])

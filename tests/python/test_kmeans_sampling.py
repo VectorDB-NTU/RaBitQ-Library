@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 from rabitqlib import (
-    FinalAssignmentMode,
     IvfIndex,
     QGKMeans,
     QGKMeansParameters,
@@ -14,7 +13,7 @@ from rabitqlib import (
 DIM = 64
 # QGKMeans requires more centroids than its default graph degree of 32.
 CLUSTERS = {QGKMeans: 33, RaBitQKMeans: 4}
-MODES = [FinalAssignmentMode.Approximate, FinalAssignmentMode.Exact]
+MODES = ["approximate", "exact"]
 
 
 def make_model(model_type, **kwargs):
@@ -129,7 +128,7 @@ def test_assign_returns_documented_types_for_new_vectors(model_type, mode):
         rtol=1e-5,
         atol=1e-5,
     )
-    if mode == FinalAssignmentMode.Exact:
+    if mode == "exact":
         all_distances = np.stack(
             [
                 selected_distances(queries, model.centroids, np.full(45, cluster))
@@ -165,9 +164,7 @@ def test_assign_on_training_data_matches_final_assignment(
     )
     model.train(x)
     assignments, distances = model.assign(x)
-    reproducible = (
-        sampled or mode == FinalAssignmentMode.Exact or model_type is RaBitQKMeans
-    )
+    reproducible = sampled or mode == "exact" or model_type is RaBitQKMeans
     if reproducible:
         np.testing.assert_array_equal(assignments, model.assignments)
         np.testing.assert_array_equal(distances, model.distances)

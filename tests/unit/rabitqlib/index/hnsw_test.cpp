@@ -681,6 +681,33 @@ TEST(HnswResizeTest, GrowsCapacityAndKeepsTheGraph) {
     }
 }
 
+TEST(HnswResizeTest, ShrinksUnusedCapacityAndKeepsSearchResults) {
+    constexpr size_t kBuilt = 128;
+    AddFixture fixture(kBuilt, 37);
+
+    HierarchicalNSW index(kBuilt, AddFixture::kDim, 4, 8, 50);
+    index.construct(
+        1,
+        fixture.centroid.data(),
+        kBuilt,
+        fixture.data.data(),
+        fixture.cluster_ids.data(),
+        1,
+        false
+    );
+    const auto expected = index.search(fixture.data.data(), kBuilt, 4, kBuilt, 1);
+
+    // Grow past the 2 MiB level-0 allocation threshold, then shrink back to the
+    // stored count.
+    for (const size_t capacity : {size_t{32768}, kBuilt + 1, kBuilt}) {
+        SCOPED_TRACE(capacity);
+        index.resize(capacity);
+        EXPECT_EQ(index.max_elements(), capacity);
+        EXPECT_EQ(index.num_points(), kBuilt);
+        EXPECT_EQ(index.search(fixture.data.data(), kBuilt, 4, kBuilt, 1), expected);
+    }
+}
+
 TEST(HnswResizeTest, SurvivesSaveAndLoad) {
     constexpr size_t kBuilt = 64;
     constexpr size_t kTotal = 96;

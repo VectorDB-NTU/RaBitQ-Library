@@ -53,7 +53,7 @@ def test_properties(built_ivf):
     assert built_ivf.num_clusters == N_CLUSTERS
     assert built_ivf.nbits == 4
     assert built_ivf.metric == "l2"
-    assert built_ivf.max_elements == N_VECTORS
+    assert built_ivf.num_stored_points == N_VECTORS
 
 
 # ── search output shape and dtype ─────────────────────────────────────────────
@@ -323,8 +323,9 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
     assert loaded.dim == dim
     assert loaded.metric == metric
     for k in (5, len(data)):
-        ids, distances = idx.search(queries, k, 3, high_accuracy, 2)
-        loaded_ids, loaded_distances = loaded.search(queries, k, 3, high_accuracy, 2)
+        options = {"high_accuracy": high_accuracy, "num_threads": 2}
+        ids, distances = idx.search(queries, k, 3, **options)
+        loaded_ids, loaded_distances = loaded.search(queries, k, 3, **options)
         np.testing.assert_array_equal(loaded_ids, ids)
         np.testing.assert_array_equal(loaded_distances, distances)
         np.testing.assert_allclose(
@@ -378,7 +379,13 @@ def test_raw_reranking(metric, high_accuracy, fast_quantization, tmp_path):
 def test_legacy_ivf_fixture(tmp_path, filename, dim, bits, padded, nonzero_distances):
     path = Path(__file__).parent / "fixtures" / filename
     idx = IvfIndex.load(str(path))
-    assert (idx.dim, idx.max_elements, idx.num_clusters, idx.nbits, idx.metric) == (
+    assert (
+        idx.dim,
+        idx.num_stored_points,
+        idx.num_clusters,
+        idx.nbits,
+        idx.metric,
+    ) == (
         dim,
         3,
         1,
@@ -494,7 +501,7 @@ def test_save_failure_keeps_the_index(tmp_path, initializer):
     data = np.zeros((2, 64), dtype=np.float32)
     data[1, 0] = 1
     idx = _built(
-        data, data, np.arange(2, dtype=np.uint32), nbits=32, initializer=initializer
+        data, data, np.arange(2, dtype=np.uint32), nbits=32, routing=initializer
     )
     expected = idx.search(data, 1, 1)
     # /dev/full is not a regular file, so save writes it in place and the write fails.
@@ -512,9 +519,7 @@ def test_save_failure_keeps_the_index(tmp_path, initializer):
 def test_hnsw_routing_is_saved_inside_the_index_file(tmp_path):
     data = np.zeros((2, 64), dtype=np.float32)
     data[1, 0] = 1
-    idx = _built(
-        data, data, np.arange(2, dtype=np.uint32), nbits=32, initializer="hnsw"
-    )
+    idx = _built(data, data, np.arange(2, dtype=np.uint32), nbits=32, routing="hnsw")
     expected = idx.search(data, 1, 1)
     path = tmp_path / "embedded.index"
     # A path where releases up to 0.8 wrote the sidecar is neither used nor needed.
@@ -537,7 +542,7 @@ def test_hnsw_centroid_routing_roundtrip(tmp_path):
     count, dim = 128, 64
     centroids = rng.standard_normal((count, dim)).astype(np.float32)
     labels = np.arange(count, dtype=np.uint32)
-    idx = IvfIndex(dim, count, nbits=1, initializer="hnsw", seed=7)
+    idx = IvfIndex(dim, count, nbits=1, routing="hnsw", seed=7)
     # A seeded single-thread routing build gives the same graph on every run; a
     # parallel build may leave a centroid unreachable (#216).
     idx.set_centroids(centroids, num_threads=1)
@@ -573,7 +578,7 @@ def test_hnsw_inner_product_routing_roundtrip(tmp_path):
         nbits=32,
         num_threads=4,
         metric="ip",
-        initializer="hnsw",
+        routing="hnsw",
     )
 
     path = str(tmp_path / "hnsw_ip_centroid.index")
@@ -610,7 +615,7 @@ def test_add_returns_ids_and_makes_points_searchable():
     added = idx.add(new)
     assert added.dtype == np.int64
     np.testing.assert_array_equal(added, np.arange(len(old), len(old) + len(new)))
-    assert idx.max_elements == len(old) + len(new)
+    assert idx.num_stored_points == len(old) + len(new)
     # k may now exceed the original point count; raw storage makes the ranking exact.
     ids, dists = idx.search(new[:3], k=len(old) + len(new), nprobe=3)
     np.testing.assert_array_equal(ids[:, 0], added[:3])
@@ -666,7 +671,7 @@ def test_reserved_adds_match_a_single_add(tmp_path, nbits):
     whole.add(new, cluster_ids=assigned)
     parts = IvfIndex.load(str(base))
     for cluster in range(parts.num_clusters):
-        parts.reserve(cluster, len(old) + len(new))
+        parts.reserve_cluster(cluster, len(old) + len(new))
     for chunk in np.array_split(np.arange(len(new)), [1, 33, 34, 90]):
         parts.add(new[chunk], cluster_ids=assigned[chunk])
     a, b = tmp_path / "a.index", tmp_path / "b.index"
@@ -675,29 +680,29 @@ def test_reserved_adds_match_a_single_add(tmp_path, nbits):
     assert a.read_bytes() == b.read_bytes()
 
 
-def test_reserve_rejects_invalid_arguments():
+def test_reserve_cluster_rejects_invalid_arguments():
     idx, old, _, _ = _dynamic_index()
     for bad in (-1, 3, 2**32):
         with pytest.raises(ValueError, match="cluster_id"):
-            idx.reserve(bad, 10)
+            idx.reserve_cluster(bad, 10)
     with pytest.raises(ValueError, match="num_points"):
-        idx.reserve(0, -1)
+        idx.reserve_cluster(0, -1)
     with pytest.raises(ValueError, match="supported ID range"):
-        idx.reserve(0, 2**40)
-    idx.reserve(0, 0)
-    assert idx.max_elements == len(old)
+        idx.reserve_cluster(0, 2**40)
+    idx.reserve_cluster(0, 0)
+    assert idx.num_stored_points == len(old)
 
     unbuilt = IvfIndex(65, 1, nbits=4)
     with pytest.raises(RuntimeError, match="trained or loaded"):
-        unbuilt.reserve(0, 1)
+        unbuilt.reserve_cluster(0, 1)
 
 
 def test_add_accepts_fast_quantization_and_other_dtypes():
     idx, _, new, _ = _dynamic_index()
     idx.add(new[:10].astype(np.float64), fast_quantization=True)
-    assert idx.max_elements == 130
+    assert idx.num_stored_points == 130
     assert len(idx.add(new[:0])) == 0
-    assert idx.max_elements == 130
+    assert idx.num_stored_points == 130
 
 
 def test_add_rejects_invalid_arguments():
@@ -713,7 +718,7 @@ def test_add_rejects_invalid_arguments():
         cluster_ids[0] = bad
         with pytest.raises(ValueError, match="cluster_ids"):
             idx.add(new, cluster_ids=cluster_ids)
-    assert idx.max_elements == len(old)
+    assert idx.num_stored_points == len(old)
 
     # Without cluster IDs, the first add trains the index; with them, it needs centroids.
     unbuilt = IvfIndex(65, 1, nbits=4)
@@ -739,7 +744,7 @@ def test_remove_excludes_points_and_survives_reload(
     assert idx.remove(removed) == 4
     assert idx.remove(removed) == 0
     assert idx.remove([]) == 0
-    assert idx.max_elements == count
+    assert idx.num_stored_points == count
 
     def check(index):
         ids, dists = index.search(
@@ -832,7 +837,7 @@ def test_remove_and_add_refuse_non_integer_ids(bad):
             idx.add(new[:2], cluster_ids=bad)
     after = idx.search(new[:3], k=len(old), nprobe=3)
     np.testing.assert_array_equal(before[0], after[0])
-    assert idx.max_elements == len(old)
+    assert idx.num_stored_points == len(old)
 
 
 def test_remove_and_add_accept_any_integer_dtype_and_empty_input():
