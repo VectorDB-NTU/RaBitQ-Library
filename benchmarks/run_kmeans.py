@@ -64,7 +64,7 @@ def load_base(cfg):
 
 def train_python(method, x, k, threads, seed):
     if method == "qgkmeans":
-        from rabitqlib import FinalAssignmentMode, QGKMeans
+        from rabitqlib import QGKMeans
 
         start = time.perf_counter()
         model = QGKMeans(
@@ -74,13 +74,13 @@ def train_python(method, x, k, threads, seed):
             num_threads=threads,
             seed=seed,
             spherical=False,
-            quantization_bits=0,
-            graph_degree=32,
-            ef_build=240,
+            nbits=32,
+            max_degree=32,
+            ef_construction=240,
             ef_search=16,
             graph_build_iterations=1,
             early_stop_threshold=0.0,
-            final_assignment=FinalAssignmentMode.Exact,
+            final_assignment="exact",
         )
         model.train(x)
         total = time.perf_counter() - start

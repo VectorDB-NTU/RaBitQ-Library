@@ -20,7 +20,7 @@ from rabitqlib import HnswIndex
 
 index = HnswIndex(data.shape[1], M=16, ef_construction=100)  # nbits=7 by default
 index.add(data, num_threads=1)  # trains 16 centroids, then links; 1 thread is reproducible
-ids, distances = index.search(queries, k=10)  # ef defaults to max(k, 64)
+ids, distances = index.search(queries, k=10)  # ef_search defaults to max(k, 64)
 index.save("hnsw.index")
 loaded = HnswIndex.load("hnsw.index")
 ```
@@ -70,9 +70,9 @@ see [C++ integration](../cpp_integration.md).
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
 | `num_clusters` | Python keyword, default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
-| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` was called `random_seed` before 0.8. |
-| `max_elements` | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `resize` can preallocate. C++ `add` never grows it. |
-| `k`, `ef` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. Omitted, `None` or zero `ef` uses `max(k, 64)` in Python, positive `ef` is raised to at least `k`, and `ef` above the stored point count is clamped to it. |
+| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` was called `random_seed` before 0.8. A seed is in `[0, 2**32 - 1]`; larger values are deprecated since 0.8.5, and 0.9 draws a seed when it is omitted. |
+| `capacity` (C++ `max_elements()`) | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `reserve` can preallocate; they were named `max_elements` and `resize` before 0.8.5. C++ `add` never grows it. |
+| `k`, `ef_search` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. An omitted or `None` `ef_search` uses `max(k, 64)` in Python (0 does the same and is deprecated since 0.8.5), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. Python named it `ef` before 0.8.5. |
 
 `seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
@@ -177,7 +177,7 @@ Python follows the shared [concurrency contract](usage.md#threading-and-file-pat
 
 ## Updating an index
 
-A constructed or loaded index supports `add()`, `resize()`,
+A constructed or loaded index supports `add()`, `resize()` (Python `reserve`),
 and `remove()` without the original data; C++ also adds to a
 [trained](#training-centroids-in-c) index. Adding points and resizing preserve
 the index file format; files with removals have
@@ -233,8 +233,9 @@ records still occupy capacity.
 
 C++ `add` never grows the index: it rejects a whole batch whose size exceeds
 `max_elements() - num_stored_points()`, and `resize` is the only way to raise
-that. Python `add` calls `resize` first when the batch does not fit, to at least
-double the capacity. Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
+that. Python `add` grows the capacity first when the batch does not fit, to at least
+double it, and `reserve(num_points)` preallocates it (since 0.8.5; `resize` still works,
+with a `DeprecationWarning`, until 0.9, and `capacity` replaces `max_elements`). Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.
 
@@ -276,12 +277,12 @@ with an infinite distance. Removed points still count in
 `num_stored_points()` and cannot be restored. Removal requires the same
 exclusive access as other updates.
 
-#### Choosing `ef` after removals
+#### Choosing `ef_search` after removals
 
 Removed points still take slots in the `ef_search` candidate set, so a search with
 `ef_search` close to `k` finds fewer live points as removals accumulate. C++ search
 uses `max(ef_search, k)`, clamped to `num_stored_points()`. Python uses `max(k, 64)`
-when `ef` is omitted or zero; an explicit positive `ef` is also raised to at least `k`,
+when `ef_search` is omitted (it was named `ef` before 0.8.5); an explicit value is also raised to at least `k`,
 and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points (search clamps the result to

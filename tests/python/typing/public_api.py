@@ -11,6 +11,7 @@ from rabitqlib import (
     FinalAssignmentMode,
     HnswIndex,
     IvfIndex,
+    KMeansIterationStats,
     QGKMeans,
     QGKMeansIterationStats,
     QGKMeansParameters,
@@ -59,10 +60,10 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(IvfIndex.load("index.bin"), IvfIndex)
     assert_type(HnswIndex.load("index.bin"), HnswIndex)
     assert_type(SymqgIndex.load("index.bin"), SymqgIndex)
-    ivf.reserve(0, 128)
-    hnsw.resize(256)
-    qg = QGKMeans(64, 40, niter=2, quantization_bits=4)
-    flat = RaBitQKMeans(64, 2, final_assignment=FinalAssignmentMode.Exact)
+    ivf.reserve_cluster(0, 128)
+    hnsw.reserve(256)
+    qg = QGKMeans(64, 40, niter=2, nbits=4)
+    flat = RaBitQKMeans(64, 2, final_assignment="exact")
     assert_type(qg.cp, QGKMeansParameters)
     assert_type(flat.cp, RaBitQKMeansParameters)
     for model in (qg, flat):
@@ -77,18 +78,34 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
             tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]],
         )
         if model.iteration_stats is not None:
-            assert_type(model.iteration_stats[0], QGKMeansIterationStats)
-    qg.cp.final_assignment = FinalAssignmentMode.Approximate
-    ivf.search(x, "five", 2)  # type: ignore[arg-type]
+            assert_type(model.iteration_stats[0], KMeansIterationStats)
+    qg.cp.final_assignment = "approximate"
+    ivf.search(x, "five", 2)  # type: ignore[call-overload]
     ivf.dim = 16  # type: ignore[misc]
     qg.cp.niter = "two"  # type: ignore[assignment]
     RaBitQKMeans(64, 2, graph_degree=32)  # type: ignore[call-arg]
-    hnsw.search(x, 5, nprobe=2)  # type: ignore[call-arg]
+    hnsw.search(x, 5, nprobe=2)  # type: ignore[call-overload]
     IvfIndex(64, 2, 4)  # type: ignore[call-overload]
     hnsw.train(x, 1)  # type: ignore[call-arg]
+    qg.cp.final_assignment = "Exact"  # type: ignore[assignment]
+    QGKMeans(64, 40, ef_build=1, bogus=1)  # type: ignore[call-overload]
+
+
+def deprecated_forms_still_type_check(qg: QGKMeans, flat: RaBitQKMeans) -> None:
+    # Accepted until 0.9; the stubs mark them deprecated without rejecting them.
+    RaBitQKMeans(64, 2, final_assignment=FinalAssignmentMode.Exact)
+    QGKMeans(64, 40, final_assignment=FinalAssignmentMode.Approximate)
+    qg.cp.final_assignment = FinalAssignmentMode.Exact
+    assert_type(flat.cp.final_assignment, FinalAssignmentMode)
+    QGKMeans(64, 40, quantization_bits=4, niter=2)
+    QGKMeans(64, 40, graph_degree=32, ef_build=100)
 
 
 def stats_alias(stats: RaBitQKMeansIterationStats) -> QGKMeansIterationStats:
+    return stats
+
+
+def stats_name(stats: QGKMeansIterationStats) -> KMeansIterationStats:
     return stats
 
 
@@ -131,14 +148,14 @@ def check_numpy_scalars() -> None:
         )
         assert_type(index.dim, int)
         assert type(index.dim) is int
-    ivf.reserve(np.uint32(0), np.int64(100))
+    ivf.reserve_cluster(np.uint32(0), np.int64(100))
     ids, distances = ivf.search(
         x[:2], k=np.int64(3), nprobe=np.int64(1), high_accuracy=np.bool_(True)
     )
     assert_type(ids, npt.NDArray[np.int64])
     assert_type(distances, npt.NDArray[np.float32])
-    hnsw.resize(np.int64(100))
-    hnsw.search(x[:2], np.int64(3), ef=np.int64(10))
+    hnsw.reserve(np.int64(100))
+    hnsw.search(x[:2], np.int64(3), ef_search=np.int64(10))
     graph.add(x, num_threads=np.int64(1))
     graph.search(x[:2], np.int64(3), np.int64(10))
     flat = RaBitQKMeans(
@@ -152,7 +169,7 @@ def check_numpy_scalars() -> None:
         np.int64(64),
         np.int64(40),
         niter=np.int64(1),
-        graph_degree=np.int64(32),
+        max_degree=np.int64(32),
         num_threads=np.int64(1),
     )
     for model in (flat, qg):
@@ -167,11 +184,11 @@ def check_numpy_scalars() -> None:
         assert_type(model.train(x), float)
         assignments, distances = model.assign(x[:3])
         assert assignments.shape == distances.shape == (3,)
-    qg.cp.graph_degree = np.int64(32)
-    qg.cp.ef_build = np.int64(40)
+    qg.cp.max_degree = np.int64(32)
+    qg.cp.ef_construction = np.int64(40)
     qg.cp.ef_search = np.int64(16)
     qg.cp.graph_build_iterations = np.int64(1)
-    qg.cp.quantization_bits = np.int64(4)
+    qg.cp.nbits = np.int64(4)
     members = FinalAssignmentMode.__members__
     assert_type(members, dict[str, FinalAssignmentMode])
     assert_type(members["Exact"], FinalAssignmentMode)
@@ -196,14 +213,14 @@ def check_input_contracts() -> None:
         ivf = IvfIndex(64, 1, nbits=4, metric=metric)
         HnswIndex(64, nbits=4, metric=metric)
         SymqgIndex(64, metric=metric)
-    initializers: tuple[Literal["auto", "flat", "flat_rabitq", "hnsw"], ...] = (
+    routings: tuple[Literal["auto", "flat", "flat_rabitq", "hnsw"], ...] = (
         "auto",
         "flat",
         "flat_rabitq",
         "hnsw",
     )
-    for initializer in initializers:
-        IvfIndex(64, 1, nbits=4, initializer=initializer)
+    for routing in routings:
+        IvfIndex(64, 1, nbits=4, routing=routing)
     for ids in (signed, unsigned, [0] * 80, (0,) * 80):
         ivf = IvfIndex(64, 1, nbits=4)
         ivf.set_centroids(centroids, num_threads=1)
@@ -227,7 +244,7 @@ def check_input_contracts() -> None:
         graph = SymqgIndex(64, ef_construction=40, init=init)
         graph.add(x)
     # Returned option values must be usable as inputs without casts.
-    IvfIndex(64, 1, nbits=4, metric=ivf.metric, initializer=ivf.initializer)
+    IvfIndex(64, 1, nbits=4, metric=ivf.metric, routing=ivf.routing)
     assert_type(ivf.metric, Literal["l2", "ip", "cosine"])
 
 
@@ -241,7 +258,7 @@ def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
     IvfIndex(64, 1, nbits=4, metric="cos")  # type: ignore[call-overload]
     HnswIndex(64, nbits=4, metric="L2")  # type: ignore[call-overload]
     SymqgIndex(64, metric="inner_product")  # type: ignore[call-overload]
-    IvfIndex(64, 1, nbits=4, initializer="flat_rabit")  # type: ignore[call-overload]
+    IvfIndex(64, 1, nbits=4, routing="flat_rabit")  # type: ignore[call-overload]
     SymqgIndex(64, init="pippn")  # type: ignore[call-overload]
     graph.add(x, 1)  # type: ignore[call-arg]
     ivf.add(x, cluster_ids=[0.0] * 80)  # type: ignore[list-item]
@@ -338,3 +355,18 @@ def check_quant(x: npt.NDArray[np.float32]) -> None:
     quant.code_factors(residuals, codes, nbits=4, metric="cosine")  # type: ignore[arg-type]
     quant.quantize(residuals, 4)  # type: ignore[call-overload]
     quant.Rotator(64, method="hadamard")  # type: ignore[arg-type]
+
+
+def deprecated_search_forms_return_int64_ids(
+    ivf: IvfIndex, hnsw: HnswIndex, graph: SymqgIndex, x: npt.NDArray[np.float32]
+) -> None:
+    # The deprecated overloads return the same types as the current forms.
+    for found in (
+        ivf.search(x, 5, 1, None, 1),
+        hnsw.search(x, 5, ef=32),
+        hnsw.search(x, 5, 32, 1),
+        graph.search(x, 5, ef=32),
+        graph.search(x, 5, 32, 1),
+        graph.search_batch(x, 5, 32),
+    ):
+        assert_type(found, tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]])

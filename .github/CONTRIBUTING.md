@@ -152,10 +152,17 @@ require the full [static analysis check](../docs/development.md#static-analysis)
 Tests and examples are intentionally excluded from CI clang-tidy; use focused
 local analysis for substantial logic changes.
 For a first contribution, the formatting check and the affected tests are
-enough to open a PR. If a check needs a tool, compiler or CPU you do not have
-(for example clang-tidy 23 or a particular SIMD instruction set), say so in the
-PR and a maintainer will run it. See [CI routing](../docs/maintaining.md#checks-selected-by-changed-files)
+enough to open a PR. Code PRs must be built and tested locally: CI does not
+replace building the code you change and running its affected tests. If another
+check needs a tool, compiler or CPU you do not have (for example clang-tidy 23 or
+a particular SIMD instruction set), say so in the PR and a maintainer will run it.
+See [CI routing](../docs/maintaining.md#checks-selected-by-changed-files)
 for details.
+
+You are responsible for every change you submit, including changes produced
+with automated tools: verify it yourself, report the results, and respond to
+review. Code PRs that were not built and tested locally, or that are updated
+without addressing review feedback, are closed.
 
 ## If setup fails
 
@@ -184,7 +191,9 @@ are small, self-contained tasks that say where to start and when they are done;
 [help wanted](https://github.com/VectorDB-NTU/RaBitQ-Library/labels/help%20wanted)
 issues are larger. The [roadmap issue](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/220)
 lists the goals for the next releases. Comment on an issue before starting so work
-is not duplicated.
+is not duplicated. When claiming a code issue, say how you will verify the change
+locally, such as the tests or benchmark you will run. A maintainer may unassign an
+issue when review feedback goes unanswered.
 
 ## Feedback and further reading
 

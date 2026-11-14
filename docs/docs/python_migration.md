@@ -9,6 +9,10 @@ nothing to train and builds its graph in `add`. Code written for 0.7
 still runs in 0.8. Each old form raises a `DeprecationWarning` at your call site
 and will be removed in **0.9**.
 
+If your code already uses the 0.8 forms, go to
+[From 0.8 to 0.9](#from-08-to-09): 0.9 renames some of them, and 0.8.5 accepts
+the new names.
+
 Unless an item below says otherwise, a 0.7 call that raises a deprecation
 warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 `add(x)` and `search`, follow the 0.8 rules.
@@ -19,9 +23,9 @@ warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 
 | 0.7 | 0.8 |
 | --- | --- |
-| `IvfIndex(dim, max_elements, num_clusters, nbits, metric, initializer)` | `IvfIndex(dim, num_clusters, nbits=..., metric=..., initializer=..., seed=None)`; storage grows on `add` |
+| `IvfIndex(dim, max_elements, num_clusters, nbits, metric, initializer)` | `IvfIndex(dim, num_clusters, nbits=..., metric=..., routing=..., seed=None)` (`initializer=` before 0.8.5); storage grows on `add` |
 | `IvfIndex(dim=..., max_elements=..., num_clusters=..., nbits=...)` | the same, without `max_elements` |
-| `HnswIndex(dim, max_elements, M=16, ef_construction=200, nbits=8, metric="l2", random_seed=100)` | `HnswIndex(dim, nbits=..., num_clusters=16, M=16, ef_construction=200, metric="l2", seed=100)`; capacity grows on `add`, and `resize(n)` preallocates it |
+| `HnswIndex(dim, max_elements, M=16, ef_construction=200, nbits=8, metric="l2", random_seed=100)` | `HnswIndex(dim, nbits=..., num_clusters=16, M=16, ef_construction=200, metric="l2", seed=100)`; capacity grows on `add`, and `reserve(n)` preallocates it (`resize(n)` before 0.8.5) |
 | `HnswIndex(..., random_seed=s)` | `HnswIndex(..., seed=s)` |
 | `kmeans = RaBitQKMeans(dim, k)`<br>`kmeans.train(x)`<br>`index.build(x, kmeans.centroids, kmeans.assignments)` | `index.add(x)`, which trains on `x` first (since 0.8.2; in 0.8.0 and 0.8.1, call `index.train(x)` first) |
 | `index.build(x, centroids, cluster_ids)` | `index.set_centroids(centroids)`<br>`index.add(x, cluster_ids=cluster_ids)` |
@@ -68,7 +72,7 @@ work if you want to run k-means yourself.
   to `add` on indexes created in the old form, and to the deprecated `build`,
   which no longer rejects more rows than `max_elements`.
 - **State errors.** Calling `add` with `cluster_ids`, `search`, `remove`,
-  `reserve` or `save` before training raises `RuntimeError("IvfIndex must be
+  `reserve_cluster` (`reserve` before 0.8.5) or `save` before training raises `RuntimeError("IvfIndex must be
   trained or loaded before ...")`; the 0.7 message said "built". Since 0.8.2,
   `add` without `cluster_ids` trains first. A trained index without vectors
   cannot be saved. `repr` shows `is_trained` instead of `is_built`.
@@ -98,7 +102,8 @@ a second `add`, or `add` on a loaded index, raises `RuntimeError`, as Faiss's
 NSG index does. The deprecated `build` keeps its 0.7 behavior: it replaces any
 existing graph and, unless you passed `seed`, draws a new random seed each time.
 
-`search` now treats `ef` like HNSW-RaBitQ: an omitted or zero `ef` uses
+`search` now treats its breadth (`ef_search`; `ef` before 0.8.5) like HNSW-RaBitQ:
+omitted, it uses
 `max(k, 64)` (`max(k, 10)` before 0.8.2), and a smaller one is raised to `k`. In 0.7, both raised
 `ValueError`. `add` uses every CPU by default, while the deprecated `build`
 keeps one thread. The seed now also drives graph construction: without `seed`,
@@ -108,9 +113,10 @@ separate random seeds for the rotation and the graph. Before vectors are added,
 
 ## Files and C++
 
-Saved files and the `max_elements` property are unchanged. `HnswIndex.search`
-without `ef` uses `max(k, 64)` since 0.8.2 (`max(k, 10)` before), which changes
-its results and latency; pass `ef=` to keep the old window. Files written by 0.7
+Saved files are unchanged, and so is the `max_elements` property up to 0.8.4 (see
+[From 0.8 to 0.9](#from-08-to-09)). `HnswIndex.search`
+without a search breadth uses `max(k, 64)` since 0.8.2 (`max(k, 10)` before), which changes
+its results and latency; pass the breadth as the third argument to keep the old window. Files written by 0.7
 load as trained indexes, except empty, untrained HNSW-RaBitQ files, which need
 `train` before `add`.
 
@@ -121,3 +127,62 @@ points. C++ behavior changes: since 0.8.0, saving an index without stored points
 throws `std::logic_error`; since 0.8.2, IVF and SymphonyQG searches pad `k` above
 the point count instead of throwing, and `default_training_parameters` runs 10
 iterations. See the [0.8.2 notes](releases/0.8.2.md#c-changes).
+
+## From 0.8 to 0.9
+
+0.9 gives the three index classes one name for each concept
+([#232](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/232)). Since 0.8.5 the
+0.8 form in the first column raises a `DeprecationWarning` at your call site; 0.9
+removes it.
+
+| 0.8 | Use instead | Works since |
+| --- | --- | --- |
+| `IvfIndex.max_elements`, `SymqgIndex.max_elements` | `num_stored_points` | Every 0.8 release. The two are equal, except on an `IvfIndex` created in the 0.7 form before `build`. |
+| `HnswIndex.max_elements` | `HnswIndex.capacity` | 0.8.5 |
+| `HnswIndex.resize(n)` | `HnswIndex.reserve(n)`, which only grows the capacity; `resize` could also shrink it | 0.8.5 |
+| `IvfIndex.reserve(cluster_id, num_points)` | `IvfIndex.reserve_cluster(cluster_id, num_points)` | 0.8.5 |
+| `IvfIndex(initializer=...)`, `index.initializer` | `IvfIndex(routing=...)`, `index.routing`, with the same values | 0.8.5 |
+| `search(queries, k, ef=...)` on `HnswIndex` and `SymqgIndex` | `search(queries, k, ef_search=...)` | 0.8.5; passing the breadth by position works in every release |
+| `search(queries, k, nprobe, high_accuracy, num_threads)`, `search(queries, k, ef, num_threads)` | `high_accuracy=` and `num_threads=` by keyword; only `nprobe` or `ef_search` stays positional | Every 0.8 release |
+| `nprobe=0`, `ef=0` for the default | `None`, or omit the argument; 0.9 raises `ValueError` for 0, while `num_threads=0` keeps meaning every available CPU | 0.8.2 |
+| `HnswIndex(seed=s)` with `s` above `2**32 - 1` | A seed in `[0, 2**32 - 1]`, the range of the other two classes | Every 0.8 release |
+
+The k-means classes take the names of the index parameters
+([#233](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/233)), as keywords and as
+attributes of `cp`:
+
+| 0.8 | Use instead | Works since |
+| --- | --- | --- |
+| `QGKMeans(quantization_bits=0 \| 4 \| 8)` | `nbits=32 \| 4 \| 8`: 32, not 0, keeps raw vectors | 0.8.5 |
+| `QGKMeans(graph_degree=...)` | `max_degree=...` | 0.8.5 |
+| `QGKMeans(ef_build=...)` | `ef_construction=...` | 0.8.5 |
+| `final_assignment=FinalAssignmentMode.Approximate \| .Exact`, also as `index.cp.final_assignment` on `IvfIndex` and `HnswIndex` | `final_assignment='approximate' \| 'exact'`; `'approximate'` also replaces the alias `FinalAssignmentMode.SymphonyQG` | 0.8.5 |
+| `QGKMeansIterationStats`, `RaBitQKMeansIterationStats` | `KMeansIterationStats`, the one class both always were; since 0.8.5 it also reports that name | 0.8.5 |
+
+Passing a `FinalAssignmentMode` member does not warn by itself; the warning comes where
+one of the three old names is imported or read from `rabitqlib`, including through
+`from rabitqlib import *`.
+
+Until 0.9, `cp.final_assignment` still reads back as a `FinalAssignmentMode` member,
+whose `.name` is `'Approximate'` or `'Exact'`; 0.9 returns `'approximate'` or
+`'exact'`. Reading it does not warn. Code that reads it on both releases can
+normalize the value:
+
+```python
+mode = cp.final_assignment
+mode = mode if isinstance(mode, str) else mode.name.lower()
+```
+
+Code that must also run on releases before 0.8.5 needs a version check for the rows
+marked 0.8.5; the other replacements work on every release named.
+
+Three of these changes come without a warning in 0.9. `HnswIndex()` without `seed=` draws a seed,
+as `IvfIndex` and `SymqgIndex` already do, instead of using 100: pass `seed=` (and
+`num_threads=1` to `add`) if you rely on a reproducible build. `repr(index)` prints
+`capacity=` and `routing=` where it prints `max_elements=` and `initializer=`. And
+`cp.final_assignment` reads back as a string, as described above.
+
+0.9 also changes behavior that no warning can announce: `search` and `add` return
+`int64` IDs with `-1` instead of `2**32 - 1` for a missing result, `save` writes index
+format 2, which releases up to 0.8 cannot read, and `load` restores the seed. See the
+[0.9 notes](releases/unreleased.md).

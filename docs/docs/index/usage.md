@@ -58,15 +58,20 @@ HNSW-RaBitQ's `num_points` now excludes removed records; see the
 [count migration guide](../modular_migration.md#unified-index-counts) when upgrading.
 
 IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
-(C++ uses the same names with `()`):
+(C++ uses the same names with `()`, and `max_elements()` for the capacity of all
+three indexes):
 
 | Property | Meaning |
 | --- | --- |
-| `max_elements` | Logical record capacity, excluding SIMD padding |
 | `num_points` | Nonremoved points |
 | `num_stored_points` | Stored records, including removed ones |
+| `capacity` (HNSW-RaBitQ only) | Logical record capacity, excluding SIMD padding |
 
-`0 <= num_points <= num_stored_points <= max_elements`. Before vectors are
+`0 <= num_points <= num_stored_points`, and `num_stored_points <= capacity` for
+HNSW-RaBitQ. Before 0.8.5 Python named the capacity `max_elements` on all three
+classes; that property is deprecated and is removed in 0.9. On `IvfIndex` and
+`SymqgIndex` it equals `num_stored_points`, except on an `IvfIndex` created in the
+0.7 form before `build`, where it is the declared row count. Before vectors are
 added, both point counts are zero; configured capacity may be nonzero. For
 all three indexes, `len(index)` equals `num_points`. `is_trained` reports
 whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by `train`, `set_centroids`,
@@ -77,13 +82,13 @@ start at the previous `num_stored_points`. Use this stored count for ID bounds,
 and `num_points` for a live count. Counts survive save/load.
 
 IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
-HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `resize` changes
-only capacity, for example to preallocate it. SymphonyQG has no incremental
-updates: `add` builds the graph once, and all three counts are equal afterwards.
+HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `reserve` preallocates
+it (`resize` before 0.8.5). SymphonyQG has no incremental
+updates: `add` builds the graph once, and both counts are equal afterwards.
 
 `repr(index)` shows dimension, metric, quantization bits and live point count,
 plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
-the resolved initializer, and SymphonyQG includes its degree bound. The summary
+the resolved routing strategy, and SymphonyQG includes its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.
 
 ## Estimate storage
@@ -143,7 +148,7 @@ construction, updates, and file I/O. The following contract applies to
 | Operation on the same index | Concurrent access |
 | --- | --- |
 | `search`, `search_batch`, `save`, `repr`, and property reads | May run together |
-| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `resize`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input and may run with reads |
+| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `reserve_cluster`, `resize`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input and may run with reads |
 
 A conflicting call immediately raises
 `RuntimeError("Index is busy: conflicting operation in progress")`.
@@ -152,7 +157,7 @@ conversion and is released when the operation returns or raises an exception.
 Different index objects can operate independently. Concurrent saves must use
 different output paths.
 
-Search parameters such as `ef`, `nprobe`, precision, and `num_threads` belong to
+Search parameters such as `ef_search`, `nprobe`, precision, and `num_threads` belong to
 each call. When using a Python thread pool, consider `num_threads=1` to avoid
 starting multiple native worker pools. Keep input arrays and any shared backing
 storage unchanged for the entire call; do not resize or modify them from another

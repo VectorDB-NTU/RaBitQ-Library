@@ -51,8 +51,8 @@ See [C++ integration](../cpp_integration.md) for build setup and
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit, or 32 for owned raw-vector reranking. Python's keyword-only `nbits` defaults to 7; C++ requires it. |
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random; `index.seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"`, `"ip"` or `"cosine"`; defaults to `"l2"`. See [the cosine metric](usage.md#the-cosine-metric). |
-| `initializer` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). |
-| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted, `None` or 0; C++ requires a positive `nprobe`. |
+| `routing` | Defaults to `"auto"`; see [centroid routing](#centroid-routing). Named `initializer` before 0.8.5; the old name still works, with a `DeprecationWarning`, until 0.9. |
+| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with `kPidMax` (`-1` in Python) and `+inf`. Python's `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted or `None` (0 does the same and is deprecated since 0.8.5); C++ requires a positive `nprobe`. |
 | `high_accuracy` | Python defaults to `None`: HACC for 4–9 bits, standard FastScan otherwise. |
 
 Results contain IDs and squared L2 or `1 - dot` distances, ordered from smallest
@@ -123,11 +123,11 @@ index_type ivf(num_points, dim, num_clusters, total_bits);
 
 The optional final C++ constructor argument selects `InitializerType::Auto`,
 `Flat`, `FlatRaBitQ`, or `HNSW` from the `rabitqlib::ivf` namespace. Python accepts
-`initializer="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:
+`routing="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:
 
 ```python
-index = IvfIndex(dim, num_clusters, nbits=4, initializer="flat_rabitq")
-print(index.initializer)  # resolved routing type
+index = IvfIndex(dim, num_clusters, nbits=4, routing="flat_rabitq")
+print(index.routing)  # resolved routing type
 ```
 
 ```c++
@@ -171,7 +171,7 @@ To retain the earlier policy when rebuilding, choose `flat` below 20,000 cluster
 and `hnsw` otherwise. Loading an old index preserves its historical routing.
 
 Routing is fixed for an index and is also used by `add` when cluster IDs are
-omitted. `initializer_type()` (Python `initializer`) reports the resolved type,
+omitted. `initializer_type()` (Python `routing`) reports the resolved type,
 including after loading; loading never re-runs the current `auto` policy for a
 new-format file.
 
@@ -229,7 +229,7 @@ index.add(vectors)
 - Training or setting centroids again replaces them while the index stores no
   vectors; once it stores any (including removed ones), both raise
   `RuntimeError`. A failed call leaves the index unchanged.
-- Before training, `add` with `cluster_ids`, `search`, `remove`, `reserve` and
+- Before training, `add` with `cluster_ids`, `search`, `remove`, `reserve_cluster` and
   `save` raise `RuntimeError`; `add` without `cluster_ids` trains first, except
   on an index created with `max_elements`, which `build` fills. If that
   first `add` fails, the index stays untrained and empty; an empty first `add`
@@ -395,8 +395,11 @@ new_ids = index.add(vectors, num_threads=1, fast_quantization=False)
 # To choose clusters explicitly, use this instead of the call above:
 # new_ids = index.add(vectors, cluster_ids=labels)
 removed = index.remove(new_ids[:10])
-index.reserve(cluster_id, num_points)
+index.reserve_cluster(cluster_id, num_points)
 ```
+
+Python names this method `reserve_cluster` since 0.8.5; `reserve` still works, with a
+`DeprecationWarning`, until 0.9.
 
 Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float32.
 `add()` returns a uint32 array of the new IDs. Optional `cluster_ids` must be a
@@ -424,7 +427,7 @@ index is unchanged if `add` throws. As a result:
   time.**
 
 A rebuilt cluster gets exactly the room it needs. To grow a cluster without
-copying it, call `reserve` first: later `add` calls then write into the reserved
+copying it, call `reserve` (Python `reserve_cluster`) first: later `add` calls then write into the reserved
 room in place until the cluster outgrows it. The reserved room is memory the index
 holds but does not use yet. It is not saved, so a loaded index has none.
 
