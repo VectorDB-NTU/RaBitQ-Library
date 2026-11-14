@@ -57,7 +57,7 @@ qgkmeans::QGKMeansParameters test_parameters(const qgkmeans::QGKMeans*) {
     parameters.niter = 4;
     parameters.num_threads = 1;
     parameters.min_points_per_centroid = 1;
-    parameters.ef_build = 64;
+    parameters.ef_construction = 64;
     parameters.ef_search = 16;
     return parameters;
 }
@@ -244,7 +244,7 @@ void check_assign_matches_final_training_assignment() {
     constexpr size_t kMaxPoints = 2;
     for (const uint32_t threads : {1U, 4U}) {
         for (const uint32_t bits :
-             kGraph ? std::vector<uint32_t>{0, 4, 8} : std::vector<uint32_t>{0}) {
+             kGraph ? std::vector<uint32_t>{32, 4, 8} : std::vector<uint32_t>{32}) {
             for (const size_t num_points :
                  {kClusterCount * kMaxPoints, 3 * kClusterCount * kMaxPoints + 1}) {
                 const auto points = clustered_points(num_points, 67);
@@ -257,7 +257,7 @@ void check_assign_matches_final_training_assignment() {
                     auto parameters = test_parameters<Clustering>();
                     parameters.num_threads = threads;
                     if constexpr (kGraph) {
-                        parameters.quantization_bits = bits;
+                        parameters.nbits = bits;
                     }
                     parameters.final_assignment = mode;
                     parameters.max_points_per_centroid = kMaxPoints;
@@ -323,10 +323,10 @@ void check_graph_cache_follows_centroids_and_settings() {
     constexpr size_t kClusterCount = kClusters<QGKMeans>;
     const auto points = clustered_points(6 * kClusterCount, 83);
     const auto queries = clustered_points(60, 89);
-    for (const uint32_t bits : {0U, 4U}) {
+    for (const uint32_t bits : {32U, 4U}) {
         SCOPED_TRACE(bits);
         auto parameters = test_parameters<QGKMeans>();
-        parameters.quantization_bits = bits;
+        parameters.nbits = bits;
         QGKMeans clustering(kDim, kClusterCount, parameters);
         clustering.train(6 * kClusterCount, points.data());
         QGKMeans fresh = clustering;  // Copied before any graph is cached.
@@ -693,11 +693,11 @@ TEST(KMeansParametersTest, CopySharedParametersCopiesOnlySharedFields) {
     from.spherical = true;
     from.verbose = true;
     qgkmeans::QGKMeansParameters to;
-    to.graph_degree = 64;
-    to.ef_build = 99;
+    to.max_degree = 64;
+    to.ef_construction = 99;
     to.ef_search = 33;
     to.graph_build_iterations = 2;
-    to.quantization_bits = 4;
+    to.nbits = 4;
 
     clustering::detail::copy_shared_parameters(from, to);
     EXPECT_EQ(to.early_stop_threshold, from.early_stop_threshold);
@@ -709,11 +709,11 @@ TEST(KMeansParametersTest, CopySharedParametersCopiesOnlySharedFields) {
     EXPECT_EQ(to.seed, from.seed);
     EXPECT_EQ(to.spherical, from.spherical);
     EXPECT_EQ(to.verbose, from.verbose);
-    EXPECT_EQ(to.graph_degree, 64U);
-    EXPECT_EQ(to.ef_build, 99U);
+    EXPECT_EQ(to.max_degree, 64U);
+    EXPECT_EQ(to.ef_construction, 99U);
     EXPECT_EQ(to.ef_search, 33U);
     EXPECT_EQ(to.graph_build_iterations, 2U);
-    EXPECT_EQ(to.quantization_bits, 4U);
+    EXPECT_EQ(to.nbits, 4U);
 }
 
 TEST(KMeansTrainCentroidsTest, RaBitQSkipsFinalAssignment) {

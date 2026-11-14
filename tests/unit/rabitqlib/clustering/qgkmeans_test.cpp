@@ -134,15 +134,15 @@ TEST(QGKMeansTest, UsesTwentyFiveIterationsByDefault) {
 }
 
 TEST(QGKMeansTest, UsesRawGraphStorageByDefaultAndRejectsUnsupportedBits) {
-    EXPECT_EQ(QGKMeansParameters{}.quantization_bits, 0U);
-    for (const uint32_t bits : {1U, 7U, 9U, 32U}) {
+    EXPECT_EQ(QGKMeansParameters{}.nbits, 32U);
+    for (const uint32_t bits : {0U, 1U, 7U, 9U}) {
         QGKMeansParameters parameters;
-        parameters.quantization_bits = bits;
+        parameters.nbits = bits;
         try {
             QGKMeans clustering(65, 33, parameters);
-            FAIL() << "Accepted unsupported quantization bits " << bits;
+            FAIL() << "Accepted unsupported nbits " << bits;
         } catch (const std::invalid_argument& error) {
-            EXPECT_STREQ(error.what(), "QGKMeans quantization_bits must be 0, 4, or 8");
+            EXPECT_STREQ(error.what(), "QGKMeans nbits must be 4, 8, or 32");
         }
     }
 }
@@ -294,8 +294,8 @@ TEST(QGAssignerTest, GroupedQueriesPreserveIndependentSearchHintsAcrossRebuilds)
     }
 }
 
-TEST(QGKMeansTest, UsesSymphonyQGForFinalAssignmentByDefault) {
-    EXPECT_EQ(QGKMeansParameters{}.final_assignment, FinalAssignmentMode::SymphonyQG);
+TEST(QGKMeansTest, UsesApproximateFinalAssignmentByDefault) {
+    EXPECT_EQ(QGKMeansParameters{}.final_assignment, FinalAssignmentMode::Approximate);
 }
 
 TEST(QGKMeansTest, UsesFaissTrainingSizeWarningThresholdByDefault) {
@@ -305,8 +305,8 @@ TEST(QGKMeansTest, UsesFaissTrainingSizeWarningThresholdByDefault) {
 QGKMeansParameters exact_search_parameters() {
     QGKMeansParameters parameters;
     parameters.niter = 4;
-    parameters.graph_degree = 32;
-    parameters.ef_build = 33;
+    parameters.max_degree = 32;
+    parameters.ef_construction = 33;
     parameters.ef_search = 33;
     parameters.graph_build_iterations = 2;
     parameters.num_threads = 1;
@@ -791,9 +791,9 @@ TEST(QGKMeansTest, TrainsAndReturnsAssignmentsForFinalCentroids) {
 TEST(QGKMeansTest, RetrainsOnOwnedCentroidsLikeAnIndependentCopy) {
     constexpr size_t kDim = 65, kInitialClusters = 35, kClusters = 33;
     const auto data = separated_points(kInitialClusters, kDim);
-    for (const uint32_t bits : {0U, 4U, 8U}) {
+    for (const uint32_t bits : {32U, 4U, 8U}) {
         for (const auto mode :
-             {FinalAssignmentMode::SymphonyQG, FinalAssignmentMode::Exact}) {
+             {FinalAssignmentMode::Approximate, FinalAssignmentMode::Exact}) {
             for (const size_t offset : {0U, 1U}) {
                 SCOPED_TRACE(
                     ::testing::Message()
@@ -801,7 +801,7 @@ TEST(QGKMeansTest, RetrainsOnOwnedCentroidsLikeAnIndependentCopy) {
                 );
                 auto parameters = exact_search_parameters();
                 parameters.niter = 2;
-                parameters.quantization_bits = bits;
+                parameters.nbits = bits;
                 parameters.final_assignment = mode;
                 QGKMeans clustering(kDim, kInitialClusters, parameters);
                 clustering.train(kInitialClusters, data.data());
@@ -1163,7 +1163,7 @@ TEST(QGKMeansTest, FinalAssignmentsRetainACloserPreviousCluster) {
             parameters.num_threads = 1;
             parameters.min_points_per_centroid = 1;
             parameters.spherical = spherical;
-            parameters.quantization_bits = bits;
+            parameters.nbits = bits == 0 ? 32 : bits;
             QGKMeans clustering(kDim, kClusters, parameters);
             clustering.train(kPoints, data.data());
             const auto distance = spherical ? dot_product_dis<float> : euclidean_sqr<float>;
@@ -1209,20 +1209,20 @@ TEST(QGKMeansTest, TrainsWithMovingCentroidsAndAnApproximateGraph) {
                 }
             }
         }
-        for (uint32_t bits : {0U, 4U, 8U}) {
+        for (uint32_t bits : {32U, 4U, 8U}) {
             SCOPED_TRACE(::testing::Message() << spherical << "/" << bits);
             QGKMeansParameters parameters;
             parameters.niter = 5;
             parameters.num_threads = 2;
             parameters.min_points_per_centroid = 1;
             parameters.spherical = spherical;
-            parameters.quantization_bits = bits;
+            parameters.nbits = bits;
             QGKMeans clustering(kDim, kClusters, parameters);
             clustering.train(kCount, data.data());
             double previous = std::numeric_limits<double>::infinity();
             for (const auto& stats : clustering.iteration_stats) {
                 EXPECT_TRUE(std::isfinite(stats.obj));
-                if (bits == 0) {
+                if (bits == 32) {
                     EXPECT_LE(stats.obj, previous + 1e-6 * std::abs(previous));
                 }
                 previous = stats.obj;
@@ -1248,7 +1248,7 @@ TEST(QGKMeansTest, RejectsTooFewClustersForGraphDegreeInBothFinalModes) {
                 QGKMeansParameters parameters;
                 parameters.niter = 1;
                 parameters.num_threads = 1;
-                parameters.graph_degree = degree;
+                parameters.max_degree = degree;
                 parameters.final_assignment = mode;
                 try {
                     QGKMeans model(kDim, clusters, parameters);
@@ -1256,8 +1256,7 @@ TEST(QGKMeansTest, RejectsTooFewClustersForGraphDegreeInBothFinalModes) {
                     FAIL() << "Accepted k=" << clusters << " for degree=" << degree;
                 } catch (const std::invalid_argument& error) {
                     EXPECT_STREQ(
-                        error.what(),
-                        "QGKMeans requires more centroids than the graph degree"
+                        error.what(), "QGKMeans requires more centroids than max_degree"
                     );
                 }
             }
@@ -1312,11 +1311,11 @@ TEST(QGAssignerTest, PropagatesSearchFailureFromWorkers) {
 }
 
 TEST(QGKMeansTest, RejectsFiniteOutOfRangeInputBeforeConstruction) {
-    for (uint32_t bits : {0U, 4U, 8U}) {
+    for (uint32_t bits : {32U, 4U, 8U}) {
         QGKMeansParameters parameters;
         parameters.niter = 1;
         parameters.num_threads = 2;
-        parameters.quantization_bits = bits;
+        parameters.nbits = bits;
         QGKMeans model(64, 33, parameters);
         const std::vector<float> data(66 * 64, 1e19F);
         EXPECT_THROW(model.train(66, data.data()), std::invalid_argument);
@@ -1335,16 +1334,16 @@ TEST(QGKMeansTest, SupportsLargerPaddedDimensions) {
             data[i * d + i] = 1.0F;
             data[i * d + d - 1] = static_cast<float>(i) / 64.0F;
         }
-        for (uint32_t bits : {0U, 4U, 8U}) {
+        for (uint32_t bits : {32U, 4U, 8U}) {
             // Quantized rows of 65535 and 65536 inputs share the 65536-wide padded
             // layout; the exact maximum only adds unpadded raw storage.
-            if (d == 65536 && bits != 0) {
+            if (d == 65536 && bits != 32) {
                 continue;
             }
             QGKMeansParameters parameters;
             parameters.niter = 1;
             parameters.num_threads = 2;
-            parameters.quantization_bits = bits;
+            parameters.nbits = bits;
             QGKMeans model(d, kClusters, parameters);
             model.train(kClusters, data.data());
             EXPECT_DOUBLE_EQ(model.final_obj, 0.0);
@@ -1396,9 +1395,9 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                 parameters.num_threads = threads;
                 parameters.seed = 42;
                 parameters.min_points_per_centroid = 1;
-                parameters.quantization_bits = bits;
+                parameters.nbits = bits == 0 ? 32 : bits;
                 parameters.spherical = spherical;
-                parameters.ef_build = 128;
+                parameters.ef_construction = 128;
                 parameters.ef_search = ef_search;
                 QGKMeans model(kDim, clusters, parameters);
                 model.train(kPoints, x.data());
@@ -1423,7 +1422,7 @@ void check_uncached_reference(size_t clusters, uint32_t ef_search, size_t intrin
                     kDim,
                     clusters,
                     32,
-                    parameters.ef_build,
+                    parameters.ef_construction,
                     ef_search,
                     1,
                     threads,

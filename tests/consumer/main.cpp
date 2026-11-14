@@ -82,7 +82,7 @@ int main() {
     rabitqlib::qgkmeans::QGKMeansParameters graph_parameters;
     graph_parameters.niter = 2;
     graph_parameters.num_threads = 2;
-    graph_parameters.ef_build = 33;
+    graph_parameters.ef_construction = 33;
     graph_parameters.ef_search = 33;
     graph_parameters.final_assignment = rabitqlib::clustering::FinalAssignmentMode::Exact;
     rabitqlib::qgkmeans::QGKMeans graph(kDimension, 33, graph_parameters);
