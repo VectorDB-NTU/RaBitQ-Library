@@ -18,6 +18,7 @@ __all__ = [
     "FormatError",
     "HnswIndex",
     "IvfIndex",
+    "KMeansIterationStats",
     "QGKMeans",
     "QGKMeansIterationStats",
     "QGKMeansParameters",
@@ -30,8 +31,9 @@ __all__ = [
 _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
 _Metric: TypeAlias = Literal["l2", "ip", "innerproduct", "cosine"]
-_Initializer: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
+_Routing: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
 _QGInit: TypeAlias = Literal["pipnn", "random"]
+_FinalAssignment: TypeAlias = Literal["approximate", "exact"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
 
@@ -39,6 +41,10 @@ class FormatError(ValueError, RuntimeError):
     """A damaged or mismatched index file or serialized byte string, or one this release cannot read. A subclass of both ValueError and RuntimeError."""
 
 # pybind11 enums are not subclasses of enum.Enum.
+@deprecated(
+    "FinalAssignmentMode is deprecated since 0.8.5; pass 'approximate' or 'exact' "
+    "as final_assignment"
+)
 class FinalAssignmentMode:
     """Final centroid assignment policy.
 
@@ -59,7 +65,7 @@ class FinalAssignmentMode:
     def __int__(self) -> int: ...
     def __index__(self) -> int: ...
 
-class QGKMeansIterationStats:
+class KMeansIterationStats:
     """Read-only statistics for one completed clustering iteration."""
 
     @property
@@ -75,7 +81,9 @@ class QGKMeansIterationStats:
     def nsplit(self) -> int:
         """Number of empty centroids repaired by splitting."""
 
-RaBitQKMeansIterationStats = QGKMeansIterationStats
+# The two 0.8 names of KMeansIterationStats; deprecated since 0.8.5.
+QGKMeansIterationStats = KMeansIterationStats
+RaBitQKMeansIterationStats = KMeansIterationStats
 
 class IvfIndex:
     """An approximate nearest-neighbor index using IVF.
@@ -92,8 +100,9 @@ class IvfIndex:
     metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
         Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
         scales data and queries to unit length.
-    initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
-        Centroid routing strategy. Default is 'auto'.
+    routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+        Centroid routing strategy. Default is 'auto'. Named initializer before
+        0.8.5.
     seed : int, optional
         Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
         (default) draws one at random; the seed property reports it.
@@ -130,7 +139,7 @@ class IvfIndex:
         *,
         nbits: SupportsIndex = 7,
         metric: _Metric = "l2",
-        initializer: _Initializer = "auto",
+        routing: _Routing = "auto",
         seed: SupportsIndex | None = None,
     ) -> None:
         """An approximate nearest-neighbor index using IVF.
@@ -147,8 +156,9 @@ class IvfIndex:
         metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
             Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
             scales data and queries to unit length.
-        initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
-            Centroid routing strategy. Default is 'auto'.
+        routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+            Centroid routing strategy. Default is 'auto'. Named initializer before
+            0.8.5.
         seed : int, optional
             Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
             (default) draws one at random; the seed property reports it.
@@ -177,7 +187,19 @@ class IvfIndex:
         num_clusters: SupportsIndex,
         nbits: SupportsIndex,
         metric: _Metric = "l2",
-        initializer: _Initializer = "auto",
+        initializer: _Routing = "auto",
+    ) -> None: ...
+    @overload
+    @deprecated("IvfIndex(initializer=...) is deprecated since 0.8.5; use routing=")
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        num_clusters: SupportsIndex,
+        *,
+        nbits: SupportsIndex = 7,
+        metric: _Metric = "l2",
+        initializer: _Routing,
+        seed: SupportsIndex | None = None,
     ) -> None: ...
     def __repr__(self) -> str:
         """Return a one-line summary of configuration, counts and training state."""
@@ -190,8 +212,11 @@ class IvfIndex:
         """Original vector dimension."""
 
     @property
+    @deprecated(
+        "IvfIndex.max_elements is deprecated since 0.8.5; use num_stored_points"
+    )
     def max_elements(self) -> int:
-        """Logical capacity: stored points, or the build row count of a 0.7-form index before build."""
+        """Deprecated since 0.8.5: use num_stored_points."""
 
     @property
     def num_points(self) -> int:
@@ -333,7 +358,7 @@ class IvfIndex:
             float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,), optional
             Keyword-only. Existing centroid IDs. None routes each vector using the
-            index's configured centroid initializer; routing may be approximate.
+            index's configured routing strategy, which may be approximate.
             Centroids do not move.
         num_threads : int, optional
             Keyword-only. Worker count. None (default) and 0 select the available
@@ -355,7 +380,7 @@ class IvfIndex:
         untrained index raises RuntimeError, as does add on an index created with
         max_elements, which build fills. If the call fails, the index stays
         untrained and empty. Batch additions to reduce repeated cluster copying;
-        reserve can preallocate room. Passing the options positionally is
+        reserve_cluster can preallocate room. Passing the options positionally is
         deprecated.
         """
     @overload
@@ -389,11 +414,13 @@ class IvfIndex:
         Removal does not reclaim storage and cannot be undone.
         """
 
+    @overload
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
         nprobe: SupportsIndex | None = None,
+        *,
         high_accuracy: bool | np.bool_ | None = None,
         num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
@@ -408,14 +435,17 @@ class IvfIndex:
             Number of neighbors requested, at least 1. It may exceed the number of
             points; slots without a neighbor are padded as described below.
         nprobe : int, optional
-            Number of clusters to probe, capped at num_clusters. None (default) and
-            0 select num_clusters / 16, rounded to the nearest integer and at least 1.
+            Number of clusters to probe, capped at num_clusters. None (default)
+            selects num_clusters / 16, rounded to the nearest integer and at least
+            1; 0 does the same and is deprecated since 0.8.5.
         high_accuracy : bool, optional
+            Keyword-only; passing it by position is deprecated since 0.8.5.
             Enable HACC. None (default) selects it for 4-9 bits and standard
             FastScan otherwise. Raw storage uses standard FastScan.
         num_threads : int, optional
-            Worker count. None (default) selects 1; 0 selects the available CPU
-            count, capped by OMP_NUM_THREADS.
+            Keyword-only; passing it by position is deprecated since 0.8.5. Worker
+            count. None (default) selects 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -432,7 +462,18 @@ class IvfIndex:
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
-
+    @overload
+    @deprecated(
+        "Passing high_accuracy or num_threads to IvfIndex.search() by position is deprecated since 0.8.5; use keywords"
+    )
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        nprobe: SupportsIndex | None,
+        high_accuracy: bool | np.bool_ | None,
+        num_threads: SupportsIndex | None = ...,
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]: ...
     def save(self, path: _Path) -> None:
         """Save an index with stored vectors to disk.
 
@@ -470,10 +511,17 @@ class IvfIndex:
         """
 
     @property
-    def initializer(self) -> _Initializer:
-        """Resolved centroid routing strategy."""
+    def routing(self) -> _Routing:
+        """Resolved centroid routing strategy. Named initializer before 0.8.5."""
 
-    def reserve(self, cluster_id: SupportsIndex, num_points: SupportsIndex) -> None:
+    @property
+    @deprecated("IvfIndex.initializer is deprecated since 0.8.5; use routing")
+    def initializer(self) -> _Routing:
+        """Deprecated since 0.8.5: use routing."""
+
+    def reserve_cluster(
+        self, cluster_id: SupportsIndex, num_points: SupportsIndex
+    ) -> None:
         """Preallocate storage for a cluster.
 
         Parameters
@@ -481,12 +529,18 @@ class IvfIndex:
         cluster_id : int
             Cluster ID in [0, num_clusters).
         num_points : int
-            Nonnegative capacity to reserve for this cluster.
+            Nonnegative capacity to reserve for this cluster: the total number
+            of points it can hold, including its current ones.
 
         Notes
         -----
-        Requires a trained or loaded index. Reserved room is not saved.
+        Requires a trained or loaded index. Reserved room is not saved. Named
+        reserve before 0.8.5.
         """
+
+    @deprecated("IvfIndex.reserve() is deprecated since 0.8.5; use reserve_cluster()")
+    def reserve(self, cluster_id: SupportsIndex, num_points: SupportsIndex) -> None:
+        """Deprecated since 0.8.5: the same as reserve_cluster(); use reserve_cluster()."""
 
 class HnswIndex:
     """An approximate nearest-neighbor index using HNSW.
@@ -511,7 +565,8 @@ class HnswIndex:
         'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
         Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
-        32 bits). Default is 100.
+        32 bits), in [0, 2**32 - 1]; larger values are deprecated since 0.8.5.
+        Default is 100.
 
     Notes
     -----
@@ -519,7 +574,7 @@ class HnswIndex:
     on a sample, or set_centroids, first to choose the training data or the
     centroids. Loaded indexes are trained, except empty files saved untrained
     by 0.7. Capacity grows automatically
-    on add; resize can preallocate it. Concurrent reads are supported; an
+    on add; reserve can preallocate it. Concurrent reads are supported; an
     overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
     coordinate range; other values raise ValueError.
@@ -574,7 +629,8 @@ class HnswIndex:
             'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional
             Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
-            32 bits). Default is 100.
+            32 bits), in [0, 2**32 - 1]; larger values are deprecated since 0.8.5.
+            Default is 100.
 
         Notes
         -----
@@ -582,7 +638,7 @@ class HnswIndex:
         on a sample, or set_centroids, first to choose the training data or the
         centroids. Loaded indexes are trained, except empty files saved untrained
         by 0.7. Capacity grows automatically
-        on add; resize can preallocate it. Concurrent reads are supported; an
+        on add; reserve can preallocate it. Concurrent reads are supported; an
         overlapping mutation raises RuntimeError.
         Data, centroids and queries must be finite float32 values within the index
         coordinate range; other values raise ValueError.
@@ -630,8 +686,13 @@ class HnswIndex:
         """Original vector dimension."""
 
     @property
+    def capacity(self) -> int:
+        """Current storage capacity, in stored points. Named max_elements before 0.8.5."""
+
+    @property
+    @deprecated("HnswIndex.max_elements is deprecated since 0.8.5; use capacity")
     def max_elements(self) -> int:
-        """Current storage capacity."""
+        """Deprecated since 0.8.5: use capacity."""
 
     @property
     def num_points(self) -> int:
@@ -831,11 +892,13 @@ class HnswIndex:
         Removal does not reclaim storage and cannot be undone.
         """
 
+    @overload
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex | None = None,
+        ef_search: SupportsIndex | None = None,
+        *,
         num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
@@ -848,12 +911,14 @@ class HnswIndex:
         k : int
             Number of neighbors requested, at least 1. It may exceed the number of
             points; slots without a neighbor are padded as described below.
-        ef : int, optional
-            Search breadth. None or 0 (default) selects max(k, 64); values above the stored
-            point count are clamped.
+        ef_search : int, optional
+            Search breadth. None (default) selects max(k, 64); values above the stored
+            point count are clamped. 0 selects the default and is deprecated since
+            0.8.5. Named ef before 0.8.5.
         num_threads : int, optional
-            Worker count. None (default) selects 1; 0 selects the available CPU
-            count, capped by OMP_NUM_THREADS.
+            Keyword-only; passing it by position is deprecated since 0.8.5. Worker
+            count. None (default) selects 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -870,7 +935,27 @@ class HnswIndex:
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
-
+    @overload
+    @deprecated("HnswIndex.search(ef=...) is deprecated since 0.8.5; use ef_search=")
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        *,
+        ef: SupportsIndex | None,
+        num_threads: SupportsIndex | None = None,
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]: ...
+    @overload
+    @deprecated(
+        "Passing num_threads to HnswIndex.search() by position is deprecated since 0.8.5; use the keyword"
+    )
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        ef_search: SupportsIndex | None,
+        num_threads: SupportsIndex | None,
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]: ...
     def save(self, path: _Path) -> None:
         """Save an index with stored vectors to disk.
 
@@ -903,14 +988,27 @@ class HnswIndex:
             A trained index ready for search.
         """
 
-    def resize(self, max_elements: SupportsIndex) -> None:
-        """Change the storage capacity, for example to preallocate before add.
+    def reserve(self, num_points: SupportsIndex) -> None:
+        """Preallocate room for at least num_points stored points.
 
         Parameters
         ----------
-        max_elements : int
-            New capacity; must be at least num_stored_points.
+        num_points : int
+            Nonnegative number of stored points to make room for, including the
+            current ones.
+
+        Notes
+        -----
+        Capacity only grows: a value at or below capacity changes nothing. add
+        also grows the capacity when needed, so reserve is an optimization.
         """
+
+    @deprecated(
+        "HnswIndex.resize() is deprecated since 0.8.5; use reserve(), which only "
+        "grows the capacity"
+    )
+    def resize(self, max_elements: SupportsIndex) -> None:
+        """Deprecated since 0.8.5: change the capacity; use reserve(), which only grows it."""
 
 class SymqgIndex:
     """An approximate nearest-neighbor index using SymphonyQG.
@@ -1050,8 +1148,11 @@ class SymqgIndex:
         """Original vector dimension."""
 
     @property
+    @deprecated(
+        "SymqgIndex.max_elements is deprecated since 0.8.5; use num_stored_points"
+    )
     def max_elements(self) -> int:
-        """Current storage capacity."""
+        """Deprecated since 0.8.5: use num_stored_points."""
 
     @property
     def num_points(self) -> int:
@@ -1181,11 +1282,13 @@ class SymqgIndex:
             Graph initialization method. Default is 'pipnn'.
         """
 
+    @overload
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex | None = None,
+        ef_search: SupportsIndex | None = None,
+        *,
         num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
@@ -1198,12 +1301,14 @@ class SymqgIndex:
         k : int
             Number of neighbors requested, at least 1. It may exceed the number of
             points; slots without a neighbor are padded as described below.
-        ef : int, optional
-            Search breadth. None or 0 (default) selects max(k, 64); smaller values
-            are raised to k.
+        ef_search : int, optional
+            Search breadth. None (default) selects max(k, 64); smaller values
+            are raised to k. 0 selects the default and is deprecated since 0.8.5.
+            Named ef before 0.8.5.
         num_threads : int, optional
-            Worker count. None (default) selects 1; 0 selects the available CPU
-            count, capped by OMP_NUM_THREADS.
+            Keyword-only; passing it by position is deprecated since 0.8.5. Worker
+            count. None (default) selects 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -1220,7 +1325,27 @@ class SymqgIndex:
         np.isfinite(distances) to find them. Array shapes and value ranges are
         checked at runtime, not by static type checkers.
         """
-
+    @overload
+    @deprecated("SymqgIndex.search(ef=...) is deprecated since 0.8.5; use ef_search=")
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        *,
+        ef: SupportsIndex | None,
+        num_threads: SupportsIndex | None = None,
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]: ...
+    @overload
+    @deprecated(
+        "Passing num_threads to SymqgIndex.search() by position is deprecated since 0.8.5; use the keyword"
+    )
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        ef_search: SupportsIndex | None,
+        num_threads: SupportsIndex | None,
+    ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]: ...
     @deprecated("SymqgIndex.search_batch() is deprecated since 0.8; use search()")
     def search_batch(
         self,
@@ -1270,7 +1395,7 @@ class QGKMeans:
     d : int
         Original vector dimension, from 64 through 65536.
     k : int
-        Number of centroids; greater than graph_degree and no more than the
+        Number of centroids; greater than max_degree and no more than the
         number of training vectors.
     niter : int, optional
         Maximum number of clustering iterations. Default is 25.
@@ -1294,22 +1419,24 @@ class QGKMeans:
     num_threads : int, optional
         Worker count; 0 selects the available CPU count,
         capped by OMP_NUM_THREADS. Default is 0.
-    final_assignment : FinalAssignmentMode, optional
-        Approximate uses the training assignment method; Exact uses exhaustive
-        assignment against final centroids. Default is
-        FinalAssignmentMode.Approximate.
-    graph_degree : int, optional
-        Centroid graph degree; a positive multiple of 32. Default is 32.
-    ef_build : int, optional
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' uses the training assignment method; 'exact' uses exhaustive
+        assignment against final centroids. Default is 'approximate'. A
+        FinalAssignmentMode member is still accepted until 0.9.
+    max_degree : int, optional
+        Centroid graph degree; a positive multiple of 32. Default is 32. Named
+        graph_degree before 0.8.5.
+    ef_construction : int, optional
         Positive centroid-graph construction search breadth. Default is 240.
+        Named ef_build before 0.8.5.
     ef_search : int, optional
         Positive centroid-graph assignment search breadth. Default is 16.
     graph_build_iterations : int, optional
         Positive number of graph-building passes after initialization. Default
         is 1.
-    quantization_bits : int, optional
-        Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is
-        0.
+    nbits : int, optional
+        Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is
+        32. Named quantization_bits, with 0 for raw float32, before 0.8.5.
 
     Notes
     -----
@@ -1328,6 +1455,7 @@ class QGKMeans:
     k: int
     cp: QGKMeansParameters
 
+    @overload
     def __init__(
         self,
         d: SupportsIndex,
@@ -1341,12 +1469,12 @@ class QGKMeans:
         max_points_per_centroid: SupportsIndex = 0,
         early_stop_threshold: float = 0.0,
         num_threads: SupportsIndex = 0,
-        final_assignment: FinalAssignmentMode = FinalAssignmentMode.Approximate,
-        graph_degree: SupportsIndex = 32,
-        ef_build: SupportsIndex = 240,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 240,
         ef_search: SupportsIndex = 16,
         graph_build_iterations: SupportsIndex = 1,
-        quantization_bits: SupportsIndex = 0,
+        nbits: SupportsIndex = 32,
     ) -> None:
         """Cluster vectors using SymphonyQG graph assignment.
 
@@ -1355,7 +1483,7 @@ class QGKMeans:
         d : int
             Original vector dimension, from 64 through 65536.
         k : int
-            Number of centroids; greater than graph_degree and no more than the
+            Number of centroids; greater than max_degree and no more than the
             number of training vectors.
         niter : int, optional
             Maximum number of clustering iterations. Default is 25.
@@ -1379,22 +1507,24 @@ class QGKMeans:
         num_threads : int, optional
             Worker count; 0 selects the available CPU count,
             capped by OMP_NUM_THREADS. Default is 0.
-        final_assignment : FinalAssignmentMode, optional
-            Approximate uses the training assignment method; Exact uses exhaustive
-            assignment against final centroids. Default is
-            FinalAssignmentMode.Approximate.
-        graph_degree : int, optional
-            Centroid graph degree; a positive multiple of 32. Default is 32.
-        ef_build : int, optional
+        final_assignment : {'approximate', 'exact'}, optional
+            'approximate' uses the training assignment method; 'exact' uses exhaustive
+            assignment against final centroids. Default is 'approximate'. A
+            FinalAssignmentMode member is still accepted until 0.9.
+        max_degree : int, optional
+            Centroid graph degree; a positive multiple of 32. Default is 32. Named
+            graph_degree before 0.8.5.
+        ef_construction : int, optional
             Positive centroid-graph construction search breadth. Default is 240.
+            Named ef_build before 0.8.5.
         ef_search : int, optional
             Positive centroid-graph assignment search breadth. Default is 16.
         graph_build_iterations : int, optional
             Positive number of graph-building passes after initialization. Default
             is 1.
-        quantization_bits : int, optional
-            Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is
-            0.
+        nbits : int, optional
+            Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is
+            32. Named quantization_bits, with 0 for raw float32, before 0.8.5.
 
         Notes
         -----
@@ -1409,6 +1539,79 @@ class QGKMeans:
         kinds of objective are not directly comparable.
         """
 
+    @overload
+    @deprecated(
+        "QGKMeans(quantization_bits=...) is deprecated since 0.8.5; use nbits=, with 32 instead of 0 for raw vectors"
+    )
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        quantization_bits: SupportsIndex,
+        niter: SupportsIndex = 25,
+        verbose: bool | np.bool_ = False,
+        spherical: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        min_points_per_centroid: SupportsIndex = 39,
+        max_points_per_centroid: SupportsIndex = 0,
+        early_stop_threshold: float = 0.0,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+        graph_degree: SupportsIndex = ...,
+        ef_build: SupportsIndex = ...,
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 240,
+    ) -> None: ...
+    @overload
+    @deprecated("QGKMeans(graph_degree=...) is deprecated since 0.8.5; use max_degree=")
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        graph_degree: SupportsIndex,
+        niter: SupportsIndex = 25,
+        verbose: bool | np.bool_ = False,
+        spherical: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        min_points_per_centroid: SupportsIndex = 39,
+        max_points_per_centroid: SupportsIndex = 0,
+        early_stop_threshold: float = 0.0,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+        ef_build: SupportsIndex = ...,
+        ef_construction: SupportsIndex = 240,
+        nbits: SupportsIndex = 32,
+    ) -> None: ...
+    @overload
+    @deprecated(
+        "QGKMeans(ef_build=...) is deprecated since 0.8.5; use ef_construction="
+    )
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        ef_build: SupportsIndex,
+        niter: SupportsIndex = 25,
+        verbose: bool | np.bool_ = False,
+        spherical: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        min_points_per_centroid: SupportsIndex = 39,
+        max_points_per_centroid: SupportsIndex = 0,
+        early_stop_threshold: float = 0.0,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+        max_degree: SupportsIndex = 32,
+        nbits: SupportsIndex = 32,
+    ) -> None: ...
     def train(self, x: npt.ArrayLike) -> float:
         """Train centroids and retain the final assignments.
 
@@ -1488,7 +1691,7 @@ class QGKMeans:
         """Objective for the final assignments of all n vectors, or None before training."""
 
     @property
-    def iteration_stats(self) -> list[QGKMeansIterationStats] | None:
+    def iteration_stats(self) -> list[KMeansIterationStats] | None:
         """Per-iteration statistics over the vectors used for iterations, or None before training."""
 
 class QGKMeansParameters:
@@ -1539,19 +1742,44 @@ class QGKMeansParameters:
         """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
     @num_threads.setter
     def num_threads(self, value: SupportsIndex) -> None: ...
-
-    final_assignment: FinalAssignmentMode
-    """Approximate uses the training assignment method; Exact uses exhaustive assignment against final centroids. Default is FinalAssignmentMode.Approximate."""
-
     @property
+    def final_assignment(self) -> FinalAssignmentMode:
+        """'approximate' uses the training assignment method; 'exact' uses exhaustive assignment against final centroids. Default is 'approximate'. Until 0.9 it reads back as the FinalAssignmentMode member, which is still accepted."""
+    @final_assignment.setter
+    def final_assignment(
+        self, value: _FinalAssignment | FinalAssignmentMode
+    ) -> None: ...
+    @property
+    def max_degree(self) -> int:
+        """Centroid graph degree; a positive multiple of 32. Default is 32. Named graph_degree before 0.8.5."""
+    @max_degree.setter
+    def max_degree(self, value: SupportsIndex) -> None: ...
+    @property
+    @deprecated(
+        "QGKMeansParameters.graph_degree is deprecated since 0.8.5; use max_degree"
+    )
     def graph_degree(self) -> int:
-        """Centroid graph degree; a positive multiple of 32. Default is 32."""
+        """Deprecated since 0.8.5: use max_degree."""
     @graph_degree.setter
+    @deprecated(
+        "QGKMeansParameters.graph_degree is deprecated since 0.8.5; use max_degree"
+    )
     def graph_degree(self, value: SupportsIndex) -> None: ...
     @property
+    def ef_construction(self) -> int:
+        """Positive centroid-graph construction search breadth. Default is 240. Named ef_build before 0.8.5."""
+    @ef_construction.setter
+    def ef_construction(self, value: SupportsIndex) -> None: ...
+    @property
+    @deprecated(
+        "QGKMeansParameters.ef_build is deprecated since 0.8.5; use ef_construction"
+    )
     def ef_build(self) -> int:
-        """Positive centroid-graph construction search breadth. Default is 240."""
+        """Deprecated since 0.8.5: use ef_construction."""
     @ef_build.setter
+    @deprecated(
+        "QGKMeansParameters.ef_build is deprecated since 0.8.5; use ef_construction"
+    )
     def ef_build(self, value: SupportsIndex) -> None: ...
     @property
     def ef_search(self) -> int:
@@ -1564,9 +1792,20 @@ class QGKMeansParameters:
     @graph_build_iterations.setter
     def graph_build_iterations(self, value: SupportsIndex) -> None: ...
     @property
+    def nbits(self) -> int:
+        """Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is 32. Named quantization_bits, with 0 for raw float32, before 0.8.5."""
+    @nbits.setter
+    def nbits(self, value: SupportsIndex) -> None: ...
+    @property
+    @deprecated(
+        "QGKMeansParameters.quantization_bits is deprecated since 0.8.5; use nbits"
+    )
     def quantization_bits(self) -> int:
-        """Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is 0."""
+        """Deprecated since 0.8.5: use nbits."""
     @quantization_bits.setter
+    @deprecated(
+        "QGKMeansParameters.quantization_bits is deprecated since 0.8.5; use nbits"
+    )
     def quantization_bits(self, value: SupportsIndex) -> None: ...
     def __init__(self) -> None:
         """Create parameters with their documented defaults."""
@@ -1602,10 +1841,10 @@ class RaBitQKMeans:
     num_threads : int, optional
         Worker count; 0 selects the available CPU count,
         capped by OMP_NUM_THREADS. Default is 0.
-    final_assignment : FinalAssignmentMode, optional
-        Approximate uses the training assignment method; Exact uses exhaustive
-        assignment against final centroids. Default is
-        FinalAssignmentMode.Approximate.
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' uses the training assignment method; 'exact' uses exhaustive
+        assignment against final centroids. Default is 'approximate'. A
+        FinalAssignmentMode member is still accepted until 0.9.
 
     Notes
     -----
@@ -1647,7 +1886,7 @@ class RaBitQKMeans:
         max_points_per_centroid: SupportsIndex = 0,
         early_stop_threshold: float = 0.0,
         num_threads: SupportsIndex = 0,
-        final_assignment: FinalAssignmentMode = FinalAssignmentMode.Approximate,
+        final_assignment: _FinalAssignment | FinalAssignmentMode = "approximate",
     ) -> None:
         """Cluster vectors using flat RaBitQ assignment.
 
@@ -1679,10 +1918,10 @@ class RaBitQKMeans:
         num_threads : int, optional
             Worker count; 0 selects the available CPU count,
             capped by OMP_NUM_THREADS. Default is 0.
-        final_assignment : FinalAssignmentMode, optional
-            Approximate uses the training assignment method; Exact uses exhaustive
-            assignment against final centroids. Default is
-            FinalAssignmentMode.Approximate.
+        final_assignment : {'approximate', 'exact'}, optional
+            'approximate' uses the training assignment method; 'exact' uses exhaustive
+            assignment against final centroids. Default is 'approximate'. A
+            FinalAssignmentMode member is still accepted until 0.9.
 
         Notes
         -----
@@ -1786,7 +2025,7 @@ class RaBitQKMeans:
         """Objective for the final assignments of all n vectors, or None before training."""
 
     @property
-    def iteration_stats(self) -> list[QGKMeansIterationStats] | None:
+    def iteration_stats(self) -> list[KMeansIterationStats] | None:
         """Per-iteration statistics over the vectors used for iterations, or None before training."""
 
 class RaBitQKMeansParameters:
@@ -1837,9 +2076,12 @@ class RaBitQKMeansParameters:
         """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
     @num_threads.setter
     def num_threads(self, value: SupportsIndex) -> None: ...
-
-    final_assignment: FinalAssignmentMode
-    """Approximate uses the training assignment method; Exact uses exhaustive assignment against final centroids. Default is FinalAssignmentMode.Approximate."""
-
+    @property
+    def final_assignment(self) -> FinalAssignmentMode:
+        """'approximate' uses the training assignment method; 'exact' uses exhaustive assignment against final centroids. Default is 'approximate'. Until 0.9 it reads back as the FinalAssignmentMode member, which is still accepted."""
+    @final_assignment.setter
+    def final_assignment(
+        self, value: _FinalAssignment | FinalAssignmentMode
+    ) -> None: ...
     def __init__(self) -> None:
         """Create parameters with their documented defaults."""

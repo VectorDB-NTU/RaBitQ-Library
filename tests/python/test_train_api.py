@@ -120,14 +120,14 @@ def test_ivf_seed_range_and_random_default():
 @pytest.mark.parametrize("metric", ["l2", "ip"])
 def test_cp_defaults_follow_metric_and_seed(metric):
     ivf = IvfIndex(DIM, 4, nbits=4, metric=metric, seed=11)
-    hnsw = HnswIndex(DIM, nbits=4, metric=metric, seed=2**40 + 5)
+    hnsw = HnswIndex(DIM, nbits=4, metric=metric, seed=5)
     for index, seed in ((ivf, 11), (hnsw, 5)):
         assert index.cp.niter == 10
         assert index.cp.max_points_per_centroid == 256
         assert index.cp.spherical is (metric == "ip")
         assert index.cp.seed == seed
         assert index.cp.num_threads == 0
-    assert hnsw.seed == 2**40 + 5
+    assert hnsw.seed == 5
     # cp is the index's own object: changes persist, and assignment copies.
     ivf.cp.niter = 3
     assert ivf.cp.niter == 3
@@ -254,7 +254,7 @@ def test_operations_before_training_raise_and_change_nothing(kind, base_data, tm
         "save": lambda: index.save(tmp_path / "untrained.index"),
     }
     if kind == "ivf":
-        operations["reserve"] = lambda: index.reserve(0, 10)
+        operations["reserve_cluster"] = lambda: index.reserve_cluster(0, 10)
     for operation, call in operations.items():
         with pytest.raises(
             RuntimeError, match=f"^{name} must be trained or loaded before {operation}$"
@@ -345,29 +345,31 @@ def test_ivf_point_count_index_cannot_be_trained(base_data):
         index.train(base_data)
     with pytest.raises(RuntimeError, match=message):
         index.set_centroids(base_data[:4])
-    assert index.max_elements == N_VECTORS
+    assert index.num_stored_points == 0
+    with pytest.warns(DeprecationWarning):
+        assert index.max_elements == N_VECTORS  # the declared row count is kept
 
 
-def test_hnsw_capacity_grows_and_resize_preallocates(base_data):
+def test_hnsw_capacity_grows_and_reserve_preallocates(base_data):
     index = HnswIndex(DIM, nbits=4, num_clusters=4)
-    assert index.max_elements == 1
+    assert index.capacity == 1
     index.train(base_data)
     index.add(base_data[:100])
-    assert index.max_elements == 100
+    assert index.capacity == 100
     index.add(base_data[100:110])
-    assert index.max_elements == 200  # doubled
+    assert index.capacity == 200  # doubled
     preallocated = HnswIndex(DIM, nbits=4, num_clusters=4)
-    preallocated.resize(1000)
+    preallocated.reserve(1000)
     preallocated.train(base_data)
     preallocated.add(base_data)
-    assert preallocated.max_elements == 1000
+    assert preallocated.capacity == 1000
 
 
 def test_hnsw_search_ef_none_means_the_default(base_data):
     index = HnswIndex(DIM, nbits=4, num_clusters=4)
     index.train(base_data)
     index.add(base_data, num_threads=1)
-    expected = index.search(base_data[:10], 5, 0)
+    expected = index.search(base_data[:10], 5, 64)
     for found in (
         index.search(base_data[:10], 5, None),
         index.search(base_data[:10], 5),
@@ -384,7 +386,7 @@ def test_hnsw_failed_add_keeps_the_capacity(base_data):
     bad[150, 0] = np.nan
     with pytest.raises(ValueError, match="must contain only finite values"):
         index.add(bad)
-    assert index.max_elements == 100
+    assert index.capacity == 100
     assert len(index) == 100
 
 
@@ -461,7 +463,6 @@ def test_ivf_nprobe_defaults_to_a_sixteenth_of_the_clusters(base_data):
     for found in (index.search(queries, 5), index.search(queries, 5, None)):
         np.testing.assert_array_equal(found[0], expected[0])
         np.testing.assert_array_equal(found[1], expected[1])
-    np.testing.assert_array_equal(index.search(queries, 5, 0)[0], expected[0])
     small = IvfIndex(DIM, 4, nbits=4, seed=3)
     small.add(base_data)
     np.testing.assert_array_equal(
@@ -476,7 +477,7 @@ def test_num_threads_none_selects_the_defaults(kind, base_data):
     found = (
         index.search(base_data[:5], 3, None, num_threads=None)
         if kind == "hnsw"
-        else index.search(base_data[:5], 3, None, None, None)
+        else index.search(base_data[:5], 3, None, high_accuracy=None, num_threads=None)
     )
     assert found[0].shape == (5, 3)
 
@@ -498,8 +499,8 @@ def test_package_reports_its_version():
     "options",
     [
         {"nbits": 32},
-        {"initializer": "flat_rabitq"},
-        {"initializer": "hnsw"},
+        {"routing": "flat_rabitq"},
+        {"routing": "hnsw"},
         {"niter": 3, "max_points_per_centroid": 64},
     ],
 )
@@ -540,11 +541,11 @@ def test_ivf_first_add_uses_the_drawn_seed(base_data, tmp_path):
 
 def test_hnsw_first_add_keeps_a_preallocated_capacity(base_data, tmp_path):
     implicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
-    implicit.resize(2 * N_VECTORS)
+    implicit.reserve(2 * N_VECTORS)
     implicit.add(base_data, num_threads=1)
-    assert implicit.max_elements == 2 * N_VECTORS
+    assert implicit.capacity == 2 * N_VECTORS
     explicit = HnswIndex(DIM, num_clusters=4, M=8, ef_construction=50)
-    explicit.resize(2 * N_VECTORS)
+    explicit.reserve(2 * N_VECTORS)
     explicit.train(base_data)
     explicit.add(base_data, num_threads=1)
     assert saved_bytes(implicit, tmp_path / "implicit.index") == saved_bytes(

@@ -37,7 +37,7 @@ def main(args=None) -> None:
         for r in range(args.test_rounds):
             t0 = perf_counter()
             ids, _ = idx.search(
-                queries, k=args.topk, ef=ef, num_threads=args.num_threads
+                queries, k=args.topk, ef_search=ef, num_threads=args.num_threads
             )
             elapsed = perf_counter() - t0  # seconds
 

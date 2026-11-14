@@ -197,7 +197,7 @@ def check_saved_index_and_query(tmp_path, kind, metric, data):
     index_type = {"ivf": IvfIndex, "hnsw": HnswIndex, "symqg": SymqgIndex}[kind]
     index = index_type.load(str(index_path))
     queries = data[:4].copy()
-    search_args = {"nprobe": 2} if kind == "ivf" else {"ef": len(data)}
+    search_args = {"nprobe": 2} if kind == "ivf" else {"ef_search": len(data)}
     ids, distances = index.search(queries, k=5, num_threads=2, **search_args)
     assert index.metric == metric
     if kind == "ivf":

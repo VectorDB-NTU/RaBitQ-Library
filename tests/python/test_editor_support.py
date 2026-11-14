@@ -157,16 +157,23 @@ def test_native_signature_names_and_defaults(name):
 def test_clustering_keyword_defaults(name):
     cls = declarations()[name]
     init = next(
-        n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "__init__"
+        n
+        for n in cls.body
+        if isinstance(n, ast.FunctionDef)
+        and n.name == "__init__"
+        and not is_deprecated(n)
     )
     instance = getattr(rabitqlib, name)(64, 40)
     for arg, default in zip(init.args.kwonlyargs, init.args.kw_defaults):
         assert default is not None, (name, arg.arg)
-        if isinstance(default, ast.Attribute):
-            expected = getattr(rabitqlib.FinalAssignmentMode, default.attr)
-        else:
-            expected = ast.literal_eval(default)
-        assert getattr(instance.cp, arg.arg) == expected
+        expected = ast.literal_eval(default)
+        actual = getattr(instance.cp, arg.arg)
+        if arg.arg == "final_assignment":
+            # Reads back as the enum member until 0.9: compare with what passing
+            # the declared default explicitly gives.
+            explicit = getattr(rabitqlib, name)(64, 40, final_assignment=expected)
+            expected = explicit.cp.final_assignment
+        assert actual == expected
     for name in (
         "centroids",
         "assignments",
@@ -198,7 +205,7 @@ def test_documented_search_result_types(kind):
     if kind == "symqg":
         index = rabitqlib.SymqgIndex(64, ef_construction=40)
         index.add(data)
-        result = index.search(data[:2], 3, ef=20)
+        result = index.search(data[:2], 3, ef_search=20)
     else:
         if kind == "ivf":
             index = rabitqlib.IvfIndex(64, 2, nbits=4)
@@ -209,7 +216,7 @@ def test_documented_search_result_types(kind):
         if isinstance(index, rabitqlib.IvfIndex):
             result = index.search(data[:2], 3, nprobe=2)
         else:
-            result = index.search(data[:2], 3, ef=20)
+            result = index.search(data[:2], 3, ef_search=20)
     ids, distances = result
     assert ids.shape == distances.shape == (2, 3)
     assert ids.dtype == np.int64

@@ -161,8 +161,7 @@ def test_search_ef_defaults_to_max_of_k_and_64_and_is_raised_to_k(base_data):
     queries = base_data[:10]
     for k, implied_ef in ((3, 64), (80, 80)):
         expected = index.search(queries, k, implied_ef)
-        for ef in (None, 0):
-            actual = index.search(queries, k, ef)
+        for actual in (index.search(queries, k), index.search(queries, k, None)):
             np.testing.assert_array_equal(actual[0], expected[0])
             np.testing.assert_array_equal(actual[1], expected[1])
     np.testing.assert_array_equal(
