@@ -29,7 +29,7 @@ __all__ = [
 _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
 _Metric: TypeAlias = Literal["l2", "ip", "innerproduct"]
-_Initializer: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
+_Routing: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
 _QGInit: TypeAlias = Literal["pipnn", "random"]
 # Rank, ID ranges and Python bool (an int subtype) are validated at runtime.
 _IntegerIds: TypeAlias = npt.NDArray[np.integer[Any]] | Sequence[int | np.integer[Any]]
@@ -88,8 +88,9 @@ class IvfIndex:
     metric : {'l2', 'ip', 'innerproduct'}, optional
         Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
         automatically normalized for cosine similarity.
-    initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
-        Centroid routing strategy. Default is 'auto'.
+    routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+        Centroid routing strategy. Default is 'auto'. Named initializer before
+        0.8.5.
     seed : int, optional
         Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
         (default) draws one at random; the seed property reports it.
@@ -126,7 +127,7 @@ class IvfIndex:
         *,
         nbits: SupportsIndex = 7,
         metric: _Metric = "l2",
-        initializer: _Initializer = "auto",
+        routing: _Routing = "auto",
         seed: SupportsIndex | None = None,
     ) -> None:
         """An approximate nearest-neighbor index using IVF.
@@ -143,8 +144,9 @@ class IvfIndex:
         metric : {'l2', 'ip', 'innerproduct'}, optional
             Squared L2 or inner-product distance. Default is 'l2'. Vectors are not
             automatically normalized for cosine similarity.
-        initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
-            Centroid routing strategy. Default is 'auto'.
+        routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
+            Centroid routing strategy. Default is 'auto'. Named initializer before
+            0.8.5.
         seed : int, optional
             Rotation seed in [0, 2**32 - 1], also the initial cp.seed. None
             (default) draws one at random; the seed property reports it.
@@ -173,7 +175,19 @@ class IvfIndex:
         num_clusters: SupportsIndex,
         nbits: SupportsIndex,
         metric: _Metric = "l2",
-        initializer: _Initializer = "auto",
+        initializer: _Routing = "auto",
+    ) -> None: ...
+    @overload
+    @deprecated("IvfIndex(initializer=...) is deprecated since 0.8.5; use routing=")
+    def __init__(
+        self,
+        dim: SupportsIndex,
+        num_clusters: SupportsIndex,
+        *,
+        nbits: SupportsIndex = 7,
+        metric: _Metric = "l2",
+        initializer: _Routing,
+        seed: SupportsIndex | None = None,
     ) -> None: ...
     def __repr__(self) -> str:
         """Return a one-line summary of configuration, counts and training state."""
@@ -186,8 +200,11 @@ class IvfIndex:
         """Original vector dimension."""
 
     @property
+    @deprecated(
+        "IvfIndex.max_elements is deprecated since 0.8.5; use num_stored_points"
+    )
     def max_elements(self) -> int:
-        """Logical capacity: stored points, or the build row count of a 0.7-form index before build."""
+        """Deprecated since 0.8.5: use num_stored_points."""
 
     @property
     def num_points(self) -> int:
@@ -329,7 +346,7 @@ class IvfIndex:
             float32; a copy may be made.
         cluster_ids : array_like of int, shape (n,), optional
             Keyword-only. Existing centroid IDs. None routes each vector using the
-            index's configured centroid initializer; routing may be approximate.
+            index's configured routing strategy, which may be approximate.
             Centroids do not move.
         num_threads : int, optional
             Keyword-only. Worker count. None (default) and 0 select the available
@@ -351,7 +368,7 @@ class IvfIndex:
         untrained index raises RuntimeError, as does add on an index created with
         max_elements, which build fills. If the call fails, the index stays
         untrained and empty. Batch additions to reduce repeated cluster copying;
-        reserve can preallocate room. Passing the options positionally is
+        reserve_cluster can preallocate room. Passing the options positionally is
         deprecated.
         """
     @overload
@@ -385,11 +402,13 @@ class IvfIndex:
         Removal does not reclaim storage and cannot be undone.
         """
 
+    @overload
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
         nprobe: SupportsIndex | None = None,
+        *,
         high_accuracy: bool | np.bool_ | None = None,
         num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
@@ -404,14 +423,17 @@ class IvfIndex:
             Number of neighbors requested, at least 1. It may exceed the number of
             points; slots without a neighbor are padded as described below.
         nprobe : int, optional
-            Number of clusters to probe, capped at num_clusters. None (default) and
-            0 select num_clusters / 16, rounded to the nearest integer and at least 1.
+            Number of clusters to probe, capped at num_clusters. None (default)
+            selects num_clusters / 16, rounded to the nearest integer and at least
+            1; 0 does the same and is deprecated since 0.8.5.
         high_accuracy : bool, optional
+            Keyword-only; passing it by position is deprecated since 0.8.5.
             Enable HACC. None (default) selects it for 4-9 bits and standard
             FastScan otherwise. Raw storage uses standard FastScan.
         num_threads : int, optional
-            Worker count. None (default) selects 1; 0 selects the available CPU
-            count, capped by OMP_NUM_THREADS.
+            Keyword-only; passing it by position is deprecated since 0.8.5. Worker
+            count. None (default) selects 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -428,7 +450,18 @@ class IvfIndex:
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
-
+    @overload
+    @deprecated(
+        "Passing high_accuracy or num_threads to IvfIndex.search() by position is deprecated since 0.8.5; use keywords"
+    )
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        nprobe: SupportsIndex | None,
+        high_accuracy: bool | np.bool_ | None,
+        num_threads: SupportsIndex | None = ...,
+    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]: ...
     def save(self, path: _Path) -> None:
         """Save an index with stored vectors to disk.
 
@@ -461,10 +494,17 @@ class IvfIndex:
         """
 
     @property
-    def initializer(self) -> _Initializer:
-        """Resolved centroid routing strategy."""
+    def routing(self) -> _Routing:
+        """Resolved centroid routing strategy. Named initializer before 0.8.5."""
 
-    def reserve(self, cluster_id: SupportsIndex, num_points: SupportsIndex) -> None:
+    @property
+    @deprecated("IvfIndex.initializer is deprecated since 0.8.5; use routing")
+    def initializer(self) -> _Routing:
+        """Deprecated since 0.8.5: use routing."""
+
+    def reserve_cluster(
+        self, cluster_id: SupportsIndex, num_points: SupportsIndex
+    ) -> None:
         """Preallocate storage for a cluster.
 
         Parameters
@@ -472,12 +512,18 @@ class IvfIndex:
         cluster_id : int
             Cluster ID in [0, num_clusters).
         num_points : int
-            Nonnegative capacity to reserve for this cluster.
+            Nonnegative capacity to reserve for this cluster: the total number
+            of points it can hold, including its current ones.
 
         Notes
         -----
-        Requires a trained or loaded index. Reserved room is not saved.
+        Requires a trained or loaded index. Reserved room is not saved. Named
+        reserve before 0.8.5.
         """
+
+    @deprecated("IvfIndex.reserve() is deprecated since 0.8.5; use reserve_cluster()")
+    def reserve(self, cluster_id: SupportsIndex, num_points: SupportsIndex) -> None:
+        """Deprecated since 0.8.5: the same as reserve_cluster(); use reserve_cluster()."""
 
 class HnswIndex:
     """An approximate nearest-neighbor index using HNSW.
@@ -502,7 +548,8 @@ class HnswIndex:
         Vectors are not automatically normalized for cosine similarity.
     seed : int, optional
         Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
-        32 bits). Default is 100.
+        32 bits), in [0, 2**32 - 1]; larger values are deprecated since 0.8.5.
+        Default is 100.
 
     Notes
     -----
@@ -510,7 +557,7 @@ class HnswIndex:
     on a sample, or set_centroids, first to choose the training data or the
     centroids. Loaded indexes are trained, except empty files saved untrained
     by 0.7. Capacity grows automatically
-    on add; resize can preallocate it. Concurrent reads are supported; an
+    on add; reserve can preallocate it. Concurrent reads are supported; an
     overlapping mutation raises RuntimeError.
     Data, centroids and queries must be finite float32 values within the index
     coordinate range; other values raise ValueError.
@@ -565,7 +612,8 @@ class HnswIndex:
             Vectors are not automatically normalized for cosine similarity.
         seed : int, optional
             Keyword-only. Graph and rotation seed, also the initial cp.seed (its low
-            32 bits). Default is 100.
+            32 bits), in [0, 2**32 - 1]; larger values are deprecated since 0.8.5.
+            Default is 100.
 
         Notes
         -----
@@ -573,7 +621,7 @@ class HnswIndex:
         on a sample, or set_centroids, first to choose the training data or the
         centroids. Loaded indexes are trained, except empty files saved untrained
         by 0.7. Capacity grows automatically
-        on add; resize can preallocate it. Concurrent reads are supported; an
+        on add; reserve can preallocate it. Concurrent reads are supported; an
         overlapping mutation raises RuntimeError.
         Data, centroids and queries must be finite float32 values within the index
         coordinate range; other values raise ValueError.
@@ -621,8 +669,13 @@ class HnswIndex:
         """Original vector dimension."""
 
     @property
+    def capacity(self) -> int:
+        """Current storage capacity, in stored points. Named max_elements before 0.8.5."""
+
+    @property
+    @deprecated("HnswIndex.max_elements is deprecated since 0.8.5; use capacity")
     def max_elements(self) -> int:
-        """Current storage capacity."""
+        """Deprecated since 0.8.5: use capacity."""
 
     @property
     def num_points(self) -> int:
@@ -822,11 +875,13 @@ class HnswIndex:
         Removal does not reclaim storage and cannot be undone.
         """
 
+    @overload
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex | None = None,
+        ef_search: SupportsIndex | None = None,
+        *,
         num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
@@ -839,12 +894,14 @@ class HnswIndex:
         k : int
             Number of neighbors requested, at least 1. It may exceed the number of
             points; slots without a neighbor are padded as described below.
-        ef : int, optional
-            Search breadth. None or 0 (default) selects max(k, 64); values above the stored
-            point count are clamped.
+        ef_search : int, optional
+            Search breadth. None (default) selects max(k, 64); values above the stored
+            point count are clamped. 0 selects the default and is deprecated since
+            0.8.5. Named ef before 0.8.5.
         num_threads : int, optional
-            Worker count. None (default) selects 1; 0 selects the available CPU
-            count, capped by OMP_NUM_THREADS.
+            Keyword-only; passing it by position is deprecated since 0.8.5. Worker
+            count. None (default) selects 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -861,7 +918,27 @@ class HnswIndex:
         np.isfinite(distances) to find them. Array shapes
         and value ranges are checked at runtime, not by static type checkers.
         """
-
+    @overload
+    @deprecated("HnswIndex.search(ef=...) is deprecated since 0.8.5; use ef_search=")
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        *,
+        ef: SupportsIndex | None,
+        num_threads: SupportsIndex | None = None,
+    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]: ...
+    @overload
+    @deprecated(
+        "Passing num_threads to HnswIndex.search() by position is deprecated since 0.8.5; use the keyword"
+    )
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        ef_search: SupportsIndex | None,
+        num_threads: SupportsIndex | None,
+    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]: ...
     def save(self, path: _Path) -> None:
         """Save an index with stored vectors to disk.
 
@@ -893,14 +970,27 @@ class HnswIndex:
             A trained index ready for search.
         """
 
-    def resize(self, max_elements: SupportsIndex) -> None:
-        """Change the storage capacity, for example to preallocate before add.
+    def reserve(self, num_points: SupportsIndex) -> None:
+        """Preallocate room for at least num_points stored points.
 
         Parameters
         ----------
-        max_elements : int
-            New capacity; must be at least num_stored_points.
+        num_points : int
+            Nonnegative number of stored points to make room for, including the
+            current ones.
+
+        Notes
+        -----
+        Capacity only grows: a value at or below capacity changes nothing. add
+        also grows the capacity when needed, so reserve is an optimization.
         """
+
+    @deprecated(
+        "HnswIndex.resize() is deprecated since 0.8.5; use reserve(), which only "
+        "grows the capacity"
+    )
+    def resize(self, max_elements: SupportsIndex) -> None:
+        """Deprecated since 0.8.5: change the capacity; use reserve(), which only grows it."""
 
 class SymqgIndex:
     """An approximate nearest-neighbor index using SymphonyQG.
@@ -1040,8 +1130,11 @@ class SymqgIndex:
         """Original vector dimension."""
 
     @property
+    @deprecated(
+        "SymqgIndex.max_elements is deprecated since 0.8.5; use num_stored_points"
+    )
     def max_elements(self) -> int:
-        """Current storage capacity."""
+        """Deprecated since 0.8.5: use num_stored_points."""
 
     @property
     def num_points(self) -> int:
@@ -1171,11 +1264,13 @@ class SymqgIndex:
             Graph initialization method. Default is 'pipnn'.
         """
 
+    @overload
     def search(
         self,
         queries: npt.ArrayLike,
         k: SupportsIndex,
-        ef: SupportsIndex | None = None,
+        ef_search: SupportsIndex | None = None,
+        *,
         num_threads: SupportsIndex | None = None,
     ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
         """Search a batch of query vectors.
@@ -1188,12 +1283,14 @@ class SymqgIndex:
         k : int
             Number of neighbors requested, at least 1. It may exceed the number of
             points; slots without a neighbor are padded as described below.
-        ef : int, optional
-            Search breadth. None or 0 (default) selects max(k, 64); smaller values
-            are raised to k.
+        ef_search : int, optional
+            Search breadth. None (default) selects max(k, 64); smaller values
+            are raised to k. 0 selects the default and is deprecated since 0.8.5.
+            Named ef before 0.8.5.
         num_threads : int, optional
-            Worker count. None (default) selects 1; 0 selects the available CPU
-            count, capped by OMP_NUM_THREADS.
+            Keyword-only; passing it by position is deprecated since 0.8.5. Worker
+            count. None (default) selects 1; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS.
 
         Returns
         -------
@@ -1210,7 +1307,27 @@ class SymqgIndex:
         np.isfinite(distances) to find them. Array shapes and value ranges are
         checked at runtime, not by static type checkers.
         """
-
+    @overload
+    @deprecated("SymqgIndex.search(ef=...) is deprecated since 0.8.5; use ef_search=")
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        *,
+        ef: SupportsIndex | None,
+        num_threads: SupportsIndex | None = None,
+    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]: ...
+    @overload
+    @deprecated(
+        "Passing num_threads to SymqgIndex.search() by position is deprecated since 0.8.5; use the keyword"
+    )
+    def search(
+        self,
+        queries: npt.ArrayLike,
+        k: SupportsIndex,
+        ef_search: SupportsIndex | None,
+        num_threads: SupportsIndex | None,
+    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]: ...
     @deprecated("SymqgIndex.search_batch() is deprecated since 0.8; use search()")
     def search_batch(
         self,

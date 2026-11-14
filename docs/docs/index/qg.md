@@ -28,7 +28,7 @@ ids = index.add(data)  # builds the whole graph; ids are the row numbers
 index.save("qg_example.index")
 
 loaded = SymqgIndex.load("qg_example.index")
-ids, distances = loaded.search(queries, k=10, ef=100)
+ids, distances = loaded.search(queries, k=10, ef_search=100)
 ```
 
 SymphonyQG follows the same `train` → `add` → `search` workflow as the other
@@ -77,7 +77,7 @@ qg.save("qg_example.index");
 | `init` | Python keyword: `"pipnn"` (default) or `"random"`. |
 | `metric` | Python keyword: `"l2"` (default) or `"ip"`. |
 | `seed` | Python keyword: rotation and graph-construction seed in `[0, 2**32 - 1]`. The default `None` draws one at random; `index.seed` reports it, and passing it back with `num_threads=1` rebuilds the same graph from the same data. |
-| `k`, `ef` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `2**32 - 1` and distance `+inf`. Omitted or zero `ef` uses `max(k, 64)` in Python, and smaller values are raised to `k`, as for HNSW-RaBitQ. |
+| `k`, `ef_search` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `2**32 - 1` and distance `+inf`. An omitted `ef_search` uses `max(k, 64)` in Python, and smaller values are raised to `k`, as for HNSW-RaBitQ. Python named it `ef` before 0.8.5. |
 | `num_threads` | Python `add` defaults to every available logical CPU, capped by `OMP_NUM_THREADS`, and `search` to 1; `None` selects these defaults. |
 
 Python search returns `(ids, distances)` arrays. Distances are squared
@@ -180,14 +180,14 @@ do no work and may use null buffers. Inputs and outputs must not overlap.
 Concurrent searches need separate outputs; do not modify the index or call
 `set_ef()` while searches are running.
 
-Python `search(queries, k, ef=None, num_threads=None)` accepts a two-dimensional
+Python `search(queries, k, ef_search=None, *, num_threads=None)` accepts a two-dimensional
 query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. It defaults to one worker; `num_threads=0` selects the
 available logical CPU count, capped by the number of queries. The 0.7 name
 `search_batch` still works in 0.8 with a `DeprecationWarning`.
 Queries use the original dimension, including when the internal rotation pads it.
 
-Python searches use per-call `ef` values. For access rules, see the
+Python searches use per-call `ef_search` values. For access rules, see the
 [concurrency contract](usage.md#threading-and-file-paths).
 
 For C++, use

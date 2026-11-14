@@ -5,6 +5,7 @@ and adds the clustering wrappers. Import public classes from ``rabitqlib``.
 """
 
 import inspect
+import operator
 import warnings
 
 from ._rabitqlib import (
@@ -35,6 +36,29 @@ _MIGRATION = (
 _MISSING = object()
 
 
+def _is_zero(value):
+    """Whether an optional integer argument is one the extension reads as 0."""
+    if value is None or isinstance(value, (float, str, bytes)):
+        return False
+    try:
+        return operator.index(value) == 0
+    except TypeError:
+        pass
+    try:
+        # pybind11 also converts objects that only define __int__, such as
+        # numpy floating scalars.
+        return int(value) == 0
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _exceeds_32_bits(value):
+    try:
+        return operator.index(value) > 0xFFFFFFFF
+    except TypeError:
+        return False
+
+
 def _deprecated(message):
     # Called from a replacement method, so the caller of that method is two up.
     warnings.warn(f"{message}; {_MIGRATION}", DeprecationWarning, stacklevel=3)
@@ -52,7 +76,7 @@ def _bind(signature, name, args, kwargs, hint=""):
 
 
 def _ivf_signature(
-    self, dim, num_clusters, *, nbits=7, metric="l2", initializer="auto", seed=None
+    self, dim, num_clusters, *, nbits=7, metric="l2", routing="auto", seed=None
 ): ...
 
 
@@ -126,7 +150,28 @@ def _patch_ivf_init(cls):
                 _max_elements=arguments["max_elements"],
             )
             return
-        native_init(self, **_bind(signature, "IvfIndex", (self, *args), kwargs))
+        # 0.9 names the routing strategy routing; initializer is its 0.8 spelling.
+        initializer = kwargs.pop("initializer", _MISSING)
+        if initializer is not _MISSING:
+            if "routing" in kwargs:
+                raise TypeError(
+                    "IvfIndex() got both routing and its old name initializer"
+                )
+            _deprecated("IvfIndex(initializer=...) is deprecated; use routing=")
+            kwargs["routing"] = initializer
+        arguments = _bind(signature, "IvfIndex", (self, *args), kwargs)
+        arguments["initializer"] = arguments.pop("routing")
+        try:
+            native_init(self, **arguments)
+        except ValueError as error:
+            # The extension names the argument initializer; a caller who wrote
+            # routing= gets that name back.
+            message = str(error)
+            if initializer is not _MISSING or not message.startswith(
+                "initializer must be"
+            ):
+                raise
+            raise ValueError("routing" + message[len("initializer") :]) from None
 
     __init__.__doc__ = cls.__doc__
     __init__.__signature__ = signature
@@ -171,7 +216,13 @@ def _patch_hnsw_init(cls):
                 )
             _deprecated("HnswIndex(random_seed=...) is deprecated; use seed=")
             kwargs["seed"] = random_seed
-        native_init(self, **_bind(signature, "HnswIndex", (self, *args), kwargs))
+        arguments = _bind(signature, "HnswIndex", (self, *args), kwargs)
+        if _exceeds_32_bits(arguments["seed"]):
+            _deprecated(
+                "HnswIndex seeds above 2**32 - 1 are deprecated; 0.9 accepts "
+                "[0, 2**32 - 1], as the other indexes do"
+            )
+        native_init(self, **arguments)
 
     __init__.__doc__ = cls.__doc__
     __init__.__signature__ = signature
@@ -277,6 +328,7 @@ def _symqg_nbits(quantization_bits):
 
 def _patch_symqg(cls):
     native_init = cls.__init__
+    native_search = cls.search
     signature = inspect.signature(_symqg_signature)
     legacy_signature = inspect.signature(_symqg_legacy_signature)
 
@@ -345,7 +397,7 @@ def _patch_symqg(cls):
     def search_batch(self, queries, k, ef, num_threads=1):
         """Deprecated since 0.8: the same as search(); use search()."""
         _deprecated("SymqgIndex.search_batch() is deprecated; use search()")
-        return self.search(queries, k, ef, num_threads)
+        return native_search(self, queries, k, ef, num_threads)
 
     def quantization_bits(self):
         """Deprecated since 0.8: storage bits with 0 for raw vectors; use nbits."""
@@ -377,6 +429,305 @@ for _cls in (IvfIndex, HnswIndex):
 del _cls
 _patch_symqg(SymqgIndex)
 # --- end of the 0.8 compatibility layer -------------------------------------
+
+
+# --- 0.9 names; the 0.8 spellings they replace are removed in 0.9 -----------
+# 0.9 renames these members and arguments (issue #232). This release accepts both
+# spellings and warns on the old one. The extension classes still carry the 0.8
+# names, so the new ones are added here, again by replacing members on the classes.
+
+
+def _member(cls, function, name=None):
+    """function named as a member of cls, so errors and help() show the class."""
+    if name is not None:
+        function.__name__ = name
+    function.__qualname__ = f"{cls.__name__}.{function.__name__}"
+    function.__module__ = cls.__module__
+    return function
+
+
+def _renamed_property(cls, old, new, new_doc, replacement):
+    """Add property new for the native property old, which then warns."""
+    native = vars(cls)[old]
+    name = cls.__name__
+
+    def current(self):
+        return native.__get__(self, cls)
+
+    def former(self):
+        _deprecated(f"{name}.{old} is deprecated; use {replacement}")
+        return native.__get__(self, cls)
+
+    _member(cls, former, old)
+    if new is not None:
+        _member(cls, current, new)
+        setattr(cls, new, property(current, doc=new_doc))
+    setattr(
+        cls,
+        old,
+        property(former, doc=f"Deprecated since 0.8.5: use {replacement}."),
+    )
+
+
+def _options_from_positions(name, options, args, kwargs):
+    if len(args) > len(options):
+        raise TypeError(
+            f"{name}.search() takes at most {len(options) + 2} positional "
+            f"arguments ({len(args) + 2} given)"
+        )
+    for option, value in zip(options, args, strict=False):
+        if option in kwargs:
+            raise TypeError(
+                f"{name}.search() got multiple values for argument {option!r}"
+            )
+        kwargs[option] = value
+
+
+def _edited(documentation, replacements):
+    """A docstring with replacements applied; fails if the native text moved."""
+    for old, new in replacements:
+        if old not in documentation:
+            raise AssertionError(f"native documentation changed: {old!r}")
+        documentation = documentation.replace(old, new)
+    return documentation
+
+
+def _redocumented(native, replacements):
+    """The native docstring without pybind11's signature line, with edits applied."""
+    return _edited(native.__doc__.split("\n\n", 1)[1], replacements)
+
+
+_THREADS_DOC = (
+    "    Worker count. None (default) selects 1; 0 selects the available CPU\n"
+    "    count, capped by OMP_NUM_THREADS.",
+    "    Keyword-only; passing it by position is deprecated since 0.8.5. Worker\n"
+    "    count. None (default) selects 1; 0 selects the available CPU count,\n"
+    "    capped by OMP_NUM_THREADS.",
+)
+
+
+def _ivf_search_signature(
+    self, queries, k, nprobe=None, *, high_accuracy=None, num_threads=None
+): ...
+
+
+def _graph_search_signature(self, queries, k, ef_search=None, *, num_threads=None): ...
+
+
+def _patch_ivf_names(cls):
+    native_reserve = cls.reserve
+    native_search = cls.search
+    options = ("nprobe", "high_accuracy", "num_threads")
+
+    def reserve_cluster(self, cluster_id, num_points):
+        """Preallocate storage for a cluster.
+
+        Parameters
+        ----------
+        cluster_id : int
+            Cluster ID in [0, num_clusters).
+        num_points : int
+            Nonnegative capacity to reserve for this cluster: the total number
+            of points it can hold, including its current ones.
+
+        Notes
+        -----
+        Requires a trained or loaded index. Reserved room is not saved. Named
+        reserve before 0.8.5.
+        """
+        try:
+            native_reserve(self, cluster_id, num_points)
+        except RuntimeError as error:
+            # The extension still names the operation reserve.
+            if not str(error).endswith("before reserve"):
+                raise
+            raise RuntimeError(f"{error}_cluster") from None
+
+    def reserve(self, cluster_id, num_points):
+        """Deprecated since 0.8.5: the same as reserve_cluster(); use reserve_cluster()."""
+        _deprecated("IvfIndex.reserve() is deprecated; use reserve_cluster()")
+        native_reserve(self, cluster_id, num_points)
+
+    def search(self, queries, k, *args, **kwargs):
+        _options_from_positions("IvfIndex", options, args, kwargs)
+        if len(args) > 1:
+            _deprecated(
+                f"passing {', '.join(options[1 : len(args)])} to IvfIndex.search() "
+                "by position is deprecated; use keywords"
+            )
+        if _is_zero(kwargs.get("nprobe")):
+            _deprecated(
+                "IvfIndex.search(nprobe=0) is deprecated; pass None, or omit nprobe, "
+                "for the default"
+            )
+        return native_search(self, queries, k, **kwargs)
+
+    search.__doc__ = _redocumented(
+        native_search,
+        [
+            (
+                "    Number of clusters to probe, capped at num_clusters. None (default) and\n"
+                "    0 select num_clusters / 16, rounded to the nearest integer and at least 1.",
+                "    Number of clusters to probe, capped at num_clusters. None (default)\n"
+                "    selects num_clusters / 16, rounded to the nearest integer and at least\n"
+                "    1; 0 does the same and is deprecated since 0.8.5.",
+            ),
+            (
+                "    Enable HACC. None (default) selects it for 4-9 bits and standard\n"
+                "    FastScan otherwise. Raw storage uses standard FastScan.",
+                "    Keyword-only; passing it by position is deprecated since 0.8.5.\n"
+                "    Enable HACC. None (default) selects it for 4-9 bits and standard\n"
+                "    FastScan otherwise. Raw storage uses standard FastScan.",
+            ),
+            _THREADS_DOC,
+        ],
+    )
+    search.__signature__ = inspect.signature(_ivf_search_signature)
+    cls.__doc__ = _edited(
+        cls.__doc__,
+        [
+            (
+                "initializer : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional\n"
+                "    Centroid routing strategy. Default is 'auto'.",
+                "routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional\n"
+                "    Centroid routing strategy. Default is 'auto'. Named initializer\n"
+                "    before 0.8.5.",
+            )
+        ],
+    )
+    cls.__init__.__doc__ = cls.__doc__
+    cls.add.__doc__ = _edited(
+        cls.add.__doc__,
+        [
+            ("reserve can preallocate room.", "reserve_cluster can preallocate room."),
+            (
+                "index's configured centroid initializer; routing may be approximate.",
+                "index's configured routing strategy, which may be approximate.",
+            ),
+        ],
+    )
+    cls.reserve_cluster = _member(cls, reserve_cluster)
+    cls.reserve = _member(cls, reserve)
+    cls.search = _member(cls, search)
+    _renamed_property(
+        cls,
+        "initializer",
+        "routing",
+        "Resolved centroid routing strategy. Named initializer before 0.8.5.",
+        "routing",
+    )
+    _renamed_property(cls, "max_elements", None, None, "num_stored_points")
+
+
+def _patch_graph_search(cls, breadth_doc):
+    native_search = cls.search
+    name = cls.__name__
+    options = ("ef_search", "num_threads")
+
+    def search(self, queries, k, *args, **kwargs):
+        _options_from_positions(name, options, args, kwargs)
+        if "ef" in kwargs and "ef_search" in kwargs:
+            raise TypeError(f"{name}.search() got both ef_search and its old name ef")
+        if len(args) == len(options):
+            _deprecated(
+                f"passing num_threads to {name}.search() by position is deprecated; "
+                "use the keyword"
+            )
+        if "ef" in kwargs:
+            _deprecated(f"{name}.search(ef=...) is deprecated; use ef_search=")
+            kwargs["ef_search"] = kwargs.pop("ef")
+        ef_search = kwargs.pop("ef_search", None)
+        if _is_zero(ef_search):
+            _deprecated(
+                f"{name}.search(ef_search=0) is deprecated; pass None, or omit "
+                "ef_search, for the default"
+            )
+        return native_search(self, queries, k, ef_search, **kwargs)
+
+    search.__doc__ = _redocumented(native_search, [breadth_doc, _THREADS_DOC])
+    search.__signature__ = inspect.signature(_graph_search_signature)
+    cls.search = _member(cls, search)
+
+
+def _patch_hnsw_names(cls):
+    native_resize = cls.resize
+    native_max_elements = vars(cls)["max_elements"]
+
+    def reserve(self, num_points):
+        """Preallocate room for at least num_points stored points.
+
+        Parameters
+        ----------
+        num_points : int
+            Nonnegative number of stored points to make room for, including the
+            current ones.
+
+        Notes
+        -----
+        Capacity only grows: a value at or below capacity changes nothing. add
+        also grows the capacity when needed, so reserve is an optimization.
+        """
+        needed = operator.index(num_points)
+        if needed < 0:
+            raise ValueError("num_points must be non-negative")
+        if needed > native_max_elements.__get__(self, cls):
+            native_resize(self, needed)
+
+    def resize(self, max_elements):
+        """Deprecated since 0.8.5: change the capacity; use reserve(), which only grows it."""
+        _deprecated(
+            "HnswIndex.resize() is deprecated; use reserve(), which only grows the "
+            "capacity"
+        )
+        native_resize(self, max_elements)
+
+    cls.__doc__ = _edited(
+        cls.__doc__,
+        [
+            ("resize can preallocate it.", "reserve can preallocate it."),
+            (
+                "32 bits). Default is 100.",
+                "32 bits), in [0, 2**32 - 1]; larger values are deprecated since\n"
+                "    0.8.5. Default is 100.",
+            ),
+        ],
+    )
+    cls.__init__.__doc__ = cls.__doc__
+    cls.reserve = _member(cls, reserve)
+    cls.resize = _member(cls, resize)
+    _renamed_property(
+        cls,
+        "max_elements",
+        "capacity",
+        "Current storage capacity, in stored points. Named max_elements before 0.8.5.",
+        "capacity",
+    )
+
+
+_patch_ivf_names(IvfIndex)
+_patch_hnsw_names(HnswIndex)
+_renamed_property(SymqgIndex, "max_elements", None, None, "num_stored_points")
+_patch_graph_search(
+    HnswIndex,
+    (
+        "ef : int, optional\n    Search breadth. None or 0 (default) selects max(k, 64); values above the stored\n"
+        "    point count are clamped.",
+        "ef_search : int, optional\n    Search breadth. None (default) selects max(k, 64); values above the stored\n"
+        "    point count are clamped. 0 selects the default and is deprecated since\n"
+        "    0.8.5. Named ef before 0.8.5.",
+    ),
+)
+_patch_graph_search(
+    SymqgIndex,
+    (
+        "ef : int, optional\n    Search breadth. None or 0 (default) selects max(k, 64); smaller values\n"
+        "    are raised to k.",
+        "ef_search : int, optional\n    Search breadth. None (default) selects max(k, 64); smaller values\n"
+        "    are raised to k. 0 selects the default and is deprecated since 0.8.5.\n"
+        "    Named ef before 0.8.5.",
+    ),
+)
+# --- end of the 0.9 names ----------------------------------------------------
 
 
 class _KMeans:

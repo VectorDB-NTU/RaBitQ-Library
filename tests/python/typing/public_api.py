@@ -59,8 +59,8 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(IvfIndex.load("index.bin"), IvfIndex)
     assert_type(HnswIndex.load("index.bin"), HnswIndex)
     assert_type(SymqgIndex.load("index.bin"), SymqgIndex)
-    ivf.reserve(0, 128)
-    hnsw.resize(256)
+    ivf.reserve_cluster(0, 128)
+    hnsw.reserve(256)
     qg = QGKMeans(64, 40, niter=2, quantization_bits=4)
     flat = RaBitQKMeans(64, 2, final_assignment=FinalAssignmentMode.Exact)
     assert_type(qg.cp, QGKMeansParameters)
@@ -79,11 +79,11 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
         if model.iteration_stats is not None:
             assert_type(model.iteration_stats[0], QGKMeansIterationStats)
     qg.cp.final_assignment = FinalAssignmentMode.Approximate
-    ivf.search(x, "five", 2)  # type: ignore[arg-type]
+    ivf.search(x, "five", 2)  # type: ignore[call-overload]
     ivf.dim = 16  # type: ignore[misc]
     qg.cp.niter = "two"  # type: ignore[assignment]
     RaBitQKMeans(64, 2, graph_degree=32)  # type: ignore[call-arg]
-    hnsw.search(x, 5, nprobe=2)  # type: ignore[call-arg]
+    hnsw.search(x, 5, nprobe=2)  # type: ignore[call-overload]
     IvfIndex(64, 2, 4)  # type: ignore[call-overload]
     hnsw.train(x, 1)  # type: ignore[call-arg]
 
@@ -131,14 +131,14 @@ def check_numpy_scalars() -> None:
         )
         assert_type(index.dim, int)
         assert type(index.dim) is int
-    ivf.reserve(np.uint32(0), np.int64(100))
+    ivf.reserve_cluster(np.uint32(0), np.int64(100))
     ids, distances = ivf.search(
         x[:2], k=np.int64(3), nprobe=np.int64(1), high_accuracy=np.bool_(True)
     )
     assert_type(ids, npt.NDArray[np.uint32])
     assert_type(distances, npt.NDArray[np.float32])
-    hnsw.resize(np.int64(100))
-    hnsw.search(x[:2], np.int64(3), ef=np.int64(10))
+    hnsw.reserve(np.int64(100))
+    hnsw.search(x[:2], np.int64(3), ef_search=np.int64(10))
     graph.add(x, num_threads=np.int64(1))
     graph.search(x[:2], np.int64(3), np.int64(10))
     flat = RaBitQKMeans(
@@ -195,14 +195,14 @@ def check_input_contracts() -> None:
         ivf = IvfIndex(64, 1, nbits=4, metric=metric)
         HnswIndex(64, nbits=4, metric=metric)
         SymqgIndex(64, metric=metric)
-    initializers: tuple[Literal["auto", "flat", "flat_rabitq", "hnsw"], ...] = (
+    routings: tuple[Literal["auto", "flat", "flat_rabitq", "hnsw"], ...] = (
         "auto",
         "flat",
         "flat_rabitq",
         "hnsw",
     )
-    for initializer in initializers:
-        IvfIndex(64, 1, nbits=4, initializer=initializer)
+    for routing in routings:
+        IvfIndex(64, 1, nbits=4, routing=routing)
     for ids in (signed, unsigned, [0] * 80, (0,) * 80):
         ivf = IvfIndex(64, 1, nbits=4)
         ivf.set_centroids(centroids, num_threads=1)
@@ -226,7 +226,7 @@ def check_input_contracts() -> None:
         graph = SymqgIndex(64, ef_construction=40, init=init)
         graph.add(x)
     # Returned option values must be usable as inputs without casts.
-    IvfIndex(64, 1, nbits=4, metric=ivf.metric, initializer=ivf.initializer)
+    IvfIndex(64, 1, nbits=4, metric=ivf.metric, routing=ivf.routing)
 
 
 def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
@@ -239,7 +239,7 @@ def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
     IvfIndex(64, 1, nbits=4, metric="cosine")  # type: ignore[call-overload]
     HnswIndex(64, nbits=4, metric="L2")  # type: ignore[call-overload]
     SymqgIndex(64, metric="inner_product")  # type: ignore[call-overload]
-    IvfIndex(64, 1, nbits=4, initializer="flat_rabit")  # type: ignore[call-overload]
+    IvfIndex(64, 1, nbits=4, routing="flat_rabit")  # type: ignore[call-overload]
     SymqgIndex(64, init="pippn")  # type: ignore[call-overload]
     graph.add(x, 1)  # type: ignore[call-arg]
     ivf.add(x, cluster_ids=[0.0] * 80)  # type: ignore[list-item]

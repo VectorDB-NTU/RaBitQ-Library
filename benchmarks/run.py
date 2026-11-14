@@ -120,7 +120,7 @@ def build_index(cfg, base, path):
         from rabitqlib import IvfIndex
 
         # The library's default training: QGKMeans above 2,000 clusters, then add
-        # routes each vector with the index's centroid initializer.
+        # routes each vector with the index's routing strategy.
         index = IvfIndex(
             dim, cfg["nlist"], nbits=cfg["bits"], metric=cfg["metric"], seed=42
         )
@@ -167,7 +167,7 @@ def build_index(cfg, base, path):
             metric=cfg["metric"],
             seed=42,
         )
-        index.resize(n)
+        index.reserve(n)
         index.set_centroids(kmeans.centroids)
         index.add(base, cluster_ids=kmeans.assignments, num_threads=cfg["threads"])
         indexing_s = time.perf_counter() - stage_start
@@ -259,7 +259,9 @@ def search(index, cfg, queries, threads):
     if method == "rabitq-ivf":
         return index.search(queries, k=k, nprobe=cfg["nprobe"], num_threads=threads)
     if method in ("rabitq-hnsw", "rabitq-symqg"):
-        return index.search(queries, k=k, ef=cfg["ef_search"], num_threads=threads)
+        return index.search(
+            queries, k=k, ef_search=cfg["ef_search"], num_threads=threads
+        )
     raise ValueError(f"unsupported benchmark method: {method}")
 
 
