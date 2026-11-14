@@ -18,8 +18,8 @@ Run the [Quick start](../quick_start.md#build-and-search-an-ivf-index) to prepar
 ```python
 from rabitqlib import HnswIndex
 
-index = HnswIndex(data.shape[1], M=16, ef_construction=100)  # nbits=7 by default
-index.add(data, num_threads=1)  # trains 16 centroids, then links; 1 thread is reproducible
+index = HnswIndex(data.shape[1], M=16, ef_construction=100, seed=7)  # nbits=7 by default
+index.add(data, num_threads=1)  # trains 16 centroids, then links; a seed and 1 thread are reproducible
 ids, distances = index.search(queries, k=10)  # ef_search defaults to max(k, 64)
 index.save("hnsw.index")
 loaded = HnswIndex.load("hnsw.index")
@@ -31,7 +31,7 @@ The first `add` trains an untrained index on the added vectors, as for
 the row count. An empty first `add` raises `RuntimeError`.
 `train` and `set_centroids` work as for [IVF-RaBitQ](ivf.md#training-centroids-in-python),
 with `num_clusters` centroids (default 16) and always RaBitQKMeans; `index.cp`
-starts from the same defaults with `seed`'s low 32 bits. The first `add` into the
+starts from the same defaults with the index `seed`. The first `add` into the
 empty index links vectors with their exact coordinates, like the 0.7 `build`;
 later adds link through the stored codes (see [Recall after `add`](#recall-after-add)),
 so add most vectors in the first call.
@@ -70,15 +70,16 @@ see [C++ integration](../cpp_integration.md).
 | `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
 | `num_clusters` | Python keyword, default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
 | `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
-| `metric`, `seed` | Python defaults are `"l2"` and 100; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` was called `random_seed` before 0.8. A seed is in `[0, 2**32 - 1]`; larger values are deprecated since 0.8.5, and 0.9 draws a seed when it is omitted. |
-| `capacity` (C++ `max_elements()`) | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `reserve` can preallocate; they were named `max_elements` and `resize` before 0.8.5. C++ `add` never grows it. |
-| `k`, `ef_search` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. An omitted or `None` `ef_search` uses `max(k, 64)` in Python (0 does the same and is deprecated since 0.8.5), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. Python named it `ef` before 0.8.5. |
+| `metric`, `seed` | `metric` defaults to `"l2"` in Python; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` is the graph and rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random (it was 100 before 0.9); `index.seed` reports it. |
+| `capacity` (C++ `max_elements()`) | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `reserve` can preallocate; they replace `max_elements` and `resize`, which 0.9 removed. C++ `add` never grows it. |
+| `k`, `ef_search` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. An omitted or `None` `ef_search` uses `max(k, 64)` in Python (0 raises `ValueError`), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. It replaces `ef`, which 0.9 removed. |
 
 `seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
-within the same build environment. Python `train` and `add` default to every
-available CPU, so **default builds are not reproducible**: pass `num_threads=1` to
-`add` when you need the same graph again. Different toolchains or SIMD backends can
+within the same build environment. Python draws a seed unless `seed=` is given, and
+`train` and `add` default to every available CPU, so **default builds are not
+reproducible**: pass `seed=` to the constructor and `num_threads=1` to `add` when you
+need the same graph again. Different toolchains or SIMD backends can
 still change results. Loading restores the saved rotation.
 
 Results use squared L2 or `1 - dot` estimates, ordered from smallest to largest.
@@ -234,8 +235,8 @@ records still occupy capacity.
 C++ `add` never grows the index: it rejects a whole batch whose size exceeds
 `max_elements() - num_stored_points()`, and `resize` is the only way to raise
 that. Python `add` grows the capacity first when the batch does not fit, to at least
-double it, and `reserve(num_points)` preallocates it (since 0.8.5; `resize` still works,
-with a `DeprecationWarning`, until 0.9, and `capacity` replaces `max_elements`). Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
+double it, and `reserve(num_points)` preallocates it; `reserve` never shrinks the
+capacity. Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.
 
@@ -282,7 +283,7 @@ exclusive access as other updates.
 Removed points still take slots in the `ef_search` candidate set, so a search with
 `ef_search` close to `k` finds fewer live points as removals accumulate. C++ search
 uses `max(ef_search, k)`, clamped to `num_stored_points()`. Python uses `max(k, 64)`
-when `ef_search` is omitted (it was named `ef` before 0.8.5); an explicit value is also raised to at least `k`,
+when `ef_search` is omitted; an explicit value is also raised to at least `k`,
 and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points (search clamps the result to

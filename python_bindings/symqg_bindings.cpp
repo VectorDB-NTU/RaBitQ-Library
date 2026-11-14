@@ -58,11 +58,10 @@ class SymqgIndex {
         }
         quantization_bits_ = nbits == 32 ? 0 : nbits;
         check_construction(ef_construction, init);
-        seed_given_ = !seed.is_none();
-        seed_ = seed_given_ ? static_cast<uint32_t>(
-                                  checked_seed(seed, std::numeric_limits<uint32_t>::max())
-                              )
-                            : random_seed();
+        seed_ = seed.is_none() ? std::random_device{}()
+                               : static_cast<uint32_t>(checked_seed(
+                                     seed, std::numeric_limits<uint32_t>::max()
+                                 ));
     }
 
     // SymphonyQG learns nothing before add: train only checks x as add would, so
@@ -85,8 +84,7 @@ class SymqgIndex {
                 "and add all vectors at once"
             );
         }
-        // Only a loaded index lacks these settings, and it is already built.
-        build_graph(data, *ef_construction_, num_threads.value_or(0), *init_, *seed_);
+        build_graph(data, num_threads.value_or(0));
         // Point IDs are the row numbers of data.
         const size_t rows = index_->num_points();
         auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
@@ -94,34 +92,20 @@ class SymqgIndex {
         return ids;
     }
 
-    // Deprecated: the 0.7 build, which replaces any existing graph. Without a
-    // user seed, each build draws a new one, as 0.7 did.
-    void build(
-        py::handle data, size_t ef_construction, size_t num_threads, const std::string& init
-    ) {
-        const auto operation = access_.write();
-        check_construction(ef_construction, init);
-        const uint32_t seed = seed_given_ ? *seed_ : random_seed();
-        build_graph(data, ef_construction, num_threads, init, seed);
-        ef_construction_ = ef_construction;
-        init_ = init;
-        seed_ = seed;
-    }
-
     py::tuple search(
         py::handle queries,
         size_t k,
-        std::optional<size_t> ef,
+        std::optional<size_t> ef_search,
         std::optional<size_t> num_threads
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
         check_built("search");
-        check_k(k);
-        // As in HnswIndex: no or zero ef selects max(k, 64), and ef is at least k.
-        const size_t ef_search =
-            std::max(ef.value_or(0) == 0 ? std::max<size_t>(k, 64) : *ef, k);
         ensure_dimension(query_array, dim_, "query dimension does not match index dim");
+        check_k(k);
+        check_ef_search(ef_search);
+        // As in HnswIndex, None selects max(k, 64); a smaller breadth is raised to k.
+        const size_t search_breadth = std::max(ef_search.value_or(64), k);
 
         const size_t num_queries = static_cast<size_t>(query_array.shape(0));
         auto output = unfilled_search_results(num_queries, k);
@@ -136,7 +120,7 @@ class SymqgIndex {
                 static_cast<uint32_t>(k),
                 ids_data,
                 distances_data,
-                ef_search,
+                search_breadth,
                 num_threads.value_or(1)
             );
         }
@@ -207,10 +191,6 @@ class SymqgIndex {
         const auto operation = access_.read();
         return built() ? index_->num_stored_points() : 0;
     }
-    [[nodiscard]] size_t max_elements() const {
-        const auto operation = access_.read();
-        return built() ? index_->max_elements() : 0;
-    }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
         return metric_to_string(metric_type_);
@@ -218,10 +198,6 @@ class SymqgIndex {
     [[nodiscard]] size_t nbits_property() const {
         const auto operation = access_.read();
         return nbits();
-    }
-    [[nodiscard]] size_t quantization_bits() const {
-        const auto operation = access_.read();
-        return quantization_bits_;
     }
     [[nodiscard]] std::optional<uint32_t> seed() const {
         const auto operation = access_.read();
@@ -232,8 +208,6 @@ class SymqgIndex {
     static constexpr size_t kDefaultEfConstruction = 200;
 
     SymqgIndex() = default;
-
-    static uint32_t random_seed() { return std::random_device{}(); }
 
     static void check_max_degree(size_t max_degree) {
         if (max_degree == 0 || max_degree % fastscan::kBatchSize != 0) {
@@ -262,15 +236,11 @@ class SymqgIndex {
         }
     }
 
-    // Build a new graph from data; a failure keeps the previous one. Requires the
-    // write guard.
-    void build_graph(
-        py::handle data,
-        size_t ef_construction,
-        size_t num_threads,
-        const std::string& init,
-        uint32_t seed
-    ) {
+    // Build the graph from data with the constructor's settings; a failure leaves
+    // the index without one. Only a loaded index lacks those settings, and it
+    // already has a graph. Requires the write guard.
+    void build_graph(py::handle data, size_t num_threads) {
+        const uint32_t seed = *seed_;
         auto data_array = ensure_2d_array<float>(data, "data");
         ensure_dimension(data_array, dim_, "data dimension does not match index dim");
 
@@ -285,14 +255,14 @@ class SymqgIndex {
             seed
         );
 
-        const auto initialization = init == "pipnn" ? symqg::QGInitialization::PiPNN
-                                                    : symqg::QGInitialization::Random;
+        const auto initialization = *init_ == "pipnn" ? symqg::QGInitialization::PiPNN
+                                                      : symqg::QGInitialization::Random;
         const auto* data_ptr = data_array.data();
         {
             py::gil_scoped_release release;
             symqg::QGBuilder builder(
                 *index,
-                static_cast<uint32_t>(ef_construction),
+                static_cast<uint32_t>(*ef_construction_),
                 data_ptr,
                 num_threads,
                 initialization,
@@ -317,7 +287,6 @@ class SymqgIndex {
     std::optional<size_t> ef_construction_ = kDefaultEfConstruction;
     std::optional<std::string> init_ = "pipnn";
     std::optional<uint32_t> seed_;  // Unknown for files from releases up to 0.8.
-    bool seed_given_ = false;       // The user chose the seed.
     mutable IndexAccess access_;
     std::unique_ptr<symqg::QuantizedGraph<float>> index_;
 };
@@ -362,9 +331,6 @@ vectors before searching or saving. Concurrent reads are supported; an
 overlapping mutation raises RuntimeError.
 Data and queries must be finite float32 values within the index coordinate
 range; other values raise ValueError.
-The 0.7 forms SymqgIndex(dim, max_degree, metric, quantization_bits),
-quantization_bits=, build() and search_batch() still work in 0.8, raise
-DeprecationWarning, and will be removed in 0.9.
 
 Examples
 --------
@@ -387,12 +353,12 @@ queries : array_like of float, shape (n_queries, dim)
 k : int
     Number of neighbors requested, at least 1. It may exceed the number of
     points; slots without a neighbor are padded as described below.
-ef : int, optional
-    Search breadth. None or 0 (default) selects max(k, 64); smaller values
-    are raised to k.
+ef_search : int, optional
+    Search breadth, at least 1. None (default) selects max(k, 64); smaller
+    values are raised to k.
 num_threads : int, optional
-    Worker count. None (default) selects 1; 0 selects the available CPU
-    count, capped by OMP_NUM_THREADS.
+    Keyword-only. Worker count. None (default) selects 1; 0 selects the
+    available CPU count, capped by OMP_NUM_THREADS.
 
 Returns
 -------
@@ -482,19 +448,12 @@ call, or create a new index to rebuild. Point IDs are the row numbers of
 data. Input arrays need not be retained after this synchronous call.)doc"
         )
         .def(
-            "_build",
-            &SymqgIndex::build,
-            py::arg("data"),
-            py::arg("ef_construction"),
-            py::arg("num_threads"),
-            py::arg("init")
-        )
-        .def(
             "search",
             &SymqgIndex::search,
             py::arg("queries"),
             py::arg("k"),
-            py::arg("ef") = py::none(),
+            py::arg("ef_search") = py::none(),
+            py::kw_only(),
             py::arg("num_threads") = py::none(),
             kSearchDoc
         )
@@ -569,9 +528,6 @@ index : SymqgIndex
             R"doc(Number of stored points, including removed points.)doc"
         )
         .def_property_readonly(
-            "max_elements", &SymqgIndex::max_elements, R"doc(Current storage capacity.)doc"
-        )
-        .def_property_readonly(
             "is_trained",
             [](const SymqgIndex&) { return true; },
             R"doc(Always True: SymphonyQG needs no training.)doc"
@@ -586,7 +542,6 @@ index : SymqgIndex
             &SymqgIndex::nbits_property,
             R"doc(Storage bits: 32 for raw float32, or 4 or 8 for RaBitQ.)doc"
         )
-        .def_property_readonly("_quantization_bits", &SymqgIndex::quantization_bits)
         .def_property_readonly(
             "seed",
             &SymqgIndex::seed,
