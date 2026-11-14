@@ -1,16 +1,25 @@
 """The 0.8 spellings that 0.9 renames: both work in 0.8.5, and the old one warns."""
 
+import _thread
 import inspect
+import pickle
+import sys
+import time
 import warnings
 
 import numpy as np
 import pytest
+import rabitqlib
 from conftest import DIM
-from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
+from rabitqlib import HnswIndex, IvfIndex, QGKMeans, RaBitQKMeans, SymqgIndex
 
 
-def single_deprecation(call):
-    """Run call and return its result and its one DeprecationWarning."""
+def single_deprecation(call, at=None):
+    """Run call and return its result and its one DeprecationWarning.
+
+    The warning must point at the code that used the old form: the lines of call,
+    or of the helper function at when call reaches the old form through it.
+    """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = call()
@@ -19,6 +28,10 @@ def single_deprecation(call):
     ]
     # Attributed to the caller, so users see their own line.
     assert caught[0].filename == __file__
+    lines = [
+        line for _, _, line in (at or call).__code__.co_lines() if line is not None
+    ]
+    assert min(lines) <= caught[0].lineno <= max(lines), (caught[0].lineno, lines)
     assert "python_migration" in str(caught[0].message)
     return result, str(caught[0].message)
 
@@ -360,3 +373,325 @@ def test_new_members_are_documented():
     assert "reserve can preallocate it" in HnswIndex.__doc__
     assert "reserve_cluster can preallocate room" in IvfIndex.add.__doc__
     assert "centroid initializer" not in IvfIndex.add.__doc__
+
+
+# --- k-means: the names of issue #233 -----------------------------------------
+
+
+def qg_kmeans(**parameters):
+    return QGKMeans(DIM, 80, niter=2, num_threads=1, seed=1, **parameters)
+
+
+def test_qgkmeans_takes_the_index_parameter_names(base_data):
+    new = silently(lambda: qg_kmeans(nbits=4, max_degree=64, ef_construction=100))
+    assert (new.cp.nbits, new.cp.max_degree, new.cp.ef_construction) == (4, 64, 100)
+    for keyword, value, hint, current in (
+        ("quantization_bits", 4, "use nbits=, with 32 instead of 0", "nbits"),
+        ("graph_degree", 64, "use max_degree=", "max_degree"),
+        ("ef_build", 100, "use ef_construction=", "ef_construction"),
+    ):
+        model, message = single_deprecation(
+            lambda keyword=keyword, value=value: qg_kmeans(**{keyword: value}),
+            at=qg_kmeans,
+        )
+        assert message.startswith(f"QGKMeans({keyword}=...) is deprecated; {hint}")
+        # The old keyword reaches the same setting, which differs from its default.
+        assert (
+            getattr(model.cp, current)
+            == value
+            != getattr(QGKMeans(DIM, 80).cp, current)
+        )
+        with pytest.raises(
+            TypeError,
+            match=f"^QGKMeans\\(\\) got both {current} and its old name {keyword}$",
+        ):
+            silently(
+                lambda keyword=keyword, value=value, current=current: qg_kmeans(
+                    **{keyword: value, current: value}
+                )
+            )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        old = qg_kmeans(quantization_bits=4, graph_degree=64, ef_build=100)
+    new.train(base_data)
+    old.train(base_data)
+    np.testing.assert_array_equal(new.centroids, old.centroids)
+    np.testing.assert_array_equal(new.assignments, old.assignments)
+
+
+def test_qgkmeans_nbits_uses_32_for_raw_vectors():
+    assert silently(lambda: QGKMeans(DIM, 80).cp.nbits) == 32
+    for nbits, stored in ((32, 0), (4, 4), (8, 8), (np.int64(32), 0)):
+        model = silently(lambda nbits=nbits: qg_kmeans(nbits=nbits))
+        assert model.cp.nbits == nbits
+        with pytest.warns(DeprecationWarning, match="use nbits"):
+            assert model.cp.quantization_bits == stored
+    raw, _ = single_deprecation(lambda: qg_kmeans(quantization_bits=0), at=qg_kmeans)
+    assert raw.cp.nbits == 32
+    for invalid in (0, 16, 33, True):
+        with pytest.raises(ValueError, match="^nbits must be 4, 8, or 32$"):
+            qg_kmeans(nbits=invalid)
+        with pytest.raises(ValueError, match="^nbits must be 4, 8, or 32$"):
+            QGKMeans(DIM, 80).cp.nbits = invalid
+    with pytest.raises(TypeError, match="could not convert parameter 'nbits'"):
+        qg_kmeans(nbits="4")
+
+
+def test_qgkmeans_parameter_attributes_are_renamed():
+    cp = QGKMeans(DIM, 80).cp
+    for old, new, value in (
+        ("graph_degree", "max_degree", 64),
+        ("ef_build", "ef_construction", 100),
+        ("quantization_bits", "nbits", 8),
+    ):
+        silently(lambda new=new, value=value: setattr(cp, new, value))
+        assert silently(lambda new=new: getattr(cp, new)) == value
+        read, message = single_deprecation(lambda old=old: getattr(cp, old))
+        assert read == value
+        assert message.startswith(f"QGKMeansParameters.{old} is deprecated; use {new}")
+        _, message = single_deprecation(
+            lambda old=old: setattr(cp, old, 4 if new == "nbits" else 32)
+        )
+        assert message.startswith(f"QGKMeansParameters.{old} is deprecated; use {new}")
+        assert getattr(cp, new) == (4 if new == "nbits" else 32)
+    for name in ("nbits", "max_degree", "ef_construction", "graph_degree"):
+        with pytest.raises(AttributeError, match="unexpected keyword argument"):
+            RaBitQKMeans(DIM, 4, **{name: 32})
+
+
+@pytest.mark.parametrize("cls", [QGKMeans, RaBitQKMeans])
+def test_final_assignment_takes_a_string(cls, base_data):
+    def trained(final_assignment):
+        model = cls(
+            DIM, 80, niter=2, num_threads=1, seed=1, final_assignment=final_assignment
+        )
+        model.train(base_data)
+        return model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        modes = rabitqlib.FinalAssignmentMode
+    for text, member in (("exact", modes.Exact), ("approximate", modes.Approximate)):
+        by_text = silently(lambda text=text: trained(text))
+        # A member is still accepted, silently: its name warned where it was read.
+        by_member = silently(lambda member=member: trained(member))
+        assert by_text.cp.final_assignment == member  # reads back as the member
+        np.testing.assert_array_equal(by_text.assignments, by_member.assignments)
+        np.testing.assert_array_equal(by_text.distances, by_member.distances)
+        cp = cls(DIM, 80).cp
+        silently(lambda cp=cp, text=text: setattr(cp, "final_assignment", text))
+        assert cp.final_assignment == member
+    for invalid in ("Exact", "EXACT", "", "symphonyqg"):
+        with pytest.raises(
+            ValueError, match="^final_assignment must be 'approximate' or 'exact'$"
+        ):
+            cls(DIM, 80, final_assignment=invalid)
+    with pytest.raises(
+        TypeError, match="could not convert parameter 'final_assignment'"
+    ):
+        cls(DIM, 80, final_assignment=1)
+
+
+def test_index_training_parameters_take_the_string(base_data):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        modes = rabitqlib.FinalAssignmentMode
+    for index in (IvfIndex(DIM, 8, seed=3), HnswIndex(DIM, num_clusters=8, seed=3)):
+        for value, member in (
+            ("exact", modes.Exact),
+            ("approximate", modes.Approximate),
+            (modes.Exact, modes.Exact),
+            (modes.SymphonyQG, modes.Approximate),
+        ):
+            silently(
+                lambda index=index, value=value: setattr(
+                    index.cp, "final_assignment", value
+                )
+            )
+            assert index.cp.final_assignment == member
+        with pytest.raises(
+            ValueError, match="^final_assignment must be 'approximate' or 'exact'$"
+        ):
+            index.cp.final_assignment = "Exact"
+        with pytest.raises(
+            TypeError,
+            match="^final_assignment must be 'approximate' or 'exact', not int$",
+        ):
+            index.cp.final_assignment = 1
+        assert index.cp.final_assignment == modes.Approximate  # unchanged by failures
+        silently(lambda index=index: index.train(base_data, num_threads=1))
+        assert index.is_trained
+
+
+def _import_final_assignment_mode():
+    from rabitqlib import FinalAssignmentMode
+
+    return FinalAssignmentMode
+
+
+def _import_qg_stats():
+    from rabitqlib import QGKMeansIterationStats
+
+    return QGKMeansIterationStats
+
+
+def _import_rabitq_stats():
+    from rabitqlib import RaBitQKMeansIterationStats
+
+    return RaBitQKMeansIterationStats
+
+
+@pytest.mark.parametrize(
+    "name,importer,message",
+    [
+        (
+            "FinalAssignmentMode",
+            _import_final_assignment_mode,
+            "FinalAssignmentMode is deprecated; pass 'approximate'",
+        ),
+        (
+            "QGKMeansIterationStats",
+            _import_qg_stats,
+            "QGKMeansIterationStats is deprecated; use KMeansIterationStats",
+        ),
+        (
+            "RaBitQKMeansIterationStats",
+            _import_rabitq_stats,
+            "RaBitQKMeansIterationStats is deprecated; use KMeansIterationStats",
+        ),
+    ],
+)
+def test_names_that_leave_the_package_warn_once(name, importer, message):
+    value, text = single_deprecation(lambda: getattr(rabitqlib, name))
+    assert text.startswith(message)
+    imported, text = single_deprecation(importer, at=importer)
+    assert text.startswith(message)
+    assert imported is value
+    assert name in rabitqlib.__all__
+    # hasattr reads the name too.
+    found, text = single_deprecation(lambda: hasattr(rabitqlib, name))
+    assert found and text.startswith(message)
+
+
+def test_old_names_can_be_read_without_a_python_caller():
+    # A thread whose entry point is a builtin has no Python frame for the warning
+    # to point at; the read must still succeed. list.extend and map are builtins,
+    # so getattr runs in the new thread with no Python code calling it.
+    read = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        expected = rabitqlib.FinalAssignmentMode
+        _thread.start_new_thread(
+            read.extend, (map(getattr, [rabitqlib], ["FinalAssignmentMode"]),)
+        )
+        # A failed read leaves the list empty, so this waits out the deadline.
+        deadline = time.monotonic() + 5
+        while not read and time.monotonic() < deadline:
+            time.sleep(0.01)
+    assert read == [expected]
+
+
+def test_kmeans_iteration_stats_is_one_class(base_data):
+    stats = silently(lambda: rabitqlib.KMeansIterationStats)
+    assert stats.__name__ == stats.__qualname__ == "KMeansIterationStats"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        assert rabitqlib.QGKMeansIterationStats is stats
+        assert rabitqlib.RaBitQKMeansIterationStats is stats
+    for cls in (QGKMeans, RaBitQKMeans):
+        model = cls(DIM, 80, niter=2, num_threads=1, seed=1)
+        model.train(base_data)
+        assert all(type(item) is stats for item in model.iteration_stats)
+    with pytest.raises(
+        AttributeError, match="^module 'rabitqlib' has no attribute 'missing'$"
+    ):
+        rabitqlib.missing
+
+
+def test_star_import_still_provides_the_old_names():
+    namespace = {}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        exec("from rabitqlib import *", namespace)
+    assert set(rabitqlib.__all__) <= set(namespace)
+    assert [w.category for w in caught] == [DeprecationWarning] * 3
+
+
+def test_old_attribute_keeps_the_08_encoding():
+    cp = QGKMeans(DIM, 80).cp
+    cp.nbits = 8
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        cp.quantization_bits = 0  # raw vectors in the 0.8 encoding
+        assert cp.quantization_bits == 0
+    assert cp.nbits == 32
+
+
+def test_subclass_warnings_name_the_subclass():
+    class Clustering(QGKMeans):
+        pass
+
+    def make():
+        return Clustering(DIM, 80, graph_degree=64)
+
+    model, message = single_deprecation(make, at=make)
+    assert message.startswith(
+        "Clustering(graph_degree=...) is deprecated; use max_degree="
+    )
+    assert model.cp.max_degree == 64
+
+
+@pytest.mark.parametrize("cls", [QGKMeans, RaBitQKMeans])
+@pytest.mark.parametrize("name", ["unknown", "mro", "__dict__"])
+def test_unknown_kmeans_keyword_message_is_unchanged(cls, name):
+    with pytest.raises(
+        AttributeError,
+        match=f"^{cls.__name__}\\(\\) got an unexpected keyword argument '{name}'$",
+    ):
+        cls(DIM, 80, **{name: 1})
+
+
+def test_train_error_names_the_keyword_the_caller_used(base_data):
+    old_message = "^QGKMeans ef_build and ef_search must be positive$"
+    with pytest.raises(
+        ValueError, match="^QGKMeans ef_construction and ef_search must be positive$"
+    ):
+        QGKMeans(DIM, 80, niter=1, ef_construction=0).train(base_data)
+    # Every call that 0.8 accepts keeps the message 0.8 gave it.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        old = QGKMeans(DIM, 80, niter=1, ef_build=0)
+    with pytest.raises(ValueError, match=old_message):
+        old.train(base_data)
+    with pytest.raises(ValueError, match=old_message):
+        QGKMeans(DIM, 80, niter=1, ef_search=0).train(base_data)
+
+    class WithoutInit(QGKMeans):
+        def __init__(self):
+            self.d, self.k, self._impl = DIM, 80, None
+            self.cp = rabitqlib.QGKMeansParameters()
+            self.cp.ef_search = 0
+
+    with pytest.raises(ValueError, match=old_message):
+        WithoutInit().train(base_data)
+    # Other errors pass through as the extension raised them.
+    with pytest.raises(
+        ValueError, match="^QGKMeans graph_build_iterations must be positive$"
+    ) as raised:
+        QGKMeans(DIM, 80, niter=1, ef_construction=100, graph_build_iterations=0).train(
+            base_data
+        )
+    assert raised.value.__context__ is None  # not re-raised as a new object
+    # The 0.8 name with a value only nbits would accept is still rejected at train.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        wrong = QGKMeans(DIM, 80, niter=1, quantization_bits=32)
+    with pytest.raises(ValueError, match="quantization_bits must be 0, 4, or 8"):
+        wrong.train(base_data)
+
+
+def test_statistics_class_pickles_by_reference():
+    stats = rabitqlib.KMeansIterationStats
+    assert pickle.loads(pickle.dumps(stats)) is stats
+    assert stats.__module__ == "rabitqlib._rabitqlib"
+    assert getattr(sys.modules[stats.__module__], "KMeansIterationStats") is stats

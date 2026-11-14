@@ -4,7 +4,7 @@ import argparse
 from time import time
 
 import numpy as np
-from rabitqlib import FinalAssignmentMode, QGKMeans, RaBitQKMeans
+from rabitqlib import QGKMeans, RaBitQKMeans
 from rabitqlib._rabitqlib import _available_cpu_count, _default_thread_count
 
 from utils import read_fvecs
@@ -37,7 +37,7 @@ def cluster_data(
         num_clusters,
         spherical=metric == "ip",
         num_threads=threads,
-        final_assignment=FinalAssignmentMode.Exact,
+        final_assignment="exact",
         verbose=True,
     )
     start = time()
@@ -71,7 +71,7 @@ if __name__ == "__main__":
         "--method",
         choices=["rabitq", "qg"],
         default="qg",
-        help="rabitq for few centroids; qg for many (requires k > graph_degree)",
+        help="rabitq for few centroids; qg for many (requires k > max_degree)",
     )
     parser.add_argument(
         "--num-threads",

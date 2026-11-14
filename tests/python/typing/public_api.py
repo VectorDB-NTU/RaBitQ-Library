@@ -11,6 +11,7 @@ from rabitqlib import (
     FinalAssignmentMode,
     HnswIndex,
     IvfIndex,
+    KMeansIterationStats,
     QGKMeans,
     QGKMeansIterationStats,
     QGKMeansParameters,
@@ -61,8 +62,8 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(SymqgIndex.load("index.bin"), SymqgIndex)
     ivf.reserve_cluster(0, 128)
     hnsw.reserve(256)
-    qg = QGKMeans(64, 40, niter=2, quantization_bits=4)
-    flat = RaBitQKMeans(64, 2, final_assignment=FinalAssignmentMode.Exact)
+    qg = QGKMeans(64, 40, niter=2, nbits=4)
+    flat = RaBitQKMeans(64, 2, final_assignment="exact")
     assert_type(qg.cp, QGKMeansParameters)
     assert_type(flat.cp, RaBitQKMeansParameters)
     for model in (qg, flat):
@@ -77,8 +78,8 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
             tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]],
         )
         if model.iteration_stats is not None:
-            assert_type(model.iteration_stats[0], QGKMeansIterationStats)
-    qg.cp.final_assignment = FinalAssignmentMode.Approximate
+            assert_type(model.iteration_stats[0], KMeansIterationStats)
+    qg.cp.final_assignment = "approximate"
     ivf.search(x, "five", 2)  # type: ignore[call-overload]
     ivf.dim = 16  # type: ignore[misc]
     qg.cp.niter = "two"  # type: ignore[assignment]
@@ -86,9 +87,25 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     hnsw.search(x, 5, nprobe=2)  # type: ignore[call-overload]
     IvfIndex(64, 2, 4)  # type: ignore[call-overload]
     hnsw.train(x, 1)  # type: ignore[call-arg]
+    qg.cp.final_assignment = "Exact"  # type: ignore[assignment]
+    QGKMeans(64, 40, ef_build=1, bogus=1)  # type: ignore[call-overload]
+
+
+def deprecated_forms_still_type_check(qg: QGKMeans, flat: RaBitQKMeans) -> None:
+    # Accepted until 0.9; the stubs mark them deprecated without rejecting them.
+    RaBitQKMeans(64, 2, final_assignment=FinalAssignmentMode.Exact)
+    QGKMeans(64, 40, final_assignment=FinalAssignmentMode.Approximate)
+    qg.cp.final_assignment = FinalAssignmentMode.Exact
+    assert_type(flat.cp.final_assignment, FinalAssignmentMode)
+    QGKMeans(64, 40, quantization_bits=4, niter=2)
+    QGKMeans(64, 40, graph_degree=32, ef_build=100)
 
 
 def stats_alias(stats: RaBitQKMeansIterationStats) -> QGKMeansIterationStats:
+    return stats
+
+
+def stats_name(stats: QGKMeansIterationStats) -> KMeansIterationStats:
     return stats
 
 
@@ -152,7 +169,7 @@ def check_numpy_scalars() -> None:
         np.int64(64),
         np.int64(40),
         niter=np.int64(1),
-        graph_degree=np.int64(32),
+        max_degree=np.int64(32),
         num_threads=np.int64(1),
     )
     for model in (flat, qg):
@@ -167,11 +184,11 @@ def check_numpy_scalars() -> None:
         assert_type(model.train(x), float)
         assignments, distances = model.assign(x[:3])
         assert assignments.shape == distances.shape == (3,)
-    qg.cp.graph_degree = np.int64(32)
-    qg.cp.ef_build = np.int64(40)
+    qg.cp.max_degree = np.int64(32)
+    qg.cp.ef_construction = np.int64(40)
     qg.cp.ef_search = np.int64(16)
     qg.cp.graph_build_iterations = np.int64(1)
-    qg.cp.quantization_bits = np.int64(4)
+    qg.cp.nbits = np.int64(4)
     members = FinalAssignmentMode.__members__
     assert_type(members, dict[str, FinalAssignmentMode])
     assert_type(members["Exact"], FinalAssignmentMode)

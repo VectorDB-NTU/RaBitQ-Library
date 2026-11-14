@@ -6,19 +6,23 @@ and adds the clustering wrappers. Import public classes from ``rabitqlib``.
 
 import inspect
 import operator
+import sys
 import warnings
 
 from ._rabitqlib import (
-    FinalAssignmentMode,
+    FinalAssignmentMode as _FinalAssignmentMode,
+)
+from ._rabitqlib import (
     HnswIndex,
     IvfIndex,
-    QGKMeansIterationStats,
     QGKMeansParameters,
-    RaBitQKMeansIterationStats,
     RaBitQKMeansParameters,
     SymqgIndex,
     _QGKMeans,
     _RaBitQKMeans,
+)
+from ._rabitqlib import (
+    QGKMeansIterationStats as KMeansIterationStats,
 )
 from ._rabitqlib import (
     __version__ as __version__,
@@ -465,9 +469,9 @@ def _renamed_property(cls, old, new, new_doc, replacement):
     _set_property(cls, old, former, f"Deprecated since 0.8.5: use {replacement}.")
 
 
-def _set_property(cls, name, getter, documentation):
-    """Assign a read-only property, named as a class body would name it."""
-    member = property(getter, doc=documentation)
+def _set_property(cls, name, getter, documentation, setter=None):
+    """Assign a property, named as a class body would name it."""
+    member = property(getter, setter, doc=documentation)
     setattr(cls, name, member)
     # Assignment after class creation skips __set_name__, and before Python 3.13
     # a property without it reports errors without its name.
@@ -732,6 +736,169 @@ _patch_graph_search(
         "    Named ef before 0.8.5.",
     ),
 )
+# k-means (issue #233): the graph parameters take the index names, final_assignment
+# takes a string, and the two statistics class names become one.
+
+KMeansIterationStats.__name__ = KMeansIterationStats.__qualname__ = (
+    "KMeansIterationStats"
+)
+# Pickle and pydoc find a class by its name in its module, which is the extension.
+sys.modules[KMeansIterationStats.__module__].KMeansIterationStats = KMeansIterationStats
+
+_FINAL_ASSIGNMENTS = {
+    "approximate": _FinalAssignmentMode.Approximate,
+    "exact": _FinalAssignmentMode.Exact,
+}
+
+
+def _patch_final_assignment(cls):
+    native = vars(cls)["final_assignment"]
+
+    def final_assignment(self):
+        return native.__get__(self, cls)
+
+    def set_final_assignment(self, value):
+        if isinstance(value, str):
+            try:
+                value = _FINAL_ASSIGNMENTS[value]
+            except KeyError:
+                raise ValueError(
+                    "final_assignment must be 'approximate' or 'exact'"
+                ) from None
+        elif not isinstance(value, _FinalAssignmentMode):
+            raise TypeError(
+                "final_assignment must be 'approximate' or 'exact', not "
+                f"{type(value).__name__}"
+            )
+        native.__set__(self, value)
+
+    _set_property(
+        cls,
+        "final_assignment",
+        _member(cls, final_assignment),
+        "'approximate' uses the training assignment method; 'exact' uses exhaustive "
+        "assignment against final centroids. Default is 'approximate'. Until 0.9 it "
+        "reads back as the FinalAssignmentMode member, which is still accepted.",
+        _member(cls, set_final_assignment, "final_assignment"),
+    )
+
+
+def _qg_nbits_to_native(value):
+    bits = operator.index(value)
+    if bits not in (4, 8, 32):
+        raise ValueError("nbits must be 4, 8, or 32")
+    return 0 if bits == 32 else bits
+
+
+def _qg_nbits_from_native(value):
+    return 32 if value == 0 else value
+
+
+def _rename_parameter(cls, old, new, documentation, to_native=None, from_native=None):
+    """Add attribute new for the native attribute old, which then warns."""
+    native = vars(cls)[old]
+    name = cls.__name__
+
+    def current(self):
+        value = native.__get__(self, cls)
+        return value if from_native is None else from_native(value)
+
+    def set_current(self, value):
+        native.__set__(self, value if to_native is None else to_native(value))
+
+    def former(self):
+        _deprecated(f"{name}.{old} is deprecated; use {new}")
+        return native.__get__(self, cls)
+
+    def set_former(self, value):
+        _deprecated(f"{name}.{old} is deprecated; use {new}")
+        native.__set__(self, value)
+
+    _set_property(
+        cls,
+        new,
+        _member(cls, current, new),
+        documentation,
+        _member(cls, set_current, new),
+    )
+    _set_property(
+        cls,
+        old,
+        _member(cls, former, old),
+        f"Deprecated since 0.8.5: use {new}.",
+        _member(cls, set_former, old),
+    )
+    return native
+
+
+# Old keyword and attribute name -> (new name, the native attribute behind both).
+_QG_RENAMED = {
+    "graph_degree": (
+        "max_degree",
+        _rename_parameter(
+            QGKMeansParameters,
+            "graph_degree",
+            "max_degree",
+            "Centroid graph degree; a positive multiple of 32. Default is 32. Named "
+            "graph_degree before 0.8.5.",
+        ),
+    ),
+    "ef_build": (
+        "ef_construction",
+        _rename_parameter(
+            QGKMeansParameters,
+            "ef_build",
+            "ef_construction",
+            "Positive centroid-graph construction search breadth. Default is 240. "
+            "Named ef_build before 0.8.5.",
+        ),
+    ),
+    "quantization_bits": (
+        "nbits",
+        _rename_parameter(
+            QGKMeansParameters,
+            "quantization_bits",
+            "nbits",
+            "Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is "
+            "32. Named quantization_bits, with 0 for raw float32, before 0.8.5.",
+            _qg_nbits_to_native,
+            _qg_nbits_from_native,
+        ),
+    ),
+}
+_patch_final_assignment(QGKMeansParameters)
+_patch_final_assignment(RaBitQKMeansParameters)
+
+_RENAMED_EXPORTS = {
+    "FinalAssignmentMode": (
+        _FinalAssignmentMode,
+        "FinalAssignmentMode is deprecated; pass 'approximate' or 'exact' as "
+        "final_assignment",
+    ),
+    "QGKMeansIterationStats": (
+        KMeansIterationStats,
+        "QGKMeansIterationStats is deprecated; use KMeansIterationStats",
+    ),
+    "RaBitQKMeansIterationStats": (
+        KMeansIterationStats,
+        "RaBitQKMeansIterationStats is deprecated; use KMeansIterationStats",
+    ),
+}
+
+
+def __getattr__(name):
+    try:
+        value, message = _RENAMED_EXPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    # "from rabitqlib import <name>" asks twice: importlib checks the name before
+    # the import statement reads it. Warn for the statement only, at its line.
+    caller = sys._getframe().f_back  # None when no Python code is calling
+    if caller is None or caller.f_code.co_name != "_handle_fromlist":
+        warnings.warn(f"{message}; {_MIGRATION}", DeprecationWarning, stacklevel=2)
+    return value
+
+
 # --- end of the 0.9 names ----------------------------------------------------
 
 
@@ -742,15 +909,36 @@ class _KMeans:
         self.d = int(d)
         self.k = int(k)
         self.cp = self._parameters_type()
+        self._keywords = frozenset(kwargs)
         for name, value in kwargs.items():
+            renamed = self._renamed_parameters.get(name)
+            if renamed is not None:
+                new, native = renamed
+                if new in kwargs:
+                    raise TypeError(
+                        f"{type(self).__name__}() got both {new} and its old name {name}"
+                    )
+                _deprecated(
+                    f"{type(self).__name__}({name}=...) is deprecated; use {new}="
+                    + (
+                        ", with 32 instead of 0 for raw vectors"
+                        if new == "nbits"
+                        else ""
+                    )
+                )
+            else:
+                try:
+                    getattr(self.cp, name)
+                except AttributeError:
+                    raise AttributeError(
+                        f"{type(self).__name__}() got an unexpected keyword argument "
+                        f"{name!r}"
+                    ) from None
             try:
-                getattr(self.cp, name)
-            except AttributeError:
-                raise AttributeError(
-                    f"{type(self).__name__}() got an unexpected keyword argument {name!r}"
-                ) from None
-            try:
-                setattr(self.cp, name, value)
+                if renamed is not None:
+                    native.__set__(self.cp, value)
+                else:
+                    setattr(self.cp, name, value)
             except TypeError as error:
                 raise TypeError(
                     f"{type(self).__name__}() could not convert parameter {name!r} "
@@ -779,8 +967,19 @@ class _KMeans:
         A failed fit preserves the last successful results. Returned arrays are
         copies.
         """
-        implementation = self._implementation_type(self.d, self.k, self.cp)
-        objective = implementation.train(x)
+        try:
+            implementation = self._implementation_type(self.d, self.k, self.cp)
+            objective = implementation.train(x)
+        except ValueError as error:
+            # The extension names the 0.8 setting. A caller who wrote the 0.9
+            # keyword gets that name back; every 0.8 call keeps its message. A
+            # subclass may not have run __init__, hence the getattr.
+            message = str(error)
+            if "ef_build" not in message or "ef_construction" not in getattr(
+                self, "_keywords", ()
+            ):
+                raise
+            raise ValueError(message.replace("ef_build", "ef_construction")) from None
         self._impl = implementation
         return objective
 
@@ -860,7 +1059,7 @@ class QGKMeans(_KMeans):
     d : int
         Original vector dimension, from 64 through 65536.
     k : int
-        Number of centroids; greater than graph_degree and no more than the
+        Number of centroids; greater than max_degree and no more than the
         number of training vectors.
     niter : int, optional
         Maximum number of clustering iterations. Default is 25.
@@ -884,22 +1083,24 @@ class QGKMeans(_KMeans):
     num_threads : int, optional
         Worker count; 0 selects the available CPU count,
         capped by OMP_NUM_THREADS. Default is 0.
-    final_assignment : FinalAssignmentMode, optional
-        Approximate uses the training assignment method; Exact uses exhaustive
-        assignment against final centroids. Default is
-        FinalAssignmentMode.Approximate.
-    graph_degree : int, optional
-        Centroid graph degree; a positive multiple of 32. Default is 32.
-    ef_build : int, optional
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' uses the training assignment method; 'exact' uses exhaustive
+        assignment against final centroids. Default is 'approximate'. A
+        FinalAssignmentMode member is still accepted until 0.9.
+    max_degree : int, optional
+        Centroid graph degree; a positive multiple of 32. Default is 32. Named
+        graph_degree before 0.8.5.
+    ef_construction : int, optional
         Positive centroid-graph construction search breadth. Default is 240.
+        Named ef_build before 0.8.5.
     ef_search : int, optional
         Positive centroid-graph assignment search breadth. Default is 16.
     graph_build_iterations : int, optional
         Positive number of graph-building passes after initialization. Default
         is 1.
-    quantization_bits : int, optional
-        Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is
-        0.
+    nbits : int, optional
+        Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is
+        32. Named quantization_bits, with 0 for raw float32, before 0.8.5.
 
     Notes
     -----
@@ -916,6 +1117,7 @@ class QGKMeans(_KMeans):
 
     _parameters_type = QGKMeansParameters
     _implementation_type = _QGKMeans
+    _renamed_parameters = _QG_RENAMED
 
 
 class RaBitQKMeans(_KMeans):
@@ -949,10 +1151,10 @@ class RaBitQKMeans(_KMeans):
     num_threads : int, optional
         Worker count; 0 selects the available CPU count,
         capped by OMP_NUM_THREADS. Default is 0.
-    final_assignment : FinalAssignmentMode, optional
-        Approximate uses the training assignment method; Exact uses exhaustive
-        assignment against final centroids. Default is
-        FinalAssignmentMode.Approximate.
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' uses the training assignment method; 'exact' uses exhaustive
+        assignment against final centroids. Default is 'approximate'. A
+        FinalAssignmentMode member is still accepted until 0.9.
 
     Notes
     -----
@@ -979,12 +1181,14 @@ class RaBitQKMeans(_KMeans):
 
     _parameters_type = RaBitQKMeansParameters
     _implementation_type = _RaBitQKMeans
+    _renamed_parameters = {}
 
 
 __all__ = [
     "FinalAssignmentMode",
     "HnswIndex",
     "IvfIndex",
+    "KMeansIterationStats",
     "QGKMeans",
     "QGKMeansIterationStats",
     "QGKMeansParameters",
