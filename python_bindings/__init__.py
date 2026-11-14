@@ -461,12 +461,17 @@ def _renamed_property(cls, old, new, new_doc, replacement):
     _member(cls, former, old)
     if new is not None:
         _member(cls, current, new)
-        setattr(cls, new, property(current, doc=new_doc))
-    setattr(
-        cls,
-        old,
-        property(former, doc=f"Deprecated since 0.8.5: use {replacement}."),
-    )
+        _set_property(cls, new, current, new_doc)
+    _set_property(cls, old, former, f"Deprecated since 0.8.5: use {replacement}.")
+
+
+def _set_property(cls, name, getter, documentation):
+    """Assign a read-only property, named as a class body would name it."""
+    member = property(getter, doc=documentation)
+    setattr(cls, name, member)
+    # Assignment after class creation skips __set_name__, and before Python 3.13
+    # a property without it reports errors without its name.
+    member.__set_name__(cls, name)
 
 
 def _options_from_positions(name, options, args, kwargs):
