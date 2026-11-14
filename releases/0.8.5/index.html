@@ -27,7 +27,7 @@
     
     
       
-        <title>0.8.5 (unreleased) - RaBitQ Library</title>
+        <title>0.8.5 - RaBitQ Library</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#rabitq-library-085-unreleased" class="md-skip">
+        <a href="#rabitq-library-085" class="md-skip">
           Skip to content
         </a>
       
@@ -109,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              0.8.5 (unreleased)
+              0.8.5
             
           </span>
         </div>
@@ -534,7 +534,7 @@
   <span class="md-ellipsis">
     
   
-    0.8.5 (unreleased)
+    0.8.5
   
 
     
@@ -552,7 +552,7 @@
   <span class="md-ellipsis">
     
   
-    0.8.5 (unreleased)
+    0.8.5
   
 
     
@@ -604,6 +604,17 @@
     <span class="md-ellipsis">
       
         Coming in 0.9 without a warning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#upgrading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading
       
     </span>
   </a>
@@ -2030,6 +2041,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#upgrading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Upgrading
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2055,10 +2077,10 @@
   
 
 
-<h1 id="rabitq-library-085-unreleased">RaBitQ Library 0.8.5 (unreleased)<a class="headerlink" href="#rabitq-library-085-unreleased" title="Permanent link">&para;</a></h1>
-<p>These notes collect what is on <code>main</code> for the next 0.8 release. It adds the names that
-0.9 will use and deprecates the 0.8 spellings they replace. Every 0.8 call keeps
-working, with the same results; index files are unchanged.</p>
+<h1 id="rabitq-library-085">RaBitQ Library 0.8.5<a class="headerlink" href="#rabitq-library-085" title="Permanent link">&para;</a></h1>
+<p>This release prepares for 0.9: it adds the names that 0.9 will use and deprecates
+the 0.8 spellings they replace. Every 0.8 call keeps working, with the same results;
+index files and C++ are unchanged.</p>
 <h2 id="python-names-that-change-in-09">Python: names that change in 0.9<a class="headerlink" href="#python-names-that-change-in-09" title="Permanent link">&para;</a></h2>
 <p>0.9 gives the three index classes one name for each concept (#232). This release
 accepts both spellings and raises a <code>DeprecationWarning</code> for the old one, at your call
@@ -2071,8 +2093,8 @@ site. The <a href="../../python_migration/#from-08-to-09">migration guide</a> li
 <li><code>IvfIndex(routing=...)</code> and <code>index.routing</code> replace <code>initializer</code>.</li>
 <li><code>HnswIndex.search</code> and <code>SymqgIndex.search</code> take <code>ef_search=</code> instead of <code>ef=</code>. Passing
   the breadth by position is unaffected.</li>
-<li>The <code>search</code> options after the breadth (<code>high_accuracy</code>, <code>num_threads</code>) are
-  keyword-only; passing them by position is deprecated.</li>
+<li>Passing the <code>search</code> options after the breadth (<code>high_accuracy</code>, <code>num_threads</code>) by
+  position is deprecated; 0.9 makes them keyword-only.</li>
 <li><code>nprobe=0</code> and <code>ef_search=0</code> for the default are deprecated; pass <code>None</code> or omit the
   argument. <code>num_threads=0</code> keeps meaning every available CPU.</li>
 <li><code>HnswIndex</code> seeds above <code>2**32 - 1</code> are deprecated.</li>
@@ -2089,10 +2111,17 @@ site. The <a href="../../python_migration/#from-08-to-09">migration guide</a> li
   when imported or read from the package. The class now reports its name as
   <code>KMeansIterationStats</code>.</li>
 </ul>
+<p>The type stubs mark the renamed 0.8 forms as deprecated, so mypy and Pyright can
+report them (mypy with <code>--enable-error-code deprecated</code>, Pyright with
+<code>reportDeprecated</code>). Three forms warn only at run time: <code>nprobe=0</code> or <code>ef_search=0</code>,
+an <code>HnswIndex</code> seed above <code>2**32 - 1</code>, and the two old names of
+<code>KMeansIterationStats</code>.</p>
 <h2 id="python-other-changes">Python: other changes<a class="headerlink" href="#python-other-changes" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>IvfIndex.set_centroids</code> takes <code>num_threads</code> (#231). Its default follows
-  <code>OMP_NUM_THREADS</code>; before, building HNSW centroid routing always used every CPU.</li>
+<li><code>IvfIndex.set_centroids</code> takes <code>num_threads</code> (#231). Without it, <code>set_centroids</code> now
+  follows <code>OMP_NUM_THREADS</code>, as <code>train</code> and <code>add</code> do; before, it always used every
+  CPU. Only the HNSW routing graph varies with the thread count: build it with one
+  thread and a fixed <code>seed</code> for a reproducible graph.</li>
 </ul>
 <h2 id="coming-in-09-without-a-warning">Coming in 0.9 without a warning<a class="headerlink" href="#coming-in-09-without-a-warning" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2104,6 +2133,15 @@ site. The <a href="../../python_migration/#from-08-to-09">migration guide</a> li
 <li><code>cp.final_assignment</code> will read back as <code>'approximate'</code> or <code>'exact'</code> instead of a
   <code>FinalAssignmentMode</code> member.</li>
 </ul>
+<h2 id="upgrading">Upgrading<a class="headerlink" href="#upgrading" title="Permanent link">&para;</a></h2>
+<p>From 0.8.4, index file formats, the stable core API v1 and C++ are unchanged, and every
+0.8 Python call keeps its result. Code that uses a deprecated spelling now raises a
+<code>DeprecationWarning</code>; move to the new names with the
+<a href="../../python_migration/#from-08-to-09">migration guide</a> before 0.9 removes the old ones.
+Rebuild C++ consumers with matching headers and libraries; no cross-version C++ binary
+ABI is promised.</p>
+<p>When upgrading from 0.7, follow the <a href="../0.8.0/">0.8.0 release notes</a> and the
+<a href="../../python_migration/">migration guide</a>.</p>
 
 
 
