@@ -2265,7 +2265,7 @@ search. Centroids are not normalized.</p>
 <tbody>
 <tr>
 <td><code>rabitqlib.QGKMeans</code></td>
-<td><code>quantization_bits=0</code>, degree 32, <code>ef_build=240</code>, <code>ef_search=16</code>, one graph refinement, <code>early_stop_threshold=0</code>, <code>FinalAssignmentMode.Exact</code></td>
+<td>raw centroid storage (<code>nbits=32</code>; <code>quantization_bits=0</code> before 0.8.5), degree 32, <code>ef_construction=240</code> (<code>ef_build</code> before 0.8.5), <code>ef_search=16</code>, one graph refinement, <code>early_stop_threshold=0</code>, exact final assignment</td>
 </tr>
 <tr>
 <td><code>faiss.Kmeans</code></td>

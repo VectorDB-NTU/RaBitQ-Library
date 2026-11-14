@@ -2361,12 +2361,62 @@ removes it.</p>
 </tr>
 </tbody>
 </table>
+<p>The k-means classes take the names of the index parameters
+(<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/issues/233">#233</a>), as keywords and as
+attributes of <code>cp</code>:</p>
+<table>
+<thead>
+<tr>
+<th>0.8</th>
+<th>Use instead</th>
+<th>Works since</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QGKMeans(quantization_bits=0 \| 4 \| 8)</code></td>
+<td><code>nbits=32 \| 4 \| 8</code>: 32, not 0, keeps raw vectors</td>
+<td>0.8.5</td>
+</tr>
+<tr>
+<td><code>QGKMeans(graph_degree=...)</code></td>
+<td><code>max_degree=...</code></td>
+<td>0.8.5</td>
+</tr>
+<tr>
+<td><code>QGKMeans(ef_build=...)</code></td>
+<td><code>ef_construction=...</code></td>
+<td>0.8.5</td>
+</tr>
+<tr>
+<td><code>final_assignment=FinalAssignmentMode.Approximate \| .Exact</code>, also as <code>index.cp.final_assignment</code> on <code>IvfIndex</code> and <code>HnswIndex</code></td>
+<td><code>final_assignment='approximate' \| 'exact'</code>; <code>'approximate'</code> also replaces the alias <code>FinalAssignmentMode.SymphonyQG</code></td>
+<td>0.8.5</td>
+</tr>
+<tr>
+<td><code>QGKMeansIterationStats</code>, <code>RaBitQKMeansIterationStats</code></td>
+<td><code>KMeansIterationStats</code>, the one class both always were; since 0.8.5 it also reports that name</td>
+<td>0.8.5</td>
+</tr>
+</tbody>
+</table>
+<p>Passing a <code>FinalAssignmentMode</code> member does not warn by itself; the warning comes where
+one of the three old names is imported or read from <code>rabitqlib</code>, including through
+<code>from rabitqlib import *</code>.</p>
+<p>Until 0.9, <code>cp.final_assignment</code> still reads back as a <code>FinalAssignmentMode</code> member,
+whose <code>.name</code> is <code>'Approximate'</code> or <code>'Exact'</code>; 0.9 returns <code>'approximate'</code> or
+<code>'exact'</code>. Reading it does not warn. Code that reads it on both releases can
+normalize the value:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">mode</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">final_assignment</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">mode</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</code></pre></div>
 <p>Code that must also run on releases before 0.8.5 needs a version check for the rows
 marked 0.8.5; the other replacements work on every release named.</p>
-<p>Two changes come without a warning in 0.9. <code>HnswIndex()</code> without <code>seed=</code> draws a seed,
+<p>Three changes come without a warning in 0.9. <code>HnswIndex()</code> without <code>seed=</code> draws a seed,
 as <code>IvfIndex</code> and <code>SymqgIndex</code> already do, instead of using 100: pass <code>seed=</code> (and
-<code>num_threads=1</code> to <code>add</code>) if you rely on a reproducible build. And <code>repr(index)</code> prints
-<code>capacity=</code> and <code>routing=</code> where it prints <code>max_elements=</code> and <code>initializer=</code>.</p>
+<code>num_threads=1</code> to <code>add</code>) if you rely on a reproducible build. <code>repr(index)</code> prints
+<code>capacity=</code> and <code>routing=</code> where it prints <code>max_elements=</code> and <code>initializer=</code>. And
+<code>cp.final_assignment</code> reads back as a string, as described above.</p>
 
 
 

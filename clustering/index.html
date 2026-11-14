@@ -2285,7 +2285,7 @@ per centroid; the classes below default to training on every vector.</p>
 <td><a href="#qgkmeans">QGKMeans</a></td>
 <td>SymphonyQG centroid graph</td>
 <td>Larger cluster counts</td>
-<td><code>n &gt;= k &gt; graph_degree</code> (default 32)</td>
+<td><code>n &gt;= k &gt; max_degree</code> (C++ <code>graph_degree</code>; default 32)</td>
 </tr>
 </tbody>
 </table>
@@ -2394,8 +2394,8 @@ Append <code>ip</code> for spherical clustering of normalized input; the default
 </tr>
 <tr>
 <td><code>final_assignment</code></td>
-<td><code>Approximate</code></td>
-<td>Use the selected method for final labels, or <code>Exact</code> for nearest-centroid labels.</td>
+<td><code>'approximate'</code> (C++ <code>Approximate</code>)</td>
+<td>Use the selected method for final labels, or <code>'exact'</code> (C++ <code>Exact</code>) for nearest-centroid labels.</td>
 </tr>
 </tbody>
 </table>
@@ -2449,10 +2449,13 @@ the best estimated distance. The model keeps this mean of the training points
 encodes new vectors around it.</p>
 <p>Each iteration compares every training point with every centroid. The batch size of 32
 is not a cluster-count limit. This method uses one-bit point codes throughout;
-it has no graph parameters or <code>quantization_bits</code> setting.</p>
+it has no graph parameters or <code>nbits</code> (C++ <code>quantization_bits</code>) setting.</p>
 <h3 id="qgkmeans">QGKMeans<a class="headerlink" href="#qgkmeans" title="Permanent link">&para;</a></h3>
 <p>QGKMeans builds a SymphonyQG graph over the centroids and uses previous
-assignments as search hints. Its additional parameters are:</p>
+assignments as search hints. Its additional parameters are below, under their Python
+names since 0.8.5. C++ and Python before 0.8.5 name the first three
+<code>quantization_bits</code> (with <code>0</code> for raw storage), <code>graph_degree</code> and <code>ef_build</code>; in
+Python those names still work, with a <code>DeprecationWarning</code>, until 0.9.</p>
 <table>
 <thead>
 <tr>
@@ -2463,17 +2466,17 @@ assignments as search hints. Its additional parameters are:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>quantization_bits</code></td>
-<td><code>0</code></td>
-<td>Graph centroid storage: raw, or <code>4</code>/<code>8</code> bits.</td>
+<td><code>nbits</code></td>
+<td><code>32</code></td>
+<td>Graph centroid storage: <code>32</code> for raw vectors, or <code>4</code>/<code>8</code> bits.</td>
 </tr>
 <tr>
-<td><code>graph_degree</code></td>
+<td><code>max_degree</code></td>
 <td><code>32</code></td>
 <td>A positive multiple of 32, strictly smaller than <code>k</code>.</td>
 </tr>
 <tr>
-<td><code>ef_build</code>, <code>ef_search</code></td>
+<td><code>ef_construction</code>, <code>ef_search</code></td>
 <td><code>240</code>, <code>16</code></td>
 <td>Positive graph construction and search window sizes.</td>
 </tr>
@@ -2496,19 +2499,22 @@ from the original float32 vectors and centroids. For squared L2, <code>final_obj
 their sum (WCSS); spherical mode sums <code>1 - inner_product</code>. <code>obj</code> and
 <code>iteration_stats</code> record objectives before each centroid update; Python
 <code>train()</code> returns the last such objective.</p>
-<p><code>FinalAssignmentMode.Approximate</code> (default) uses the selected class's assignment
-algorithm. The legacy name <code>FinalAssignmentMode.SymphonyQG</code> remains an alias for
-<code>Approximate</code>. Labels need not identify the exact nearest centroids, but reported
+<p><code>final_assignment='approximate'</code> (default) uses the selected class's assignment
+algorithm. Labels need not identify the exact nearest centroids, but reported
 distances and WCSS remain exact for those labels. Without sampling, quantized
 QGKMeans final assignment retains a point's last-iteration label when it is
 closer. After sampling, most points have no such label, so every point uses the
 same graph search. Approximate training objectives need not decrease monotonically.</p>
 <p>To require exact nearest-centroid <strong>final</strong> assignments with either class:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">FinalAssignmentMode</span><span class="p">,</span> <span class="n">RaBitQKMeans</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">RaBitQKMeans</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">kmeans</span> <span class="o">=</span> <span class="n">RaBitQKMeans</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="n">final_assignment</span><span class="o">=</span><span class="n">FinalAssignmentMode</span><span class="o">.</span><span class="n">Exact</span><span class="p">)</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">kmeans</span> <span class="o">=</span> <span class="n">RaBitQKMeans</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="n">final_assignment</span><span class="o">=</span><span class="s2">"exact"</span><span class="p">)</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">kmeans</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 </code></pre></div>
+<p>Python takes the strings <code>'approximate'</code> and <code>'exact'</code> since 0.8.5. The
+<code>FinalAssignmentMode</code> members <code>Approximate</code>, <code>Exact</code> and the legacy alias <code>SymphonyQG</code>
+are still accepted until 0.9, and <code>cp.final_assignment</code> reads back as a member
+until then; importing <code>FinalAssignmentMode</code> raises a <code>DeprecationWarning</code>.</p>
 <p>In C++, set <code>parameters.final_assignment</code> to
 <code>rabitqlib::rabitqkmeans::FinalAssignmentMode::Exact</code> or
 <code>rabitqlib::qgkmeans::FinalAssignmentMode::Exact</code>; both names refer to the same
@@ -2533,7 +2539,7 @@ QGKMeans builds a graph over the centroids on first use and reuses it;
 C++ callers that change <code>centroids</code> or graph parameters cause one rebuild on
 the next call. Each call still validates the <code>k * d</code> centroid coordinates.</p>
 <p>For the training vectors, <code>assign</code> reproduces <code>assignments</code> and <code>distances</code>
-with <code>FinalAssignmentMode.Exact</code>, for RaBitQKMeans, and whenever training
+with exact final assignment, for RaBitQKMeans, and whenever training
 sampled the input, because the sampled final pass is the same assignment.
 Unsampled approximate QGKMeans training also uses previous labels as graph
 search hints, so its final labels can differ.</p>

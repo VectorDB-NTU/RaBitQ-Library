@@ -2077,6 +2077,18 @@ site. The <a href="../../python_migration/#from-08-to-09">migration guide</a> li
   argument. <code>num_threads=0</code> keeps meaning every available CPU.</li>
 <li><code>HnswIndex</code> seeds above <code>2**32 - 1</code> are deprecated.</li>
 </ul>
+<p>The k-means classes take the names of the index parameters (#233):</p>
+<ul>
+<li><code>QGKMeans</code> and <code>QGKMeansParameters</code> take <code>nbits</code> (32, 4 or 8), <code>max_degree</code> and
+  <code>ef_construction</code> for <code>quantization_bits</code> (0, 4 or 8), <code>graph_degree</code> and <code>ef_build</code>.</li>
+<li><code>final_assignment</code> takes <code>'approximate'</code> or <code>'exact'</code>, also as
+  <code>index.cp.final_assignment</code> on <code>IvfIndex</code> and <code>HnswIndex</code>. <code>FinalAssignmentMode</code>
+  members are still accepted, and the attribute still reads back as a member until 0.9.</li>
+<li><code>KMeansIterationStats</code> is the one name of the statistics class.
+  <code>QGKMeansIterationStats</code>, <code>RaBitQKMeansIterationStats</code> and <code>FinalAssignmentMode</code> warn
+  when imported or read from the package. The class now reports its name as
+  <code>KMeansIterationStats</code>.</li>
+</ul>
 <h2 id="python-other-changes">Python: other changes<a class="headerlink" href="#python-other-changes" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>IvfIndex.set_centroids</code> takes <code>num_threads</code> (#231). Its default follows
@@ -2089,6 +2101,8 @@ site. The <a href="../../python_migration/#from-08-to-09">migration guide</a> li
   build.</li>
 <li><code>repr(index)</code> will print <code>capacity=</code> and <code>routing=</code> where it prints <code>max_elements=</code>
   and <code>initializer=</code>.</li>
+<li><code>cp.final_assignment</code> will read back as <code>'approximate'</code> or <code>'exact'</code> instead of a
+  <code>FinalAssignmentMode</code> member.</li>
 </ul>
 
 
