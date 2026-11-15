@@ -72,6 +72,20 @@ class IndexAccess {
     [[nodiscard]] Guard write() { return Guard(*this, true); }
 };
 
+// `__reduce_ex__` for every extension class and enum. Pickle protocols 0 and 1 reduce
+// through copyreg._reduce_ex, which calls pybind11_object(self); that constructor throws a
+// C++ exception through the C API and aborts the interpreter (pybind11 issue 3745).
+// Reducing with protocol 2 instead pickles a class that defines py::pickle with any
+// protocol and raises TypeError for the others, as protocol 2 already does.
+inline py::object reduce_ex_with_protocol_2(const py::object& self, int protocol) {
+    const auto object_type =
+        py::reinterpret_borrow<py::object>(reinterpret_cast<PyObject*>(&PyBaseObject_Type));
+    return object_type.attr("__reduce_ex__")(self, std::max(protocol, 2));
+}
+
+inline constexpr const char* kReduceExDoc =
+    "Reduce for pickle; protocols 0 and 1 use the protocol-2 reduction.";
+
 // Resolve Python callbacks before index guards and own bytes across GIL release.
 inline std::string path_string(py::handle value) {
     // The old std::string caster also accepted bytearray directly.

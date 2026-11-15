@@ -1,6 +1,7 @@
 #include <pybind11/detail/common.h>
 #include <pybind11/pybind11.h>
 
+#include "bindings_common.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/format_error.hpp"
@@ -60,11 +61,23 @@ PYBIND11_MODULE(_rabitqlib, m) {
 
     // Register shared enums once
     py::enum_<rabitqlib::MetricType>(m, "MetricType")
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .value("L2", rabitqlib::METRIC_L2)
         .value("IP", rabitqlib::METRIC_IP)
         .export_values();
 
     py::enum_<rabitqlib::RotatorType>(m, "RotatorType")
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .value("FhtKacRotator", rabitqlib::RotatorType::FhtKacRotator)
         .value("MatrixRotator", rabitqlib::RotatorType::MatrixRotator)
         .export_values();

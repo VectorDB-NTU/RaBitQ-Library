@@ -62,6 +62,7 @@
   - Errors in an HNSW routing graph name the graph rather than the sidecar: `Truncated HNSW centroid graph` and `HNSW centroid graph changed while loading` replace their `sidecar` forms.
   - A missing sidecar of an earlier file still raises `Cannot open HNSW centroid sidecar`.
   - A failed HNSW-RaBitQ write raises `HNSW index file cannot be written` instead of `HNSW failed to write index file`.
+- `pickle.dumps(obj, protocol=0)` or `protocol=1` on a `rabitqlib` object no longer aborts the Python process. `quant.Rotator` and `quant.Query` now pickle with every protocol; the index, k-means, parameter and iteration-statistics classes raise `TypeError: cannot pickle ...`, as they already did with protocol 2 and higher, which include the default. Protocols 0 and 1 cannot reduce pybind11 objects ([pybind11#3745](https://github.com/pybind/pybind11/issues/3745)), so they now use the protocol-2 reduction.
 
 ## C++ changes
 

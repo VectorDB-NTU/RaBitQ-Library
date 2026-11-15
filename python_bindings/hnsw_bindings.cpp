@@ -474,6 +474,12 @@ grows geometrically when needed. Removed IDs are not reused.)doc";
 
     py::class_<HnswIndex>(m, "HnswIndex", kIndexDoc)
         .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
+        .def(
             py::init<
                 size_t,
                 size_t,

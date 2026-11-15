@@ -377,6 +377,12 @@ checked at runtime, not by static type checkers.)doc";
 
     py::class_<SymqgIndex>(m, "SymqgIndex", kIndexDoc)
         .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
+        .def(
             py::init<
                 size_t,
                 size_t,

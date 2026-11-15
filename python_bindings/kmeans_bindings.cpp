@@ -73,7 +73,14 @@ py::tuple assign(const Clustering& clustering, py::handle x) {
 
 template <typename Parameters>
 void bind_training_parameters(py::class_<Parameters>& binding) {
-    binding.def(py::init<>(), "Create parameters with their documented defaults.")
+    binding
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
+        .def(py::init<>(), "Create parameters with their documented defaults.")
         .def_readwrite(
             "niter",
             &Parameters::niter,
@@ -138,6 +145,12 @@ void bind_training_parameters(py::class_<Parameters>& binding) {
 template <typename Clustering, typename Parameters>
 void bind_clustering(py::module_& m, const char* native_name, const char* public_name) {
     py::class_<Clustering>(m, native_name)
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .def(py::init<size_t, size_t, const Parameters&>())
         .def("train", &train<Clustering>, py::arg("x"))
         .def("assign", &assign<Clustering>, py::arg("x"))
@@ -240,6 +253,12 @@ on RaBitQKMeans.)doc"
         "KMeansIterationStats",
         R"doc(Read-only statistics for one completed clustering iteration.)doc"
     )
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .def_readonly(
             "iteration",
             &KMeansIterationStats::iteration,
