@@ -400,7 +400,7 @@ index.reserve_cluster(cluster_id, num_points)
 Python names this method `reserve_cluster`; it replaces `reserve`, which 0.9 removed.
 
 Python `vectors` has shape `(n, index.dim)` and is converted to contiguous float32.
-`add()` returns a uint32 array of the new IDs. Optional `cluster_ids` must be a
+`add()` returns an int64 array of the new IDs. Optional `cluster_ids` must be a
 one-dimensional integer array or sequence with one valid cluster ID per vector;
 `remove()` likewise accepts a one-dimensional integer array or sequence of point
 IDs and returns the number newly removed. Duplicate IDs count once. Python
