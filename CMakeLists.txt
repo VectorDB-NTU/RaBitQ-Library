@@ -251,6 +251,7 @@ if(RABITQ_BUILD_INDEX)
         src/index/format2.cpp
         src/index/hnsw.cpp
         src/index/ivf.cpp
+        src/index/ivf_index.cpp
         src/index/ivf_initializer.cpp
         src/index/ivf_search.cpp
         src/index/qg.cpp

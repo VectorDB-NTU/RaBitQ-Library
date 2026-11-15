@@ -9,19 +9,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <memory>
+#include <numeric>
 #include <optional>
-#include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bindings_common.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
-#include "rabitqlib/core/rotator.hpp"
-#include "rabitqlib/index/ivf/initializer.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
-#include "rabitqlib/index/training.hpp"
+#include "rabitqlib/index/ivf/types.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/types.hpp"
 
 namespace py = pybind11;
@@ -69,49 +67,28 @@ class IvfIndex {
         const std::string& metric,
         const std::string& routing,
         const py::object& seed
-    ) {
-        const auto metric_type = index_metric_from_string(metric);
-        const auto initializer_type = routing_from_string(routing);
-        const auto rotation_seed =
-            seed.is_none() ? std::random_device{}()
-                           : static_cast<uint32_t>(
-                                 checked_seed(seed, std::numeric_limits<uint32_t>::max())
-                             );
-        index_ = std::make_unique<ivf::IVF>(
-            dim,
-            num_clusters,
-            nbits,
-            metric_type,
-            rotation_seed,
-            RotatorType::FhtKacRotator,
-            initializer_type
-        );
-        seed_ = rotation_seed;
-        cp_ = default_training_parameters(metric_type, rotation_seed);
-    }
+    )
+        : index_(dim, num_clusters, index_options(nbits, metric, routing, seed))
+        , cp_(index_.cp()) {}
 
     void train(py::handle x, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         auto x_array = ensure_2d_array<float>(x, "x");
-        check_trainable();
-        ensure_dimension(
-            x_array, index_->dimension(), "x dimension does not match index dim"
-        );
-        const auto rows = training_rows(x_array, index_->num_clusters());
-        const auto cp = training_parameters(cp_, num_threads);
+        ensure_dimension(x_array, index_.dim(), "x dimension does not match index dim");
+        const auto rows = training_rows(x_array, index_.num_clusters());
         const auto* x_ptr = x_array.data();
+        index_.cp() = cp_;
         py::gil_scoped_release release;
-        index_->train(rows, x_ptr, cp);
+        index_.train(x_ptr, rows, num_threads);
     }
 
     void set_centroids(py::handle centroids, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
-        check_trainable();
-        check_centroid_shape(centroids_array, index_->num_clusters(), index_->dimension());
+        check_centroid_shape(centroids_array, index_.num_clusters(), index_.dim());
         const auto* centroids_ptr = centroids_array.data();
         py::gil_scoped_release release;
-        index_->set_centroids(centroids_ptr, num_threads.value_or(0));
+        index_.set_centroids(centroids_ptr, num_threads.value_or(0));
     }
 
     py::array_t<int64_t> add(
@@ -122,95 +99,48 @@ class IvfIndex {
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
-        // The first add on an untrained index trains it on the same data. A loaded
-        // index is trained, so an untrained one knows its seed.
-        const bool trains =
-            !index_->is_trained() && cluster_ids.is_none() && data_array.shape(0) > 0;
-        if (!trains) {
-            check_trained("add");
-        }
         ensure_dimension(
-            data_array, index_->dimension(), "data dimension does not match index dim"
+            data_array, index_.dim(), "data dimension does not match index dim"
         );
         const auto rows = static_cast<size_t>(data_array.shape(0));
-        if (trains && rows < index_->num_clusters()) {
-            throw std::invalid_argument(
-                "the first add trains the index and needs at least num_clusters rows; "
-                "expected at least " +
-                std::to_string(index_->num_clusters()) + ", got shape " +
-                array_shape(data_array)
-            );
-        }
-
         std::vector<PID> assigned;
+        AddOptions options;
         if (!cluster_ids.is_none()) {
-            assigned = checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
+            assigned = checked_cluster_ids(cluster_ids, rows, index_.num_clusters());
+            options.cluster_ids = assigned.data();
         }
-
-        const size_t first = index_->num_stored_points();
-        // Allocate the returned IDs before committing any changes to the index.
+        options.num_threads = num_threads;
+        options.fast_quantization = fast_quantization;
+        // Allocate the returned IDs before the index changes.
         auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
-        auto* ids_data = ids.mutable_data();
-        for (size_t i = 0; i < rows; ++i) {
-            ids_data[i] = static_cast<int64_t>(first + i);
-        }
-
         const auto* data_ptr = data_array.data();
-        const size_t threads = num_threads.value_or(0);
-        if (trains) {
-            // Train and fill a fresh index with the same rotation, then swap it in,
-            // so that a failure leaves this index untrained and empty.
-            const auto cp = training_parameters(cp_, num_threads);
-            auto staged = std::make_unique<ivf::IVF>(
-                index_->dimension(),
-                index_->num_clusters(),
-                index_->nbits(),
-                index_->metric_type(),
-                *seed_,
-                RotatorType::FhtKacRotator,
-                index_->initializer_type()
-            );
-            {
-                py::gil_scoped_release release;
-                staged->train(rows, data_ptr, cp);
-                staged->add(data_ptr, rows, nullptr, fast_quantization, threads);
-            }
-            index_.swap(staged);
-            return ids;
-        }
+        index_.cp() = cp_;  // the first add trains with it
+        Id first = 0;
         {
             py::gil_scoped_release release;
-            index_->add(
-                data_ptr,
-                rows,
-                assigned.empty() ? nullptr : assigned.data(),
-                fast_quantization,
-                threads
-            );
+            first = index_.add(data_ptr, rows, options);
         }
+        std::iota(ids.mutable_data(), ids.mutable_data() + rows, first);
         return ids;
     }
 
     void reserve_cluster(int64_t cluster_id, int64_t num_points) {
         const auto operation = access_.write();
-        check_trained("reserve_cluster");
-        if (cluster_id < 0 || static_cast<uint64_t>(cluster_id) >= index_->num_clusters()) {
-            throw std::invalid_argument("cluster_id must be in [0, num_clusters)");
-        }
         if (num_points < 0) {
             throw std::invalid_argument("num_points must be non-negative");
         }
         py::gil_scoped_release release;
-        index_->reserve(static_cast<PID>(cluster_id), static_cast<size_t>(num_points));
+        // A negative cluster_id converts to a value the index rejects as out of range.
+        index_.reserve_cluster(
+            static_cast<size_t>(cluster_id), static_cast<size_t>(num_points)
+        );
     }
 
     size_t remove(py::handle ids) {
         const auto operation = access_.write();
-        auto ids_array = ensure_1d_integer_array(ids, "ids");
-        check_trained("remove");
-        auto to_remove = checked_removal_ids(ids_array, index_->num_stored_points());
+        const auto to_remove = copied_ids(ensure_1d_integer_array(ids, "ids"));
         py::gil_scoped_release release;
-        return index_->remove(to_remove.data(), to_remove.size());
+        return index_.remove(to_remove.data(), to_remove.size());
     }
 
     py::tuple search(
@@ -222,120 +152,102 @@ class IvfIndex {
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
-        check_trained("search");
         ensure_dimension(
-            query_array, index_->dimension(), "query dimension does not match index dim"
+            query_array, index_.dim(), "query dimension does not match index dim"
         );
-        check_k(k);
+        check_k(k);  // before the outputs are allocated
         if (nprobe == size_t{0}) {
             throw std::invalid_argument(
                 "nprobe must be at least 1; pass None for the default"
             );
         }
-        // None probes num_clusters / 16 clusters, rounded, and at least one.
-        const size_t num_probes =
-            nprobe.value_or(std::max<size_t>(1, (index_->num_clusters() + 8) / 16));
+        IvfSearchOptions options;
+        options.nprobe = nprobe;
+        options.num_threads = num_threads.value_or(1);
+        options.high_accuracy = high_accuracy;
 
-        const size_t num_queries = static_cast<size_t>(query_array.shape(0));
-        auto output = unfilled_search_results(num_queries, k);
-        auto* ids_data = output.ids.data();
-        auto* distances_data = output.distances.mutable_data();
-
+        const auto num_queries = static_cast<size_t>(query_array.shape(0));
+        const auto shape = std::vector<py::ssize_t>{
+            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
+        auto ids = py::array_t<int64_t>(shape);
+        auto distances = py::array_t<float>(shape);
         const auto* queries_data = query_array.data();
+        auto* ids_data = ids.mutable_data();
+        auto* distances_data = distances.mutable_data();
         {
             py::gil_scoped_release release;
-            index_->search_batch(
-                queries_data,
-                num_queries,
-                k,
-                num_probes,
-                ids_data,
-                distances_data,
-                high_accuracy,
-                num_threads.value_or(1)
-            );
+            index_.search(queries_data, num_queries, k, ids_data, distances_data, options);
         }
-
-        return output.to_python();
+        return py::make_tuple(ids, distances);
     }
 
     void save(py::handle path) const {
         const auto filename = path_string(path);
         const auto operation = access_.read();
-        check_trained("save");
-        if (index_->num_stored_points() == 0) {
-            throw std::runtime_error("IvfIndex has no points to save; add points first");
-        }
         py::gil_scoped_release release;
-        index_->save(filename.c_str());
+        index_.save(filename.c_str());
     }
 
     static IvfIndex load(py::handle path) {
         const auto filename = path_string(path);
-        IvfIndex wrapper;
-        wrapper.index_ = std::make_unique<ivf::IVF>();
-        {
+        auto index = [&filename] {
             py::gil_scoped_release release;
-            wrapper.index_->load(filename.c_str());
-        }
-        wrapper.seed_ = wrapper.index_->seed();  // recorded by format-2 files
-        wrapper.cp_ = default_training_parameters(
-            wrapper.index_->metric_type(),
-            wrapper.seed_.value_or(rabitqkmeans::RaBitQKMeansParameters{}.seed)
-        );
-        return wrapper;
+            return rabitqlib::IvfIndex::load(filename.c_str());
+        }();
+        return IvfIndex(std::move(index));
     }
 
     [[nodiscard]] std::string repr() const {
         const auto operation = access_.read();
-        return "IvfIndex(dim=" + std::to_string(index_->dimension()) + ", metric='" +
-               metric_to_string(index_->metric_type()) +
-               "', nbits=" + std::to_string(index_->nbits()) +
-               ", num_points=" + std::to_string(index_->num_points()) +
-               ", num_stored_points=" + std::to_string(index_->num_stored_points()) +
-               ", num_clusters=" + std::to_string(index_->num_clusters()) + ", routing='" +
-               routing_to_string(index_->initializer_type()) +
-               "', is_trained=" + (index_->is_trained() ? "True" : "False") + ")";
+        return "IvfIndex(dim=" + std::to_string(index_.dim()) + ", metric='" +
+               metric_to_string(index_.metric()) +
+               "', nbits=" + std::to_string(index_.nbits()) +
+               ", num_points=" + std::to_string(index_.num_points()) +
+               ", num_stored_points=" + std::to_string(index_.num_stored_points()) +
+               ", num_clusters=" + std::to_string(index_.num_clusters()) + ", routing='" +
+               routing_to_string(index_.routing()) +
+               "', is_trained=" + (index_.is_trained() ? "True" : "False") + ")";
     }
 
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
-        return index_->dimension();
+        return index_.dim();
     }
     [[nodiscard]] size_t num_points() const {
         const auto operation = access_.read();
-        return index_->num_points();
+        return index_.num_points();
     }
     [[nodiscard]] size_t num_stored_points() const {
         const auto operation = access_.read();
-        return index_->num_stored_points();
+        return index_.num_stored_points();
     }
     [[nodiscard]] size_t num_clusters() const {
         const auto operation = access_.read();
-        return index_->num_clusters();
+        return index_.num_clusters();
     }
     [[nodiscard]] size_t nbits() const {
         const auto operation = access_.read();
-        return index_->nbits();
+        return index_.nbits();
     }
     [[nodiscard]] bool is_trained() const {
         const auto operation = access_.read();
-        return index_->is_trained();
+        return index_.is_trained();
     }
     [[nodiscard]] std::optional<uint32_t> seed() const {
         const auto operation = access_.read();
-        return seed_;
+        return index_.seed();
     }
     [[nodiscard]] std::string routing() const {
         const auto operation = access_.read();
-        return routing_to_string(index_->initializer_type());
+        return routing_to_string(index_.routing());
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
-        return metric_to_string(index_->metric_type());
+        return metric_to_string(index_.metric());
     }
 
-    // Parameters are wrapper state that train copies with the GIL held.
+    // Python reads and writes the fields of cp_ with the GIL held but without a guard, so
+    // the native index trains with a copy that train and add make with the GIL held.
     rabitqkmeans::RaBitQKMeansParameters& cp() { return cp_; }
     void set_cp(const rabitqkmeans::RaBitQKMeansParameters& cp) {
         const auto operation = access_.write();
@@ -343,26 +255,30 @@ class IvfIndex {
     }
 
    private:
-    IvfIndex() = default;
+    explicit IvfIndex(rabitqlib::IvfIndex index)
+        : index_(std::move(index)), cp_(index_.cp()) {}
 
-    void check_trained(const char* operation) const {
-        if (!index_->is_trained()) {
-            throw std::runtime_error(
-                std::string("IvfIndex must be trained or loaded before ") + operation
+    static IvfOptions index_options(
+        size_t nbits,
+        const std::string& metric,
+        const std::string& routing,
+        const py::object& seed
+    ) {
+        IvfOptions options;
+        options.metric = index_metric_from_string(metric);
+        options.routing = routing_from_string(routing);
+        if (!seed.is_none()) {
+            options.seed = static_cast<uint32_t>(
+                checked_seed(seed, std::numeric_limits<uint32_t>::max())
             );
         }
-    }
-
-    void check_trainable() const {
-        if (index_->num_stored_points() != 0) {
-            throw std::runtime_error("IvfIndex cannot be trained once it stores points");
-        }
+        options.nbits = nbits;
+        return options;
     }
 
     mutable IndexAccess access_;
-    std::unique_ptr<ivf::IVF> index_;
+    rabitqlib::IvfIndex index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
-    std::optional<uint32_t> seed_;  // Unknown for files from releases up to 0.8.
 };
 
 }  // namespace rabitqlib::python_bindings

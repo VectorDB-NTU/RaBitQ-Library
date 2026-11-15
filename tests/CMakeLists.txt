@@ -51,6 +51,7 @@ set_source_files_properties(unit/rabitqlib/utils/blob_test.cpp
     PROPERTIES COMPILE_DEFINITIONS
     "RABITQ_QUANT_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/python/fixtures/quant\"")
 set_source_files_properties(unit/rabitqlib/index/historical_persistence_test.cpp
+    unit/rabitqlib/index/ivf_index_test.cpp
     PROPERTIES COMPILE_DEFINITIONS
     "RABITQ_TEST_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence\"")
 rabitq_configure_target(rabitq_tests)
@@ -140,6 +141,11 @@ if(RABITQ_BUILD_INDEX)
     target_link_libraries(hnsw_add_allocation_test PRIVATE GTest::gtest_main rabitqlib::index)
     rabitq_configure_target(hnsw_add_allocation_test)
     gtest_discover_tests(hnsw_add_allocation_test DISCOVERY_MODE PRE_TEST)
+
+    add_executable(ivf_index_allocation_test failures/ivf_index_allocation_test.cpp)
+    target_link_libraries(ivf_index_allocation_test PRIVATE GTest::gtest_main rabitqlib::index)
+    rabitq_configure_target(ivf_index_allocation_test)
+    gtest_discover_tests(ivf_index_allocation_test DISCOVERY_MODE PRE_TEST)
 
 endif()
 

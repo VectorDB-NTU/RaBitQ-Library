@@ -47,7 +47,9 @@
 - Point IDs are `int64` at the Python boundary (#211):
   - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
-  - IDs remain the row numbers the index assigns, and C++ point IDs remain 32-bit `PID` values with `kPidMax` for a missing result.
+  - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex` uses 64-bit IDs, as Python does.
+
+- An `IvfIndex` call with both an invalid argument and the wrong state may now report the argument first, for example `ValueError` for `nprobe=0` on an untrained index, which raised `RuntimeError`.
 
 - Loading a format-2 file keeps the `seed` of every index, and `ef_construction` and `init` of SymphonyQG. They were `None` after `load`, and still are for files from releases up to 0.8.
 - With a recorded seed, `cp.seed` after `load` follows it as for a new index; for an HNSW-RaBitQ file whose seed exceeds 32 bits, which only C++ can write, it is the low 32 bits. It was the k-means default.
@@ -61,6 +63,15 @@
   - A failed HNSW-RaBitQ write raises `HNSW index file cannot be written` instead of `HNSW failed to write index file`.
 
 ## C++ changes
+
+- New `rabitqlib::IvfIndex` in `rabitqlib/index/ivf_index.hpp` (#234), with the workflow and defaults of the Python class, which now wraps it, and its messages where they do not name Python values:
+  - `IvfIndex(dim, num_clusters, options)` takes an `IvfOptions` struct with an `ivf::Routing`, an alias of `ivf::InitializerType`. A static `load` returns a trained index, and `train`, `set_centroids`, `add`, `remove`, `reserve_cluster`, `search` and `save` follow the Python methods.
+  - The first `add` trains an untrained index and leaves it untrained and empty if it fails. `add` takes an `AddOptions` struct and returns the first new ID.
+  - IDs are `rabitqlib::Id` (`int64_t`). A missing search result is `kNoId` (-1) with distance `+inf`.
+  - `search` takes a batch of queries and an `IvfSearchOptions` struct. Without an `nprobe` it probes `num_clusters / 16` clusters, rounded and at least 1, and an explicit 0 throws.
+  - A seed is drawn unless given, and `num_threads == 0` means every available CPU, capped by `OMP_NUM_THREADS`.
+  - Arguments out of range throw `std::invalid_argument`, and calls in the wrong state `std::logic_error`.
+- `ivf::IVF` is unchanged.
 
 - `qgkmeans::QGKMeansParameters` uses the Python names (#233): `graph_degree` becomes `max_degree`, `ef_build` becomes `ef_construction`, and `quantization_bits` (0, 4 or 8) becomes `nbits` (32, 4 or 8, with 32 for raw float32). The fields keep their order and types. An `nbits` of 0 is rejected, so code that initialized the field positionally with 0 must pass 32. `QGAssigner` keeps its constructor, including `quantization_bits` with 0 for raw storage.
 - Messages follow the names: `QGKMeans nbits must be 4, 8, or 32`, `QGKMeans max_degree must be a positive multiple of 32`, `QGKMeans requires more centroids than max_degree` and `QGKMeans ef_construction and ef_search must be positive`.

@@ -466,6 +466,21 @@ inline std::vector<PID> checked_removal_ids(
     return result;
 }
 
+// An aligned copy of IDs whose rank and dtype the caller has validated; the index checks
+// their range.
+inline std::vector<Id> copied_ids(
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast>& ids
+) {
+    std::vector<Id> result(static_cast<size_t>(ids.shape(0)));
+    const detail::ConstPackedArrayView<int64_t> values(
+        reinterpret_cast<const char*>(ids.data())
+    );
+    for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = values[i];
+    }
+    return result;
+}
+
 // Validate before narrowing, and own the result for APIs that mutate assignments.
 inline std::vector<PID> checked_cluster_ids(
     py::handle value, size_t rows, size_t clusters
