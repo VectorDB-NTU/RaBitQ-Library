@@ -45,7 +45,8 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/core/` | Per-vector encoding, query/estimation, rotation and per-vector byte layouts |
 | `include/rabitqlib/fastscan/` | All 32-vector batch layouts, encoding adapters, packing, LUT/estimation and FastScan/HACC |
 | `include/rabitqlib/core/types.hpp`, `core/detail/eigen.hpp` | Numerical configuration/types and internal Eigen aliases, respectively |
-| `include/rabitqlib/index/types.hpp` | Point IDs and ANN candidate values; no Eigen dependency |
+| `include/rabitqlib/index/types.hpp` | Point IDs, add options and ANN candidate values; no Eigen dependency |
+| `include/rabitqlib/index/ivf_index.hpp` | `IvfIndex`, the supported C++ IVF API: the Python workflow over `ivf::IVF` |
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
