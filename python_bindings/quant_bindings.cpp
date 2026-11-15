@@ -2164,7 +2164,7 @@ Parameters
 ----------
 rotated_query : array_like of float32, shape (d,)
     A rotated, padded query; d is a positive multiple of 32.
-metric : {'l2', 'ip', 'innerproduct'}
+metric : {'l2', 'ip'}
     The metric the factors were computed for.
 centroid : array_like of float32, shape (d,), optional
     The working-space centroid the factors were computed with; None is zero.
@@ -2251,7 +2251,7 @@ Parameters
 ----------
 rotated_query : array_like of float32, shape (d,)
     A rotated, padded query; d is a positive multiple of 32.
-metric : {'l2', 'ip', 'innerproduct'}
+metric : {'l2', 'ip'}
     The metric the factors were computed for.
 centroid : array_like of float32, shape (d,), optional
     The working-space centroid the factors were computed with; None is zero.

@@ -29,15 +29,13 @@ def vectors():
 
 def unbuilt_index(kind, bits):
     if kind == "ivf":
-        return IvfIndex(64, 1, nbits=bits, metric="innerproduct")
+        return IvfIndex(64, 1, nbits=bits, metric="ip")
     if kind == "hnsw":
-        index = HnswIndex(64, nbits=bits, num_clusters=1, metric="innerproduct")
+        index = HnswIndex(64, nbits=bits, num_clusters=1, metric="ip")
         # Keep capacity distinct from the 80 stored points.
         index.reserve(96)
         return index
-    return SymqgIndex(
-        64, max_degree=32, ef_construction=40, metric="innerproduct", nbits=bits
-    )
+    return SymqgIndex(64, max_degree=32, ef_construction=40, metric="ip", nbits=bits)
 
 
 def build_index(index, vectors):

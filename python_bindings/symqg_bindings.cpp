@@ -315,7 +315,7 @@ ef_construction : int, optional
     Default is 200.
 init : {'pipnn', 'random'}, optional
     Keyword-only. Graph initialization method. Default is 'pipnn'.
-metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+metric : {'l2', 'ip', 'cosine'}, optional
     Keyword-only. Squared L2, inner-product or cosine distance. Default is
     'l2'. 'cosine' scales data and queries to unit length.
 seed : int, optional

@@ -205,7 +205,7 @@ inline MetricType metric_from_string(const std::string& metric) {
     if (metric == "l2") {
         return METRIC_L2;
     }
-    if (metric == "ip" || metric == "innerproduct") {
+    if (metric == "ip") {
         return METRIC_IP;
     }
     throw std::invalid_argument("metric must be 'l2' or 'ip'");
@@ -216,7 +216,7 @@ inline MetricType index_metric_from_string(const std::string& metric) {
     if (metric == "cosine") {
         return METRIC_COSINE;
     }
-    if (metric == "l2" || metric == "ip" || metric == "innerproduct") {
+    if (metric == "l2" || metric == "ip") {
         return metric_from_string(metric);
     }
     throw std::invalid_argument("metric must be 'l2', 'ip' or 'cosine'");

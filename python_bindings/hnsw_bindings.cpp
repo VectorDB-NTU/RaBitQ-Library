@@ -405,7 +405,7 @@ M : int, optional
     2 * M edges. Default is 16.
 ef_construction : int, optional
     Keyword-only. Construction search breadth. Default is 200.
-metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+metric : {'l2', 'ip', 'cosine'}, optional
     Keyword-only. Squared L2, inner-product or cosine distance. Default is
     'l2'. 'cosine' scales data and queries to unit length.
 seed : int, optional

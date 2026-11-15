@@ -69,7 +69,7 @@ number of points, after removals, or when the probed IVF-RaBitQ clusters contain
 few points. IDs are `int64`; unfilled slots contain ID `-1` and distance `+inf`. Filter them with
 `valid = np.isfinite(distances)` before using IDs to index your data.
 
-The `metric` argument accepts `"l2"`, `"ip"` (also `"innerproduct"`) and `"cosine"`.
+The `metric` argument accepts `"l2"`, `"ip"` and `"cosine"`.
 `metric="cosine"` scales database and query vectors to unit length and returns
 `1 - cos`; the saved file records it, so a loaded index keeps normalizing.
 
