@@ -2059,6 +2059,12 @@ Examples
 
     py::class_<QuantRotator>(quant, "Rotator", kRotatorDoc)
         .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
+        .def(
             py::init<size_t, const std::string&, const py::object&, const py::object&>(),
             py::arg("dim"),
             py::kw_only(),
@@ -2276,6 +2282,12 @@ num_threads : int, optional
     OMP_NUM_THREADS.)doc";
 
     py::class_<QuantQuery>(quant, "Query", kQueryDoc)
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .def(
             py::init(&QuantQuery::create),
             py::arg("rotated_query"),
