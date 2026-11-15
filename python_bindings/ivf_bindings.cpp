@@ -299,7 +299,7 @@ num_clusters : int
 nbits : int, optional
     Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
     float32 vectors with one-bit filtering and raw reranking. Default is 7.
-metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+metric : {'l2', 'ip', 'cosine'}, optional
     Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
     scales data and queries to unit length.
 routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional

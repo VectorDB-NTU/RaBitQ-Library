@@ -17,7 +17,7 @@ if __name__ == "__main__":
         nargs="?",
         default="l2",
         type=str.lower,
-        choices=["l2", "ip", "innerproduct"],
+        choices=["l2", "ip"],
     )
     parser.add_argument(
         "--method",
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     K = args.num_clusters
     centroids_path = args.centroids_path
     cluster_id_path = args.cluster_id_path
-    metric = "l2" if args.metric == "l2" else "ip"
+    metric = args.metric
     clustering_type = RaBitQKMeans if args.method == "rabitq" else QGKMeans
     print(f"Using {metric.upper()} metric with {clustering_type.__name__}")
 

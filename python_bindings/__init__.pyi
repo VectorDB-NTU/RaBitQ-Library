@@ -26,7 +26,7 @@ __all__ = [
 
 _Path: TypeAlias = str | bytes | bytearray | PathLike[str] | PathLike[bytes]
 
-_Metric: TypeAlias = Literal["l2", "ip", "innerproduct", "cosine"]
+_Metric: TypeAlias = Literal["l2", "ip", "cosine"]
 _Routing: TypeAlias = Literal["auto", "flat", "flat_rabitq", "hnsw"]
 _QGInit: TypeAlias = Literal["pipnn", "random"]
 _FinalAssignment: TypeAlias = Literal["approximate", "exact"]
@@ -64,7 +64,7 @@ class IvfIndex:
     nbits : int, optional
         Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
         float32 vectors with one-bit filtering and raw reranking. Default is 7.
-    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    metric : {'l2', 'ip', 'cosine'}, optional
         Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
         scales data and queries to unit length.
     routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
@@ -115,7 +115,7 @@ class IvfIndex:
         nbits : int, optional
             Keyword-only. Total quantization bits, 1 through 9, or 32 for owned
             float32 vectors with one-bit filtering and raw reranking. Default is 7.
-        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        metric : {'l2', 'ip', 'cosine'}, optional
             Squared L2, inner-product or cosine distance. Default is 'l2'. 'cosine'
             scales data and queries to unit length.
         routing : {'auto', 'flat', 'flat_rabitq', 'hnsw'}, optional
@@ -403,7 +403,7 @@ class HnswIndex:
         2 * M edges. Default is 16.
     ef_construction : int, optional
         Keyword-only. Construction search breadth. Default is 200.
-    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    metric : {'l2', 'ip', 'cosine'}, optional
         Keyword-only. Squared L2, inner-product or cosine distance. Default is
         'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
@@ -463,7 +463,7 @@ class HnswIndex:
             2 * M edges. Default is 16.
         ef_construction : int, optional
             Keyword-only. Construction search breadth. Default is 200.
-        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        metric : {'l2', 'ip', 'cosine'}, optional
             Keyword-only. Squared L2, inner-product or cosine distance. Default is
             'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional
@@ -745,7 +745,7 @@ class SymqgIndex:
         Default is 200.
     init : {'pipnn', 'random'}, optional
         Keyword-only. Graph initialization method. Default is 'pipnn'.
-    metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+    metric : {'l2', 'ip', 'cosine'}, optional
         Keyword-only. Squared L2, inner-product or cosine distance. Default is
         'l2'. 'cosine' scales data and queries to unit length.
     seed : int, optional
@@ -802,7 +802,7 @@ class SymqgIndex:
             Default is 200.
         init : {'pipnn', 'random'}, optional
             Keyword-only. Graph initialization method. Default is 'pipnn'.
-        metric : {'l2', 'ip', 'innerproduct', 'cosine'}, optional
+        metric : {'l2', 'ip', 'cosine'}, optional
             Keyword-only. Squared L2, inner-product or cosine distance. Default is
             'l2'. 'cosine' scales data and queries to unit length.
         seed : int, optional

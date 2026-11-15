@@ -326,7 +326,7 @@ def check_exact_cluster_labels(data, centroids, labels, metric):
     np.testing.assert_array_equal(labels, np.argmin(distances, axis=1))
 
 
-@pytest.mark.parametrize("argument", [None, "l2", "ip", "innerproduct"])
+@pytest.mark.parametrize("argument", [None, "l2", "ip"])
 def test_legacy_clustering_formats_without_faiss(tmp_path, example_data, argument):
     data_path, data = example_data
     centroids_path = tmp_path / "centroids.fvecs"
@@ -349,7 +349,7 @@ def test_legacy_clustering_formats_without_faiss(tmp_path, example_data, argumen
     labels = label_words[:, 1]
     assert np.isfinite(centroids).all()
     assert ((0 <= labels) & (labels < 16)).all()
-    metric = "ip" if argument in ("ip", "innerproduct") else "l2"
+    metric = argument or "l2"
     check_exact_cluster_labels(data, centroids, labels, metric)
 
 

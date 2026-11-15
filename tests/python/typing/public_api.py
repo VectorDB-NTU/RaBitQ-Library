@@ -107,6 +107,7 @@ def reject_removed_forms(
     IvfIndex(64, 80, 1, 4)  # type: ignore[arg-type, call-arg]
     IvfIndex(dim=64, max_elements=80, num_clusters=1, nbits=4)  # type: ignore[call-arg]
     IvfIndex(64, 1, initializer="flat")  # type: ignore[call-arg]
+    IvfIndex(64, 1, metric="innerproduct")  # type: ignore[arg-type]
     HnswIndex(64, 80)  # type: ignore[call-arg]
     HnswIndex(64, max_elements=80)  # type: ignore[call-arg]
     HnswIndex(64, random_seed=5)  # type: ignore[call-arg]
@@ -234,12 +235,7 @@ def check_input_contracts() -> None:
     centroids = x.mean(axis=0, keepdims=True)
     signed = np.zeros(80, dtype=np.int64)
     unsigned = np.zeros(80, dtype=np.uint32)
-    metrics: tuple[Literal["l2", "ip", "innerproduct", "cosine"], ...] = (
-        "l2",
-        "ip",
-        "innerproduct",
-        "cosine",
-    )
+    metrics: tuple[Literal["l2", "ip", "cosine"], ...] = ("l2", "ip", "cosine")
     for metric in metrics:
         ivf = IvfIndex(64, 1, nbits=4, metric=metric)
         HnswIndex(64, nbits=4, metric=metric)

@@ -1,7 +1,7 @@
 """The call forms that 0.9 removed fail plainly; none is read as something else.
 
-Covers the 0.7 forms (issue #213), the 0.8 index spellings (#232) and the 0.8
-k-means spellings (#233).
+Covers the 0.7 forms (issue #213), the 0.8 index spellings (#232), including the
+"innerproduct" metric spelling, and the 0.8 k-means spellings (#233).
 """
 
 import pickle
@@ -18,6 +18,7 @@ from rabitqlib import (
     RaBitQKMeans,
     RaBitQKMeansParameters,
     SymqgIndex,
+    quant,
 )
 
 
@@ -307,3 +308,27 @@ def test_kmeans_iteration_stats_is_one_class(base_data):
     # Pickle and pydoc find the class by this name in its module.
     assert stats.__module__ == "rabitqlib._rabitqlib"
     assert pickle.loads(pickle.dumps(stats)) is stats
+
+
+def test_innerproduct_is_no_longer_a_metric_name():
+    # The inner-product metric is spelled "ip" only, as index.metric reports it.
+    index_message = r"^metric must be 'l2', 'ip' or 'cosine'$"
+    for make in (
+        lambda: IvfIndex(DIM, 8, metric="innerproduct"),
+        lambda: HnswIndex(DIM, metric="innerproduct"),
+        lambda: SymqgIndex(DIM, metric="innerproduct"),
+    ):
+        with pytest.raises(ValueError, match=index_message):
+            make()
+    query = np.zeros(DIM, dtype=np.float32)
+    codes = np.zeros((0, DIM), dtype=np.uint8)
+    for call in (
+        lambda: quant.Query(query, metric="innerproduct"),
+        lambda: quant.query_terms(query, metric="innerproduct"),
+        lambda: quant.code_factors(
+            codes.astype(np.float32), codes, nbits=4, metric="innerproduct"
+        ),
+    ):
+        with pytest.raises(ValueError, match=r"^metric must be 'l2' or 'ip'$"):
+            call()
+    assert IvfIndex(DIM, 8, metric="ip").metric == "ip"

@@ -178,12 +178,14 @@ In C++, `QGKMeansParameters` takes the same three field renames in 0.9, without 
 transition release, and `FinalAssignmentMode::SymphonyQG` and the two statistics
 aliases are removed; see the [0.9 notes](releases/unreleased.md#c-changes).
 
-Three of these changes come without a warning in 0.9. `HnswIndex()` without `seed=` draws a seed,
+Four changes come without a warning in 0.9. `HnswIndex()` without `seed=` draws a seed,
 as `IvfIndex` and `SymqgIndex` already do, instead of using 100: pass `seed=` (and
 `num_threads=1` to `add`) if you rely on a reproducible build. `repr(index)` prints
 `capacity=` for `HnswIndex` and `routing=` for `IvfIndex` where it prints `max_elements=`
-and `initializer=`, and no longer prints `max_elements=` for `IvfIndex`. And
-`cp.final_assignment` reads back as a string, as described above.
+and `initializer=`, and no longer prints `max_elements=` for `IvfIndex`. The metric
+spelling `"innerproduct"` raises `ValueError` on the index classes and in
+`rabitqlib.quant`: use `"ip"`, which every release accepts and the `metric` properties
+return. And `cp.final_assignment` reads back as a string, as described above.
 
 0.9 also changes behavior that no warning can announce: `search` and `add` return
 `int64` IDs with `-1` instead of `2**32 - 1` for a missing result, `save` writes index

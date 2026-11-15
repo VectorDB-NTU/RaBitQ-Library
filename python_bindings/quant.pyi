@@ -81,7 +81,7 @@ class Rotator:
     def __deepcopy__(self, memo: Any) -> Rotator:
         """Return self; rotators are immutable."""
 
-_Metric = Literal["l2", "ip", "innerproduct"]
+_Metric = Literal["l2", "ip"]
 
 class Query:
     """A rotated, padded query for scoring codes in the working space."""

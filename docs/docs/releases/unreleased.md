@@ -33,6 +33,7 @@
   - `KMeansIterationStats` is the only name of the statistics class; `QGKMeansIterationStats` and `RaBitQKMeansIterationStats` are no longer in the package.
 - A removed call form of an index raises `TypeError`, and a removed attribute or name `AttributeError` (`ImportError` when imported), as does a removed `QGKMeans` keyword, like any unknown keyword there; none is read as a different call. For example, `IvfIndex(dim, 1000, 64)` is an error, not an index with 1000 clusters.
 - Changes that 0.8.5 could not announce with a warning:
+  - `metric="innerproduct"` raises `ValueError` on the index classes and in `rabitqlib.quant`. Use `"ip"`, which every release accepts and the `metric` properties return.
   - `HnswIndex()` without `seed=` draws a seed, as `IvfIndex` and `SymqgIndex` do, instead of using 100. `index.seed` reports it; pass `seed=`, and `num_threads=1` to `add`, for a reproducible build.
   - `repr(index)` prints `capacity=` for `HnswIndex` and `routing=` for `IvfIndex`, and no longer prints `max_elements=` for `IvfIndex`.
 - The index classes are now the extension's own, without replaced methods:
