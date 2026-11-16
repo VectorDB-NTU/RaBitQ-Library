@@ -1,4 +1,5 @@
-// Times one IVF::add() per repetition, each on a freshly loaded copy of the base index.
+// Times one IvfIndex::add() per repetition, each on a freshly loaded copy of the base
+// index.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -12,7 +13,7 @@
 
 #include "common.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/types.hpp"
 
 namespace {
@@ -49,47 +50,58 @@ void run(int argc, char** argv) {
     const std::vector<rabitqlib::PID> single_ids(add_n, rabitqlib::PID{0});
     const rabitqlib::PID* add_cluster_ids = mode == "single" ? single_ids.data() : nullptr;
 
+    rabitqlib::AddOptions add_options;
+    add_options.num_threads = 1;
     {
-        rabitqlib::ivf::IVF base(base_n, dim, clusters, 4, rabitqlib::METRIC_L2);
-        base.construct(base_data.data(), centroids.data(), base_assigned.data(), false, 1);
+        rabitqlib::IvfOptions options;
+        options.nbits = 4;
+        options.seed = 42;  // a fixed rotation keeps hashes comparable across processes
+        rabitqlib::IvfIndex base(dim, clusters, options);
+        base.set_centroids(centroids.data(), 1);
+        add_options.cluster_ids = base_assigned.data();
+        base.add(base_data.data(), base_n, add_options);
         base.save(path.c_str());
     }
+    add_options.cluster_ids = add_cluster_ids;
+    rabitqlib::IvfSearchOptions search_options;
+    search_options.nprobe = clusters;
 
     bench::metadata(dim, base_n, 1);
     const char* name = mode == "single" ? "add_single_cluster" : "add_routed";
     uint64_t expected = 0;
     for (size_t rep = 0; rep <= reps; ++rep) {
-        rabitqlib::ivf::IVF index;
-        index.load(path.c_str());
+        auto index = rabitqlib::IvfIndex::load(path.c_str());
 
         const auto start = bench::Clock::now();
-        index.add(add_data.data(), add_n, add_cluster_ids, false, 1);
+        index.add(add_data.data(), add_n, add_options);
         const double seconds =
             std::chrono::duration<double>(bench::Clock::now() - start).count();
 
         if (index.num_stored_points() != base_n + add_n ||
-            index.num_points() != base_n + add_n ||
-            index.max_elements() != base_n + add_n) {
+            index.num_points() != base_n + add_n) {
             throw std::runtime_error("add() did not append the requested points");
         }
         // Validate known self-neighbors outside timing, independently of prior runs.
         for (size_t row = 0; row < std::min(add_n, size_t{3}); ++row) {
-            rabitqlib::PID id = rabitqlib::kPidMax;
+            rabitqlib::Id id = rabitqlib::kNoId;
             float distance = 0;
-            index.search(add_data.data() + row * dim, 1, clusters, &id, &distance);
-            if (id != base_n + row || !std::isfinite(distance)) {
+            index.search(add_data.data() + row * dim, 1, 1, &id, &distance, search_options);
+            if (id != static_cast<rabitqlib::Id>(base_n + row) ||
+                !std::isfinite(distance)) {
                 throw std::runtime_error("Added point is not searchable with its new ID");
             }
         }
 
         uint64_t h = 14695981039346656037ULL;
-        const size_t total = index.max_elements();
+        const size_t total = index.num_stored_points();
         h = bench::hash(&total, sizeof(total), h);
         const size_t k = std::min(size_t{10}, index.num_points());
-        std::vector<rabitqlib::PID> ids(k);
+        std::vector<rabitqlib::Id> ids(k);
         std::vector<float> distances(k);
-        index.search(base_data.data(), ids.size(), clusters, ids.data(), distances.data());
-        h = bench::hash(ids.data(), ids.size() * sizeof(rabitqlib::PID), h);
+        index.search(
+            base_data.data(), 1, ids.size(), ids.data(), distances.data(), search_options
+        );
+        h = bench::hash(ids.data(), ids.size() * sizeof(rabitqlib::Id), h);
         h = bench::hash(distances.data(), distances.size() * sizeof(float), h);
 
         if (rep == 0) {

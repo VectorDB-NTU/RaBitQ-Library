@@ -7,13 +7,11 @@
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/hnsw_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
 
-using PID = rabitqlib::PID;
-using index_type = rabitqlib::hnsw::HierarchicalNSW;
 using data_type = rabitqlib::RowMajorArray<float>;
 using cluster_ids_type = rabitqlib::RowMajorArray<uint32_t>;
 
@@ -75,23 +73,24 @@ int run(int argc, char* argv[]) {
     size_t num_points = data.rows();
     size_t dim = data.cols();
 
-    size_t random_seed = 100;  // by default 100
-    rabitqlib::hnsw::HierarchicalNSW hnsw(
-        num_points, dim, total_bits, m, ef, random_seed, metric_type
-    );
+    rabitqlib::HnswOptions options;
+    options.metric = metric_type;
+    options.nbits = total_bits;
+    options.num_clusters = centroids.rows();
+    options.M = m;
+    options.ef_construction = ef;
+    options.seed = 100;
+    rabitqlib::HnswIndex hnsw(dim, options);
+    hnsw.reserve(num_points);  // allocate the graph storage outside the timing
 
     rabitqlib::StopW stopw;
     stopw.reset();
 
-    hnsw.construct(
-        centroids.rows(),
-        centroids.data(),
-        num_points,
-        data.data(),
-        cluster_ids.data(),
-        0,
-        faster_quant
-    );
+    hnsw.set_centroids(centroids.data());
+    rabitqlib::AddOptions add_options;
+    add_options.cluster_ids = cluster_ids.data();
+    add_options.fast_quantization = faster_quant;
+    hnsw.add(data.data(), num_points, add_options);
 
     float total_time = stopw.get_elapsed_micro();
     total_time /= 1e6;

@@ -8,8 +8,8 @@
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/index/hnsw/hnsw.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/hnsw_index.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 
@@ -27,37 +27,34 @@ int main(int argc, char** argv) {
         const size_t count = data.rows();
         const size_t dim = data.cols();
         const auto check = [&](const auto& index, const auto& search) {
-            if (index.dimension() != dim || index.num_stored_points() != count ||
-                index.num_points() != count || index.metric_type() != metric ||
+            if (index.dim() != dim || index.num_stored_points() != count ||
+                index.num_points() != count || index.metric() != metric ||
                 index.nbits() != bits) {
                 throw std::runtime_error("Example index metadata does not match input");
             }
             // Unit vectors make self the exact winner for the IP fixture as well.
             for (size_t row : std::array<size_t, 3>{0, count / 2, count - 1}) {
-                rabitqlib::PID id = rabitqlib::kPidMax;
+                rabitqlib::Id id = rabitqlib::kNoId;
                 float distance = 0;
                 search(data.data() + row * dim, id, distance);
-                if (id != row || !std::isfinite(distance)) {
+                if (id != static_cast<rabitqlib::Id>(row) || !std::isfinite(distance)) {
                     throw std::runtime_error("Example index did not retrieve its input");
                 }
             }
         };
         if (kind == "ivf") {
-            rabitqlib::ivf::IVF index;
-            index.load(argv[2]);
-            check(index, [&](const float* query, rabitqlib::PID& id, float& distance) {
-                index.search(query, 1, index.num_clusters(), &id, &distance);
+            const auto index = rabitqlib::IvfIndex::load(argv[2]);
+            rabitqlib::IvfSearchOptions options;
+            options.nprobe = index.num_clusters();
+            check(index, [&](const float* query, rabitqlib::Id& id, float& distance) {
+                index.search(query, 1, 1, &id, &distance, options);
             });
         } else if (kind == "hnsw") {
-            rabitqlib::hnsw::HierarchicalNSW index;
-            index.load(argv[2]);
-            check(index, [&](const float* query, rabitqlib::PID& id, float& distance) {
-                const auto hits = index.search(query, 1, 1, count, 1);
-                if (hits.size() != 1 || hits[0].size() != 1) {
-                    throw std::runtime_error("Example index returned no neighbor");
-                }
-                distance = hits[0][0].first;
-                id = hits[0][0].second;
+            const auto index = rabitqlib::HnswIndex::load(argv[2]);
+            rabitqlib::GraphSearchOptions options;
+            options.ef_search = count;
+            check(index, [&](const float* query, rabitqlib::Id& id, float& distance) {
+                index.search(query, 1, 1, &id, &distance, options);
             });
         } else {
             throw std::invalid_argument("Expected ivf or hnsw");

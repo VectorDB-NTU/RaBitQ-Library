@@ -5,14 +5,13 @@
 #include <vector>
 
 #include "rabitqlib/core/detail/eigen.hpp"
-#include "rabitqlib/index/symqg/qg.hpp"
+#include "rabitqlib/index/symqg_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
-using PID = rabitqlib::PID;
-using index_type = rabitqlib::symqg::QuantizedGraph<float>;
+using index_type = rabitqlib::SymqgIndex;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
@@ -59,8 +58,7 @@ int run(int argc, char** argv) {
     size_t nq = query.rows();
     size_t total_count = nq * topk;
 
-    index_type qg;
-    qg.load(index_file);
+    auto qg = index_type::load(index_file);
 
     rabitqlib::StopW stopw;
 
@@ -72,17 +70,19 @@ int run(int argc, char** argv) {
             size_t ef = efs[i];
             size_t total_correct = 0;
             float total_time = 0;
-            qg.set_ef(ef);
-            std::vector<PID> results(total_count);
+            rabitqlib::GraphSearchOptions options;
+            options.ef_search = ef;
+            std::vector<rabitqlib::Id> results(total_count);
             std::vector<float> dists(total_count);
             stopw.reset();
-            qg.search_batch(query.data(), nq, topk, results.data(), dists.data());
+            qg.search(query.data(), nq, topk, results.data(), dists.data(), options);
             total_time = stopw.get_elapsed_micro();
             for (size_t z = 0; z < nq; z++) {
                 for (size_t y = 0; y < topk; y++) {
                     for (size_t k = 0; k < topk; k++) {
-                        if (gt(static_cast<Eigen::Index>(z),
-                               static_cast<Eigen::Index>(k)) == results[z * topk + y]) {
+                        if (static_cast<rabitqlib::Id>(gt(
+                                static_cast<Eigen::Index>(z), static_cast<Eigen::Index>(k)
+                            )) == results[z * topk + y]) {
                             total_correct++;
                             break;
                         }
