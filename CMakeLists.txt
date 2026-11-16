@@ -257,6 +257,7 @@ if(RABITQ_BUILD_INDEX)
         src/index/ivf_search.cpp
         src/index/qg.cpp
         src/index/qg_builder.cpp
+        src/index/symqg_index.cpp
         src/index/pipnn.cpp
         src/index/hnsw_dispatch.cpp
         src/index/hnsw_search_generic.cpp

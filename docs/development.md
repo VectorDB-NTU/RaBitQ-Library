@@ -48,6 +48,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/index/types.hpp` | Point IDs, add and graph search options, and ANN candidate values; no Eigen dependency |
 | `include/rabitqlib/index/ivf_index.hpp` | `IvfIndex`, the supported C++ IVF API: the Python workflow over `ivf::IVF` |
 | `include/rabitqlib/index/hnsw_index.hpp` | `HnswIndex`, the supported C++ HNSW API: the Python workflow over `hnsw::HierarchicalNSW` |
+| `include/rabitqlib/index/symqg_index.hpp` | `SymqgIndex`, the supported C++ SymphonyQG API: the Python workflow over `symqg::QuantizedGraph<float>` and `QGBuilder` |
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
@@ -576,10 +577,11 @@ Shared NumPy and string conversion helpers live in `python_bindings/bindings_com
 index-specific APIs in their own binding file and export public classes from
 `python_bindings/__init__.py`. Validate rank, dimensionality, state, and parameter ranges before
 entering the core. A binding over a class that implements the Python workflow in C++, such as
-`IvfIndex` or `HnswIndex`, leaves the state checks and the removal-ID range to that class, and
-for IVF the `reserve_cluster` cluster-ID range. It keeps the conversions and shape checks, the
-`add` cluster-ID range and the `num_points` sign checked before narrowing, the `k` range checked
-before allocating outputs, and checks whose messages name Python values such as `None`.
+`IvfIndex`, `HnswIndex` or `SymqgIndex`, leaves the state checks and the removal-ID range to
+that class, and for IVF the `reserve_cluster` cluster-ID range. It keeps the conversions and
+shape checks, the `add` cluster-ID range and the `num_points` sign checked before narrowing, the
+`k` range checked before allocating outputs, and checks whose messages name Python values such as
+`None`.
 Be deliberate about `py::array::forcecast`: it permits dtype/layout copies and
 must not be used where callers expect in-place mutation or pointer identity.
 

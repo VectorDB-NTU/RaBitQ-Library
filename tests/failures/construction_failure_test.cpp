@@ -16,6 +16,7 @@
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
 #include "rabitqlib/index/symqg/qg_builder.hpp"
+#include "rabitqlib/index/symqg_index.hpp"
 #include "rabitqlib/index/types.hpp"
 
 namespace {
@@ -282,6 +283,58 @@ TEST_P(ConstructionWorkerFailure, QgRefinementWorkerErrorsReachCaller) {
             EXPECT_EQ(graph.num_stored_points(), 64U);
             EXPECT_EQ(graph.num_points(), 64U);
         }
+    }
+}
+
+// Fail the first, a middle and the last worker allocation of SymqgIndex::add; the last
+// is in refinement, after the builder is constructed. The index keeps no graph, so a later
+// add builds one.
+TEST_P(ConstructionWorkerFailure, FailedSymqgIndexAddKeepsNoGraph) {
+    using namespace rabitqlib;
+    const auto data = vectors();
+    const size_t threads = GetParam();
+    for (const auto init :
+         {symqg::QGInitialization::Random, symqg::QGInitialization::PiPNN}) {
+        SymqgOptions options;
+        options.nbits = 4;
+        options.ef_construction = 32;
+        options.init = init;
+        options.seed = 42;
+        // The first add of a process also allocates one-time runtime state, so count
+        // the second.
+        constexpr size_t kNever = std::numeric_limits<size_t>::max() / 2;
+        size_t allocations = 0;
+        for (int run = 0; run < 2; ++run) {
+            SymqgIndex counted(64, options);
+            remaining = kNever;
+            fail_parallel = true;
+            counted.add(data.data(), 64, threads);
+            fail_parallel = false;
+            allocations = kNever - remaining;
+        }
+        ASSERT_GT(allocations, 2U);
+        size_t failures = 0;
+        for (const size_t skip : {size_t{0}, allocations / 2, allocations - 1}) {
+            SCOPED_TRACE(skip);
+            SymqgIndex index(64, options);
+            remaining = skip;
+            fail_parallel = true;
+            bool failed = false;
+            try {
+                index.add(data.data(), 64, threads);
+            } catch (const std::bad_alloc&) { failed = true; }
+            fail_parallel = false;
+            if (!failed) {
+                // Concurrent workers may allocate a little less than the counted add.
+                EXPECT_GT(threads, 1U);
+                continue;
+            }
+            ++failures;
+            ASSERT_EQ(index.num_points(), 0U);
+            ASSERT_NO_THROW(index.add(data.data(), 64, threads));
+            ASSERT_EQ(index.num_points(), 64U);
+        }
+        EXPECT_GE(failures, 2U);
     }
 }
 }  // namespace
