@@ -2,6 +2,7 @@
 #include <gtest/internal/gtest-port.h>
 #include <omp.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -9,11 +10,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <new>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
 
+#include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/hnsw_index.hpp"
 #include "rabitqlib/index/types.hpp"
 
 namespace {
@@ -396,6 +400,67 @@ TEST(HnswRemoveAllocationTest, FailureRemovesNothing) {
         index.search(fixture.data.data(), kCapacity, kCapacity, kCapacity, 1), before
     );
     EXPECT_EQ(index.remove(labels.data(), labels.size()), labels.size());
+}
+
+// HnswIndex trains a staged index and fills it on the first add, so a failed operator new
+// anywhere, also after training has succeeded, leaves the index untrained, empty and with
+// its capacity, and a retry succeeds. Aligned storage and Eigen allocate with
+// malloc-style calls and are not injected here.
+TEST(HnswIndexFirstAddAllocationTest, EveryOperatorNewFailureLeavesTheIndexUntrained) {
+    (void)omp_get_max_threads();
+    constexpr size_t kPoints = 40;
+    std::mt19937 generator(3);
+    std::normal_distribution<float> normal;
+    std::vector<float> data(kPoints * kDim);
+    for (auto& value : data) {
+        value = normal(generator);
+    }
+    AddOptions options;
+    options.num_threads = 1;
+    // With a reserved capacity, and with the initial capacity of one point that the
+    // first add must grow.
+    for (const size_t reserved : {size_t{64}, size_t{0}}) {
+        SCOPED_TRACE(reserved);
+        const size_t capacity = std::max<size_t>(reserved, 1);
+        const auto new_index = [reserved] {
+            HnswOptions settings;
+            settings.num_clusters = 2;
+            settings.M = 4;
+            settings.ef_construction = 10;
+            settings.seed = 11;
+            HnswIndex index(kDim, settings);
+            index.cp().niter = 2;
+            index.reserve(reserved);
+            return index;
+        };
+
+        size_t failures = 0;
+        bool succeeded = false;
+        for (size_t allocation = 0; allocation < 8192; ++allocation) {
+            SCOPED_TRACE(allocation);
+            HnswIndex index = new_index();
+            bool failed = false;
+            {
+                AllocationFailure failure(allocation);
+                try {
+                    index.add(data.data(), kPoints, options);
+                } catch (const std::bad_alloc&) { failed = true; }
+            }
+            if (!failed) {
+                succeeded = true;
+                break;
+            }
+            ++failures;
+            ASSERT_FALSE(index.is_trained());
+            ASSERT_EQ(index.num_stored_points(), 0U);
+            ASSERT_EQ(index.capacity(), capacity);
+            ASSERT_EQ(index.seed(), std::optional<uint64_t>(11));
+            ASSERT_EQ(index.add(data.data(), kPoints, options), 0);
+            ASSERT_EQ(index.num_points(), kPoints);
+        }
+        EXPECT_GT(failures, 0U);
+        EXPECT_TRUE(succeeded);
+    }
 }
 }  // namespace
 }  // namespace rabitqlib::hnsw

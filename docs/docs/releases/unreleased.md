@@ -48,7 +48,7 @@
 - Point IDs are `int64` at the Python boundary (#211):
   - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
-  - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex` uses 64-bit IDs, as Python does.
+  - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex` and `HnswIndex` use 64-bit IDs, as Python does.
 
 - An `IvfIndex` call with both an invalid argument and the wrong state may now report the argument first, for example `ValueError` for `nprobe=0` on an untrained index, which raised `RuntimeError`.
 
@@ -73,7 +73,14 @@
   - `search` takes a batch of queries and an `IvfSearchOptions` struct. Without an `nprobe` it probes `num_clusters / 16` clusters, rounded and at least 1, and an explicit 0 throws.
   - A seed is drawn unless given, and `num_threads == 0` means every available CPU, capped by `OMP_NUM_THREADS`.
   - Arguments out of range throw `std::invalid_argument`, and calls in the wrong state `std::logic_error`.
-- `ivf::IVF` is unchanged.
+- New `rabitqlib::HnswIndex` in `rabitqlib/index/hnsw_index.hpp` (#234), built the same way, which the Python `HnswIndex` now wraps:
+  - `HnswIndex(dim, options)` takes an `HnswOptions` struct (metric, `nbits`, `num_clusters`, `M`, `ef_construction`, seed). `train`, `set_centroids`, `add`, `remove`, `reserve`, `search`, `save` and the static `load` follow the Python methods.
+  - The first `add` trains `min(num_clusters, number of points)` centroids and leaves the index untrained, empty and with its capacity if it fails.
+  - Capacity starts at one point and grows on `add`, at least doubling, after the points and cluster IDs are checked; `reserve` only grows it.
+  - `add` uses every available CPU unless `num_threads` is set, whereas `hnsw::HierarchicalNSW::add` uses one; pass `num_threads = 1` and a seed for a reproducible graph.
+  - `search` takes a `GraphSearchOptions` struct. Without an `ef_search` it uses `max(k, 64)`, and an explicit 0 throws.
+  - `seed()` is a `std::optional<uint64_t>`, because a file written by `hnsw::HierarchicalNSW` may record a seed above 32 bits.
+- `ivf::IVF` and `hnsw::HierarchicalNSW` are unchanged.
 
 - `qgkmeans::QGKMeansParameters` uses the Python names (#233): `graph_degree` becomes `max_degree`, `ef_build` becomes `ef_construction`, and `quantization_bits` (0, 4 or 8) becomes `nbits` (32, 4 or 8, with 32 for raw float32). The fields keep their order and types. An `nbits` of 0 is rejected, so code that initialized the field positionally with 0 must pass 32. `QGAssigner` keeps its constructor, including `quantization_bits` with 0 for raw storage.
 - Messages follow the names: `QGKMeans nbits must be 4, 8, or 32`, `QGKMeans max_degree must be a positive multiple of 32`, `QGKMeans requires more centroids than max_degree` and `QGKMeans ef_construction and ef_search must be positive`.

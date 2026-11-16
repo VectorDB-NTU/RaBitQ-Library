@@ -54,6 +54,8 @@ CheckOptions:
   readability-identifier-naming.ProtectedMemberCase: lower_case
   readability-identifier-naming.ProtectedMemberSuffix: '_'
   readability-identifier-naming.PublicMemberCase: lower_case
+  # HnswOptions::M, the same HNSW graph-degree setting.
+  readability-identifier-naming.PublicMemberIgnoredRegexp: '^M$'
   # Functions, types, namespaces, constants and macros follow AGENTS.md. The
   # ignored names are retained public API or names the standard library requires.
   readability-identifier-naming.FunctionCase: lower_case

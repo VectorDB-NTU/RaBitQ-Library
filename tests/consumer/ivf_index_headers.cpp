@@ -6,7 +6,7 @@
 
 // The supported IVF API compiles and works without the existing IVF class, k-means or
 // any implementation header.
-int main() {
+int ivf_index_header_smoke() {
     constexpr size_t kDim = 64;
     constexpr size_t kNumPoints = 40;
     std::mt19937 rng(1);
