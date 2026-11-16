@@ -524,9 +524,17 @@ IVF search defaults to HACC for 4–9 bits and standard FastScan for 1–3 bits 
 
 #### SymphonyQG storage
 
-SymphonyQG supports raw storage (`quantization_bits == 0`) and quantized storage at 4 or 8 bits.
+SymphonyQG supports raw storage (`quantization_bits == 0` in `QuantizedGraph`, `nbits == 32` in
+`SymqgIndex` and Python) and quantized storage at 4 or 8 bits.
 
 ### Change an index API
+
+The supported C++ index API is `IvfIndex`, `HnswIndex` and `SymqgIndex` in
+`include/rabitqlib/index/*_index.hpp`, with the names, defaults and behaviour of the Python
+classes, and their messages where those do not name Python values; the bindings wrap them.
+`ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `QGBuilder` stay installed for
+these classes and for `QGAssigner`, without documentation or a compatibility promise. Samples and
+docs use the supported classes.
 
 Update the C++ declaration/implementation, the corresponding file in `python_bindings/`, Python
 type stubs, tests, samples, and the relevant page under `docs/docs/index/`. Preserve public signatures where
@@ -712,21 +720,24 @@ its upper and base layers use `upper_layer_max_degree_` and
 of 32. These settings are not interchangeable.
 
 Public names and Python keywords are compatibility contracts. For example,
-`Cluster::num()`, the protected `Initializer::num_cluster_` and QG's
-`degree_bound()`/`set_ef()` retain their existing spellings, as do the Python
-vocabulary `seed`, `train`, `obj`, `nsplit`, `final_obj` and `niter`. Since 0.9, Python
+`Cluster::num()`, the protected `Initializer::num_cluster_`, QG's `degree_bound()` and its
+`set_ef()`, which the installed `QGAssigner` calls, retain their existing spellings, as do the
+Python vocabulary `seed`, `train`, `obj`, `nsplit`, `final_obj` and `niter`. Since 0.9, Python
 spells each concept one way on the index and k-means classes: `ef_search`,
 `ef_construction`, `max_degree`, `nbits` (32 for raw storage), `routing` and `capacity`
-(#232, #233). `QGKMeansParameters` has the same field names in C++, converting
-`nbits == 32` to the 0 that `QGAssigner` and QG take as `quantization_bits`. C++ parameter
-names may be clarified without changing types, order or defaults. Keep declarations, definitions and comments
-in agreement; do not rename methods or literals by textual substitution.
+(#232, #233). The C++ index classes and `QGKMeansParameters` use the same names; the index
+classes also take `Id` (`int64_t`) IDs with `kNoId` for an empty result slot, and
+`num_threads == 0` for every available CPU, capped by `OMP_NUM_THREADS`.
+`QGKMeansParameters` and `SymqgIndex` convert `nbits == 32` to the 0 that `QGAssigner` and
+QG take as `quantization_bits`. C++ parameter names may be clarified without changing types,
+order or defaults. Keep declarations, definitions and comments in agreement; do not rename
+methods or literals by textual substitution.
 
 Storage-mode parameters also retain their contracts: IVF/HNSW use `nbits()`
 with separate internal `ex_bits_`; IVF additionally accepts 32 for raw-vector
 reranking. QG uses `quantization_bits()` with 0 for raw storage and 4/8 for packed
-vectors. Naming work does not change these values, allocation sizes, numeric
-operations, serialized field order, or ownership.
+vectors; `SymqgIndex::nbits()` reports 32 for raw storage. Naming work does not change
+these values, allocation sizes, numeric operations, serialized field order, or ownership.
 
 ### Numerical module variable names
 

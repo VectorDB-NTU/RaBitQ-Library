@@ -117,10 +117,12 @@ its results and latency; pass the breadth as the third argument to keep the old 
 load as trained indexes, except empty, untrained HNSW-RaBitQ files, which need
 `train` before `add`.
 
-For C++, the existing index constructors and `construct` are unchanged; see
-[IVF-RaBitQ](index/ivf.md#training-centroids-in-c) and
-[HNSW-RaBitQ](index/hnsw.md#training-centroids-in-c) for the new training entry
-points. C++ behavior changes: since 0.8.0, saving an index without stored points
+For C++ in 0.8, the existing index constructors and `construct` are unchanged, and
+`IVF::train` and `HierarchicalNSW::train` are the new training entry points; from
+0.9 the [IVF-RaBitQ](index/ivf.md#training-centroids-in-c) and
+[HNSW-RaBitQ](index/hnsw.md#training-centroids-in-c) pages describe `IvfIndex` and
+`HnswIndex` instead, and the [release notes](releases/unreleased.md#c-changes) map the
+0.8 classes to `IvfIndex`, `HnswIndex` and `SymqgIndex`. C++ behavior changes: since 0.8.0, saving an index without stored points
 throws `std::logic_error`; since 0.8.2, IVF and SymphonyQG searches pad `k` above
 the point count instead of throwing, and `default_training_parameters` runs 10
 iterations. See the [0.8.2 notes](releases/0.8.2.md#c-changes).

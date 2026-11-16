@@ -7,13 +7,12 @@
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
 
 using PID = rabitqlib::PID;
-using index_type = rabitqlib::ivf::IVF;
 using data_type = rabitqlib::RowMajorArray<float>;
 using cluster_ids_type = rabitqlib::RowMajorArray<uint32_t>;
 
@@ -69,15 +68,22 @@ int run(int argc, char** argv) {
 
     size_t num_points = data.rows();
     size_t dim = data.cols();
-    size_t k = centroids.rows();
+    size_t num_clusters = centroids.rows();
 
     std::cout << "data loaded\n";
     std::cout << "\tN: " << num_points << '\n';
     std::cout << "\tDIM: " << dim << '\n';
 
     rabitqlib::StopW stopw;
-    index_type ivf(num_points, dim, k, total_bits, metric_type);
-    ivf.construct(data.data(), centroids.data(), cluster_ids.data(), faster_quant);
+    rabitqlib::IvfOptions options;
+    options.metric = metric_type;
+    options.nbits = total_bits;
+    rabitqlib::IvfIndex ivf(dim, num_clusters, options);
+    ivf.set_centroids(centroids.data());
+    rabitqlib::AddOptions add_options;
+    add_options.cluster_ids = cluster_ids.data();
+    add_options.fast_quantization = faster_quant;
+    ivf.add(data.data(), num_points, add_options);
     float miniutes = stopw.get_elapsed_mili() / 1000 / 60;
     std::cout << "ivf constructed \n";
     ivf.save(index_file);

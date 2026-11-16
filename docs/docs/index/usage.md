@@ -6,7 +6,8 @@ SymphonyQG. Start with the [Python quick start](../quick_start.md) for a complet
 ## Input requirements
 
 `IvfIndex`, `HnswIndex`, and `SymqgIndex` accept data and query arrays with shape
-`(count, dim)`, converted to contiguous float32. Their FHT/Kac rotation requires
+`(count, dim)`, converted to contiguous float32; the C++ classes of the same names
+take row-major float32 buffers. Their FHT/Kac rotation requires
 `64 <= dim <= 65536`. Supply the original dimension; the indexes pad internally
 to a multiple of 32. Queries and centroids must have the same original dimension
 as the indexed data.
@@ -22,10 +23,10 @@ float32. `train`, `set_centroids`, `add` and `search` raise `ValueError` (C++:
 the index. The C++ `quantize_*` encoders in `core/encoder.hpp` assume their
 callers have validated the input.
 
-These limits apply to the Python indexes. The C++ [stable core API](../rabitq/core_api.md)
+These limits apply to the index classes in both languages. The C++ [stable core API](../rabitq/core_api.md)
 accepts working dimensions from 2, with multiples of 32 required for `SplitPacked`.
 C++ [MatrixRotator](../rabitq/rotator.md) has separate dimension and storage requirements;
-the Python indexes do not expose a rotator choice.
+the index classes do not expose a rotator choice.
 
 ## The cosine metric
 
@@ -35,7 +36,7 @@ unit length, stores the inner-product codes of the scaled vectors, and returns
 Results equal those of a `metric="ip"` index built from the same vectors after this
 scaling. A zero vector stays zero, as in hnswlib and Faiss: its true distance to every
 vector is 1, which quantized storage estimates like any other distance. Centroids
-passed to `set_centroids` or C++ `construct` are used as given; `train`, and the first
+passed to `set_centroids` are used as given; `train`, and the first
 `add` that trains, compute them from the scaled vectors with spherical k-means.
 
 The index checks the original coordinates first, as above. Because it then trains on
@@ -58,8 +59,7 @@ HNSW-RaBitQ's `num_points` now excludes removed records; see the
 [count migration guide](../modular_migration.md#unified-index-counts) when upgrading.
 
 IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
-(C++ uses the same names with `()`, and `max_elements()` for the capacity of all
-three indexes):
+(the C++ classes use the same names with `()`):
 
 | Property | Meaning |
 | --- | --- |
@@ -80,7 +80,7 @@ start at the previous `num_stored_points`. Use this stored count for ID bounds,
 and `num_points` for a live count. Counts survive save/load.
 
 IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
-HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `reserve` preallocates
+HNSW-RaBitQ's `add` grows its capacity geometrically, and `reserve` preallocates
 it. SymphonyQG has no incremental
 updates: `add` builds the graph once, and both counts are equal afterwards.
 
@@ -115,7 +115,7 @@ IVF-RaBitQ allocates one-bit codes and their three factors in full batches of 32
 use the stored point count. Small clusters therefore increase padding overhead.
 Centroids, routing structures and cluster metadata are additional.
 
-HNSW-RaBitQ allocates base-layer records for `max_elements`, including unused capacity.
+HNSW-RaBitQ allocates base-layer records for its whole `capacity`, including unused capacity.
 Upper-layer edges, label maps, locks, visited lists and other bookkeeping are
 additional. Removing points does not reclaim their storage in either IVF-RaBitQ or HNSW-RaBitQ.
 
