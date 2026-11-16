@@ -8,7 +8,7 @@
 - IVF-RaBitQ stores HNSW centroid routing inside the file, so `save` no longer writes a `<file>.hnsw` sidecar. A sidecar left by an earlier save is not removed.
 - The saved bytes now include that routing graph. It is reproducible only when `train`, `set_centroids` or the first `add` builds it with `num_threads=1`. Saving the same index twice still gives identical files.
 - `save` rejects IVF-RaBitQ indexes of more than 65,536 dimensions.
-- A format-2 file that uses read-only-compatible features unknown to this release loads for search only: operations that change or save the index raise. Rebuilding with IVF-RaBitQ `construct`, or a new SymphonyQG build, makes it writable again.
+- A format-2 file that uses read-only-compatible features unknown to this release loads for search only: operations that change or save the index raise. A new index built from the original data is writable.
 
 ## Removed and renamed Python forms
 
@@ -48,7 +48,7 @@
 - Point IDs are `int64` at the Python boundary (#211):
   - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
-  - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex`, `HnswIndex` and `SymqgIndex` use 64-bit IDs, as Python does.
+  - IDs remain the row numbers the index assigns. The C++ `IvfIndex`, `HnswIndex` and `SymqgIndex` use 64-bit `rabitqlib::Id` values with `kNoId` (-1) for a missing result, as Python does. The indexes still hold 32-bit row numbers inside, so they keep their limit of 2^31 points; the unsupported `ivf::IVF`, `hnsw::HierarchicalNSW` and `symqg::QuantizedGraph` keep `PID` and `kPidMax`.
 
 - An `IvfIndex`, `HnswIndex` or `SymqgIndex` call with both an invalid argument and the wrong state may now report the argument first, for example `ValueError` for `nprobe=0` on an untrained index, which raised `RuntimeError`, or for data of the wrong dimension passed to `SymqgIndex.add` after the graph is built. `HnswIndex()` with an invalid `metric` or `seed` and an out-of-range `num_clusters` now reports the metric or seed. `SymqgIndex()` with an invalid `init` and an invalid `dim`, `nbits` or `max_degree` now reports the `init`, and with an invalid `seed` and an invalid `dim`, `nbits`, `max_degree` or `ef_construction` the seed.
 
@@ -85,7 +85,24 @@
   - A failed `add` leaves the index without a graph. `add` takes a worker count, with 0, the default, for every available CPU.
   - `search` takes a `GraphSearchOptions` struct. Without an `ef_search` it uses `max(k, 64)`, a smaller value is raised to `k`, and an explicit 0 throws; `symqg::QuantizedGraph` rejects an `ef_search` below `k`.
   - `seed()`, `ef_construction()` and `init()` have no value for a file of a release up to 0.8.
-- `ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `symqg::QGBuilder` are otherwise unchanged.
+- `IvfIndex`, `HnswIndex` and `SymqgIndex` are the supported and documented C++ index API from 0.9. `ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `symqg::QGBuilder` stay installed at their paths and keep their interfaces apart from the changes listed below, but they leave the documentation and carry no compatibility promise.
+
+Move to the new classes as follows:
+
+| 0.8 | 0.9 |
+| --- | --- |
+| `IVF(num_points, dim, num_clusters, bits, ...)`, then `construct(data, centroids, cluster_ids)` | `IvfIndex(dim, num_clusters, options)`, `set_centroids(centroids)`, then `add(data, num_points, add_options)` with `add_options.cluster_ids` |
+| `HierarchicalNSW(max_elements, dim, bits, M, ef_construction, seed, metric)`, then `construct(...)` | `HnswIndex(dim, options)` with `options.num_clusters`, then the same two calls; capacity grows on `add` |
+| `QuantizedGraph(num_points, dim, max_degree, ...)` with `quantization_bits` 0 for raw vectors, then `QGBuilder(graph, ef_construction, data).build()` | `SymqgIndex(dim, options)` with `options.nbits` 32 for raw vectors, then `add(data, num_points)` |
+| `IVF::search`, `IVF::search_batch`, `HierarchicalNSW::search` (nested vectors), `set_ef` with `QuantizedGraph::search_batch` | `search(queries, num_queries, k, ids, distances, search_options)` |
+| `Index index; index.load(filename);` | `auto index = IvfIndex::load(filename);`, and likewise `HnswIndex::load` and `SymqgIndex::load` |
+| `PID` results, `kPidMax` for a missing IVF or SymphonyQG result | `Id` results, `kNoId` for a missing result |
+| `dimension()`, `metric_type()`, `initializer_type()`, `max_elements()` (HNSW), `degree_bound()`, `quantization_bits()` (0 for raw), `num_vertices()`; `IVF::reserve`, `HierarchicalNSW::resize` | `dim()`, `metric()`, `routing()`, `capacity()`, `max_degree()`, `nbits()` (32 for raw), `num_points()`; `reserve_cluster`, `reserve` |
+| `IVF::train(num_points, data, cp)`, `HierarchicalNSW::train(num_clusters, num_points, data, cp)`, `HierarchicalNSW::set_centroids(num_clusters, centroids)`; `add` returning `void` or every label | `train(data, num_points)` with `cp()`, `set_centroids(centroids)`, `add` returning the first `Id` |
+
+Four differences are not renames: `HnswIndex::add` uses every CPU unless `num_threads` is set; `HnswIndex::search` writes all `k` slots, padding with `kNoId` and `+inf`, where `HierarchicalNSW::search` returns only the pairs found; a seed is drawn unless given, where `HierarchicalNSW` defaults to 100; and default thread counts are capped by `OMP_NUM_THREADS`. The new classes do not offer the matrix rotator, rebuilding with `IVF::construct`, shrinking with `HierarchicalNSW::resize`, `HierarchicalNSW::cluster_id_of`, `QuantizedGraph::search_with_scratch` with its warm-start hint, `QGBuilder`'s multi-pass `build(n)`, `reset`, `refine`, `avg_degree`, `check_dup` and `cache_vectors`, or `padded_dim()`; use the existing classes for them.
+
+- The C++ examples in `sample/cpp` and the IVF `add` hot-path benchmark use the new classes. `symqg_indexing` takes `nbits` (32 for raw vectors, 4 or 8, default 32) and still reads 0 as raw vectors; it no longer prints stage times or the average degree. Its optional thread count 0 selects every available CPU. The default thread counts of `symqg_indexing` and `ivf_rabitq_indexing` are now capped by `OMP_NUM_THREADS`, which they ignored.
 
 - `qgkmeans::QGKMeansParameters` uses the Python names (#233): `graph_degree` becomes `max_degree`, `ef_build` becomes `ef_construction`, and `quantization_bits` (0, 4 or 8) becomes `nbits` (32, 4 or 8, with 32 for raw float32). The fields keep their order and types. An `nbits` of 0 is rejected, so code that initialized the field positionally with 0 must pass 32. `QGAssigner` keeps its constructor, including `quantization_bits` with 0 for raw storage.
 - Messages follow the names: `QGKMeans nbits must be 4, 8, or 32`, `QGKMeans max_degree must be a positive multiple of 32`, `QGKMeans requires more centroids than max_degree` and `QGKMeans ef_construction and ef_search must be positive`.

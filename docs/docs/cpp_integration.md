@@ -44,7 +44,9 @@ for Linux ARM64, Windows, and Apple Silicon.
 ## C++ examples
 
 ANN example executables are written to `bin/`. Their source demonstrates complete
-indexing and querying workflows:
+indexing and querying workflows with the index classes `IvfIndex`, `HnswIndex` and
+`SymqgIndex` from `rabitqlib/index/ivf_index.hpp`, `hnsw_index.hpp` and
+`symqg_index.hpp`, which `rabitqlib::index` provides:
 
 - [IVF-RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
 - [HNSW-RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp)

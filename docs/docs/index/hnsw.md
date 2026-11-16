@@ -1,6 +1,6 @@
 # HNSW-RaBitQ
 
-C++ callers include `rabitqlib/index/hnsw/hnsw.hpp` and link `rabitqlib::index`.
+C++ callers include `rabitqlib/index/hnsw_index.hpp` and link `rabitqlib::index`.
 [HNSW](https://arxiv.org/abs/1603.09320) is a popular graph-based index.
 HNSW-RaBitQ combines HNSW graph traversal with RaBitQ quantization. Under
 comparable quantization settings, HNSW-RaBitQ typically uses more memory
@@ -38,53 +38,58 @@ so add most vectors in the first call.
 
 ### C++
 
-Link `rabitqlib::index`. Here `data`, `centroids` and `queries` are row-major
-`std::vector<float>` buffers with original dimension `dim`; `cluster_ids` is a
-`std::vector<rabitqlib::PID>` with one centroid ID per data row. Supply at least
-ten points for this example.
+`rabitqlib::HnswIndex` has the names, defaults and behaviour of the Python class.
+Here `data` and `queries` are row-major `std::vector<float>` buffers with
+dimension `dim`.
 
 ```cpp
 #include <vector>
-#include <rabitqlib/index/hnsw/hnsw.hpp>
+#include <rabitqlib/index/hnsw_index.hpp>
 
-// Constructor order: capacity, dimension, total bits, M, ef_construction.
-rabitqlib::hnsw::HierarchicalNSW index(data.size() / dim, dim, 4, 16, 100);
-index.construct(
-    centroids.size() / dim, centroids.data(), data.size() / dim, data.data(),
-    cluster_ids.data(), 1
-);
-auto results = index.search(queries.data(), queries.size() / dim, 10, 100, 1);
+rabitqlib::HnswOptions options;  // set the fields by name; nbits is 7 by default
+options.ef_construction = 100;
+options.seed = 7;
+rabitqlib::HnswIndex index(dim, options);
+rabitqlib::AddOptions add_options;
+add_options.num_threads = 1;  // with the seed, a reproducible graph
+index.add(data.data(), data.size() / dim, add_options);  // trains 16 centroids, then links
+
+const size_t num_queries = queries.size() / dim;
+std::vector<rabitqlib::Id> ids(num_queries * 10);
+std::vector<float> distances(num_queries * 10);
+index.search(queries.data(), num_queries, 10, ids.data(), distances.data());
 index.save("hnsw.index");
-rabitqlib::hnsw::HierarchicalNSW loaded;
-loaded.load("hnsw.index");
+auto loaded = rabitqlib::HnswIndex::load("hnsw.index");
 ```
 
-C++ results are per-query vectors of `(distance, ID)` pairs. For build setup,
-see [C++ integration](../cpp_integration.md).
+For build setup, see [C++ integration](../cpp_integration.md).
 
 ## Parameters and limits
 
 | Parameter | Contract |
 | --- | --- |
-| `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `nbits` / C++ `total_bits` | 1–9 total bits including the sign bit. Python's keyword-only `nbits` defaults to 7; C++ requires it. Raw-vector storage is not supported. |
-| `num_clusters` | Python keyword, default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
-| `M`, `ef_construction` | Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
-| `metric`, `seed` | `metric` defaults to `"l2"` in Python; `"ip"` and [`"cosine"`](usage.md#the-cosine-metric) are also supported. `seed` is the graph and rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. Python's default `None` draws one at random (it was 100 before 0.9); `index.seed` reports it. |
-| `capacity` (C++ `max_elements()`) | Python reports the current capacity, which `add` grows geometrically (at least doubling) and `reserve` can preallocate; they replace `max_elements` and `resize`, which 0.9 removed. C++ `add` never grows it. |
-| `k`, `ef_search` | Positive result count and search window. `k` may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. An omitted or `None` `ef_search` uses `max(k, 64)` in Python (0 raises `ValueError`), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. It replaces `ef`, which 0.9 removed. |
+| `dim` | Original input dimension, 64–65,536; the index pads internally. |
+| `nbits` | 1–9 total bits including the sign bit; defaults to 7. Raw-vector storage is not supported. |
+| `num_clusters` | Default 16: centroids `train` or the first `add` learns, or `set_centroids` supplies; the first `add` caps it at its row count. |
+| `M`, `ef_construction` | Graph connectivity and construction search budget; defaults are 16 and 200, and the index reports both. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
+| `metric`, `seed` | `metric` defaults to L2 (Python `"l2"`); inner product and [cosine](usage.md#the-cosine-metric) are also supported. `seed` is the graph and rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. The default (Python `None`, an empty C++ `std::optional`) draws one at random (it was 100 before 0.9); `seed` reports it. |
+| `capacity` | The current capacity, which `add` grows geometrically (at least doubling) and `reserve` can preallocate; in Python they replace `max_elements` and `resize`, which 0.9 removed. |
+| `k`, `ef_search` | Positive result count and search window. `k` may exceed the stored point count; missing results are padded with ID `-1` (C++ `kNoId`) and `+inf`. An omitted `ef_search` (Python `None`) uses `max(k, 64)`, an explicit 0 raises `ValueError` (C++ `std::invalid_argument`), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. It replaces `ef`, which 0.9 removed. |
+
+In C++, the construction settings are fields of `HnswOptions`, and `ef_search`
+and `num_threads` fields of `GraphSearchOptions`.
 
 `seed` controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
-within the same build environment. Python draws a seed unless `seed=` is given, and
+within the same build environment. A seed is drawn unless one is given, and
 `train` and `add` default to every available CPU, so **default builds are not
-reproducible**: pass `seed=` to the constructor and `num_threads=1` to `add` when you
+reproducible**: pass a seed to the constructor and one thread to `add` when you
 need the same graph again. Different toolchains or SIMD backends can
 still change results. Loading restores the saved rotation.
 
 Results use squared L2 or `1 - dot` estimates, ordered from smallest to largest.
-Python returns `int64` IDs and fills missing results with ID `-1` and distance `+inf`; C++ returns
-only the available pairs. See [result handling](../quick_start.md#read-the-results)
+IDs are `int64` (C++ `rabitqlib::Id`), and missing results hold ID `-1` and distance
+`+inf`. See [result handling](../quick_start.md#read-the-results)
 and the shared [input, count and concurrency contracts](usage.md).
 
 ## Index construction
@@ -95,121 +100,110 @@ the links, centroids, cluster IDs, labels, RaBitQ codes, and factors rather
 than a copy of the raw dataset. Total bit widths from 1 through 9 are
 supported.
 
-`construct()` is synchronous. Keep its input buffers valid for the entire call;
-the index retains no pointers to them after it returns or throws. The borrowed
-input pointer and search candidate helpers are private implementation details;
-see the [C++ migration guide](../modular_migration.md#public-and-implementation-interfaces).
+`add` is synchronous. Keep its input buffers valid for the entire call; the
+index retains no pointers to them after it returns or throws.
+
+To build from centroids computed elsewhere, for example by
+[RaBitQKMeans](../clustering.md#rabitqkmeans), set them and pass each vector's
+cluster:
 
 ```cpp
-void HierarchicalNSW::construct(
-    size_t num_clusters,
-    const float* centroids,
-    size_t num_points,
-    const float* data,
-    PID* cluster_ids,
-    size_t num_threads = std::numeric_limits<size_t>::max(),
-    bool fast_quantization = false
-);
+rabitqlib::HnswOptions options;
+options.num_clusters = num_clusters;
+rabitqlib::HnswIndex index(dim, options);
+index.set_centroids(centroids.data());
+rabitqlib::AddOptions add_options;
+add_options.cluster_ids = cluster_ids.data();
+index.add(data.data(), num_points, add_options);
 ```
 
-- **data**: Vectors in the original input coordinates.
-- **num_points**: The number of data vectors.
-- **centroids**: Centroids computed by [RaBitQKMeans](../clustering.md#rabitqkmeans); the examples use `num_clusters = 16`.
-- **cluster_ids**: Array of length `num_points`; every entry must be in the range `[0, num_clusters)`.
-- **num_threads**: Number of threads to use (default: every available thread; `0` also auto-selects).
+- **centroids**: `num_clusters` centroids in the original input coordinates; the examples use 16.
+- **cluster_ids**: One entry per vector, each in `[0, num_clusters)`.
+- **num_threads**: Worker count; no value, the default, uses every available CPU, and `0` also auto-selects.
 - **fast_quantization**: Use calibrated scaling instead of per-vector scale search; see [encoding paths](../rabitq/quantizer.md#implementations).
 
 ### Training centroids in C++
 
-Instead of passing centroids to `construct`, train or set them on an empty
-index, then add the points:
+`HnswIndex` trains as the Python class does. `cp()` returns the training
+settings; include `rabitqlib/clustering/rabitqkmeans.hpp` to change them:
 
 ```cpp
-#include <rabitqlib/index/hnsw/hnsw.hpp>
-#include <rabitqlib/index/training.hpp>
+#include <rabitqlib/clustering/rabitqkmeans.hpp>
+#include <rabitqlib/index/hnsw_index.hpp>
 
-rabitqlib::hnsw::HierarchicalNSW index(max_elements, dim, 4, 16, 200);
-index.train(16, num_points, data.data(),
-            rabitqlib::default_training_parameters(rabitqlib::METRIC_L2, 100));
-// Or supply centroids: index.set_centroids(num_clusters, centroids.data());
+rabitqlib::HnswIndex index(dim);
+index.cp().niter = 20;
+index.train(sample.data(), num_samples);  // no thread count: cp().num_threads
+// Or supply centroids: index.set_centroids(centroids.data());
 index.add(data.data(), num_points);
 ```
 
-- `train(num_clusters, num_points, data, cp)` trains centroids with
-  [RaBitQKMeans](../clustering.md#rabitqkmeans); `num_points` must be at least
-  `num_clusters`. Points are assigned by `add`, not by training. See the
-  [IVF-RaBitQ defaults](ivf.md#training-centroids-in-c) for
-  `default_training_parameters`.
-- The first `add` into an empty graph links points with their exact vectors, as
-  `construct` does; with one thread it produces the same index as `construct`
-  with the same centroids and cluster IDs. If it fails, the graph is left empty
-  and the centroids are kept. Later adds link through the stored codes; see
+- `train`, `set_centroids` and the first `add` follow the Python rules above.
+  Training always uses [RaBitQKMeans](../clustering.md#rabitqkmeans); points are
+  assigned by `add`, not by training.
+- The first `add` into an empty graph links points with their exact vectors. If
+  it fails, the graph is left empty. Centroids set by `train` or `set_centroids`
+  are kept, and a first `add` that trained leaves the index untrained. Later adds link
+  through the stored codes; see
   [how added points are linked](#how-added-points-are-linked).
-- `train` and `set_centroids` replace the centroids only while the index stores
-  no points, removed ones included; otherwise they throw `std::logic_error`.
-  A failed call leaves the index unchanged. `construct` needs an untrained index,
-  so after either call it throws `std::logic_error`; use `add` instead.
-- `is_trained()` reports whether centroids are set. Before that, `add` throws
-  `std::logic_error`; searching an empty index, trained or not, returns no results.
-- `save` throws `std::logic_error` for an index without stored points, trained
-  or not. Earlier releases saved an untrained empty index; such files still load.
+- Arguments outside their range throw `std::invalid_argument` (Python
+  `ValueError`), and a call in the wrong state throws `std::logic_error` (Python
+  `RuntimeError`), with the Python messages except where those name Python values
+  such as `None`.
+- `is_trained()` reports whether centroids are set. A trained index without
+  points pads every `search` result slot with `kNoId` and `+inf`; `save` throws
+  `std::logic_error` until the index stores at least one point. Earlier
+  releases saved an untrained empty index; such files still load, and without a
+  recorded seed they need `train` or `set_centroids` before `add`.
 
 ## Querying
 
 ```cpp
-std::vector<std::vector<std::pair<float, PID>>> HierarchicalNSW::search(
+void HnswIndex::search(
     const float* queries,
     size_t num_queries,
     size_t k,
-    size_t ef_search,
-    size_t num_threads
-);
+    Id* ids,
+    float* distances,
+    const GraphSearchOptions& options = {}
+) const;
 ```
 
-- **queries**: Query vectors in the original input coordinates.
-- **num_queries**: The number of query vectors.
+- **queries**: `num_queries` query vectors in the original input coordinates.
 - **k**: The number of nearest neighbors to search.
-- **ef_search**: The size of the candidate set for searching HNSW-RaBitQ base layer.
-- **num_threads**: Number of threads to use. Each query is processed by one thread.
+- **ids**, **distances**: Output buffers of `num_queries * k` values; `distances` may be `nullptr`.
+- **options.ef_search**: The size of the candidate set for searching the base layer.
+- **options.num_threads**: Number of threads to use (default 1). Each query is processed by one thread.
 
-The search window belongs to each call, so concurrent C++ searches can use
+The search window belongs to each call, so concurrent searches can use
 different `ef_search` values and separate outputs while the index is unchanged.
-Python follows the shared [concurrency contract](usage.md#threading-and-file-paths).
+See the shared [concurrency contract](usage.md#threading-and-file-paths).
 
 ## Updating an index
 
-A constructed or loaded index supports `add()`, `resize()` (Python `reserve`),
-and `remove()` without the original data; C++ also adds to a
-[trained](#training-centroids-in-c) index. Adding points and resizing preserve
-the index file format; files with removals have
+A trained or loaded index supports `add()`, `reserve()` and `remove()` without
+the original data. Adding points and reserving capacity preserve the index file
+format; files with removals have
 [compatibility restrictions](#how-removal-is-stored).
 
 ```c++
-std::vector<PID> HierarchicalNSW::add(
-    const float* data,
-    size_t num_points,
-    const PID* cluster_ids = nullptr,
-    bool fast_quantization = false,
-    size_t num_threads = 1
-);
+Id HnswIndex::add(const float* data, size_t num_points, const AddOptions& options = {});
 
-void HierarchicalNSW::resize(size_t new_max_elements);
+void HnswIndex::reserve(size_t num_points);
 ```
 
 - **data**, **num_points**: `num_points` new vectors in the original coordinates. Vector `i` receives
-  the label `num_stored_points() + i`, so labels stay dense, and `add` returns them.
-- **cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When it
+  the ID `num_stored_points() + i`, so IDs stay dense; `add` returns the first.
+- **options.cluster_ids**: The cluster of each new vector, in `[0, num_clusters)`. When it
   is `nullptr`, each vector goes to its nearest centroid, chosen the same way a
   query is routed.
-- **fast_quantization**, **num_threads**: Same meaning as in `construct`, but `add` defaults
-  to one thread, which keeps the resulting links deterministic; pass `0` to auto-select. A point keeps the label
-  `num_stored_points() + i` whatever order the threads finish in, because the slots are
-  reserved as one block before the inserts start.
-- **new_max_elements**: The new capacity. It must be at least `num_stored_points()`.
-  In C++, initialize the index through its parameterized constructor or `load`
-  before calling `resize`.
+- **options.fast_quantization**, **options.num_threads**: As in [index construction](#index-construction).
+  With more than one thread the links vary between runs; one thread keeps them
+  deterministic. A point keeps the ID `num_stored_points() + i` whatever order the
+  threads finish in, because the slots are reserved as one block before the inserts start.
+- **num_points** of `reserve`: The capacity to preallocate; a smaller value changes nothing.
 
-In Python, `add` grows the capacity when needed:
+In Python:
 
 ```python
 new_ids = index.add(vectors)                       # route to the nearest centroids
@@ -222,7 +216,7 @@ Updates require exclusive access; see the
 
 `add` prepares the result IDs, quantized vectors, and link-list allocations before
 changing the graph or point count. A failure during preparation leaves those
-unchanged. A failure during graph linking can leave the batch counted in
+unchanged. A failure while linking a later batch can leave it counted in
 `num_stored_points()` with only some points reachable through the graph. The index
 remains safe to search, save, load, and destroy; inspect `num_stored_points()` before
 retrying, or rebuild to restore full reachability.
@@ -232,15 +226,13 @@ retrying, or rebuild to restore full reachability.
 See the shared [index count contract](usage.md#index-counts). Removed
 records still occupy capacity.
 
-C++ `add` never grows the index: it rejects a whole batch whose size exceeds
-`max_elements() - num_stored_points()`, and `resize` is the only way to raise
-that. Python `add` grows the capacity first when the batch does not fit, to at least
+`add` grows the capacity first when the batch does not fit, to at least
 double it, and `reserve(num_points)` preallocates it; `reserve` never shrinks the
 capacity. Reserving capacity avoids reallocating and copying the whole base-layer record storage during `add`.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.
 
-`resize` rebuilds the base-layer storage and copies it, so it needs memory for
+Growing the capacity rebuilds the base-layer storage and copies it, so it needs memory for
 both copies while it runs and costs time proportional to the whole index. It
 invalidates every pointer into the index. The per-node upper-layer link lists are
 not copied, only their pointer table.
@@ -256,12 +248,12 @@ of a rebuild.
 ### Removing points
 
 ```c++
-size_t HierarchicalNSW::remove(const PID* labels, size_t num_points);
+size_t HnswIndex::remove(const Id* ids, size_t num_ids);
 ```
 
-- **labels**, **num_points**: `num_points` labels of the points to remove, as returned by `add` and
-  `search`. Every label must be in the index; nothing is removed if one is not.
-  `remove` returns how many points were newly removed, so repeating a label or a
+- **ids**, **num_ids**: IDs of the points to remove, as returned by `add` and
+  `search`. Every ID must be in `[0, num_stored_points())`; nothing is removed if one is not.
+  `remove` returns how many points were newly removed, so repeating an ID or a
   call is safe.
 
 In Python:
@@ -273,7 +265,7 @@ removed = index.remove(new_ids[:10])   # IDs in [0, num_stored_points)
 A removed point keeps its codes, its links, and its place in the graph. Search
 still walks through it and `add` may link new points to it, which keeps the graph
 connected, as in hnswlib. Search never returns it, so a query can get fewer than
-`k` results once points are removed: in Python the missing slots hold ID `-1`
+`k` results once points are removed: the missing slots hold ID `-1` (C++ `kNoId`)
 with an infinite distance. Removed points still count in
 `num_stored_points()` and cannot be restored. Removal requires the same
 exclusive access as other updates.
@@ -281,10 +273,9 @@ exclusive access as other updates.
 #### Choosing `ef_search` after removals
 
 Removed points still take slots in the `ef_search` candidate set, so a search with
-`ef_search` close to `k` finds fewer live points as removals accumulate. C++ search
-uses `max(ef_search, k)`, clamped to `num_stored_points()`. Python uses `max(k, 64)`
-when `ef_search` is omitted; an explicit value is also raised to at least `k`,
-and both are clamped to the stored point count.
+`ef_search` close to `k` finds fewer live points as removals accumulate. Search uses
+`max(k, 64)` when `ef_search` is omitted; an explicit value is raised to at least
+`k`, and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points (search clamps the result to
 `num_stored_points()`):
@@ -299,19 +290,11 @@ Callers that track how many points they removed can apply this directly.
 
 ### How removal is stored
 
-`remove` sets the high bit of the point's stored cluster ID. `construct` and `load`
-limit the number of clusters to 2^31, so no real cluster ID has that bit, and
+`remove` sets the high bit of the point's stored cluster ID. Setting centroids and
+`load` limit the number of clusters to 2^31, so no real cluster ID has that bit, and
 every reader of the cluster ID masks it off. The mark lives in the base layer, so
-it survives `save`, `load`, and `resize`, and a file without removals is
+it survives `save`, `load`, and capacity growth, and a file without removals is
 unchanged.
-
-In C++, `cluster_id_of(internal_id)` returns a stored record's cluster with the
-mark masked off; removed points keep their cluster. It takes an internal ID from 0
-through `num_stored_points() - 1`, which matches the label only for points added
-in order. It throws `std::logic_error` on a default-constructed index that has
-not been loaded, and `std::invalid_argument` for an ID not below
-`num_stored_points()`, including any ID before `construct`. Python does not
-expose it.
 
 A file that has removals cannot be read by earlier releases. Releases 0.3.7
 through 0.5.1 check every cluster ID on `load` and reject the file as invalid
@@ -401,11 +384,12 @@ is not refined and uses its 1-bit estimate for window admission.
 
 ### How added points are linked
 
-`construct` borrows the caller's vectors and links points using exact distances
-between them. That pointer is not retained, so `add` cannot use it, and instead
-scores candidates with the estimator the search already uses: the vector being
-compared against is rebuilt from its stored RaBitQ code, sign bit and extra bits
-together, and the other side is scored straight from its codes. This is the same
+The first `add` into an empty graph borrows the caller's vectors and links points
+using exact distances between them. That pointer is not retained, so later adds
+cannot use it, and instead score candidates with the estimator the search already
+uses: the vector being compared against is rebuilt from its stored RaBitQ code,
+sign bit and extra bits together, and the other side is scored straight from its
+codes. This is the same
 approach quantized SymphonyQG construction takes.
 
 Graph quality therefore depends on how a point arrived.
