@@ -50,7 +50,7 @@
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
   - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex`, `HnswIndex` and `SymqgIndex` use 64-bit IDs, as Python does.
 
-- An `IvfIndex` or `HnswIndex` call with both an invalid argument and the wrong state may now report the argument first, for example `ValueError` for `nprobe=0` on an untrained index, which raised `RuntimeError`. `HnswIndex()` with an invalid `metric` or `seed` and an out-of-range `num_clusters` now reports the metric or seed.
+- An `IvfIndex`, `HnswIndex` or `SymqgIndex` call with both an invalid argument and the wrong state may now report the argument first, for example `ValueError` for `nprobe=0` on an untrained index, which raised `RuntimeError`, or for data of the wrong dimension passed to `SymqgIndex.add` after the graph is built. `HnswIndex()` with an invalid `metric` or `seed` and an out-of-range `num_clusters` now reports the metric or seed. `SymqgIndex()` with an invalid `init` and an invalid `dim`, `nbits` or `max_degree` now reports the `init`, and with an invalid `seed` and an invalid `dim`, `nbits`, `max_degree` or `ef_construction` the seed.
 
 - Loading a format-2 file keeps the `seed` of every index, and `ef_construction` and `init` of SymphonyQG. They were `None` after `load`, and still are for files from releases up to 0.8.
 - With a recorded seed, `cp.seed` after `load` follows it as for a new index; for an HNSW-RaBitQ file whose seed exceeds 32 bits, which only C++ can write, it is the low 32 bits. It was the k-means default.

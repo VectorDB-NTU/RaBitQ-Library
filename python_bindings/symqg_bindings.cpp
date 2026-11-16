@@ -6,25 +6,18 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>  // IWYU pragma: keep; registers std::optional casters
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <numeric>
 #include <optional>
-#include <random>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "bindings_common.hpp"
-#include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/core/rotator.hpp"
-#include "rabitqlib/fastscan/pack_codes.hpp"
-#include "rabitqlib/index/symqg/qg.hpp"
-#include "rabitqlib/index/symqg/qg_builder.hpp"
+#include "rabitqlib/index/symqg_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
 
@@ -43,52 +36,40 @@ class SymqgIndex {
         const std::string& metric,
         const py::object& seed
     )
-        : dim_(dim)
-        , max_degree_(max_degree)
-        , metric_type_(index_metric_from_string(metric))
-        , ef_construction_(ef_construction)
-        , init_(init) {
-        // Reject now what add would reject only after converting all the data.
-        if (dim < 64 || dim > rotator_impl::FhtKacRotator::kMaxDim) {
-            throw std::invalid_argument("Unsupported dimension for FhtKacRotator");
-        }
-        check_max_degree(max_degree);
-        if (nbits != 4 && nbits != 8 && nbits != 32) {
-            throw std::invalid_argument("nbits must be 4, 8, or 32");
-        }
-        quantization_bits_ = nbits == 32 ? 0 : nbits;
-        check_construction(ef_construction, init);
-        seed_ = seed.is_none() ? std::random_device{}()
-                               : static_cast<uint32_t>(checked_seed(
-                                     seed, std::numeric_limits<uint32_t>::max()
-                                 ));
-    }
+        : index_(
+              dim, index_options(nbits, max_degree, ef_construction, init, metric, seed)
+          ) {}
 
-    // SymphonyQG learns nothing before add: train only checks x as add would, so
-    // the index is unchanged and a shared guard suffices.
+    // SymphonyQG learns nothing before add: train only checks the coordinates of x as
+    // add does, so the index is unchanged and a shared guard suffices. The check names
+    // x, so it stays here rather than in the native train.
     void train(py::handle x, std::optional<size_t> /*num_threads*/) {
         const auto operation = access_.read();
         auto x_array = ensure_2d_array<float>(x, "x");
-        ensure_dimension(x_array, dim_, "x dimension does not match index dim");
+        const size_t dim = index_.dim();
+        ensure_dimension(x_array, dim, "x dimension does not match index dim");
         const auto* x_ptr = x_array.data();
         const size_t count = static_cast<size_t>(x_array.size());
         py::gil_scoped_release release;
-        check_coordinates(x_ptr, count, dim_, "x");
+        check_coordinates(x_ptr, count, dim, "x");
     }
 
     py::array_t<int64_t> add(py::handle data, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
-        if (built()) {
-            throw std::runtime_error(
-                "SymqgIndex does not support incremental addition; create a new index "
-                "and add all vectors at once"
-            );
-        }
-        build_graph(data, num_threads.value_or(0));
-        // Point IDs are the row numbers of data.
-        const size_t rows = index_->num_points();
+        auto data_array = ensure_2d_array<float>(data, "data");
+        ensure_dimension(
+            data_array, index_.dim(), "data dimension does not match index dim"
+        );
+        const auto rows = static_cast<size_t>(data_array.shape(0));
+        // Allocate the returned IDs before the index changes.
         auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
-        std::iota(ids.mutable_data(), ids.mutable_data() + rows, int64_t{0});
+        const auto* data_ptr = data_array.data();
+        Id first = 0;
+        {
+            py::gil_scoped_release release;
+            first = index_.add(data_ptr, rows, num_threads.value_or(0));
+        }
+        std::iota(ids.mutable_data(), ids.mutable_data() + rows, first);
         return ids;
     }
 
@@ -100,195 +81,131 @@ class SymqgIndex {
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
-        check_built("search");
-        ensure_dimension(query_array, dim_, "query dimension does not match index dim");
-        check_k(k);
+        ensure_dimension(
+            query_array, index_.dim(), "query dimension does not match index dim"
+        );
+        check_k(k);  // before the outputs are allocated
         check_ef_search(ef_search);
-        // As in HnswIndex, None selects max(k, 64); a smaller breadth is raised to k.
-        const size_t search_breadth = std::max(ef_search.value_or(64), k);
+        GraphSearchOptions options;
+        options.ef_search = ef_search;
+        options.num_threads = num_threads.value_or(1);
 
-        const size_t num_queries = static_cast<size_t>(query_array.shape(0));
-        auto output = unfilled_search_results(num_queries, k);
-        auto* ids_data = output.ids.data();
-        auto* distances_data = output.distances.mutable_data();
+        const auto num_queries = static_cast<size_t>(query_array.shape(0));
+        const auto shape = std::vector<py::ssize_t>{
+            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
+        auto ids = py::array_t<int64_t>(shape);
+        auto distances = py::array_t<float>(shape);
         const auto* queries_data = query_array.data();
+        auto* ids_data = ids.mutable_data();
+        auto* distances_data = distances.mutable_data();
         {
             py::gil_scoped_release release;
-            index_->search_batch_with_ef(
-                queries_data,
-                num_queries,
-                static_cast<uint32_t>(k),
-                ids_data,
-                distances_data,
-                search_breadth,
-                num_threads.value_or(1)
-            );
+            index_.search(queries_data, num_queries, k, ids_data, distances_data, options);
         }
-
-        return output.to_python();
+        return py::make_tuple(ids, distances);
     }
 
     void save(py::handle path) const {
         const auto filename = path_string(path);
         const auto operation = access_.read();
-        check_built("save");
         py::gil_scoped_release release;
-        index_->save(filename.c_str());
+        index_.save(filename.c_str());
     }
 
     static SymqgIndex load(py::handle path) {
         const auto filename = path_string(path);
-        SymqgIndex wrapper;
-        wrapper.index_ = std::make_unique<symqg::QuantizedGraph<float>>();
-        {
+        auto index = [&filename] {
             py::gil_scoped_release release;
-            wrapper.index_->load(filename.c_str());
-        }
-        wrapper.dim_ = wrapper.index_->dimension();
-        wrapper.max_degree_ = wrapper.index_->degree_bound();
-        wrapper.metric_type_ = wrapper.index_->metric_type();
-        wrapper.quantization_bits_ = wrapper.index_->quantization_bits();
-        // Format-2 files record the seed and the construction settings; earlier files
-        // record neither.
-        wrapper.seed_ = wrapper.index_->seed();
-        wrapper.ef_construction_ = wrapper.index_->ef_construction();
-        wrapper.init_.reset();
-        if (const auto init = wrapper.index_->initialization(); init.has_value()) {
-            wrapper.init_ = *init == symqg::QGInitialization::PiPNN ? "pipnn" : "random";
-        }
-        return wrapper;
+            return rabitqlib::SymqgIndex::load(filename.c_str());
+        }();
+        return SymqgIndex(std::move(index));
     }
 
     [[nodiscard]] std::string repr() const {
         const auto operation = access_.read();
-        return "SymqgIndex(dim=" + std::to_string(dim_) + ", metric='" +
-               metric_to_string(metric_type_) + "', nbits=" + std::to_string(nbits()) +
-               ", num_points=" + std::to_string(built() ? index_->num_points() : 0) +
-               ", max_degree=" + std::to_string(max_degree_) + ")";
+        return "SymqgIndex(dim=" + std::to_string(index_.dim()) + ", metric='" +
+               metric_to_string(index_.metric()) +
+               "', nbits=" + std::to_string(index_.nbits()) +
+               ", num_points=" + std::to_string(index_.num_points()) +
+               ", max_degree=" + std::to_string(index_.max_degree()) + ")";
     }
 
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
-        return dim_;
+        return index_.dim();
     }
     [[nodiscard]] size_t max_degree() const {
         const auto operation = access_.read();
-        return max_degree_;
+        return index_.max_degree();
     }
     [[nodiscard]] std::optional<size_t> ef_construction() const {
         const auto operation = access_.read();
-        return ef_construction_;
+        return index_.ef_construction();
     }
     [[nodiscard]] std::optional<std::string> init() const {
         const auto operation = access_.read();
-        return init_;
+        const auto init = index_.init();
+        if (!init.has_value()) {
+            return std::nullopt;
+        }
+        return *init == symqg::QGInitialization::PiPNN ? "pipnn" : "random";
     }
     [[nodiscard]] size_t num_points() const {
         const auto operation = access_.read();
-        return built() ? index_->num_points() : 0;
+        return index_.num_points();
     }
     [[nodiscard]] size_t num_stored_points() const {
         const auto operation = access_.read();
-        return built() ? index_->num_stored_points() : 0;
+        return index_.num_stored_points();
     }
+    // Always true and reads no state, so it needs no guard.
+    [[nodiscard]] bool is_trained() const { return index_.is_trained(); }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
-        return metric_to_string(metric_type_);
+        return metric_to_string(index_.metric());
     }
-    [[nodiscard]] size_t nbits_property() const {
+    [[nodiscard]] size_t nbits() const {
         const auto operation = access_.read();
-        return nbits();
+        return index_.nbits();
     }
     [[nodiscard]] std::optional<uint32_t> seed() const {
         const auto operation = access_.read();
-        return seed_;
+        return index_.seed();
     }
 
    private:
-    static constexpr size_t kDefaultEfConstruction = 200;
+    explicit SymqgIndex(rabitqlib::SymqgIndex index) : index_(std::move(index)) {}
 
-    SymqgIndex() = default;
-
-    static void check_max_degree(size_t max_degree) {
-        if (max_degree == 0 || max_degree % fastscan::kBatchSize != 0) {
-            throw std::invalid_argument("max_degree must be a positive multiple of 32");
-        }
-    }
-
-    static void check_construction(size_t ef_construction, const std::string& init) {
-        if (init != "random" && init != "pipnn") {
+    static SymqgOptions index_options(
+        size_t nbits,
+        size_t max_degree,
+        size_t ef_construction,
+        const std::string& init,
+        const std::string& metric,
+        const py::object& seed
+    ) {
+        SymqgOptions options;
+        options.metric = index_metric_from_string(metric);
+        if (init == "pipnn") {
+            options.init = symqg::QGInitialization::PiPNN;
+        } else if (init == "random") {
+            options.init = symqg::QGInitialization::Random;
+        } else {
             throw std::invalid_argument("init must be 'random' or 'pipnn'");
         }
-        if (ef_construction == 0 ||
-            ef_construction > std::numeric_limits<uint32_t>::max()) {
-            throw std::invalid_argument("ef_construction must be positive and fit uint32");
-        }
-    }
-
-    void check_built(const char* operation) const {
-        if (!built()) {
-            throw std::runtime_error(
-                std::string(
-                    "SymqgIndex has no vectors; add them or load an index before "
-                ) +
-                operation
+        if (!seed.is_none()) {
+            options.seed = static_cast<uint32_t>(
+                checked_seed(seed, std::numeric_limits<uint32_t>::max())
             );
         }
+        options.nbits = nbits;
+        options.max_degree = max_degree;
+        options.ef_construction = ef_construction;
+        return options;
     }
 
-    // Build the graph from data with the constructor's settings; a failure leaves
-    // the index without one. Only a loaded index lacks those settings, and it
-    // already has a graph. Requires the write guard.
-    void build_graph(py::handle data, size_t num_threads) {
-        const uint32_t seed = *seed_;
-        auto data_array = ensure_2d_array<float>(data, "data");
-        ensure_dimension(data_array, dim_, "data dimension does not match index dim");
-
-        const size_t num_points = static_cast<size_t>(data_array.shape(0));
-        auto index = std::make_unique<symqg::QuantizedGraph<float>>(
-            num_points,
-            dim_,
-            max_degree_,
-            metric_type_,
-            RotatorType::FhtKacRotator,
-            quantization_bits_,
-            seed
-        );
-
-        const auto initialization = *init_ == "pipnn" ? symqg::QGInitialization::PiPNN
-                                                      : symqg::QGInitialization::Random;
-        const auto* data_ptr = data_array.data();
-        {
-            py::gil_scoped_release release;
-            symqg::QGBuilder builder(
-                *index,
-                static_cast<uint32_t>(*ef_construction_),
-                data_ptr,
-                num_threads,
-                initialization,
-                seed
-            );
-            builder.build();
-        }
-        index_ = std::move(index);
-    }
-
-    [[nodiscard]] size_t nbits() const {
-        return quantization_bits_ == 0 ? 32 : quantization_bits_;
-    }
-
-    [[nodiscard]] bool built() const { return index_ != nullptr; }
-
-    size_t dim_ = 0;
-    size_t max_degree_ = 0;
-    MetricType metric_type_ = METRIC_L2;
-    size_t quantization_bits_ = 0;  // 0 stores raw vectors.
-    // Settings of the current graph, or of the next add; unknown after load.
-    std::optional<size_t> ef_construction_ = kDefaultEfConstruction;
-    std::optional<std::string> init_ = "pipnn";
-    std::optional<uint32_t> seed_;  // Unknown for files from releases up to 0.8.
+    rabitqlib::SymqgIndex index_;
     mutable IndexAccess access_;
-    std::unique_ptr<symqg::QuantizedGraph<float>> index_;
 };
 
 }  // namespace rabitqlib::python_bindings
@@ -535,7 +452,7 @@ index : SymqgIndex
         )
         .def_property_readonly(
             "is_trained",
-            [](const SymqgIndex&) { return true; },
+            &SymqgIndex::is_trained,
             R"doc(Always True: SymphonyQG needs no training.)doc"
         )
         .def_property_readonly(
@@ -545,7 +462,7 @@ index : SymqgIndex
         )
         .def_property_readonly(
             "nbits",
-            &SymqgIndex::nbits_property,
+            &SymqgIndex::nbits,
             R"doc(Storage bits: 32 for raw float32, or 4 or 8 for RaBitQ.)doc"
         )
         .def_property_readonly(

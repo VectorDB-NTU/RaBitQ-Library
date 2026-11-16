@@ -385,30 +385,6 @@ RowView<T> checked_output_rows(
     return make_row_view<T>(std::move(array));
 }
 
-// Point IDs as Python sees them: int64, with -1 where the index reports kPidMax.
-inline py::array_t<int64_t> python_ids(const PID* ids, std::vector<py::ssize_t> shape) {
-    py::array_t<int64_t> result(std::move(shape));
-    int64_t* out = result.mutable_data();
-    for (py::ssize_t i = 0; i < result.size(); ++i) {
-        out[i] = ids[i] == kPidMax ? int64_t{-1} : static_cast<int64_t>(ids[i]);
-    }
-    return result;
-}
-
-// (num_queries, k) outputs. The index writes row numbers into ids; slots without a
-// neighbor keep kPidMax and +inf. Searches pad slots without a result, so k may exceed
-// the number of points.
-struct SearchResults {
-    std::vector<py::ssize_t> shape;
-    std::vector<PID> ids;
-    py::array_t<float> distances;
-
-    // (ids, distances) for Python, with int64 IDs and -1 for a missing neighbor.
-    [[nodiscard]] py::tuple to_python() const {
-        return py::make_tuple(python_ids(ids.data(), shape), distances);
-    }
-};
-
 inline void check_k(size_t k) {
     if (k == 0 || k > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("k must be between 1 and 2**31");
@@ -422,19 +398,6 @@ inline void check_ef_search(std::optional<size_t> ef_search) {
             "ef_search must be at least 1; pass None for the default"
         );
     }
-}
-
-inline SearchResults unfilled_search_results(size_t num_queries, size_t k) {
-    const auto shape = std::vector<py::ssize_t>{
-        static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
-    SearchResults results{
-        shape, std::vector<PID>(num_queries * k, kPidMax), py::array_t<float>(shape)};
-    std::fill(
-        results.distances.mutable_data(),
-        results.distances.mutable_data() + results.distances.size(),
-        std::numeric_limits<float>::infinity()
-    );
-    return results;
 }
 
 // Like ensure_1d_array<int64_t>, but refuses input whose dtype is not an integer. forcecast
