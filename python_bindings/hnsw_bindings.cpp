@@ -6,13 +6,11 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>  // IWYU pragma: keep; registers std::optional casters
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <memory>
+#include <numeric>
 #include <optional>
-#include <random>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -20,11 +18,8 @@
 
 #include "bindings_common.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
-#include "rabitqlib/index/detail/buffer.hpp"
-#include "rabitqlib/index/hnsw/hnsw.hpp"
-#include "rabitqlib/index/training.hpp"
+#include "rabitqlib/index/hnsw_index.hpp"
 #include "rabitqlib/index/types.hpp"
-#include "rabitqlib/utils/input_checks.hpp"
 
 namespace py = pybind11;
 
@@ -40,52 +35,28 @@ class HnswIndex {
         size_t ef_construction,
         const std::string& metric,
         const py::object& seed
-    ) {
-        if (num_clusters == 0 || num_clusters > buffer::kSearchBufferMaxPointCount) {
-            throw std::invalid_argument(
-                "num_clusters must be in [1, " +
-                std::to_string(buffer::kSearchBufferMaxPointCount) + "]"
-            );
-        }
-        const auto metric_type = index_metric_from_string(metric);
-        const auto graph_seed =
-            seed.is_none() ? std::random_device{}()
-                           : static_cast<uint32_t>(
-                                 checked_seed(seed, std::numeric_limits<uint32_t>::max())
-                             );
-        // Capacity grows on add; reserve preallocates.
-        index_ = std::make_unique<hnsw::HierarchicalNSW>(
-            1, dim, nbits, M, ef_construction, graph_seed, metric_type
-        );
-        num_clusters_ = num_clusters;
-        seed_ = graph_seed;
-        cp_ = default_training_parameters(metric_type, graph_seed);
-    }
+    )
+        : index_(dim, index_options(nbits, num_clusters, M, ef_construction, metric, seed))
+        , cp_(index_.cp()) {}
 
     void train(py::handle x, std::optional<size_t> num_threads) {
         const auto operation = access_.write();
         auto x_array = ensure_2d_array<float>(x, "x");
-        check_trainable();
-        ensure_dimension(
-            x_array, index_->dimension(), "x dimension does not match index dim"
-        );
-        const auto rows = training_rows(x_array, num_clusters_);
-        const auto cp = training_parameters(cp_, num_threads);
+        ensure_dimension(x_array, index_.dim(), "x dimension does not match index dim");
+        const auto rows = training_rows(x_array, index_.num_clusters());
         const auto* x_ptr = x_array.data();
-        const size_t num_clusters = num_clusters_;
+        index_.cp() = cp_;
         py::gil_scoped_release release;
-        index_->train(num_clusters, rows, x_ptr, cp);
+        index_.train(x_ptr, rows, num_threads);
     }
 
     void set_centroids(py::handle centroids) {
         const auto operation = access_.write();
         auto centroids_array = ensure_2d_array<float>(centroids, "centroids");
-        check_trainable();
-        check_centroid_shape(centroids_array, num_clusters_, index_->dimension());
+        check_centroid_shape(centroids_array, index_.num_clusters(), index_.dim());
         const auto* centroids_ptr = centroids_array.data();
-        const size_t num_clusters = num_clusters_;
         py::gil_scoped_release release;
-        index_->set_centroids(num_clusters, centroids_ptr);
+        index_.set_centroids(centroids_ptr);
     }
 
     py::array_t<int64_t> add(
@@ -96,64 +67,28 @@ class HnswIndex {
     ) {
         const auto operation = access_.write();
         auto data_array = ensure_2d_array<float>(data, "data");
-        // The first add on an untrained index trains it on the same data. Only a
-        // loaded file lacks the seed that recreates the rotation and graph levels.
-        const bool trains = !index_->is_trained() && cluster_ids.is_none() &&
-                            seed_.has_value() && data_array.shape(0) > 0;
-        if (!trains) {
-            check_trained("add");
-        }
         ensure_dimension(
-            data_array, index_->dimension(), "data dimension does not match index dim"
+            data_array, index_.dim(), "data dimension does not match index dim"
         );
         const auto rows = static_cast<size_t>(data_array.shape(0));
-
         std::vector<PID> assigned;
+        AddOptions options;
         if (!cluster_ids.is_none()) {
-            assigned = checked_cluster_ids(cluster_ids, rows, index_->num_clusters());
+            assigned = checked_cluster_ids(cluster_ids, rows, index_.num_clusters());
+            options.cluster_ids = assigned.data();
         }
-
-        // Allocated before the index is touched.
+        options.num_threads = num_threads;
+        options.fast_quantization = fast_quantization;
+        // Allocate the returned IDs before the index changes.
         auto ids = py::array_t<int64_t>(static_cast<py::ssize_t>(rows));
         const auto* data_ptr = data_array.data();
-        const size_t threads = num_threads.value_or(0);
-        if (trains) {
-            // Train and fill a fresh index with the same seed, then swap it in, so
-            // that a failure leaves this index untrained and empty. Fewer rows than
-            // num_clusters train one centroid per row.
-            const size_t num_clusters = std::min(num_clusters_, rows);
-            const auto cp = training_parameters(cp_, num_threads);
-            auto staged = std::make_unique<hnsw::HierarchicalNSW>(
-                index_->max_elements(),
-                index_->dimension(),
-                index_->nbits(),
-                index_->M(),
-                index_->ef_construction(),
-                *seed_,
-                index_->metric_type()
-            );
-            const auto labels = [&] {
-                py::gil_scoped_release release;
-                staged->train(num_clusters, rows, data_ptr, cp);
-                grow_capacity(*staged, rows, data_ptr, "HNSW add data");
-                return staged->add(data_ptr, rows, nullptr, fast_quantization, threads);
-            }();
-            index_.swap(staged);
-            std::copy(labels.begin(), labels.end(), ids.mutable_data());
-            return ids;
-        }
-        const auto labels = [&] {
+        index_.cp() = cp_;  // the first add trains with it
+        Id first = 0;
+        {
             py::gil_scoped_release release;
-            grow_capacity(*index_, rows, data_ptr, "HNSW add data");
-            return index_->add(
-                data_ptr,
-                rows,
-                assigned.empty() ? nullptr : assigned.data(),
-                fast_quantization,
-                threads
-            );
-        }();
-        std::copy(labels.begin(), labels.end(), ids.mutable_data());
+            first = index_.add(data_ptr, rows, options);
+        }
+        std::iota(ids.mutable_data(), ids.mutable_data() + rows, first);
         return ids;
     }
 
@@ -165,7 +100,7 @@ class HnswIndex {
             // Capacity only grows, and a request within it changes nothing, so it
             // may run alongside searches.
             const auto reading = access_.read();
-            if (static_cast<uint64_t>(num_points) <= index_->max_elements()) {
+            if (static_cast<uint64_t>(num_points) <= index_.capacity()) {
                 return;
             }
         }
@@ -173,25 +108,23 @@ class HnswIndex {
         // can change the capacity in between.
         const auto operation = access_.write();
         py::gil_scoped_release release;
-        index_->resize(static_cast<size_t>(num_points));
+        index_.reserve(static_cast<size_t>(num_points));
     }
 
     size_t remove(py::handle ids) {
         const auto operation = access_.write();
-        auto ids_array = ensure_1d_integer_array(ids, "ids");
-        check_trained("remove");
-        auto to_remove = checked_removal_ids(ids_array, index_->num_stored_points());
+        const auto to_remove = copied_ids(ensure_1d_integer_array(ids, "ids"));
         py::gil_scoped_release release;
-        return index_->remove(to_remove.data(), to_remove.size());
+        return index_.remove(to_remove.data(), to_remove.size());
     }
 
     [[nodiscard]] size_t num_points() const {
         const auto operation = access_.read();
-        return index_->num_points();
+        return index_.num_points();
     }
     [[nodiscard]] size_t num_stored_points() const {
         const auto operation = access_.read();
-        return index_->num_stored_points();
+        return index_.num_stored_points();
     }
 
     py::tuple search(
@@ -202,128 +135,97 @@ class HnswIndex {
     ) {
         const auto operation = access_.read();
         auto query_array = ensure_2d_array<float>(queries, "queries");
-        check_trained("search");
         ensure_dimension(
-            query_array, index_->dimension(), "query dimension does not match index dim"
+            query_array, index_.dim(), "query dimension does not match index dim"
         );
-        check_k(k);
+        check_k(k);  // before the outputs are allocated
         check_ef_search(ef_search);
-        // None selects max(k, 64), as in SymqgIndex.
-        const size_t search_breadth = ef_search.value_or(std::max<size_t>(k, 64));
+        GraphSearchOptions options;
+        options.ef_search = ef_search;
+        options.num_threads = num_threads.value_or(1);
 
-        auto output = unfilled_search_results(static_cast<size_t>(query_array.shape(0)), k);
-        auto distances_view = output.distances.mutable_unchecked<2>();
-
-        const auto* queries_data = query_array.data();
         const auto num_queries = static_cast<size_t>(query_array.shape(0));
-        std::vector<std::vector<std::pair<float, PID>>> results;
+        const auto shape = std::vector<py::ssize_t>{
+            static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
+        auto ids = py::array_t<int64_t>(shape);
+        auto distances = py::array_t<float>(shape);
+        const auto* queries_data = query_array.data();
+        auto* ids_data = ids.mutable_data();
+        auto* distances_data = distances.mutable_data();
         {
             py::gil_scoped_release release;
-            results = index_->search(
-                queries_data, num_queries, k, search_breadth, num_threads.value_or(1)
-            );
+            index_.search(queries_data, num_queries, k, ids_data, distances_data, options);
         }
-
-        for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(results.size()); ++i) {
-            for (py::ssize_t j = 0; j < static_cast<py::ssize_t>(std::min<size_t>(
-                                            k, results[static_cast<size_t>(i)].size()
-                                        ));
-                 ++j) {
-                output.ids[(static_cast<size_t>(i) * k) + static_cast<size_t>(j)] =
-                    results[static_cast<size_t>(i)][static_cast<size_t>(j)].second;
-                distances_view(i, j) =
-                    results[static_cast<size_t>(i)][static_cast<size_t>(j)].first;
-            }
-        }
-        return output.to_python();
+        return py::make_tuple(ids, distances);
     }
 
     void save(py::handle path) const {
         const auto filename = path_string(path);
         const auto operation = access_.read();
-        check_trained("save");
-        if (index_->num_stored_points() == 0) {
-            throw std::runtime_error("HnswIndex has no points to save; add points first");
-        }
         py::gil_scoped_release release;
-        index_->save(filename.c_str());
+        index_.save(filename.c_str());
     }
 
     static HnswIndex load(py::handle path) {
         const auto filename = path_string(path);
-        HnswIndex wrapper;
-        wrapper.index_ = std::make_unique<hnsw::HierarchicalNSW>();
-        {
+        auto index = [&filename] {
             py::gil_scoped_release release;
-            wrapper.index_->load(filename.c_str());
-        }
-        // Untrained, empty files from 0.7 have no clusters; train them with the default.
-        wrapper.num_clusters_ = wrapper.index_->is_trained()
-                                    ? wrapper.index_->num_clusters()
-                                    : kDefaultNumClusters;
-        // Format-2 files record the seed; files from releases up to 0.8 do not.
-        const std::optional<uint64_t> seed = wrapper.index_->seed();
-        if (seed.has_value()) {
-            wrapper.seed_ = static_cast<size_t>(*seed);
-        }
-        wrapper.cp_ = default_training_parameters(
-            wrapper.index_->metric_type(),
-            seed.has_value() ? static_cast<uint32_t>(*seed)
-                             : rabitqkmeans::RaBitQKMeansParameters{}.seed
-        );
-        return wrapper;
+            return rabitqlib::HnswIndex::load(filename.c_str());
+        }();
+        return HnswIndex(std::move(index));
     }
 
     [[nodiscard]] std::string repr() const {
         const auto operation = access_.read();
-        return "HnswIndex(dim=" + std::to_string(index_->dimension()) + ", metric='" +
-               metric_to_string(index_->metric_type()) +
-               "', nbits=" + std::to_string(index_->nbits()) +
-               ", num_points=" + std::to_string(index_->num_points()) +
-               ", num_stored_points=" + std::to_string(index_->num_stored_points()) +
-               ", capacity=" + std::to_string(index_->max_elements()) +
-               ", num_clusters=" + std::to_string(current_num_clusters()) +
-               ", is_trained=" + (index_->is_trained() ? "True" : "False") + ")";
+        return "HnswIndex(dim=" + std::to_string(index_.dim()) + ", metric='" +
+               metric_to_string(index_.metric()) +
+               "', nbits=" + std::to_string(index_.nbits()) +
+               ", num_points=" + std::to_string(index_.num_points()) +
+               ", num_stored_points=" + std::to_string(index_.num_stored_points()) +
+               ", capacity=" + std::to_string(index_.capacity()) +
+               ", num_clusters=" + std::to_string(index_.num_clusters()) +
+               ", is_trained=" + (index_.is_trained() ? "True" : "False") + ")";
     }
 
     [[nodiscard]] size_t dim() const {
         const auto operation = access_.read();
-        return index_->dimension();
+        return index_.dim();
     }
     [[nodiscard]] size_t capacity() const {
         const auto operation = access_.read();
-        return index_->max_elements();
+        return index_.capacity();
     }
     [[nodiscard]] size_t nbits() const {
         const auto operation = access_.read();
-        return index_->nbits();
+        return index_.nbits();
     }
     [[nodiscard]] size_t M() const {
         const auto operation = access_.read();
-        return index_->M();
+        return index_.M();
     }
     [[nodiscard]] size_t ef_construction() const {
         const auto operation = access_.read();
-        return index_->ef_construction();
+        return index_.ef_construction();
     }
     [[nodiscard]] bool is_trained() const {
         const auto operation = access_.read();
-        return index_->is_trained();
+        return index_.is_trained();
     }
     [[nodiscard]] size_t num_clusters() const {
         const auto operation = access_.read();
-        return current_num_clusters();
+        return index_.num_clusters();
     }
-    [[nodiscard]] std::optional<size_t> seed() const {
+    [[nodiscard]] std::optional<uint64_t> seed() const {
         const auto operation = access_.read();
-        return seed_;
+        return index_.seed();
     }
     [[nodiscard]] std::string metric() const {
         const auto operation = access_.read();
-        return metric_to_string(index_->metric_type());
+        return metric_to_string(index_.metric());
     }
 
-    // Parameters are wrapper state that train copies with the GIL held.
+    // Python reads and writes the fields of cp_ with the GIL held but without a guard, so
+    // the native index trains with a copy that train and add make with the GIL held.
     rabitqkmeans::RaBitQKMeansParameters& cp() { return cp_; }
     void set_cp(const rabitqkmeans::RaBitQKMeansParameters& cp) {
         const auto operation = access_.write();
@@ -331,54 +233,34 @@ class HnswIndex {
     }
 
    private:
-    static constexpr size_t kDefaultNumClusters = 16;
+    explicit HnswIndex(rabitqlib::HnswIndex index)
+        : index_(std::move(index)), cp_(index_.cp()) {}
 
-    HnswIndex() = default;
-
-    // The configured count until centroids are set, then the trained count.
-    [[nodiscard]] size_t current_num_clusters() const {
-        return index_->is_trained() ? index_->num_clusters() : num_clusters_;
-    }
-
-    void check_trained(const char* operation) const {
-        if (!index_->is_trained()) {
-            throw std::runtime_error(
-                std::string("HnswIndex must be trained or loaded before ") + operation
+    static HnswOptions index_options(
+        size_t nbits,
+        size_t num_clusters,
+        size_t M,
+        size_t ef_construction,
+        const std::string& metric,
+        const py::object& seed
+    ) {
+        HnswOptions options;
+        options.metric = index_metric_from_string(metric);
+        if (!seed.is_none()) {
+            options.seed = static_cast<uint32_t>(
+                checked_seed(seed, std::numeric_limits<uint32_t>::max())
             );
         }
-    }
-
-    void check_trainable() const {
-        if (index_->num_stored_points() != 0) {
-            throw std::runtime_error("HnswIndex cannot be trained once it stores points");
-        }
-    }
-
-    // Grow capacity geometrically to fit `rows` more points from `data`, checked
-    // first so that invalid input leaves the capacity unchanged. Leaves IDs beyond
-    // the supported range for add to reject. Called without the GIL.
-    static void grow_capacity(
-        hnsw::HierarchicalNSW& index, size_t rows, const float* data, const char* what
-    ) {
-        const size_t capacity = index.max_elements();
-        const size_t stored = index.num_stored_points();
-        if (rows <= capacity - stored ||
-            rows > buffer::kSearchBufferMaxPointCount - stored) {
-            return;
-        }
-        const size_t dim = index.dimension();
-        check_coordinates(data, rows * dim, dim, what);
-        const size_t needed = stored + rows;
-        const size_t doubled =
-            std::min(capacity * 2, static_cast<size_t>(buffer::kSearchBufferMaxPointCount));
-        index.resize(std::max(needed, doubled));
+        options.nbits = nbits;
+        options.num_clusters = num_clusters;
+        options.M = M;
+        options.ef_construction = ef_construction;
+        return options;
     }
 
     mutable IndexAccess access_;
-    std::unique_ptr<hnsw::HierarchicalNSW> index_;
+    rabitqlib::HnswIndex index_;
     rabitqkmeans::RaBitQKMeansParameters cp_;
-    size_t num_clusters_ = 0;     // Centroid count train and set_centroids expect.
-    std::optional<size_t> seed_;  // Unknown for files from releases up to 0.8.
 };
 
 }  // namespace rabitqlib::python_bindings
