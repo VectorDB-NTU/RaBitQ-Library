@@ -54,10 +54,11 @@ target_include_directories(index_header_boundary BEFORE PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/forbidden")
 # The supported index classes also hide the existing index classes and k-means.
 add_executable(index_api_header_boundary
-    index_api_headers_main.cpp hnsw_index_headers.cpp ivf_index_headers.cpp)
+    index_api_headers_main.cpp hnsw_index_headers.cpp ivf_index_headers.cpp
+    symqg_index_headers.cpp)
 target_link_libraries(index_api_header_boundary PRIVATE rabitqlib::index)
 foreach(header IN ITEMS index/ivf/ivf.hpp index/ivf/cluster.hpp index/hnsw/hnsw.hpp
-        clustering/rabitqkmeans.hpp)
+        index/symqg/qg.hpp index/symqg/qg_builder.hpp clustering/rabitqkmeans.hpp)
     get_filename_component(directory "${header}" DIRECTORY)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/index-api-forbidden/rabitqlib/${directory}")
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/index-api-forbidden/rabitqlib/${header}"

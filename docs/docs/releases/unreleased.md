@@ -48,7 +48,7 @@
 - Point IDs are `int64` at the Python boundary (#211):
   - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
-  - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex` and `HnswIndex` use 64-bit IDs, as Python does.
+  - IDs remain the row numbers the index assigns. The existing C++ index classes keep 32-bit `PID` values with `kPidMax` for a missing result; the new C++ `IvfIndex`, `HnswIndex` and `SymqgIndex` use 64-bit IDs, as Python does.
 
 - An `IvfIndex` or `HnswIndex` call with both an invalid argument and the wrong state may now report the argument first, for example `ValueError` for `nprobe=0` on an untrained index, which raised `RuntimeError`. `HnswIndex()` with an invalid `metric` or `seed` and an out-of-range `num_clusters` now reports the metric or seed.
 
@@ -80,7 +80,12 @@
   - `add` uses every available CPU unless `num_threads` is set, whereas `hnsw::HierarchicalNSW::add` uses one; pass `num_threads = 1` and a seed for a reproducible graph.
   - `search` takes a `GraphSearchOptions` struct. Without an `ef_search` it uses `max(k, 64)`, and an explicit 0 throws.
   - `seed()` is a `std::optional<uint64_t>`, because a file written by `hnsw::HierarchicalNSW` may record a seed above 32 bits.
-- `ivf::IVF` and `hnsw::HierarchicalNSW` are unchanged.
+- New `rabitqlib::SymqgIndex` in `rabitqlib/index/symqg_index.hpp` (#234), which the Python `SymqgIndex` now wraps:
+  - `SymqgIndex(dim, options)` takes a `SymqgOptions` struct (metric, `nbits` of 32, 4 or 8 with 32 for raw float32, `max_degree`, `ef_construction`, `init`, seed). `add` builds the graph from every vector, once, and a built or loaded index throws `std::logic_error` on `add`. `train` only checks its input. `search`, `save` and the static `load` follow the Python methods.
+  - A failed `add` leaves the index without a graph. `add` takes a worker count, with 0, the default, for every available CPU.
+  - `search` takes a `GraphSearchOptions` struct. Without an `ef_search` it uses `max(k, 64)`, a smaller value is raised to `k`, and an explicit 0 throws; `symqg::QuantizedGraph` rejects an `ef_search` below `k`.
+  - `seed()`, `ef_construction()` and `init()` have no value for a file of a release up to 0.8.
+- `ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `symqg::QGBuilder` are otherwise unchanged.
 
 - `qgkmeans::QGKMeansParameters` uses the Python names (#233): `graph_degree` becomes `max_degree`, `ef_build` becomes `ef_construction`, and `quantization_bits` (0, 4 or 8) becomes `nbits` (32, 4 or 8, with 32 for raw float32). The fields keep their order and types. An `nbits` of 0 is rejected, so code that initialized the field positionally with 0 must pass 32. `QGAssigner` keeps its constructor, including `quantization_bits` with 0 for raw storage.
 - Messages follow the names: `QGKMeans nbits must be 4, 8, or 32`, `QGKMeans max_degree must be a positive multiple of 32`, `QGKMeans requires more centroids than max_degree` and `QGKMeans ef_construction and ef_search must be positive`.
@@ -98,5 +103,5 @@
   - `IVF::seed()`;
   - `HierarchicalNSW::seed()`;
   - `QuantizedGraph<float>::seed()`, `ef_construction()` and `initialization()`.
-- `symqg::QGInitialization` moves from `qg_builder.hpp` to `qg.hpp`, which `qg_builder.hpp` includes.
+- `symqg::QGInitialization` moves from `qg_builder.hpp` to `rabitqlib/index/symqg/types.hpp`, which `qg.hpp`, and through it `qg_builder.hpp`, includes.
 - The vendored hnswlib adds `saveIndex(std::ostream&)` and `loadIndex(std::istream&, size_t bytes, ...)`; the path overloads are unchanged.

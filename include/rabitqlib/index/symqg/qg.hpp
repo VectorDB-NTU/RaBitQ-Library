@@ -11,6 +11,7 @@
 #include "rabitqlib/core/metric.hpp"                   // IWYU pragma: export
 #include "rabitqlib/core/types.hpp"                    // IWYU pragma: export
 #include "rabitqlib/index/detail/visited_set_fwd.hpp"  // IWYU pragma: export
+#include "rabitqlib/index/symqg/types.hpp"             // IWYU pragma: export
 #include "rabitqlib/index/types.hpp"                   // IWYU pragma: export
 #include "rabitqlib/utils/memory.hpp"
 #include "rabitqlib/utils/packed.hpp"
@@ -27,9 +28,6 @@ class SearchBuffer;
 }  // namespace rabitqlib
 
 namespace rabitqlib::symqg {
-
-// How a builder initializes the graph before refinement.
-enum class QGInitialization { PiPNN, Random };
 
 class QuantizedQuery {
    private:

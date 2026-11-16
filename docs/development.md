@@ -48,6 +48,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/index/types.hpp` | Point IDs, add and graph search options, and ANN candidate values; no Eigen dependency |
 | `include/rabitqlib/index/ivf_index.hpp` | `IvfIndex`, the supported C++ IVF API: the Python workflow over `ivf::IVF` |
 | `include/rabitqlib/index/hnsw_index.hpp` | `HnswIndex`, the supported C++ HNSW API: the Python workflow over `hnsw::HierarchicalNSW` |
+| `include/rabitqlib/index/symqg_index.hpp` | `SymqgIndex`, the supported C++ SymphonyQG API: the Python workflow over `symqg::QuantizedGraph<float>` and `QGBuilder` |
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |

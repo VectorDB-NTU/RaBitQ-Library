@@ -9,8 +9,8 @@ namespace rabitqlib {
 using PID = uint32_t;
 inline constexpr PID kPidMax = 0xFFFFFFFF;
 
-// A point ID at the IvfIndex and HnswIndex API: the row number the index assigned to
-// the point.
+// A point ID at the IvfIndex, HnswIndex and SymqgIndex API: the row number the index
+// assigned to the point.
 using Id = int64_t;
 // A search result slot without a point.
 inline constexpr Id kNoId = -1;
@@ -28,7 +28,7 @@ struct AddOptions {
     bool fast_quantization = false;
 };
 
-// Settings of a graph index search (HnswIndex).
+// Settings of a graph index search (HnswIndex and SymqgIndex).
 struct GraphSearchOptions {
     // Search breadth, raised to k. No value selects max(k, 64); 0 throws.
     std::optional<size_t> ef_search;

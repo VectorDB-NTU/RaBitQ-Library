@@ -12,7 +12,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/types.hpp"
 
-// Checks and settings that the IvfIndex and HnswIndex classes share. Their
+// Checks and settings that the IvfIndex, HnswIndex and SymqgIndex classes share. Their
 // messages are the ones the Python classes raise.
 namespace rabitqlib::index_facade {
 
