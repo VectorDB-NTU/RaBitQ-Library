@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <random>
@@ -12,9 +11,9 @@
 #include <utility>
 #include <vector>
 
+#include "index_facade.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/types.hpp"
-#include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/training.hpp"
 
@@ -162,23 +161,12 @@ void IvfIndex::search(
     const IvfSearchOptions& options
 ) const {
     check_trained("search");
-    if (k == 0 || k > buffer::kSearchBufferMaxPointCount) {
-        throw std::invalid_argument("k must be between 1 and 2^31");
-    }
-    if (options.nprobe == size_t{0}) {
-        throw std::invalid_argument(
-            "nprobe must be at least 1; leave it unset for the default"
-        );
-    }
+    index_facade::check_k(k);
+    index_facade::check_breadth(options.nprobe, "nprobe");
     if (num_queries == 0) {
         return;
     }
-    if (ids == nullptr) {
-        throw std::invalid_argument("IvfIndex search ids must not be null");
-    }
-    if (num_queries > std::numeric_limits<size_t>::max() / sizeof(Id) / k) {
-        throw std::length_error("IvfIndex query batch is too large");
-    }
+    index_facade::check_outputs("IvfIndex", num_queries, k, ids);
     // The index writes 32-bit row numbers, which are widened afterwards.
     std::vector<PID> row_ids(num_queries * k);
     index_->search_batch(
@@ -231,13 +219,7 @@ void IvfIndex::check_trainable() const {
 RaBitQKMeansParameters IvfIndex::training_parameters(
     std::optional<size_t> num_threads
 ) const {
-    RaBitQKMeansParameters cp = *cp_;
-    if (num_threads.has_value()) {
-        cp.num_threads = static_cast<uint32_t>(
-            std::min<size_t>(*num_threads, std::numeric_limits<int>::max())
-        );
-    }
-    return cp;
+    return index_facade::with_num_threads(*cp_, num_threads);
 }
 
 }  // namespace rabitqlib

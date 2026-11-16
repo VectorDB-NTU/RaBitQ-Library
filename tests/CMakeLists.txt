@@ -52,6 +52,7 @@ set_source_files_properties(unit/rabitqlib/utils/blob_test.cpp
     "RABITQ_QUANT_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/python/fixtures/quant\"")
 set_source_files_properties(unit/rabitqlib/index/historical_persistence_test.cpp
     unit/rabitqlib/index/ivf_index_test.cpp
+    unit/rabitqlib/index/hnsw_index_test.cpp
     PROPERTIES COMPILE_DEFINITIONS
     "RABITQ_TEST_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence\"")
 rabitq_configure_target(rabitq_tests)

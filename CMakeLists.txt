@@ -250,6 +250,7 @@ if(RABITQ_BUILD_INDEX)
     add_library(rabitq_index STATIC
         src/index/format2.cpp
         src/index/hnsw.cpp
+        src/index/hnsw_index.cpp
         src/index/ivf.cpp
         src/index/ivf_index.cpp
         src/index/ivf_initializer.cpp

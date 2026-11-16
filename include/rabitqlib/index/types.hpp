@@ -9,12 +9,13 @@ namespace rabitqlib {
 using PID = uint32_t;
 inline constexpr PID kPidMax = 0xFFFFFFFF;
 
-// A point ID at the IvfIndex API: the row number the index assigned to the point.
+// A point ID at the IvfIndex and HnswIndex API: the row number the index assigned to
+// the point.
 using Id = int64_t;
 // A search result slot without a point.
 inline constexpr Id kNoId = -1;
 
-// Settings of IvfIndex::add.
+// Settings of IvfIndex::add and HnswIndex::add.
 struct AddOptions {
     // Cluster of each point, or nullptr to route each point with the index's routing,
     // which may be approximate.
@@ -25,6 +26,14 @@ struct AddOptions {
     // Fixed-scale extra-bit quantization: faster, possibly less accurate. No effect on
     // one-bit or raw storage.
     bool fast_quantization = false;
+};
+
+// Settings of a graph index search (HnswIndex).
+struct GraphSearchOptions {
+    // Search breadth, raised to k. No value selects max(k, 64); 0 throws.
+    std::optional<size_t> ef_search;
+    // Worker count; 0 selects every available CPU, capped by OMP_NUM_THREADS.
+    size_t num_threads = 1;
 };
 
 template <typename T, typename TP = PID>
