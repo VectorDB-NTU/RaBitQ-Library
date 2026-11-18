@@ -77,7 +77,7 @@ inline size_t floor_log2(size_t x) {
 
 inline size_t ceil_log2(size_t x) {
     size_t ret = floor_log2(x);
-    return (1UL << ret) < x ? ret + 1 : ret;
+    return (size_t{1} << ret) < x ? ret + 1 : ret;
 }
 
 inline bool is_powerof2(size_t n) { return n > 0 && (n & (n - 1)) == 0; }
