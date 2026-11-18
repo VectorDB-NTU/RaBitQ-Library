@@ -190,10 +190,13 @@ Open issues labeled
 are small, self-contained tasks that say where to start and when they are done;
 [help wanted](https://github.com/VectorDB-NTU/RaBitQ-Library/labels/help%20wanted)
 issues are larger. The [roadmap issue](https://github.com/VectorDB-NTU/RaBitQ-Library/issues/220)
-lists the goals for the next releases. Comment on an issue before starting so work
-is not duplicated. When claiming a code issue, say how you will verify the change
-locally, such as the tests or benchmark you will run. A maintainer may unassign an
-issue when review feedback goes unanswered.
+lists the goals for the next releases. Comments do not reserve an issue: it stays
+open to everyone until a PR is merged. To work on one, open a draft PR once you
+have code and report the local results of the tests or benchmark the issue asks
+for. For larger changes, you can first comment with your approach to get early
+feedback. Contributors with a merged PR may ask to be assigned. When several PRs
+address the same issue, the first to pass review is merged. A maintainer may
+unassign an issue when review feedback goes unanswered.
 
 ## Feedback and further reading
 
