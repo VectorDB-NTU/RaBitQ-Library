@@ -2016,7 +2016,7 @@ original vectors. Those vectors may be kept in memory or retrieved from disk.</p
 skipped when its estimated lower bound exceeds the relevant upper bound among
 the current nearest-neighbor candidates. These are probabilistic intervals, not
 deterministic bounds for every query.</p>
-<p>The strategy may rerank fewer than <span class="arithmatex"><span class="MathJax_Preview">K</span><script type="math/tex">K</script></span> vectors when only boundary candidates
+<p>The strategy may rerank fewer than <span class="arithmatex">\(K\)</span> vectors when only boundary candidates
 need refinement. It does not guarantee exact top-k membership or exact distances
 for results that were never reranked; measure the recall/cost trade-off for the workload.</p>
 <p>This is an application-level strategy, not a built-in disk-retrieval API.
@@ -2170,7 +2170,9 @@ search or probabilistic pruning.</p>
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
       
     
   </body>

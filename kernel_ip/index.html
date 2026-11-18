@@ -2100,20 +2100,14 @@ x86 paths when available.</p>
 query. The notation follows the <a href="../rabitq/estimator/">Estimator</a>.</p>
 <h2 id="the-kernel-for-binary-codes">The kernel for binary codes<a class="headerlink" href="#the-kernel-for-binary-codes" title="Permanent link">&para;</a></h2>
 <h3 id="single-code">Single code<a class="headerlink" href="#single-code" title="Permanent link">&para;</a></h3>
-<p>For a sign code <span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_0</span><script type="math/tex">\mathbf{x}_0</script></span>, first quantize the rotated query
-<span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> into four-bit unsigned integers using the fast RaBitQ encoder.
+<p>For a sign code <span class="arithmatex">\(\mathbf{x}_0\)</span>, first quantize the rotated query
+<span class="arithmatex">\(\mathbf{q}_r'\)</span> into four-bit unsigned integers using the fast RaBitQ encoder.
 Then use bitwise-and <code>&amp;</code> and <code>popcnt</code> to estimate the inner product.</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \mathbf{q}_r'\approx \Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D
-</div>
-<script type="math/tex; mode=display">
-\mathbf{q}_r'\approx \Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D
-</script>
-</div>
-<p>Let <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u^{(i)}</span><script type="math/tex">\mathbf{q}_u^{(i)}</script></span> be bit plane <span class="arithmatex"><span class="MathJax_Preview">i</span><script type="math/tex">i</script></span> of <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_u</span><script type="math/tex">\mathbf{q}_u</script></span>. Then:</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+\]</div>
+<p>Let <span class="arithmatex">\(\mathbf{q}_u^{(i)}\)</span> be bit plane <span class="arithmatex">\(i\)</span> of <span class="arithmatex">\(\mathbf{q}_u\)</span>. Then:</p>
+<div class="arithmatex">\[
 \begin{align}
 \left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;
 &amp;\approx \left&lt; \mathbf{x}_0,\Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D\right&gt;
@@ -2121,36 +2115,19 @@ Then use bitwise-and <code>&amp;</code> and <code>popcnt</code> to estimate the 
 \\ &amp;=\Delta_q \sum_{i=0}^{B_q-1} \left( 2^i\left&lt; \mathbf{x}_0,\mathbf{q}_u^{(i)}\right&gt; \right) + v_q \cdot\mathrm{popcnt}(\mathbf{x}_0)
 \\ &amp;=\Delta_q \sum_{i=0}^{B_q-1} 2^i\cdot \mathrm{popcnt}(\mathbf{x}_0\ \&amp;\  \mathbf{q}_u^{(i)})  + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;
-&amp;\approx \left&lt; \mathbf{x}_0,\Delta_q \mathbf{q}_u + v_q\cdot \mathbf{1}_D\right&gt;
-\\&amp;=\Delta_q \left&lt; \mathbf{x}_0,\mathbf{q}_u\right&gt; + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
-\\ &amp;=\Delta_q \sum_{i=0}^{B_q-1} \left( 2^i\left&lt; \mathbf{x}_0,\mathbf{q}_u^{(i)}\right&gt; \right) + v_q \cdot\mathrm{popcnt}(\mathbf{x}_0)
-\\ &amp;=\Delta_q \sum_{i=0}^{B_q-1} 2^i\cdot \mathrm{popcnt}(\mathbf{x}_0\ \&amp;\  \mathbf{q}_u^{(i)})  + v_q \cdot \mathrm{popcnt}(\mathbf{x}_0)
-\end{align}
-</script>
-</div>
+\]</div>
 <h3 id="batch-code">Batch code<a class="headerlink" href="#batch-code" title="Permanent link">&para;</a></h3>
 <p>FastScan scores batches of sign codes using query lookup tables. See the
 <a href="https://github.com/facebookresearch/faiss/wiki/Fast-accumulation-of-PQ-and-AQ-codes-(FastScan)">Faiss tutorial</a>
 for background.</p>
-<p>For a <span class="arithmatex"><span class="MathJax_Preview">D</span><script type="math/tex">D</script></span>-bit binary code, we split it into <span class="arithmatex"><span class="MathJax_Preview">M=D/4</span><script type="math/tex">M=D/4</script></span> segments. We prepare look-up-tables for each segment.
-- <span class="arithmatex"><span class="MathJax_Preview">\mathrm{LUT}[m][mask]</span><script type="math/tex">\mathrm{LUT}[m][mask]</script></span>: the inner product with <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span> in the <span class="arithmatex"><span class="MathJax_Preview">m</span><script type="math/tex">m</script></span>-th segment, i.e., the <span class="arithmatex"><span class="MathJax_Preview">(4m)</span><script type="math/tex">(4m)</script></span>-th to the <span class="arithmatex"><span class="MathJax_Preview">(4m+3)</span><script type="math/tex">(4m+3)</script></span>-th dimensions, when the code in the <span class="arithmatex"><span class="MathJax_Preview">m</span><script type="math/tex">m</script></span>-th segment equals to <span class="arithmatex"><span class="MathJax_Preview">mask</span><script type="math/tex">mask</script></span>.</p>
+<p>For a <span class="arithmatex">\(D\)</span>-bit binary code, we split it into <span class="arithmatex">\(M=D/4\)</span> segments. We prepare look-up-tables for each segment.
+- <span class="arithmatex">\(\mathrm{LUT}[m][mask]\)</span>: the inner product with <span class="arithmatex">\(\mathbf{q}_r'\)</span> in the <span class="arithmatex">\(m\)</span>-th segment, i.e., the <span class="arithmatex">\((4m)\)</span>-th to the <span class="arithmatex">\((4m+3)\)</span>-th dimensions, when the code in the <span class="arithmatex">\(m\)</span>-th segment equals to <span class="arithmatex">\(mask\)</span>.</p>
 <p>Based on the look-up-tables, we can compute the inner product as follows:</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \begin{align}
 \left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-\left&lt; \mathbf{x}_0,\mathbf{q}_r'\right&gt;= \sum_{m=0}^{M-1}  \mathrm{LUT}[m][\mathbf{x}_{0}[4m:4m+3]]
-\end{align}
-</script>
-</div>
+\]</div>
 <p>This equality describes real-valued lookup tables. Standard FastScan quantizes
 the entries to eight bits for SIMD accumulation. For one-bit data codes, that
 additional error is typically negligible relative to the RaBitQ encoding error.
@@ -2289,7 +2266,9 @@ nine bits per dimension.</p>
     
       <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
       
     
   </body>

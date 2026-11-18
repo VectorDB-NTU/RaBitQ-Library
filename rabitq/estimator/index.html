@@ -2178,55 +2178,55 @@ factors. For API usage, see <a href="../core_api/">Stable core API</a> or the ad
 </thead>
 <tbody>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{o}_r</span><script type="math/tex">\mathbf{o}_r</script></span>, <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r</span><script type="math/tex">\mathbf{q}_r</script></span></td>
+<td><span class="arithmatex">\(\mathbf{o}_r\)</span>, <span class="arithmatex">\(\mathbf{q}_r\)</span></td>
 <td>The original data and query vectors, zero-padded to the working dimension.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{c}</span><script type="math/tex">\mathbf{c}</script></span></td>
+<td><span class="arithmatex">\(\mathbf{c}\)</span></td>
 <td>The centroid in the same coordinate system as the original vectors.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">D</span><script type="math/tex">D</script></span></td>
-<td>The working (padded) dimension, <span class="arithmatex"><span class="MathJax_Preview">D&gt;1</span><script type="math/tex">D&gt;1</script></span>.</td>
+<td><span class="arithmatex">\(D\)</span></td>
+<td>The working (padded) dimension, <span class="arithmatex">\(D&gt;1\)</span>.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">B</span><script type="math/tex">B</script></span></td>
+<td><span class="arithmatex">\(B\)</span></td>
 <td>Total bits per dimension, including the sign bit.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">c_B</span><script type="math/tex">c_B</script></span></td>
-<td>A constant value <span class="arithmatex"><span class="MathJax_Preview">c_B=- \frac{2^B-1}{2}</span><script type="math/tex">c_B=- \frac{2^B-1}{2}</script></span>.</td>
+<td><span class="arithmatex">\(c_B\)</span></td>
+<td>A constant value <span class="arithmatex">\(c_B=- \frac{2^B-1}{2}\)</span>.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{1}_D</span><script type="math/tex">\mathbf{1}_D</script></span></td>
-<td>The all-one vector of dimension <span class="arithmatex"><span class="MathJax_Preview">D</span><script type="math/tex">D</script></span>.</td>
+<td><span class="arithmatex">\(\mathbf{1}_D\)</span></td>
+<td>The all-one vector of dimension <span class="arithmatex">\(D\)</span>.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">P</span><script type="math/tex">P</script></span></td>
+<td><span class="arithmatex">\(P\)</span></td>
 <td>Orthogonal map from the quantized coordinate system back to the original padded domain.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{o}</span><script type="math/tex">\mathbf{o}</script></span>, <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}</span><script type="math/tex">\mathbf{q}</script></span></td>
-<td>Normalized residuals: <span class="arithmatex"><span class="MathJax_Preview">(\mathbf{o}_r-\mathbf{c})/\|\mathbf{o}_r-\mathbf{c}\|</span><script type="math/tex">(\mathbf{o}_r-\mathbf{c})/\|\mathbf{o}_r-\mathbf{c}\|</script></span> and <span class="arithmatex"><span class="MathJax_Preview">(\mathbf{q}_r-\mathbf{c})/\|\mathbf{q}_r-\mathbf{c}\|</span><script type="math/tex">(\mathbf{q}_r-\mathbf{c})/\|\mathbf{q}_r-\mathbf{c}\|</script></span>.</td>
+<td><span class="arithmatex">\(\mathbf{o}\)</span>, <span class="arithmatex">\(\mathbf{q}\)</span></td>
+<td>Normalized residuals: <span class="arithmatex">\((\mathbf{o}_r-\mathbf{c})/\|\mathbf{o}_r-\mathbf{c}\|\)</span> and <span class="arithmatex">\((\mathbf{q}_r-\mathbf{c})/\|\mathbf{q}_r-\mathbf{c}\|\)</span>.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{\bar o}</span><script type="math/tex">\mathbf{\bar o}</script></span></td>
+<td><span class="arithmatex">\(\mathbf{\bar o}\)</span></td>
 <td>Unit-length quantized residual direction, expressed in the original padded domain.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'</span><script type="math/tex">\mathbf{q}_r'</script></span></td>
-<td>The query in the quantized coordinate system: <span class="arithmatex"><span class="MathJax_Preview">\mathbf{q}_r'=P^{-1}\mathbf{q}_r</span><script type="math/tex">\mathbf{q}_r'=P^{-1}\mathbf{q}_r</script></span>.</td>
+<td><span class="arithmatex">\(\mathbf{q}_r'\)</span></td>
+<td>The query in the quantized coordinate system: <span class="arithmatex">\(\mathbf{q}_r'=P^{-1}\mathbf{q}_r\)</span>.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">S_q</span><script type="math/tex">S_q</script></span></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">S_q=\sum_{i=1}^{D} \mathbf{q}'_{r}[i].</span><script type="math/tex">S_q=\sum_{i=1}^{D} \mathbf{q}'_{r}[i].</script></span></td>
+<td><span class="arithmatex">\(S_q\)</span></td>
+<td><span class="arithmatex">\(S_q=\sum_{i=1}^{D} \mathbf{q}'_{r}[i].\)</span></td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\Delta_x</span><script type="math/tex">\Delta_x</script></span></td>
+<td><span class="arithmatex">\(\Delta_x\)</span></td>
 <td>Residual-norm scale defined below; distinct from the estimator factor <code>f_rescale</code>.</td>
 </tr>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_u</span><script type="math/tex">\mathbf{x}_u</script></span></td>
+<td><span class="arithmatex">\(\mathbf{x}_u\)</span></td>
 <td>Unsigned integer codes.</td>
 </tr>
 </tbody>
@@ -2234,43 +2234,29 @@ factors. For API usage, see <a href="../core_api/">Stable core API</a> or the ad
 <h2 id="quantization">Quantization<a class="headerlink" href="#quantization" title="Permanent link">&para;</a></h2>
 <p>The derivation assumes nonzero residual norms. Zero residuals are handled by
 the encoder; callers need not normalize residuals themselves.</p>
-<p>Here <span class="arithmatex"><span class="MathJax_Preview">P^{-1}</span><script type="math/tex">P^{-1}</script></span> denotes the forward preprocessing transform applied by
+<p>Here <span class="arithmatex">\(P^{-1}\)</span> denotes the forward preprocessing transform applied by
 <a href="../rotator/">the rotator</a>. Apply that same transform to data, centroids and
 queries; no separate inverse-rotation call is needed for queries.</p>
-<p>For unsigned codes <span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_u</span><script type="math/tex">\mathbf{x}_u</script></span>, define</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<p>For unsigned codes <span class="arithmatex">\(\mathbf{x}_u\)</span>, define</p>
+<div class="arithmatex">\[
 \mathbf{z}=\mathbf{x}_u+c_B\mathbf{1}_D,\qquad
 \mathbf{\bar o}=\frac{P\mathbf{z}}{\|\mathbf{z}\|},\qquad
 \Delta_x=\frac{\|\mathbf{o}_r-\mathbf{c}\|}{\|\mathbf{z}\|}.
-</div>
-<script type="math/tex; mode=display">
-\mathbf{z}=\mathbf{x}_u+c_B\mathbf{1}_D,\qquad
-\mathbf{\bar o}=\frac{P\mathbf{z}}{\|\mathbf{z}\|},\qquad
-\Delta_x=\frac{\|\mathbf{o}_r-\mathbf{c}\|}{\|\mathbf{z}\|}.
-</script>
-</div>
+\]</div>
 <p>Then the norm-preserving reconstruction satisfies</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \begin{align}
 \mathbf{o}_r - \mathbf{c} \approx \| \mathbf{o}_r-\mathbf{c} \| \cdot \mathbf{\bar o} = \Delta_x P(\mathbf{x}_u+c_B\mathbf{1}_D)
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-\mathbf{o}_r - \mathbf{c} \approx \| \mathbf{o}_r-\mathbf{c} \| \cdot \mathbf{\bar o} = \Delta_x P(\mathbf{x}_u+c_B\mathbf{1}_D)
-\end{align}
-</script>
-</div>
+\]</div>
 <h2 id="estimator_1">Estimator<a class="headerlink" href="#estimator_1" title="Permanent link">&para;</a></h2>
 <p>The following derivation covers squared Euclidean distance and inner product.
 The public metric choices are <code>METRIC_L2</code> and <code>METRIC_IP</code>; there is no separate
 cosine metric. For cosine search, normalize both data and query vectors, then
 use inner product. The implementation represents inner-product distance as
-<span class="arithmatex"><span class="MathJax_Preview">1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle</span><script type="math/tex">1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle</script></span>, which preserves the same ranking while
+<span class="arithmatex">\(1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle\)</span>, which preserves the same ranking while
 keeping the nearest-neighbor convention that smaller values are better.</p>
-<p>Here <span class="arithmatex"><span class="MathJax_Preview">\epsilon_0</span><script type="math/tex">\epsilon_0</script></span> controls the width of the probabilistic error interval. The current
+<p>Here <span class="arithmatex">\(\epsilon_0\)</span> controls the width of the probabilistic error interval. The current
 encoder uses the internal constant <code>kConstEpsilon = 1.9</code>; it is not a public
 configuration parameter. These intervals support approximate pruning, not a
 deterministic guarantee for every vector or query. Validate recall for the target workload.
@@ -2285,8 +2271,7 @@ relative to the data-code error. For higher-bit batch estimation,
 <a href="../../kernel_ip/#batch-code">high-accuracy FastScan</a> reduces the LUT error
 carried into refinement.</p>
 <h3 id="estimator-of-euclidean-distance">Estimator of Euclidean distance<a class="headerlink" href="#estimator-of-euclidean-distance" title="Permanent link">&para;</a></h3>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \begin{align}
 &amp;\| \mathbf{o}_r-\mathbf{q}_r\|^2
 \\=&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 - 2 \left&lt; \mathbf{o}_r - \mathbf{c}, \mathbf{q}_r - \mathbf{c}\right&gt;
@@ -2296,32 +2281,13 @@ carried into refinement.</p>
 \\ =&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 +2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;} - \frac{2}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\cdot \left&lt; \| \mathbf{o}_r-\mathbf{c}\|\cdot P^{-1}\mathbf{\bar o}, \mathbf{q}_r' \right&gt;
 \\=&amp;\|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 +2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;} - \frac{2\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\cdot \left[ \left&lt; \mathbf{x}_u, \mathbf{q}_r' \right&gt;+c_B S_q\right]
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-&amp;\| \mathbf{o}_r-\mathbf{q}_r\|^2
-\\=&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 - 2 \left&lt; \mathbf{o}_r - \mathbf{c}, \mathbf{q}_r - \mathbf{c}\right&gt;
-\\ =&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 - 2\| \mathbf{o}_r-\mathbf{c}\|\cdot \| \mathbf{q}_r-\mathbf{c}\| \cdot \left&lt;\mathbf{ o},\mathbf{q} \right&gt;
-\\ \approx&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 - 2\| \mathbf{o}_r-\mathbf{c}\|\cdot \| \mathbf{q}_r-\mathbf{c}\| \cdot \frac{\left&lt;\mathbf{\bar o},\mathbf{q} \right&gt;}{ \left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}
-\\ =&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 - 2\| \mathbf{o}_r-\mathbf{c}\| \cdot \frac{\left&lt;\mathbf{\bar o},\mathbf{q}_r-\mathbf{c} \right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}
-\\ =&amp; \|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 +2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;} - \frac{2}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\cdot \left&lt; \| \mathbf{o}_r-\mathbf{c}\|\cdot P^{-1}\mathbf{\bar o}, \mathbf{q}_r' \right&gt;
-\\=&amp;\|\mathbf{o}_r -\mathbf{c}\|^2 + \|\mathbf{q}_r -\mathbf{c}\|^2 +2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;} - \frac{2\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\cdot \left[ \left&lt; \mathbf{x}_u, \mathbf{q}_r' \right&gt;+c_B S_q\right]
-\end{align}
-</script>
-</div>
+\]</div>
 <p>The probabilistic error interval is</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \begin{align}
 \pm \ 2 \|\mathbf{o}_r-\mathbf{c}\|\cdot \| \mathbf{q}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-\pm \ 2 \|\mathbf{o}_r-\mathbf{c}\|\cdot \| \mathbf{q}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}
-\end{align}
-</script>
-</div>
+\]</div>
 <p>Store the following factors. Data factors use the <code>f_</code> accessors of the code layouts;
 query factors use the <code>g_</code> accessors of the prepared query objects.</p>
 <table>
@@ -2334,66 +2300,49 @@ query factors use the <code>g_</code> accessors of the prepared query objects.</
 <tbody>
 <tr>
 <td><code>f_add (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</script></span></td>
+<td><span class="arithmatex">\(\|\mathbf{o}_r-\mathbf{c}\|^2+2\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\)</span></td>
 </tr>
 <tr>
 <td><code>f_rescale (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">-2\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">-2\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</script></span></td>
+<td><span class="arithmatex">\(-2\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\)</span></td>
 </tr>
 <tr>
 <td><code>f_error (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</span><script type="math/tex">\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</script></span></td>
+<td><span class="arithmatex">\(\ 2 \|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}\)</span></td>
 </tr>
 <tr>
 <td><code>g_add (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">\|\mathbf{q}_r-\mathbf{c}\|^2</span><script type="math/tex">\|\mathbf{q}_r-\mathbf{c}\|^2</script></span></td>
+<td><span class="arithmatex">\(\|\mathbf{q}_r-\mathbf{c}\|^2\)</span></td>
 </tr>
 <tr>
 <td><code>g_kbxsumq (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">c_BS_q</span><script type="math/tex">c_BS_q</script></span></td>
+<td><span class="arithmatex">\(c_BS_q\)</span></td>
 </tr>
 <tr>
 <td><code>g_error (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">\| \mathbf{q}_r-\mathbf{c}\|</span><script type="math/tex">\| \mathbf{q}_r-\mathbf{c}\|</script></span></td>
+<td><span class="arithmatex">\(\| \mathbf{q}_r-\mathbf{c}\|\)</span></td>
 </tr>
 </tbody>
 </table>
 <h3 id="estimator-of-inner-product">Estimator of inner product<a class="headerlink" href="#estimator-of-inner-product" title="Permanent link">&para;</a></h3>
 <p>When inner product is used as the metric of vector search, it targets the data
 vector with the <em>maximum</em> inner product with the query. The implementation
-uses <span class="arithmatex"><span class="MathJax_Preview">1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle</span><script type="math/tex">1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle</script></span> so that smaller distances rank
+uses <span class="arithmatex">\(1-\langle\mathbf{o}_r,\mathbf{q}_r\rangle\)</span> so that smaller distances rank
 higher-inner-product vectors first. The constant 1 does not affect ordering.</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \begin{align}
 &amp;1-\left&lt; \mathbf{o}_r,\mathbf{q}_r\right&gt;
 \\=&amp;1 -\left&lt; \mathbf{o}_r-\mathbf{c} + \mathbf{c},\mathbf{q}_r-\mathbf{c} + \mathbf{c}\right&gt;
 \\=&amp;1 -\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt; -\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt; -  \left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{q}_r-\mathbf{c} \right&gt;
 \\ \approx &amp;1 -\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt; -\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt; +\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;} - \frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\cdot \left[ \left&lt; \mathbf{x}_u, \mathbf{q}_r' \right&gt;+c_B S_q\right]
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-&amp;1-\left&lt; \mathbf{o}_r,\mathbf{q}_r\right&gt;
-\\=&amp;1 -\left&lt; \mathbf{o}_r-\mathbf{c} + \mathbf{c},\mathbf{q}_r-\mathbf{c} + \mathbf{c}\right&gt;
-\\=&amp;1 -\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt; -\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt; -  \left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{q}_r-\mathbf{c} \right&gt;
-\\ \approx &amp;1 -\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt; -\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt; +\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;} - \frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\cdot \left[ \left&lt; \mathbf{x}_u, \mathbf{q}_r' \right&gt;+c_B S_q\right]
-\end{align}
-</script>
-</div>
+\]</div>
 <p>The probabilistic error interval is</p>
-<div class="arithmatex">
-<div class="MathJax_Preview">
+<div class="arithmatex">\[
 \begin{align}
 \pm \|\mathbf{o}_r-\mathbf{c}\|\cdot \| \mathbf{q}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}
 \end{align}
-</div>
-<script type="math/tex; mode=display">
-\begin{align}
-\pm \|\mathbf{o}_r-\mathbf{c}\|\cdot \| \mathbf{q}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}
-\end{align}
-</script>
-</div>
+\]</div>
 <p>Store the following factors. Data factors use the <code>f_</code> accessors of the code layouts;
 query factors use the <code>g_</code> accessors of the prepared query objects.</p>
 <table>
@@ -2406,31 +2355,31 @@ query factors use the <code>g_</code> accessors of the prepared query objects.</
 <tbody>
 <tr>
 <td><code>f_add (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">1-\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt;+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">1-\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt;+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</script></span></td>
+<td><span class="arithmatex">\(1-\left&lt; \mathbf{o}_r-\mathbf{c},\mathbf{c}\right&gt;+\| \mathbf{o}_r-\mathbf{c}\| \frac{\left&lt; \mathbf{\bar o}, \mathbf{c}\right&gt;}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\)</span></td>
 </tr>
 <tr>
 <td><code>f_rescale (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">-\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</span><script type="math/tex">-\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}</script></span></td>
+<td><span class="arithmatex">\(-\frac{\Delta_x}{\left&lt;\mathbf{\bar o},\mathbf{o} \right&gt;}\)</span></td>
 </tr>
 <tr>
 <td><code>f_error (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</span><script type="math/tex">\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}</script></span></td>
+<td><span class="arithmatex">\(\|\mathbf{o}_r-\mathbf{c}\| \cdot \sqrt{\frac{1 - \left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}{\left&lt; \mathbf{\bar o},\mathbf{o}\right&gt;^2}} \frac{\epsilon_{0}}{\sqrt{D-1}}\)</span></td>
 </tr>
 <tr>
 <td><code>g_add (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">-\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt;</span><script type="math/tex">-\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt;</script></span></td>
+<td><span class="arithmatex">\(-\left&lt; \mathbf{q}_r,\mathbf{c}\right&gt;\)</span></td>
 </tr>
 <tr>
 <td><code>g_kbxsumq (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">c_BS_q</span><script type="math/tex">c_BS_q</script></span></td>
+<td><span class="arithmatex">\(c_BS_q\)</span></td>
 </tr>
 <tr>
 <td><code>g_k1xsumq (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">c_1S_q</span><script type="math/tex">c_1S_q</script></span></td>
+<td><span class="arithmatex">\(c_1S_q\)</span></td>
 </tr>
 <tr>
 <td><code>g_error (float)</code></td>
-<td><span class="arithmatex"><span class="MathJax_Preview">\| \mathbf{q}_r-\mathbf{c}\|</span><script type="math/tex">\| \mathbf{q}_r-\mathbf{c}\|</script></span></td>
+<td><span class="arithmatex">\(\| \mathbf{q}_r-\mathbf{c}\|\)</span></td>
 </tr>
 </tbody>
 </table>
@@ -2438,8 +2387,8 @@ query factors use the <code>g_</code> accessors of the prepared query objects.</
 <h3 id="distance-estimation">Distance estimation<a class="headerlink" href="#distance-estimation" title="Permanent link">&para;</a></h3>
 <p>Both metrics use the same scoring formula with metric-specific factors.
 Here <code>ip</code> is the inner product between the logical
-unsigned <span class="arithmatex"><span class="MathJax_Preview">B</span><script type="math/tex">B</script></span>-bit code and the rotated query vector; it is a binary code only
-when <span class="arithmatex"><span class="MathJax_Preview">B=1</span><script type="math/tex">B=1</script></span>.</p>
+unsigned <span class="arithmatex">\(B\)</span>-bit code and the rotated query vector; it is a binary code only
+when <span class="arithmatex">\(B=1\)</span>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1">// Compute the estimated distance</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1">// Note that g_add is dependent on the centroid.</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kt">float</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_add</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">f_rescale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">ip</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">g_kbxsumq</span><span class="p">);</span>
@@ -2453,17 +2402,17 @@ when <span class="arithmatex"><span class="MathJax_Preview">B=1</span><script ty
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="kt">float</span><span class="w"> </span><span class="n">upper_bound</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimated_distance</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">error_bound</span><span class="p">;</span>
 </code></pre></div>
 <h3 id="incremental-distance-estimation">Incremental distance estimation<a class="headerlink" href="#incremental-distance-estimation" title="Permanent link">&para;</a></h3>
-<p>Split codes separate the sign bit from the remaining <span class="arithmatex"><span class="MathJax_Preview">B-1</span><script type="math/tex">B-1</script></span> extra bits.
+<p>Split codes separate the sign bit from the remaining <span class="arithmatex">\(B-1\)</span> extra bits.
 Score the sign code first, then refine selected candidates with the extra bits.
 Each part has its own factors. The binary layout stores <code>f_add</code>,
 <code>f_rescale</code>, and <code>f_error</code>; the extended layout stores <code>f_add_ex</code> and
-<code>f_rescale_ex</code>. For <span class="arithmatex"><span class="MathJax_Preview">B&gt;1</span><script type="math/tex">B&gt;1</script></span>, the logical codes satisfy
-<span class="arithmatex"><span class="MathJax_Preview">\mathbf{x}_u=2^{B-1}\mathbf{x}_{\mathrm{bin}}+\mathbf{x}_{\mathrm{ex}}</span><script type="math/tex">\mathbf{x}_u=2^{B-1}\mathbf{x}_{\mathrm{bin}}+\mathbf{x}_{\mathrm{ex}}</script></span>,
+<code>f_rescale_ex</code>. For <span class="arithmatex">\(B&gt;1\)</span>, the logical codes satisfy
+<span class="arithmatex">\(\mathbf{x}_u=2^{B-1}\mathbf{x}_{\mathrm{bin}}+\mathbf{x}_{\mathrm{ex}}\)</span>,
 which gives the refined distance formula below.</p>
 <p>The split-code implementation uses the binary error factor divided by
-<span class="arithmatex"><span class="MathJax_Preview">2^{B-1}</span><script type="math/tex">2^{B-1}</script></span> as its refined pruning margin. This is an approximation, not an
+<span class="arithmatex">\(2^{B-1}\)</span> as its refined pruning margin. This is an approximation, not an
 identity for the full-code error factor in the tables above: that factor depends
-on the full-code direction's own <span class="arithmatex"><span class="MathJax_Preview">\langle\mathbf{\bar o},\mathbf{o}\rangle</span><script type="math/tex">\langle\mathbf{\bar o},\mathbf{o}\rangle</script></span>.
+on the full-code direction's own <span class="arithmatex">\(\langle\mathbf{\bar o},\mathbf{o}\rangle\)</span>.
 The split layout does not store a separate <code>f_error_ex</code>.
 The query factors are <code>g_add</code>, <code>g_error</code>, <code>g_kbxsumq</code> and <code>g_k1xsumq</code>.
 Here <code>ip_bin</code> and <code>ip_ex</code> are the inner products of the sign and extra-bit
@@ -2612,7 +2561,9 @@ that additional error.</p>
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
       
     
   </body>

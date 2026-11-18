@@ -2061,7 +2061,7 @@ orthogonal transformation.</p>
 <p>The default FHT/Kac transform is an efficient structured approximation to a
 random orthogonal rotation. <a href="https://dl.acm.org/doi/abs/10.1145/3709730">SymphonyQG, Section 3.1.4</a>
 describes using a Fast Hadamard-based Fast Johnson–Lindenstrauss Transform to
-reduce rotation work from <span class="arithmatex"><span class="MathJax_Preview">O(D^2)</span><script type="math/tex">O(D^2)</script></span> to <span class="arithmatex"><span class="MathJax_Preview">O(D\log D)</span><script type="math/tex">O(D\log D)</script></span>. This library combines
+reduce rotation work from <span class="arithmatex">\(O(D^2)\)</span> to <span class="arithmatex">\(O(D\log D)\)</span>. This library combines
 Hadamard transforms, random sign flips and the Givens steps described below.
 The transform preserves norms; its sampling distribution approximates the
 uniform random rotation used in the RaBitQ analysis.</p>
@@ -2123,9 +2123,9 @@ dimension (<code>dim</code>), and <code>padded_dim</code> the working dimension.
 applies normalized FFHT to the whole vector; no Givens/Kac step is performed.
 Otherwise, each round performs the following steps:</p>
 <ol>
-<li>Flip its coordinates with the <span class="arithmatex"><span class="MathJax_Preview">i</span><script type="math/tex">i</script></span>-th sequence of sampled random signs.</li>
+<li>Flip its coordinates with the <span class="arithmatex">\(i\)</span>-th sequence of sampled random signs.</li>
 <li>Apply normalized FFHT on the first/last <code>trunc_dim</code> coordinates (alternately) of the padded vector.</li>
-<li>Apply Givens rotation with a fixed angle <span class="arithmatex"><span class="MathJax_Preview">\theta = \frac{\pi}{4}</span><script type="math/tex">\theta = \frac{\pi}{4}</script></span> to the 1st and the 2nd halves of coordinates.</li>
+<li>Apply Givens rotation with a fixed angle <span class="arithmatex">\(\theta = \frac{\pi}{4}\)</span> to the 1st and the 2nd halves of coordinates.</li>
 </ol>
 <table>
 <thead>
@@ -2136,8 +2136,8 @@ Otherwise, each round performs the following steps:</p>
 </thead>
 <tbody>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">4D</span><script type="math/tex">4D</script></span> binary values (<span class="arithmatex"><span class="MathJax_Preview">4D</span><script type="math/tex">4D</script></span> bits)</td>
-<td><span class="arithmatex"><span class="MathJax_Preview">O(D\log D)</span><script type="math/tex">O(D\log D)</script></span></td>
+<td><span class="arithmatex">\(4D\)</span> binary values (<span class="arithmatex">\(4D\)</span> bits)</td>
+<td><span class="arithmatex">\(O(D\log D)\)</span></td>
 </tr>
 </tbody>
 </table>
@@ -2145,7 +2145,7 @@ Otherwise, each round performs the following steps:</p>
 <h2 id="random-orthogonal-transformation">Random orthogonal transformation<a class="headerlink" href="#random-orthogonal-transformation" title="Permanent link">&para;</a></h2>
 <p>This method samples a Gaussian matrix and orthogonalizes it with QR decomposition.
 It then multiplies each vector by the stored transform. The table describes stored
-space and per-vector rotation work when input and output dimensions are both <span class="arithmatex"><span class="MathJax_Preview">D</span><script type="math/tex">D</script></span>;
+space and per-vector rotation work when input and output dimensions are both <span class="arithmatex">\(D\)</span>;
 QR construction is separate setup work.</p>
 <table>
 <thead>
@@ -2156,8 +2156,8 @@ QR construction is separate setup work.</p>
 </thead>
 <tbody>
 <tr>
-<td><span class="arithmatex"><span class="MathJax_Preview">D^2</span><script type="math/tex">D^2</script></span> floating-point numbers</td>
-<td><span class="arithmatex"><span class="MathJax_Preview">O(D^2)</span><script type="math/tex">O(D^2)</script></span></td>
+<td><span class="arithmatex">\(D^2\)</span> floating-point numbers</td>
+<td><span class="arithmatex">\(O(D^2)\)</span></td>
 </tr>
 </tbody>
 </table>
@@ -2286,7 +2286,9 @@ QR construction is separate setup work.</p>
     
       <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
       
     
   </body>
