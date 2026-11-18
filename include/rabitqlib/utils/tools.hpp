@@ -76,8 +76,14 @@ inline size_t floor_log2(size_t x) {
 }
 
 inline size_t ceil_log2(size_t x) {
+    if (x <= 1) {
+        return 0;
+    }
     size_t ret = floor_log2(x);
-    return (1UL << ret) < x ? ret + 1 : ret;
+    if (ret >= std::numeric_limits<size_t>::digits) {
+        return std::numeric_limits<size_t>::digits;
+    }
+    return (size_t{1} << ret) < x ? ret + 1 : ret;
 }
 
 inline bool is_powerof2(size_t n) { return n > 0 && (n & (n - 1)) == 0; }
