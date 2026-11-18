@@ -167,6 +167,16 @@ class IVF {
 
     void swap(IVF& other) noexcept;
 
+    void search_with_candidates(
+        const float* query,
+        const float* rotated_query,
+        const std::vector<AnnCandidate<float>>& centroid_candidates,
+        size_t k,
+        PID* result_ids,
+        float* distances,
+        bool use_hacc
+    ) const;
+
     inline void search_cluster(
         const Cluster& cluster,
         const SplitBatchQuery<float>& query_wrapper,

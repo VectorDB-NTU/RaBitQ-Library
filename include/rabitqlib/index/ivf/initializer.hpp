@@ -103,10 +103,16 @@ class FlatInitializer : public Initializer {
                     : std::sqrt(euclidean_sqr(query, centroid(i), dim_));
         }
         const size_t num_probes = std::min(nprobe, num_cluster_);
+        const auto better = [](const AnnCandidate<float>& first,
+                               const AnnCandidate<float>& second) {
+            return first.distance < second.distance ||
+                   (first.distance == second.distance && first.id < second.id);
+        };
         std::partial_sort(
             centroid_candidates.begin(),
             centroid_candidates.begin() + static_cast<std::ptrdiff_t>(num_probes),
-            centroid_candidates.end()
+            centroid_candidates.end(),
+            better
         );
 
         candidates.resize(num_probes);

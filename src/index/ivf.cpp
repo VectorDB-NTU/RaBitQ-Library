@@ -1177,14 +1177,28 @@ void IVF::search(
     std::vector<AnnCandidate<float>> centroid_candidates(nprobe);
     initializer_->centroids_distances(rotated_query.data(), nprobe, centroid_candidates);
 
+    search_with_candidates(
+        query, rotated_query.data(), centroid_candidates, k, result_ids, distances, use_hacc
+    );
+}
+
+void IVF::search_with_candidates(
+    const float* query,
+    const float* rotated_query,
+    const std::vector<AnnCandidate<float>>& centroid_candidates,
+    size_t k,
+    PID* result_ids,
+    float* distances,
+    bool use_hacc
+) const {
     // The pool never needs more slots than points; the rest of k is padded.
     buffer::SearchBuffer result_pool(std::min(k, max_elements_));
 
     SplitBatchQuery<float> query_wrapper(
-        rotated_query.data(), padded_dim_, ex_bits_, metric_type_, use_hacc
+        rotated_query, padded_dim_, ex_bits_, metric_type_, use_hacc
     );
 
-    for (size_t i = 0; i < nprobe; ++i) {
+    for (size_t i = 0; i < centroid_candidates.size(); ++i) {
         PID cluster_id = centroid_candidates[i].id;
         float dist = centroid_candidates[i].distance;
         const Cluster& cluster = clusters_[cluster_id];
@@ -1193,10 +1207,10 @@ void IVF::search(
             query_wrapper.set_g_add(dist);
         } else {
             const float residual_norm = std::sqrt(euclidean_sqr(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             ));
             auto query_centroid_ip = dot_product<float>(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             );
             query_wrapper.set_g_add(residual_norm, query_centroid_ip);
         }
@@ -1238,6 +1252,66 @@ void IVF::search_batch(
         num_queries == 1 || num_threads == 1
             ? 1
             : std::min(resolve_num_threads(num_threads), num_queries);
+    constexpr size_t kBlockedRoutingThreshold = 4;
+    constexpr size_t kRoutingBlockRows = 32;
+    if (num_queries >= kBlockedRoutingThreshold &&
+        dynamic_cast<const FlatInitializer*>(initializer_.get()) != nullptr) {
+        const size_t blocks = 1 + (num_queries - 1) / kRoutingBlockRows;
+        const auto* flat_initializer =
+            static_cast<const FlatInitializer*>(initializer_.get());
+        std::vector<double> computed_centroid_norms;
+        const double* centroid_norms = flat_centroid_norms_.data();
+        if (flat_centroid_norms_.size() != num_clusters_) {
+            computed_centroid_norms.resize(num_clusters_);
+            for (size_t cluster = 0; cluster < num_clusters_; ++cluster) {
+                computed_centroid_norms[cluster] = clustering::detail::l2norm_sqr_f64(
+                    flat_initializer->centroid(static_cast<PID>(cluster)), padded_dim_
+                );
+            }
+            centroid_norms = computed_centroid_norms.data();
+        }
+        index_detail::parallel_for(
+            0,
+            blocks,
+            num_workers,
+            [&](size_t block, size_t /*worker*/) {
+                const size_t first = block * kRoutingBlockRows;
+                const size_t rows = std::min(kRoutingBlockRows, num_queries - first);
+                std::vector<float> rotated(rows * padded_dim_);
+                for (size_t row = 0; row < rows; ++row) {
+                    rotator_->rotate(
+                        queries + (first + row) * dim_, rotated.data() + row * padded_dim_
+                    );
+                }
+                std::vector<std::vector<AnnCandidate<float>>> candidates;
+                clustering::detail::exact_assign_topn(
+                    rotated.data(),
+                    flat_initializer->centroid(0),
+                    rows,
+                    padded_dim_,
+                    num_clusters_,
+                    nprobe,
+                    metric_type_ == METRIC_IP,
+                    1,
+                    centroid_norms,
+                    candidates
+                );
+                for (size_t row = 0; row < rows; ++row) {
+                    search_with_candidates(
+                        queries + (first + row) * dim_,
+                        rotated.data() + row * padded_dim_,
+                        candidates[row],
+                        k,
+                        result_ids + (first + row) * k,
+                        distances == nullptr ? nullptr : distances + (first + row) * k,
+                        hacc
+                    );
+                }
+            },
+            true
+        );
+        return;
+    }
     if (num_workers == 1) {
         for (size_t i = 0; i < num_queries; ++i) {
             search(

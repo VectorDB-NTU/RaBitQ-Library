@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "ivf_search.hpp"
+#include "rabitqlib/clustering/detail/kmeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -183,6 +184,119 @@ TEST(IvfSearchTest, BatchCandidatesPreserveTiesAndTailCount) {
     knns.copy_results(results.data(), result_distances.data());
     EXPECT_EQ(results, (std::array<PID, 3>{3, 1, 2}));
     EXPECT_EQ(result_distances, (std::array<float, 3>{1, 1, 2}));
+}
+
+TEST(IvfSearchTest, BlockedRoutingMatchesFlatInitializerAcrossTiles) {
+    constexpr size_t kDim = 16;
+    constexpr size_t kNumQueries = 65;
+    constexpr size_t kNumClusters = 513;
+    constexpr size_t kNprobe = 9;
+    std::mt19937 rng(218);
+    std::uniform_real_distribution<float> random(-1.0F, 1.0F);
+    std::vector<float> centroids(kNumClusters * kDim);
+    std::vector<float> queries(kNumQueries * kDim);
+    std::generate(centroids.begin(), centroids.end(), [&] { return random(rng); });
+    std::generate(queries.begin(), queries.end(), [&] { return random(rng); });
+    std::copy_n(centroids.begin(), kDim, centroids.begin() + kDim);
+    std::copy_n(centroids.begin(), kDim, centroids.begin() + 2 * kDim);
+
+    for (const auto metric : {METRIC_L2, METRIC_IP}) {
+        FlatInitializer initializer(kDim, kNumClusters, metric);
+        initializer.add_vectors(centroids.data(), 1);
+        std::vector<std::vector<AnnCandidate<float>>> actual;
+        clustering::detail::exact_assign_topn(
+            queries.data(),
+            centroids.data(),
+            kNumQueries,
+            kDim,
+            kNumClusters,
+            kNprobe,
+            metric == METRIC_IP,
+            4,
+            nullptr,
+            actual
+        );
+        std::vector<PID> exact_assignments(kNumQueries);
+        std::vector<float> exact_distances(kNumQueries);
+        clustering::detail::exact_assign(
+            queries.data(),
+            centroids.data(),
+            kNumQueries,
+            kDim,
+            kNumClusters,
+            metric == METRIC_IP,
+            4,
+            exact_assignments.data(),
+            exact_distances.data()
+        );
+        ASSERT_EQ(actual.size(), kNumQueries);
+        for (size_t row = 0; row < kNumQueries; ++row) {
+            EXPECT_EQ(actual[row][0].id, exact_assignments[row]);
+            std::vector<AnnCandidate<float>> expected;
+            initializer.centroids_distances(queries.data() + row * kDim, kNprobe, expected);
+            ASSERT_EQ(actual[row].size(), expected.size());
+            for (size_t probe = 0; probe < kNprobe; ++probe) {
+                EXPECT_EQ(actual[row][probe].id, expected[probe].id);
+                EXPECT_EQ(actual[row][probe].distance, expected[probe].distance);
+            }
+        }
+    }
+}
+
+TEST(IvfSearchTest, BlockedBatchMatchesScalarAcrossTilesAndRemovedPoints) {
+    constexpr size_t kCount = 67;
+    constexpr size_t kDim = 64;
+    constexpr size_t kNumClusters = 513;
+    constexpr size_t kNumQueries = 65;
+    constexpr size_t kTopK = 80;
+    constexpr size_t kNprobe = 9;
+    std::mt19937 rng(219);
+    std::uniform_real_distribution<float> random(-1.0F, 1.0F);
+    std::vector<float> data(kCount * kDim), centroids(kNumClusters * kDim);
+    std::vector<float> queries(kNumQueries * kDim);
+    std::vector<PID> labels(kCount);
+    std::generate(data.begin(), data.end(), [&] { return random(rng); });
+    std::generate(centroids.begin(), centroids.end(), [&] { return random(rng); });
+    std::generate(queries.begin(), queries.end(), [&] { return random(rng); });
+    std::copy_n(centroids.begin(), kDim, centroids.begin() + kDim);
+    std::copy_n(centroids.begin(), kDim, centroids.begin() + 2 * kDim);
+    for (size_t i = 0; i < kCount; ++i) {
+        labels[i] = static_cast<PID>(i % kNumClusters);
+    }
+
+    IVF index(kCount, kDim, kNumClusters, 4, METRIC_L2);
+    index.construct(data.data(), centroids.data(), labels.data(), false, 1);
+    std::vector<PID> expected(kNumQueries * kTopK), actual(kNumQueries * kTopK);
+    std::vector<float> expected_distances(kNumQueries * kTopK);
+    std::vector<float> actual_distances(kNumQueries * kTopK);
+    const auto compare_batch = [&] {
+        for (size_t row = 0; row < kNumQueries; ++row) {
+            index.search(
+                queries.data() + row * kDim,
+                kTopK,
+                kNprobe,
+                expected.data() + row * kTopK,
+                expected_distances.data() + row * kTopK,
+                false
+            );
+        }
+        index.search_batch(
+            queries.data(),
+            kNumQueries,
+            kTopK,
+            kNprobe,
+            actual.data(),
+            actual_distances.data(),
+            false,
+            4
+        );
+        EXPECT_EQ(actual, expected);
+        EXPECT_EQ(actual_distances, expected_distances);
+    };
+    compare_batch();
+    const std::array<PID, 2> removed{0, 3};
+    index.remove(removed.data(), removed.size());
+    compare_batch();
 }
 
 TEST(IvfConfigurationTest, RejectsUnsupportedMetric) {

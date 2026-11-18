@@ -23,6 +23,7 @@
 #include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
+#include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -220,6 +221,123 @@ inline void exact_assign(
         }
     }
     failure.rethrow();
+}
+
+// Route a query block to its nearest centroids. Candidate ranking matches the
+// FlatInitializer contract: float distance first, then the lowest centroid ID.
+inline void exact_assign_topn(
+    const float* x,
+    const float* centroids,
+    size_t n,
+    size_t d,
+    size_t k,
+    size_t nprobe,
+    bool inner_product,
+    size_t num_workers,
+    const double* centroid_norms,
+    std::vector<std::vector<AnnCandidate<float>>>& candidates
+) {
+    constexpr size_t kPointBlock = 32;
+    constexpr size_t kCentroidBlock = 256;
+    const size_t count = std::min(nprobe, k);
+    candidates.resize(n);
+    if (n == 0 || count == 0) {
+        return;
+    }
+
+    std::vector<double> computed_norms(centroid_norms == nullptr ? k : 0);
+    if (centroid_norms == nullptr) {
+        for (size_t cluster = 0; cluster < k; ++cluster) {
+            computed_norms[cluster] = l2norm_sqr_f64(centroids + cluster * d, d);
+        }
+    }
+    const double* norms =
+        centroid_norms == nullptr ? computed_norms.data() : centroid_norms;
+
+    const size_t blocks = 1 + (n - 1) / kPointBlock;
+    index_detail::parallel_for(
+        0,
+        blocks,
+        num_workers,
+        [&](size_t block, size_t /*worker*/) {
+            omp_set_num_threads(1);
+            const size_t first = block * kPointBlock;
+            const size_t rows = std::min(kPointBlock, n - first);
+            std::vector<float> dots(rows * std::min(k, kCentroidBlock));
+            std::vector<double> point_norms(rows);
+            std::vector<std::vector<AnnCandidate<float>>> heaps(rows);
+            const bool screen = count < k;
+            for (size_t row = 0; row < rows; ++row) {
+                heaps[row].reserve(count);
+                point_norms[row] = l2norm_sqr_f64(x + (first + row) * d, d);
+            }
+            const double error_scale =
+                8.0 * static_cast<double>(d) * std::numeric_limits<float>::epsilon();
+            const double error_floor =
+                8.0 * static_cast<double>(d) * std::numeric_limits<float>::min() +
+                8.0 * std::numeric_limits<double>::epsilon();
+            const auto better = [](const AnnCandidate<float>& a,
+                                   const AnnCandidate<float>& b) {
+                return a.distance < b.distance || (a.distance == b.distance && a.id < b.id);
+            };
+            for (size_t first_cluster = 0; first_cluster < k;
+                 first_cluster += kCentroidBlock) {
+                const size_t cols = std::min(kCentroidBlock, k - first_cluster);
+                simd::matrix_product_transposed(
+                    x + first * d, centroids + first_cluster * d, dots.data(), rows, d, cols
+                );
+                for (size_t row = 0; row < rows; ++row) {
+                    const float* query = x + (first + row) * d;
+                    auto& heap = heaps[row];
+                    for (size_t col = 0; col < cols; ++col) {
+                        const size_t cluster = first_cluster + col;
+                        const float dot = dots[row * cols + col];
+                        double estimate = 1.0 - dot;
+                        double error = error_floor;
+                        if (!inner_product) {
+                            const double norm_sum = point_norms[row] + norms[cluster];
+                            estimate = norm_sum - 2.0 * dot;
+                            error += error_scale * norm_sum;
+                        } else {
+                            error +=
+                                error_scale * std::sqrt(point_norms[row] * norms[cluster]);
+                        }
+                        const float lower_bound = static_cast<float>(
+                            inner_product ? estimate - error
+                                          : std::sqrt(std::max(0.0, estimate - error))
+                        );
+                        if (screen && heap.size() == count) {
+                            if (lower_bound > heap.front().distance) {
+                                continue;
+                            }
+                        }
+                        const float distance =
+                            inner_product
+                                ? dot_product_dis(query, centroids + cluster * d, d)
+                                : std::sqrt(
+                                      euclidean_sqr(query, centroids + cluster * d, d)
+                                  );
+                        const AnnCandidate<float> candidate{
+                            static_cast<PID>(cluster), distance};
+                        if (heap.size() < count) {
+                            heap.push_back(candidate);
+                            std::push_heap(heap.begin(), heap.end(), better);
+                        } else if (better(candidate, heap.front())) {
+                            std::pop_heap(heap.begin(), heap.end(), better);
+                            heap.back() = candidate;
+                            std::push_heap(heap.begin(), heap.end(), better);
+                        }
+                    }
+                }
+            }
+            for (size_t row = 0; row < rows; ++row) {
+                auto& heap = heaps[row];
+                std::sort(heap.begin(), heap.end(), better);
+                candidates[first + row] = std::move(heap);
+            }
+        },
+        true
+    );
 }
 
 // Returns count sorted, distinct row indices in [0, n). The seed sequence keeps
