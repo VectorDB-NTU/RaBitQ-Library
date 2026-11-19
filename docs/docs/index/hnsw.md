@@ -182,8 +182,9 @@ See the shared [concurrency contract](usage.md#threading-and-file-paths).
 
 ## Updating an index
 
-A trained or loaded index supports `add()`, `reserve()` and `remove()` without
-the original data. `save` always writes index format 2; see
+A trained index supports `add()`, `reserve()` and `remove()` without the original
+data. Every loaded index is trained, except one loaded from a file saved before
+training (see below). `save` always writes index format 2; see
 [persistence](#persistence).
 
 ```c++
@@ -305,8 +306,8 @@ IDs, so do not open such a file with them.
 `save` writes [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2), which also records the construction seed, so
 `seed` survives a reload. Releases up to 0.8 cannot read these files; every earlier
 file still loads, without a recorded seed, and saving it writes format 2.
-The C++ API of releases before 0.8 could also save an index before training it. Such a
-file from 0.7 loads untrained, with `num_clusters` 16; without a recorded seed its first `add`
+The C++ API of earlier releases could also save an index before training it. Such a
+file loads untrained, with `num_clusters` 16; without a recorded seed its first `add`
 cannot train it, so call `train` or `set_centroids` before `add`.
 
 New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
