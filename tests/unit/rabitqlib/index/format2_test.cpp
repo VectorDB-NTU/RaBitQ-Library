@@ -623,6 +623,31 @@ TEST(Format2ContainerTest, PlacesEmptySectionsByTheLayoutRule) {
     }
 }
 
+// Readers do not validate the stored writer version; messages escape bytes outside
+// printable ASCII, and the accessor returns the stored bytes.
+TEST(Format2ContainerTest, EscapesTheStoredWriterVersionInMessages) {
+    const std::string version = "0.9\xff\\";
+    std::string marked = valid_file();
+    std::memcpy(&marked[112], version.data(), version.size());  // over "0.9.0"
+    reseal(marked);
+    std::istringstream stream(marked);
+    EXPECT_EQ(open_reader(stream).writer_version(), version);
+
+    std::string bytes = marked;
+    put_u64(bytes, 16, 4);
+    reseal(bytes);
+    expect_format_error(
+        bytes, "that this release does not know; written by rabitqlib 0.9\\xff\\x5c"
+    );
+
+    bytes = marked;
+    put_u32(bytes, entry(1), 777);
+    reseal(bytes);
+    expect_format_error(
+        bytes, "is required but unknown to this release; written by rabitqlib 0.9\\xff\\x5c"
+    );
+}
+
 TEST(Format2ContainerTest, RejectsTruncatedTrailingAndCorruptFiles) {
     const std::string good = valid_file();
     expect_format_error(

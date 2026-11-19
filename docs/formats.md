@@ -149,7 +149,7 @@ The fields below take 128 bytes. `header_bytes` is a multiple of 8 and at least 
 | 96 | 8 | u64 | `section_table_offset` | A multiple of 8, at least `header_bytes` |
 | 104 | 4 | u32 | `section_count` | At least 1 |
 | 108 | 4 | u32 | `header_crc32` | Over the header with this field taken as zero, followed by the section table |
-| 112 | 16 | ASCII | `writer_version` | Library version that wrote the file, printable ASCII, NUL-padded. For error messages only; readers never branch on it |
+| 112 | 16 | ASCII | `writer_version` | Library version that wrote the file, printable ASCII, NUL-padded. For error messages only: readers neither branch on it nor validate it, and messages show the bytes before the first NUL, with backslashes and bytes outside printable ASCII as `\xNN` |
 
 The Python `nbits` maps to these fields as follows. IVF-RaBitQ `nbits` 1–9 is `code_bits`. IVF-RaBitQ `nbits = 32` is `code_bits = 1` with `raw_type = float32`, because it keeps 1-bit FastScan codes and reranks with raw vectors. SymphonyQG `nbits = 32` is `code_bits = 0` with `raw_type = float32`.
 

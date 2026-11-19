@@ -249,3 +249,18 @@ def test_rejected_files_raise_format_error(tmp_path):
     with pytest.raises(RuntimeError) as missing:
         IvfIndex.load(str(tmp_path / "missing.index"))
     assert not isinstance(missing.value, rabitqlib.FormatError)
+
+
+def test_non_ascii_writer_version_still_raises_format_error(tmp_path):
+    # Readers do not validate writer_version, but its bytes reach the message.
+    migrated = tmp_path / "ivf.index"
+    IvfIndex.load(str(FIXTURES / "v0.8.3" / "ivf4_flat_l2.index")).save(str(migrated))
+    data = bytearray(migrated.read_bytes())
+    data[112:128] = b"0.9\xff\x01".ljust(16, b"\0")
+    data[16:24] = (4).to_bytes(8, "little")  # an unknown incompat feature bit
+    format2_file.reseal(data)
+    migrated.write_bytes(bytes(data))
+    with pytest.raises(
+        rabitqlib.FormatError, match=r"written by rabitqlib 0\.9\\xff\\x01$"
+    ):
+        IvfIndex.load(str(migrated))
