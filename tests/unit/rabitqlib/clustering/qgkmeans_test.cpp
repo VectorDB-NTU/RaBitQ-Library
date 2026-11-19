@@ -1236,6 +1236,18 @@ TEST(QGAssignerTest, RejectsTooFewClustersForGraphDegree) {
     EXPECT_THROW(QGAssigner(64, 32, 32, 64, 16, 1, 1), std::invalid_argument);
 }
 
+// Like the quantizers and FastScan, clustering takes only L2 and inner product.
+TEST(QGAssignerTest, RejectsTheCosineMetric) {
+    try {
+        const QGAssigner assigner(64, 33, 32, 64, 16, 1, 1, 42, METRIC_COSINE);
+        ADD_FAILURE() << "accepted METRIC_COSINE";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_STREQ(error.what(), "Metric type must be METRIC_L2 or METRIC_IP");
+    }
+    EXPECT_NO_THROW(QGAssigner(64, 33, 32, 64, 16, 1, 1, 42, METRIC_L2));
+    EXPECT_NO_THROW(QGAssigner(64, 33, 32, 64, 16, 1, 1, 42, METRIC_IP));
+}
+
 TEST(QGKMeansTest, RejectsTooFewClustersForGraphDegreeInBothFinalModes) {
     constexpr size_t kDim = 64, kPoints = 65;
     const std::vector<float> data(kPoints * kDim, 0.0F);

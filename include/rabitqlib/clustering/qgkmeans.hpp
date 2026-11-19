@@ -157,6 +157,9 @@ class QGAssigner {
         , graph_build_iterations_(graph_build_iterations)
         , seed_(seed) {
         validate_configuration(num_threads);
+        // Cosine belongs to the indexes, which normalize vectors; the assigner's exact
+        // distances are raw L2 or inner product.
+        validate_metric_type(metric_type);
         num_workers_ = static_cast<uint32_t>(resolve_num_threads(num_threads));
 
         graph_ = std::make_unique<symqg::QuantizedGraph<float>>(
