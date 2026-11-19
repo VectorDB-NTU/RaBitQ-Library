@@ -56,7 +56,7 @@ centroids and cluster IDs.
 | `seed` | Rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. The default (Python `None`, an empty C++ `std::optional`) draws one at random; `seed` reports it, and passing it back reproduces the index. |
 | `metric` | Python `"l2"`, `"ip"` or `"cosine"` (C++ `METRIC_L2`, `METRIC_IP` or `METRIC_COSINE`); defaults to L2. See [the cosine metric](usage.md#the-cosine-metric). |
 | `routing` | Defaults to `"auto"` (C++ `ivf::Routing::Auto`); see [centroid routing](#centroid-routing). It replaces `initializer`, which 0.9 removed. |
-| `k`, `nprobe` | Positive result count and cluster probe count. `k` may exceed the stored point count; missing results are padded with ID `-1` (C++ `kNoId`) and `+inf`. `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted (Python `None`); an explicit 0 raises `ValueError` (C++ `std::invalid_argument`). |
+| `k`, `nprobe` | Result count, from 1 to 2^31, and positive cluster probe count. `k` may exceed the stored point count; missing results are padded with ID `-1` (C++ `kNoId`) and `+inf`. `nprobe` defaults to `num_clusters / 16`, rounded and at least 1, when omitted (Python `None`); an explicit 0 raises `ValueError` (C++ `std::invalid_argument`). |
 | `high_accuracy` | Defaults to automatic selection (Python `None`): HACC for 4–9 bits, standard FastScan otherwise. |
 
 In C++, `nbits`, `seed`, `metric` and `routing` are fields of `IvfOptions`, and
@@ -158,7 +158,7 @@ auto routing = ivf.routing();  // resolved routing type
   error instead of probing every cluster. Use `flat` or `flat_rabitq` when a
   query should probe most clusters.
 
-All choices support L2 and inner product. Flat RaBitQ uses the IVF-RaBitQ rotation and
+All choices support every metric. Flat RaBitQ uses the IVF-RaBitQ rotation and
 padded domain, retains float32 centroids for refinement, and stores its mean and
 codes in the main index file. Its code precision is independent of the index's
 `nbits`. It trades additional code storage and an O(cluster count) query work
@@ -324,7 +324,8 @@ Concurrent Python searches may use independent `nprobe`, `high_accuracy`, and
 ## Updating an index
 
 `IvfIndex` supports `add()` and `remove()` on a trained or loaded index without
-the original dataset. Updates preserve the file format.
+the original dataset. `save` always writes index format 2; see
+[how removal is stored](#how-removal-is-stored).
 
 ```c++
 Id IvfIndex::add(const float* data, size_t num_points, const AddOptions& options = {});

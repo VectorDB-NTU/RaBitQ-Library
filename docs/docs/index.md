@@ -36,7 +36,7 @@ python -m pip install "rabitqlib>=0.8.5"
 
 ## Choose your index
 
-All three indexes support L2 and inner-product search, with save/load support.
+All three indexes support L2, inner-product and cosine search, with save/load support.
 Start with IVF-RaBitQ for the complete introductory example, then compare on your own data.
 
 <div class="feature-grid" markdown>

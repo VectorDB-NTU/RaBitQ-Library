@@ -78,7 +78,7 @@ index, and `train` only checks its input.
 | `init` | `"pipnn"` (default) or `"random"`; C++ `symqg::QGInitialization::PiPNN` or `Random`. |
 | `metric` | L2 (default), inner product or [cosine](usage.md#the-cosine-metric): Python `"l2"`, `"ip"` or `"cosine"`. |
 | `seed` | Rotation and graph-construction seed in `[0, 2**32 - 1]`. The default (Python `None`, an empty C++ `std::optional`) draws one at random; `seed` reports it, and passing it back with one thread rebuilds the same graph from the same data. |
-| `k`, `ef_search` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `-1` (C++ `kNoId`) and distance `+inf`. An omitted `ef_search` (Python `None`) uses `max(k, 64)`, an explicit 0 raises `ValueError` (C++ `std::invalid_argument`), and smaller values are raised to `k`, as for HNSW-RaBitQ. It replaces `ef`, which 0.9 removed. |
+| `k`, `ef_search` | `k` is from 1 to 2^31 and may exceed the point count; slots the graph cannot fill are padded with ID `-1` (C++ `kNoId`) and distance `+inf`. An omitted `ef_search` (Python `None`) uses `max(k, 64)`, an explicit 0 raises `ValueError` (C++ `std::invalid_argument`), and smaller values are raised to `k`, as for HNSW-RaBitQ. It replaces `ef`, which 0.9 removed. |
 | `num_threads` | `add` defaults to every available logical CPU, capped by `OMP_NUM_THREADS`, and `search` to 1; Python `None` and C++ 0 for `add` select the available CPUs. |
 
 In C++, the construction settings are fields of `SymqgOptions`, and `ef_search`
@@ -153,7 +153,7 @@ outputs and an unchanged index.
 Python `search(queries, k, ef_search=None, *, num_threads=None)` accepts a two-dimensional
 query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. It defaults to one worker; `num_threads=0` selects the
-available logical CPU count, capped by the number of queries.
+available logical CPU count, capped by `OMP_NUM_THREADS` and by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.
 
 Python searches also use per-call `ef_search` values. For access rules, see the

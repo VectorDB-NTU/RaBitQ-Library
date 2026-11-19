@@ -48,7 +48,7 @@ QPS–recall tradeoffs.
 | Index | Search approach | Storage and updates |
 | --- | --- | --- |
 | [IVF-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/ivf/) | Partitioned search with batch scoring. | 1–9-bit codes or raw-vector reranking; add/remove. |
-| [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and resize. |
+| [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and reserve. |
 | [SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/) | Graph search with batched distance estimation. | Raw or 4/8-bit storage; updates require rebuilding. |
 
 [Native clustering methods](https://vectordb-ntu.github.io/RaBitQ-Library/clustering/) prepare centroids and
@@ -93,8 +93,8 @@ distance, with smaller values first. Without `nprobe`, search probes
 Quantization remains approximate even when all clusters are probed.
 The [complete quick start](https://vectordb-ntu.github.io/RaBitQ-Library/quick_start/) explains result handling,
 measures recall while varying `nprobe`, and shows save/load. Code written for
-0.7 still runs in 0.8 with deprecation warnings; see the
-[migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/).
+0.8 may need changes for 0.9; see the
+[migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/#from-08-to-09).
 
 For other indexes, see the [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/#minimal-workflow) and
 [SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/#minimal-workflow) examples.
@@ -208,7 +208,7 @@ listed above.
 
 - [Documentation](https://vectordb-ntu.github.io/RaBitQ-Library/) and [algorithm overview](https://vectordb-ntu.github.io/RaBitQ-Library/rabitq/rabitq/).
 - [Papers and citations](https://vectordb-ntu.github.io/RaBitQ-Library/papers/) for the research behind the library.
-- [Release notes](https://github.com/VectorDB-NTU/RaBitQ-Library/releases) and [0.7 migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/modular_migration/).
+- [Release notes](https://github.com/VectorDB-NTU/RaBitQ-Library/releases), the [Python migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/) and the [0.7 migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/modular_migration/).
 - [GPU implementation](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq) in cuVS.
 
 ## Contributing

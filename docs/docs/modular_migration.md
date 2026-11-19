@@ -175,8 +175,8 @@ HNSW-RaBitQ adds `num_stored_points`, and SymphonyQG adds `max_elements` and
 ID bounds, append offsets, and minimum resize capacity. Use `num_points` for a
 live count, without subtracting a separate deletion counter.
 
-The IVF-RaBitQ constructor keyword `max_elements` still specifies the required initial
-build size; 0.8 deprecates it and 0.9 removes it (see the [migration guide](python_migration.md)). SymphonyQG's C++ `num_vertices()` still returns the configured graph
+In 0.7, the IVF-RaBitQ constructor keyword `max_elements` still specified the required
+initial build size; 0.8 deprecated it and 0.9 removed it (see the [migration guide](python_migration.md)). SymphonyQG's C++ `num_vertices()` still returns the configured graph
 size for builders. Existing index files need no conversion: loading recovers
 counts from their removal markers.
 
