@@ -24,7 +24,7 @@ namespace rabitqlib {
 namespace {
 using rabitqkmeans::RaBitQKMeansParameters;
 
-// What an empty, untrained file saved by 0.7 trains, as a new index does by default.
+// What an empty, untrained file saved before 0.8 trains, as a new index does by default.
 constexpr size_t kDefaultNumClusters = 16;
 
 // Grow the capacity to fit num_points more points, at least doubling it. The points are
@@ -249,11 +249,20 @@ size_t HnswIndex::num_stored_points() const { return index_->num_stored_points()
 bool HnswIndex::is_trained() const { return index_->is_trained(); }
 
 void HnswIndex::check_trained(const char* operation) const {
-    if (!index_->is_trained()) {
+    if (index_->is_trained()) {
+        return;
+    }
+    // Only an empty file saved before 0.8 loads untrained, and it lacks the seed that
+    // lets the first add train.
+    if (!index_->seed().has_value()) {
         throw std::logic_error(
-            std::string("HnswIndex must be trained or loaded before ") + operation
+            std::string("HnswIndex loaded from an untrained file must be trained before ") +
+            operation + "; call train or set_centroids"
         );
     }
+    throw std::logic_error(
+        std::string("HnswIndex must be trained or loaded before ") + operation
+    );
 }
 
 void HnswIndex::check_trainable() const {

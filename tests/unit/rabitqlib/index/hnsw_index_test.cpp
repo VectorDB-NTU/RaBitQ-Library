@@ -505,6 +505,66 @@ TEST(HnswIndexTest, SaveAndLoadKeepSettingsSeedAndResults) {
     EXPECT_EQ(actual.distances, expected.distances);
 }
 
+TEST(HnswIndexTest, LoadsAnUntrainedFileSavedBy07) {
+    // The C++ API of releases before 0.8 could save an index before training it. The
+    // file has no centroids and no seed, so the first add cannot train it.
+    constexpr size_t kFileDim = 65;
+    const auto path =
+        std::filesystem::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.7.2" / "hnsw4_empty_l2.index";
+    HnswIndex index = HnswIndex::load(path.string().c_str());
+    EXPECT_FALSE(index.is_trained());
+    EXPECT_FALSE(index.seed().has_value());
+    EXPECT_EQ(index.dim(), kFileDim);
+    EXPECT_EQ(index.nbits(), 4U);
+    EXPECT_EQ(index.metric(), METRIC_L2);
+    EXPECT_EQ(index.capacity(), 130U);
+    EXPECT_EQ(index.num_points(), 0U);
+    EXPECT_EQ(index.num_clusters(), 16U);
+
+    std::mt19937 rng(21);
+    std::normal_distribution<float> normal;
+    std::vector<float> data(kNumPoints * kFileDim);
+    for (auto& value : data) {
+        value = normal(rng);
+    }
+    const auto message = [](const std::string& operation) {
+        return "HnswIndex loaded from an untrained file must be trained before " +
+               operation + "; call train or set_centroids";
+    };
+    expect_error<std::logic_error>(
+        [&] { index.add(data.data(), kNumPoints, single_thread()); }, message("add")
+    );
+    Id ids[1];
+    const Id remove_ids[] = {0};
+    expect_error<std::logic_error>(
+        [&] { index.search(data.data(), 1, 1, ids, nullptr); }, message("search")
+    );
+    expect_error<std::logic_error>([&] { index.remove(remove_ids, 1); }, message("remove"));
+    const rabitq_test::TempFile file("hnsw_index_untrained_07.index");
+    expect_error<std::logic_error>(
+        [&] { index.save(file.path().c_str()); }, message("save")
+    );
+    EXPECT_EQ(index.num_points(), 0U);
+
+    index.train(data.data(), kNumPoints, 1);
+    EXPECT_EQ(index.num_clusters(), 16U);
+    EXPECT_EQ(index.add(data.data(), kNumPoints, single_thread()), 0);
+    const auto expected = search(index, data.data(), 3, 5);
+    EXPECT_EQ(count_found(expected), 15U);
+    index.save(file.path().c_str());
+    const HnswIndex reloaded = HnswIndex::load(file.path().c_str());
+    EXPECT_TRUE(reloaded.is_trained());
+    EXPECT_EQ(reloaded.num_points(), kNumPoints);
+    EXPECT_EQ(reloaded.num_clusters(), 16U);
+    EXPECT_EQ(search(reloaded, data.data(), 3, 5).ids, expected.ids);
+
+    // Setting centroids makes it trained as well.
+    HnswIndex other = HnswIndex::load(path.string().c_str());
+    other.set_centroids(data.data());  // the first 16 points
+    EXPECT_EQ(other.add(data.data(), kNumPoints, single_thread()), 0);
+    EXPECT_EQ(other.num_points(), kNumPoints);
+}
+
 TEST(HnswIndexTest, LoadsFilesWithoutASeedAndWithA64BitSeed) {
     // Releases up to 0.8 did not record the seed; training defaults to the k-means seed.
     const auto path =
