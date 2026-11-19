@@ -34,6 +34,8 @@ routing (with its `.hnsw` sidecar), HNSW-RaBitQ at 1, 5 and 9 bits, and Symphony
 4- and 8-bit with FHT/Kac and matrix rotation. Historical auto-selected HNSW routing at 20,000 clusters is
 not represented by fixtures; Python tests cover it with headers built around the
 v0.8.3 layout.
+The [v0.7.2](v0.7.2/README.md) file is an HNSW-RaBitQ index saved before training,
+which the C++ API of releases before 0.8 could write and later releases refuse to.
 
 ## Deliberate regeneration
 

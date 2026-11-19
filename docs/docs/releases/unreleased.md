@@ -55,6 +55,7 @@
 
 - Loading a format-2 file keeps the `seed` of every index, and `ef_construction` and `init` of SymphonyQG. They were `None` after `load`, and still are for files from releases up to 0.8.
 - With a recorded seed, `cp.seed` after `load` follows it as for a new index; for an HNSW-RaBitQ file whose seed exceeds 32 bits, which only C++ can write, it is the low 32 bits. It was the k-means default.
+- An HNSW-RaBitQ file that the 0.7 C++ API saved before training loads untrained, with `num_clusters` 16. Without a recorded seed its first `add` cannot train it, so `add`, `search`, `remove` and `save` raise `HnswIndex loaded from an untrained file must be trained before add; call train or set_centroids` (naming the operation) until `train` or `set_centroids` runs.
 - A new exception, `rabitqlib.FormatError`, subclasses both `ValueError` and `RuntimeError`:
   - Every index `load` raises it for a truncated, corrupt, mismatched or unsupported file, in format 2 and in every earlier layout. These were `RuntimeError`, which still catches them. A file that cannot be opened still raises a plain `RuntimeError`.
   - `quant.FormatError` is now the same class. It was a subclass of `ValueError` only, which still catches it.

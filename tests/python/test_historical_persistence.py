@@ -264,3 +264,29 @@ def test_non_ascii_writer_version_still_raises_format_error(tmp_path):
         rabitqlib.FormatError, match=r"written by rabitqlib 0\.9\\xff\\x01$"
     ):
         IvfIndex.load(str(migrated))
+
+
+def test_untrained_hnsw_file_from_v072_loads_and_trains(tmp_path):
+    # The C++ API of releases before 0.8 could save an index before training it;
+    # without centroids or a recorded seed, the first add cannot train it.
+    index = HnswIndex.load(str(FIXTURES / "v0.7.2" / "hnsw4_empty_l2.index"))
+    assert (len(index), index.dim, index.nbits, index.metric) == (0, 65, 4, "l2")
+    assert (index.capacity, index.num_clusters, index.seed) == (130, 16, None)
+    assert not index.is_trained
+    data = np.random.default_rng(21).normal(size=(200, 65)).astype(np.float32)
+    with pytest.raises(
+        RuntimeError,
+        match="^HnswIndex loaded from an untrained file must be trained before add; "
+        "call train or set_centroids$",
+    ):
+        index.add(data, num_threads=1)
+    index.train(data, num_threads=1)
+    index.add(data, num_threads=1)
+    ids, _ = index.search(data[:3], 5)
+    resaved = tmp_path / "resaved.index"
+    index.save(str(resaved))
+    reloaded = HnswIndex.load(str(resaved))
+    assert reloaded.is_trained
+    assert len(reloaded) == 200
+    assert reloaded.num_clusters == 16
+    np.testing.assert_array_equal(reloaded.search(data[:3], 5)[0], ids)
