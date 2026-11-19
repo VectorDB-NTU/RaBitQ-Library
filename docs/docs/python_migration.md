@@ -189,7 +189,29 @@ spelling `"innerproduct"` raises `ValueError` on the index classes and in
 `rabitqlib.quant`: use `"ip"`, which every release accepts and the `metric` properties
 return. And `cp.final_assignment` reads back as a string, as described above.
 
-0.9 also changes behavior that no warning can announce: `search` and `add` return
-`int64` IDs with `-1` instead of `2**32 - 1` for a missing result, `save` writes index
-format 2, which releases up to 0.8 cannot read, and `load` restores the seed. See the
-[0.9 notes](releases/unreleased.md).
+0.9 also changes behavior that no warning can announce:
+
+- `search` and `add` return `int64` IDs, with `-1` instead of `2**32 - 1` for a missing
+  result.
+- `save` writes index format 2, which releases up to 0.8 cannot read, and `load`
+  restores the seed of such a file. Files from earlier releases still load, without a
+  recorded seed.
+- An `IvfIndex` with HNSW routing stores the routing graph in the index file, so `save`
+  no longer writes a `<file>.hnsw` sidecar. A sidecar left by an earlier save is not
+  removed; the new file does not use it.
+- `load` raises the new `rabitqlib.FormatError` for a truncated, corrupt, mismatched or
+  unsupported file. It subclasses `RuntimeError`, which these errors raised before, and
+  `ValueError`; `rabitqlib.quant.FormatError` is now the same class. A file that cannot
+  be opened, or the missing sidecar of an earlier file, still raises a plain
+  `RuntimeError`. The messages for damaged files change, so match the exception class
+  rather than its text.
+- The index classes are the extension's own classes, without Python wrappers. A wrong
+  argument raises pybind11's `TypeError`, which lists the supported signatures, instead
+  of messages such as `IvfIndex() got an unexpected keyword argument 'x'`, and
+  `inspect.signature()` no longer works on their constructors and methods; `help()` and
+  the type stubs describe them.
+- A call with both an invalid argument and the wrong state may report the argument
+  first, for example `ValueError` instead of `RuntimeError` for `nprobe=0` on an
+  untrained index.
+
+See the [0.9 notes](releases/unreleased.md) for every change.

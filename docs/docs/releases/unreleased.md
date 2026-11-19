@@ -123,3 +123,5 @@ Four differences are not renames: `HnswIndex::add` uses every CPU unless `num_th
   - `QuantizedGraph<float>::seed()`, `ef_construction()` and `initialization()`.
 - `symqg::QGInitialization` moves from `qg_builder.hpp` to `rabitqlib/index/symqg/types.hpp`, which `qg.hpp`, and through it `qg_builder.hpp`, includes.
 - The vendored hnswlib adds `saveIndex(std::ostream&)` and `loadIndex(std::istream&, size_t bytes, ...)`; the path overloads are unchanged.
+
+- `rabitqlib::ceil_log2` in `rabitqlib/utils/tools.hpp` shifts a `size_t`, so an input of 2^32 or more is no longer undefined on 64-bit Windows, where `unsigned long` has 32 bits (#247). The library does not call it.
