@@ -14,7 +14,8 @@ with a low-bit unsigned integer and store per-vector factors for distance estima
 3. **Estimate.** Combine the codes, factors and rotated query to estimate squared
    L2 or inner-product distance (`1 - dot`). See [Estimation](estimator.md).
 
-For cosine search, normalize data and queries before rotation and use inner product.
+For cosine search, normalize data and queries before rotation and use inner product;
+the indexes' [cosine metric](../index/usage.md#the-cosine-metric) does this for you.
 The probabilistic error intervals can guide [reranking](reranking.md), but do not
 make approximate search exact. Recall depends on the data and search settings.
 

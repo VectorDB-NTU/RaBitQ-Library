@@ -30,7 +30,8 @@ The first `add` trains an untrained index on the added vectors, as for
 `num_clusters`, it trains one centroid per row, and `num_clusters` then reports
 the row count. An empty first `add` raises `RuntimeError`.
 `train` and `set_centroids` work as for [IVF-RaBitQ](ivf.md#training-centroids-in-python),
-with `num_clusters` centroids (default 16) and always RaBitQKMeans; `index.cp`
+with `num_clusters` centroids (default 16) and always RaBitQKMeans, but
+`set_centroids` takes no `num_threads`; `index.cp`
 starts from the same defaults with the index `seed`. The first `add` into the
 empty index links vectors with their exact coordinates, like the 0.7 `build`;
 later adds link through the stored codes (see [Recall after `add`](#recall-after-add)),
@@ -74,7 +75,7 @@ For build setup, see [C++ integration](../cpp_integration.md).
 | `M`, `ef_construction` | Graph connectivity and construction search budget; defaults are 16 and 200, and the index reports both. `M` must be at least 2 and is capped at 10,000; `ef_construction` is raised to at least `M`. The base layer keeps up to `2 * M` edges per node. |
 | `metric`, `seed` | `metric` defaults to L2 (Python `"l2"`); inner product and [cosine](usage.md#the-cosine-metric) are also supported. `seed` is the graph and rotation seed in `[0, 2**32 - 1]` and the initial `cp.seed`. The default (Python `None`, an empty C++ `std::optional`) draws one at random (it was 100 before 0.9); `seed` reports it. |
 | `capacity` | The current capacity, which `add` grows geometrically (at least doubling) and `reserve` can preallocate; in Python they replace `max_elements` and `resize`, which 0.9 removed. |
-| `k`, `ef_search` | Positive result count and search window. `k` may exceed the stored point count; missing results are padded with ID `-1` (C++ `kNoId`) and `+inf`. An omitted `ef_search` (Python `None`) uses `max(k, 64)`, an explicit 0 raises `ValueError` (C++ `std::invalid_argument`), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. It replaces `ef`, which 0.9 removed. |
+| `k`, `ef_search` | Result count, from 1 to 2^31, and search window. `k` may exceed the stored point count; missing results are padded with ID `-1` (C++ `kNoId`) and `+inf`. An omitted `ef_search` (Python `None`) uses `max(k, 64)`, an explicit 0 raises `ValueError` (C++ `std::invalid_argument`), a smaller value is raised to at least `k`, and a value above the stored point count is clamped to it. It replaces `ef`, which 0.9 removed. |
 
 In C++, the construction settings are fields of `HnswOptions`, and `ef_search`
 and `num_threads` fields of `GraphSearchOptions`.
@@ -182,9 +183,8 @@ See the shared [concurrency contract](usage.md#threading-and-file-paths).
 ## Updating an index
 
 A trained or loaded index supports `add()`, `reserve()` and `remove()` without
-the original data. Adding points and reserving capacity preserve the index file
-format; files with removals have
-[compatibility restrictions](#how-removal-is-stored).
+the original data. `save` always writes index format 2; see
+[persistence](#persistence).
 
 ```c++
 Id HnswIndex::add(const float* data, size_t num_points, const AddOptions& options = {});
@@ -293,10 +293,11 @@ Callers that track how many points they removed can apply this directly.
 `remove` sets the high bit of the point's stored cluster ID. Setting centroids and
 `load` limit the number of clusters to 2^31, so no real cluster ID has that bit, and
 every reader of the cluster ID masks it off. The mark lives in the base layer, so
-it survives `save`, `load`, and capacity growth, and a file without removals is
-unchanged.
+it survives `save`, `load`, and capacity growth, and a file without removals
+carries no marks.
 
-A file that has removals cannot be read by earlier releases. Releases 0.3.7
+In the layout written before 0.9, a file that has removals cannot be read by
+releases before 0.5.2. Releases 0.3.7
 through 0.5.1 check every cluster ID on `load` and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.

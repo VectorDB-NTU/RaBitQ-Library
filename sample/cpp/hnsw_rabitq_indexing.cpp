@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 #include "rabitqlib/core/detail/eigen.hpp"
@@ -26,7 +27,7 @@ int run(int argc, char* argv[]) {
                   << "arg5: ef for indexing \n"
                   << "arg6: total number of bits for quantization\n"
                   << "arg7: path for saving index\n"
-                  << "arg8: metric type (\"l2\" or \"ip\"), l2 by default\n"
+                  << "arg8: metric type (\"l2\", \"ip\" or \"cosine\"), l2 by default\n"
                   << "arg9: if use faster quantization (\"true\" or \"false\"), false by "
                      "default\n";
         return 1;
@@ -41,17 +42,18 @@ int run(int argc, char* argv[]) {
     char* index_file = argv[7];
 
     rabitqlib::MetricType metric_type = rabitqlib::METRIC_L2;
-    if (argc > 8) {
-        std::string metric_str(argv[8]);
-        if (metric_str == "ip" || metric_str == "IP") {
-            metric_type = rabitqlib::METRIC_IP;
-        }
+    const char* metric_name = "L2";
+    const std::string metric_str = argc > 8 ? argv[8] : "l2";
+    if (metric_str == "ip" || metric_str == "IP") {
+        metric_type = rabitqlib::METRIC_IP;
+        metric_name = "IP";
+    } else if (metric_str == "cosine" || metric_str == "COSINE") {
+        metric_type = rabitqlib::METRIC_COSINE;
+        metric_name = "Cosine";
+    } else if (metric_str != "l2" && metric_str != "L2") {
+        throw std::invalid_argument("Metric type must be l2, ip or cosine");
     }
-    if (metric_type == rabitqlib::METRIC_IP) {
-        std::cout << "Metric Type: IP\n";
-    } else if (metric_type == rabitqlib::METRIC_L2) {
-        std::cout << "Metric Type: L2\n";
-    }
+    std::cout << "Metric Type: " << metric_name << '\n';
 
     bool faster_quant = false;
     if (argc > 9) {
