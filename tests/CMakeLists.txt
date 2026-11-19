@@ -78,6 +78,11 @@ add_test(NAME CoreOpenMPFlagCheck COMMAND "${CMAKE_COMMAND}"
     "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/openmp-flag-check"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/core_consumer/check_no_openmp_test.cmake")
 
+add_test(NAME PackageVersionCompatibility COMMAND "${CMAKE_COMMAND}"
+    "-DVERSION_FILE=${PROJECT_BINARY_DIR}/rabitqlibConfigVersion.cmake"
+    "-DPROJECT_VERSION=${PROJECT_VERSION}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/core_consumer/check_package_version.cmake")
+
 add_executable(core_api_v1_consumer fixtures/core_api_v1/consumer.cpp)
 target_link_libraries(core_api_v1_consumer PRIVATE rabitqlib::core)
 add_test(NAME CoreApiV1Consumer COMMAND core_api_v1_consumer)

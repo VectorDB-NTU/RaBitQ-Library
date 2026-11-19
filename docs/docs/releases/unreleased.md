@@ -87,6 +87,7 @@
   - `search` takes a `GraphSearchOptions` struct. Without an `ef_search` it uses `max(k, 64)`, a smaller value is raised to `k`, and an explicit 0 throws; `symqg::QuantizedGraph` rejects an `ef_search` below `k`.
   - `seed()`, `ef_construction()` and `init()` have no value for a file of a release up to 0.8.
 - `IvfIndex`, `HnswIndex` and `SymqgIndex` are the supported and documented C++ index API from 0.9. `ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `symqg::QGBuilder` stay installed at their paths and keep their interfaces apart from the changes listed below, but they leave the documentation and carry no compatibility promise.
+- The installed CMake package satisfies `find_package(rabitqlib X.Y[.Z])` only when the major and minor versions match: `find_package(rabitqlib 0.8)` no longer finds 0.9, which `SameMajorVersion` compatibility allowed, and a version range must stay within one minor release, such as `0.9...<0.10`. Before 1.0 a minor release may break the API.
 
 Move to the new classes as follows:
 
