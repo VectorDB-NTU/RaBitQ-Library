@@ -19,8 +19,10 @@ int main(int argc, char** argv) {
             throw std::invalid_argument("Expected kind, index, data, metric and bits");
         }
         const std::string kind(argv[1]);
-        const auto metric =
-            std::string(argv[4]) == "ip" ? rabitqlib::METRIC_IP : rabitqlib::METRIC_L2;
+        const std::string metric_name(argv[4]);
+        const auto metric = metric_name == "ip"       ? rabitqlib::METRIC_IP
+                            : metric_name == "cosine" ? rabitqlib::METRIC_COSINE
+                                                      : rabitqlib::METRIC_L2;
         const size_t bits = std::stoull(argv[5]);
         rabitqlib::RowMajorArray<float> data;
         rabitqlib::load_vecs<float>(argv[3], data);
@@ -32,7 +34,7 @@ int main(int argc, char** argv) {
                 index.nbits() != bits) {
                 throw std::runtime_error("Example index metadata does not match input");
             }
-            // Unit vectors make self the exact winner for the IP fixture as well.
+            // Unit vectors make self the exact winner for the IP and cosine fixtures too.
             for (size_t row : std::array<size_t, 3>{0, count / 2, count - 1}) {
                 rabitqlib::Id id = rabitqlib::kNoId;
                 float distance = 0;
