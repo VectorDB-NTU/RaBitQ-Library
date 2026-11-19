@@ -61,9 +61,9 @@ class HnswIndex {
     HnswIndex& operator=(const HnswIndex&) = delete;
     ~HnswIndex();
 
-    // Load an index saved by any release. An empty, untrained file saved by 0.7 loads
-    // untrained, with 16 clusters to train; without a recorded seed, it needs train or
-    // set_centroids before add.
+    // Load an index saved by any release. A file saved before training loads untrained,
+    // with 16 clusters to train; without a recorded seed, it needs train or set_centroids
+    // before add.
     static HnswIndex load(const char* filename);
 
     // Requires at least one stored point. Releases up to 0.8 cannot read the file.
@@ -114,8 +114,8 @@ class HnswIndex {
      * existing centroids, which do not move. Capacity grows to fit the points, at least
      * doubling, after the points and cluster IDs are checked. A failure while linking may
      * leave part of the batch in the index, which stays safe to search, save and destroy.
-     * An index loaded from an empty, untrained file saved before 0.8 has no seed, so
-     * add does not train it; call train or set_centroids first.
+     * An index loaded from a file saved before training has no seed, so add does not
+     * train it; call train or set_centroids first.
      *
      * @param data New points (num_points * dim)
      * @param num_points Number of new points

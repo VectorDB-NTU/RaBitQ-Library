@@ -298,8 +298,8 @@ Notes
 -----
 The first add trains an untrained index on the added vectors. Call train
 on a sample, or set_centroids, first to choose the training data or the
-centroids. Loaded indexes are trained, except empty files saved untrained
-by 0.7. Capacity grows automatically
+centroids. Loaded indexes are trained, except one loaded from a file saved
+before training. Capacity grows automatically
 on add; reserve can preallocate it. Concurrent reads are supported; an
 overlapping mutation raises RuntimeError.
 Data, centroids and queries must be finite float32 values within the index
@@ -348,8 +348,9 @@ train(data) does; with fewer rows it trains one centroid per row, and
 num_clusters then reports the row count. An empty first add raises
 RuntimeError. With num_threads None, training
 uses cp.num_threads. Passing cluster_ids to an untrained index raises
-RuntimeError, as does add on an untrained index loaded from a 0.7 file;
-call train first. If the call fails, the index stays untrained and empty. The first
+RuntimeError, as does add on an index loaded from an untrained file;
+call train or set_centroids first. If the call fails, the index stays untrained
+and empty. The first
 add into an empty index links vectors with their exact coordinates; later adds
 link through the stored codes, so add most vectors in the first call. Capacity
 grows geometrically when needed. Removed IDs are not reused.)doc";
@@ -457,7 +458,7 @@ distances : ndarray of float32, shape (n_queries, k)
 
 Notes
 -----
-Requires a trained or loaded index. Returns (ids, distances), in that
+Requires a trained index. Returns (ids, distances), in that
 order. Missing neighbors have ID -1 and distance inf; test
 np.isfinite(distances) to find them. Array shapes
 and value ranges are checked at runtime, not by static type checkers.)doc"
@@ -543,7 +544,7 @@ path : str, bytes, bytearray, or os.PathLike
 Returns
 -------
 index : HnswIndex
-    A trained index ready for search.)doc"
+    The loaded index, trained unless the file was saved before training.)doc"
         )
         .def(
             "__repr__",

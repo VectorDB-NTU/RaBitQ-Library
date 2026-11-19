@@ -55,7 +55,7 @@
 
 - Loading a format-2 file keeps the `seed` of every index, and `ef_construction` and `init` of SymphonyQG. They were `None` after `load`, and still are for files from releases up to 0.8.
 - With a recorded seed, `cp.seed` after `load` follows it as for a new index; for an HNSW-RaBitQ file whose seed exceeds 32 bits, which only C++ can write, it is the low 32 bits. It was the k-means default.
-- An HNSW-RaBitQ file that the 0.7 C++ API saved before training loads untrained, with `num_clusters` 16. Without a recorded seed its first `add` cannot train it, so `add`, `search`, `remove` and `save` raise `HnswIndex loaded from an untrained file must be trained before add; call train or set_centroids` (naming the operation) until `train` or `set_centroids` runs.
+- An HNSW-RaBitQ file saved before training, which the C++ API of earlier releases allowed, loads untrained, with `num_clusters` 16. Without a recorded seed its first `add` cannot train it, so `add`, `search`, `remove` and `save` raise `RuntimeError: HnswIndex loaded from an untrained file must be trained before add; call train or set_centroids` (naming the operation) until `train` or `set_centroids` runs.
 - A new exception, `rabitqlib.FormatError`, subclasses both `ValueError` and `RuntimeError`:
   - Every index `load` raises it for a truncated, corrupt, mismatched or unsupported file, in format 2 and in every earlier layout. These were `RuntimeError`, which still catches them. A file that cannot be opened still raises a plain `RuntimeError`.
   - `quant.FormatError` is now the same class. It was a subclass of `ValueError` only, which still catches it.
@@ -88,7 +88,6 @@
   - `search` takes a `GraphSearchOptions` struct. Without an `ef_search` it uses `max(k, 64)`, a smaller value is raised to `k`, and an explicit 0 throws; `symqg::QuantizedGraph` rejects an `ef_search` below `k`.
   - `seed()`, `ef_construction()` and `init()` have no value for a file of a release up to 0.8.
 - `IvfIndex`, `HnswIndex` and `SymqgIndex` are the supported and documented C++ index API from 0.9. `ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `symqg::QGBuilder` stay installed at their paths and keep their interfaces apart from the changes listed below, but they leave the documentation and carry no compatibility promise.
-- The installed CMake package satisfies `find_package(rabitqlib X.Y[.Z])` only when the major and minor versions match: `find_package(rabitqlib 0.8)` no longer finds 0.9, which `SameMajorVersion` compatibility allowed, and a version range must stay within one minor release, such as `0.9...<0.10`. Before 1.0 a minor release may break the API.
 
 Move to the new classes as follows:
 
@@ -105,7 +104,7 @@ Move to the new classes as follows:
 
 Four differences are not renames: `HnswIndex::add` uses every CPU unless `num_threads` is set; `HnswIndex::search` writes all `k` slots, padding with `kNoId` and `+inf`, where `HierarchicalNSW::search` returns only the pairs found; a seed is drawn unless given, where `HierarchicalNSW` defaults to 100; and default thread counts are capped by `OMP_NUM_THREADS`. The new classes do not offer the matrix rotator, rebuilding with `IVF::construct`, shrinking with `HierarchicalNSW::resize`, `HierarchicalNSW::cluster_id_of`, `QuantizedGraph::search_with_scratch` with its warm-start hint, `QGBuilder`'s multi-pass `build(n)`, `reset`, `refine`, `avg_degree`, `check_dup` and `cache_vectors`, or `padded_dim()`; use the existing classes for them.
 
-- The C++ examples in `sample/cpp` and the IVF `add` hot-path benchmark use the new classes. `symqg_indexing` takes `nbits` (32 for raw vectors, 4 or 8, default 32) and still reads 0 as raw vectors; it no longer prints stage times or the average degree. Its optional thread count 0 selects every available CPU. The default thread counts of `symqg_indexing` and `ivf_rabitq_indexing` are now capped by `OMP_NUM_THREADS`, which they ignored. `ivf_rabitq_indexing`, `hnsw_rabitq_indexing` and `symqg_indexing` accept `cosine` as the metric and reject unknown metric names; both used to build an L2 index silently.
+- The C++ examples in `sample/cpp` and the IVF `add` hot-path benchmark use the new classes. `symqg_indexing` takes `nbits` (32 for raw vectors, 4 or 8, default 32) and still reads 0 as raw vectors; it no longer prints stage times or the average degree. Its optional thread count 0 selects every available CPU. The default thread counts of `symqg_indexing` and `ivf_rabitq_indexing` are now capped by `OMP_NUM_THREADS`, which they ignored. `ivf_rabitq_indexing`, `hnsw_rabitq_indexing` and `symqg_indexing` accept `cosine` as the metric and reject unknown metric names; all three used to build an L2 index silently.
 
 - `qgkmeans::QGKMeansParameters` uses the Python names (#233): `graph_degree` becomes `max_degree`, `ef_build` becomes `ef_construction`, and `quantization_bits` (0, 4 or 8) becomes `nbits` (32, 4 or 8, with 32 for raw float32). The fields keep their order and types. An `nbits` of 0 is rejected, so code that initialized the field positionally with 0 must pass 32. `QGAssigner` keeps its constructor, including `quantization_bits` with 0 for raw storage.
 - Messages follow the names: `QGKMeans nbits must be 4, 8, or 32`, `QGKMeans max_degree must be a positive multiple of 32`, `QGKMeans requires more centroids than max_degree` and `QGKMeans ef_construction and ef_search must be positive`.
@@ -127,3 +126,5 @@ Four differences are not renames: `HnswIndex::add` uses every CPU unless `num_th
 - The vendored hnswlib adds `saveIndex(std::ostream&)` and `loadIndex(std::istream&, size_t bytes, ...)`; the path overloads are unchanged.
 
 - `rabitqlib::ceil_log2` in `rabitqlib/utils/tools.hpp` shifts a `size_t`, so an input of 2^32 or more is no longer undefined on 64-bit Windows, where `unsigned long` has 32 bits (#247). The library does not call it.
+
+- The installed CMake package satisfies `find_package(rabitqlib X.Y[.Z])` only when the major and minor versions match: `find_package(rabitqlib 0.8)` no longer finds 0.9, which `SameMajorVersion` compatibility allowed, and a version range must stay within one minor release, such as `0.9...<0.10`. Before 1.0 a minor release may break the API.
