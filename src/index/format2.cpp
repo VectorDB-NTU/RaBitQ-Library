@@ -6,6 +6,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 
 #include "../core/crc32.hpp"
@@ -29,6 +30,26 @@ std::string hex(uint64_t value) {
     std::ostringstream out;
     out << "0x" << std::hex << value;
     return out.str();
+}
+
+// The stored writer version for an error message. Readers do not validate the
+// field, and Python decodes messages as UTF-8, so bytes outside printable ASCII
+// appear as \xNN, and so does a backslash, which keeps the output unambiguous.
+std::string printable_writer_version(const std::string& version) {
+    constexpr std::string_view kDigits = "0123456789abcdef";
+    std::string out;
+    out.reserve(version.size());
+    for (const char c : version) {
+        const auto byte = static_cast<unsigned char>(c);
+        if (byte >= 0x20 && byte <= 0x7E && byte != '\\') {
+            out.push_back(c);
+        } else {
+            out += "\\x";
+            out.push_back(kDigits[byte >> 4U]);
+            out.push_back(kDigits[byte & 0xFU]);
+        }
+    }
+    return out;
 }
 
 // The error-message component of each index, as in docs/development.md.
@@ -378,7 +399,8 @@ Reader::Reader(
     if (unknown_incompat != 0) {
         throw FormatError(
             component_ + " uses incompatible features " + hex(unknown_incompat) +
-            " that this release does not know; written by rabitqlib " + writer_version_
+            " that this release does not know; written by rabitqlib " +
+            printable_writer_version(writer_version_)
         );
     }
     read_only_ = (header_.ro_compat_features & ~kKnownRoCompatFeatures) != 0;
@@ -473,7 +495,7 @@ Reader::Reader(
                 throw FormatError(
                     name +
                     " is required but unknown to this release; written by rabitqlib " +
-                    writer_version_
+                    printable_writer_version(writer_version_)
                 );
             }
             continue;

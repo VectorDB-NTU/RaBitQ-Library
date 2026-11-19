@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -583,6 +584,68 @@ TEST(Format2ContainerTest, RejectsBrokenSectionEntries) {
         reseal(bytes);
         expect_format_error(bytes, c.message);
     }
+}
+
+// Every entry, empty or not, starts at or after the end of the previous one, so an
+// empty section shares its offset only with entries that follow it.
+TEST(Format2ContainerTest, PlacesEmptySectionsByTheLayoutRule) {
+    // Empty, parameters, bulk: the empty section and the parameters share 256.
+    auto sections = test_sections();
+    std::rotate(sections.begin(), sections.begin() + 2, sections.end());
+    const std::string shared = write(test_header(), sections);
+    EXPECT_EQ(get_u64(shared, entry(0) + 8), 256U);
+    EXPECT_EQ(get_u64(shared, entry(1) + 8), 256U);
+    std::istringstream shared_stream(shared);
+    const f2::Reader reader = open_reader(shared_stream);
+    ASSERT_NE(reader.find(kEmpty), nullptr);
+    EXPECT_EQ(reader.find(kEmpty)->offset, 256U);
+    ASSERT_NE(reader.find(kParams), nullptr);
+    EXPECT_EQ(reader.find(kParams)->offset, 256U);
+
+    // Two empty sections may share an offset too (an empty checksummed section
+    // has CRC-32 zero).
+    std::string bytes = shared;
+    put_u64(bytes, entry(1) + 16, 0);
+    put_u32(bytes, entry(1) + 24, 0);
+    reseal(bytes);
+    std::istringstream two_empty(bytes);
+    EXPECT_EQ(open_reader(two_empty).find(kParams)->size, 0U);
+
+    // After a non-empty section, an empty one may not start at its offset or
+    // inside it. The file ends with the bulk section, so only the order check fails.
+    for (const uint64_t offset : {uint64_t{320}, uint64_t{1280}}) {
+        bytes = valid_file().substr(0, 1320);
+        put_u64(bytes, entry(2) + 8, offset);
+        reseal(bytes);
+        expect_format_error(
+            bytes, "section kind 263 overlaps the previous section or is out of order"
+        );
+    }
+}
+
+// Readers do not validate the stored writer version; messages escape bytes outside
+// printable ASCII, and the accessor returns the stored bytes.
+TEST(Format2ContainerTest, EscapesTheStoredWriterVersionInMessages) {
+    const std::string version = "0.9\xff\\";
+    std::string marked = valid_file();
+    std::memcpy(&marked[112], version.data(), version.size());  // over "0.9.0"
+    reseal(marked);
+    std::istringstream stream(marked);
+    EXPECT_EQ(open_reader(stream).writer_version(), version);
+
+    std::string bytes = marked;
+    put_u64(bytes, 16, 4);
+    reseal(bytes);
+    expect_format_error(
+        bytes, "that this release does not know; written by rabitqlib 0.9\\xff\\x5c"
+    );
+
+    bytes = marked;
+    put_u32(bytes, entry(1), 777);
+    reseal(bytes);
+    expect_format_error(
+        bytes, "is required but unknown to this release; written by rabitqlib 0.9\\xff\\x5c"
+    );
 }
 
 TEST(Format2ContainerTest, RejectsTruncatedTrailingAndCorruptFiles) {

@@ -1,6 +1,6 @@
 # Byte formats
 
-This is the specification of the byte formats `rabitqlib.quant` reads and writes. It is shared with the planned index format revision, which will add its own blob kinds. While `rabitqlib.quant` is provisional, a release may stop reading an old format version; reading it then raises `rabitqlib.FormatError` (also `quant.FormatError`) instead of returning wrong results. A promise that every released version stays readable comes with stabilisation.
+This is the specification of the byte formats `rabitqlib.quant` reads and writes. Index files ([format 2](#index-format-2)) use their own container and nest blobs in its sections. While `rabitqlib.quant` is provisional, a release may stop reading an old format version; reading it then raises `rabitqlib.FormatError` (also `quant.FormatError`) instead of returning wrong results. A promise that every released version stays readable comes with stabilisation.
 
 Every format has a version. A change to any layout is a new version, never an edit of an existing one. The golden files in `tests/python/fixtures/quant/` freeze each version and are never regenerated.
 
@@ -59,7 +59,7 @@ A blob is a self-describing byte string, such as `Rotator.to_bytes()`. It starts
 | Offset | Size | Type | Field | Rule |
 | --- | --- | --- | --- | --- |
 | 0 | 8 | ASCII | `magic` = `"RABQBLOB"` | Anything else raises `FormatError` |
-| 8 | 4 | u32 | `kind` | 1 = rotator; 2 = codec (reserved); 3 and up reserved for index formats. A kind the reader does not expect raises `FormatError` |
+| 8 | 4 | u32 | `kind` | 1 = rotator; 2 = codec (reserved); 3 and up reserved. A kind the reader does not expect raises `FormatError` |
 | 12 | 4 | u32 | `version` | Layout version of this kind; an unknown version raises `FormatError` |
 | 16 | 4 | u32 | `header_bytes` | Common header plus kind fields, a multiple of 8; it must equal the size the kind and version define |
 | 20 | 4 | u32 | `flags` | Kind-specific; unknown bits raise `FormatError` |
@@ -95,13 +95,13 @@ The body defines the rotation; `seed` only records where it came from. A seeded 
 
 <a id="index-format-2"></a>
 
-## Index files, format 2 (draft)
+## Index files, format 2
 
-> **Status: draft for 0.9 (#211, #212).** The container (`src/index/format2.*`) is implemented, and IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG read and write format 2, including the cosine metric; IVF-SSD and companion files are not implemented. Field numbers, section kinds and the open questions at the end may still change until a release writes format 2.
+> **Status:** 0.9 is the first release that writes format 2 (#211, #212). IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG read and write it, including the cosine metric; the container is `src/index/format2.*`. IVF-SSD and companion files are not implemented, and their parts of this specification may change until a release writes them.
 
-Format 2 is one container for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG, and later for the SSD-resident IVF index from RaBitQ-SSD. It replaces the per-index layouts: IVF-RaBitQ `RABQIDX1` versions 1 and 2, the unversioned HNSW-RaBitQ layout, SymphonyQG's quantized version 1 and its raw layout, and the unversioned hnswlib sidecar `<file>.hnsw` of IVF-RaBitQ. Every released layout stays readable (see [Earlier layouts](#earlier-layouts)); `save` always writes format 2.
+Format 2 is one container for IVF-RaBitQ, HNSW-RaBitQ and SymphonyQG, and later for the SSD-resident IVF index from RaBitQ-SSD. It replaces the per-index layouts: IVF-RaBitQ `RABQIDX1` version 2 (readers also accept version 1, which no release wrote), its raw-vector layout `RBFQRAW1` and its unversioned layout, the unversioned HNSW-RaBitQ layout, SymphonyQG's quantized version 1 and its raw layout, and the unversioned hnswlib sidecar `<file>.hnsw` of IVF-RaBitQ. Every released layout stays readable (see [Earlier layouts](#earlier-layouts)); `save` always writes format 2.
 
-The number continues the name used in #212. An index file is told apart from earlier layouts by its magic, not by the version, so the unrelated IVF-RaBitQ `RABQIDX1` version 2 does not clash.
+The number continues the name used in #212. An index file is told apart from earlier layouts by its magic, not by the version, so the unrelated IVF-RaBitQ `RABQIDX1` version 2 does not clash. The header is not a [blob](#blobs): a blob checksums its whole body, which is too costly for large index files, so index files have their own container and nest blobs in sections.
 
 Unlike the provisional `rabitqlib.quant` formats above, index files carry the library's full compatibility promise: every format-2 file written by a release stays readable by every later release.
 
@@ -122,11 +122,11 @@ Unlike the provisional `rabitqlib.quant` formats above, index files carry the li
 | Section table | `section_table_offset`, `section_count` entries of 32 bytes |
 | Sections | Anywhere after the header, each at a multiple of 64 |
 
-Every section starts at or after `header_bytes`. Non-empty sections do not overlap the table or each other; empty sections take no bytes and may share an offset. Table entries are in non-decreasing offset order. The file ends exactly where the table or the last section ends, whichever is later; an empty section still has an aligned offset, so writers pad up to it.
+Each section starts at or after `header_bytes` and at or after the end (`offset + size`) of the previous table entry, so the table lists sections in file order and no two overlap. An empty section takes no bytes: several may share an offset, and the next section may start at it. Non-empty sections do not overlap the section table; an empty section's offset may fall inside it. The file ends exactly where the table or the last section ends, whichever is later; an empty section still has an aligned offset, so writers pad up to it.
 
 ### Header
 
-`header_bytes` is 128 in this version. It is a multiple of 8 and at least 128; a later version may append fields, which a reader that knows only these 128 bytes skips (see [Compatibility rules](#compatibility-rules)).
+The fields below take 128 bytes. `header_bytes` is a multiple of 8 and at least 128; a later release may append fields without changing `version`, and a reader skips the bytes past the fields it knows, which `header_crc32` still covers (see [Compatibility rules](#compatibility-rules)).
 
 | Offset | Size | Type | Field | Rule |
 | --- | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ Every section starts at or after `header_bytes`. Non-empty sections do not overl
 | 96 | 8 | u64 | `section_table_offset` | A multiple of 8, at least `header_bytes` |
 | 104 | 4 | u32 | `section_count` | At least 1 |
 | 108 | 4 | u32 | `header_crc32` | Over the header with this field taken as zero, followed by the section table |
-| 112 | 16 | ASCII | `writer_version` | Library version that wrote the file, printable ASCII, NUL-padded. For error messages only; readers never branch on it |
+| 112 | 16 | ASCII | `writer_version` | Library version that wrote the file, printable ASCII, NUL-padded. For error messages only: readers neither branch on it nor validate it, and messages show the bytes before the first NUL, with backslashes and bytes outside printable ASCII as `\xNN` |
 
 The Python `nbits` maps to these fields as follows. IVF-RaBitQ `nbits` 1–9 is `code_bits`. IVF-RaBitQ `nbits = 32` is `code_bits = 1` with `raw_type = float32`, because it keeps 1-bit FastScan codes and reranks with raw vectors. SymphonyQG `nbits = 32` is `code_bits = 0` with `raw_type = float32`.
 
@@ -164,7 +164,7 @@ The Python `nbits` maps to these fields as follows. IVF-RaBitQ `nbits` 1–9 is 
 | 24 | 4 | u32 | `crc32` | Over the section's bytes when `checksummed` is set; zero otherwise |
 | 28 | 4 | — | reserved | |
 
-Kind 0 is reserved, and a kind appears at most once. Section flags other than the two above are rejected; a later version cannot add a section flag without a new `version`. Writers checksum the header-like sections (parameters, cluster sizes, companions), whose values size later allocations, and leave bulk data unchecksummed, so that loading a large index does not read it twice. Per-point arrays such as `hnsw_levels` count as bulk data: the header fixes their size, and readers check every value against its limit.
+Kind 0 is reserved, and a kind appears at most once. Section flags other than the two above are rejected; a later version cannot add a section flag without a new `version`. Writers checksum the header-like sections (parameters, cluster sizes, companions), whose values size later allocations, and leave bulk data unchecksummed, so that loading a large index does not read it twice. A reader verifies the checksum of a section it knows exactly when `checksummed` is set. Per-point arrays such as `hnsw_levels` count as bulk data: the header fixes their size, and readers check every value against its limit.
 
 A section the reader does not know is handled by its `required` bit: a required one rejects the file, and an optional one is skipped without reading it, so its checksum is not verified. A writer marks a section optional only if dropping it leaves a correct index, for example a cache that can be recomputed. `save` drops optional sections it does not know.
 
@@ -202,7 +202,7 @@ Python `search`, `add` and `remove` use `int64` IDs, and a missing search result
 
 ### Section kinds
 
-Kinds 1–255 are shared, 256–511 are IVF-RaBitQ, 512–767 HNSW-RaBitQ, 768–1023 SymphonyQG and 1024–1279 IVF-SSD. Every section listed here is `required`.
+Kinds 1–255 are shared, 256–511 are IVF-RaBitQ, 512–767 HNSW-RaBitQ, 768–1023 SymphonyQG and 1024–1279 IVF-SSD. Writers mark every section listed here `required`. A reader that knows a kind reads the section whatever its `required` bit says; the bit governs only kinds the reader does not know.
 
 | Kind | Name | Used by | Content |
 | --- | --- | --- | --- |
@@ -227,7 +227,7 @@ Kinds 1–255 are shared, 256–511 are IVF-RaBitQ, 512–767 HNSW-RaBitQ, 768�
 
 An IVF file has exactly one routing section, the one that `ivf_params` names; a rerank section exactly when `code_bits > 1` or raw vectors are stored.
 
-The HNSW per-point length prefix of the current layout becomes `hnsw_levels`, so a reader knows every size before reading the link lists.
+`hnsw_levels` replaces the per-point length prefix of the earlier HNSW-RaBitQ layout, so a reader knows every size before reading the link lists.
 
 ### Record layouts
 
@@ -245,11 +245,11 @@ One vector's `b`-bit code with its two factors. IVF-RaBitQ and HNSW-RaBitQ use i
 | `padded_dim * b / 8` | 4 | `add`, f32 |
 | `padded_dim * b / 8 + 4` | 4 | `rescale`, f32 |
 
-The record has no `error` factor. It should also become a raw-array format of `rabitqlib.quant`, so that both share one definition.
+The record has no `error` factor.
 
 #### HNSW sign code
 
-HNSW-RaBitQ stores the 1-bit code in a different bit order from the `rabitqlib.quant` bitset. Split the `padded_dim` coordinates into groups of 64, where the last group has 32 coordinates when `padded_dim` is not a multiple of 64. A group of `G` bytes, read as a little-endian integer, stores coordinate `t` of the group in bit `8G - 1 - t`. This is what `pack_binary_to_bytes<uint64_t>` writes (checked against it for `padded_dim` 32, 64, 96, 160 and 1024); the implementation adds a golden test that freezes it.
+HNSW-RaBitQ stores the 1-bit code in a different bit order from the `rabitqlib.quant` bitset. Split the `padded_dim` coordinates into groups of 64, where the last group has 32 coordinates when `padded_dim` is not a multiple of 64. A group of `G` bytes, read as a little-endian integer, stores coordinate `t` of the group in bit `8G - 1 - t`. This is what `pack_binary_to_bytes<uint64_t>` writes (checked against it for `padded_dim` 32, 64, 96, 160 and 1024); the `PackBinaryTest` cases in `tests/unit/rabitqlib/utils/space_test.cpp` check this bit order.
 
 #### HNSW-RaBitQ records
 
@@ -347,7 +347,7 @@ A reader checks, in order, and validates every size before allocating. The loade
 2. The section table is non-empty and lies within the file, and `header_crc32` matches.
 3. Feature flags, as in the table above.
 4. `index_kind` is the expected one; the fields that every kind shares are valid; then the expecting index's own header rules hold.
-5. Each table entry, in order: its flags and reserved field, alignment, bounds, order, overlap and repetition, then its kind. An unknown required kind rejects the file here.
+5. Each table entry, in order: a nonzero kind, its flags and reserved field, a zero `crc32` unless `checksummed` is set, alignment, bounds, the [layout](#layout) rules (order and overlap) and repetition, then whether its kind is known. An unknown required kind rejects the file here.
 6. The file ends where the table or the last section ends.
 7. Each known checksummed section matches its `crc32`.
 8. The index's required sections are present, and each section's size equals what the header and parameter sections imply, before its content is read.
@@ -364,7 +364,7 @@ A writer writes the file once, front to back, so it does not need seekable outpu
 
 ### Earlier layouts
 
-Readers dispatch on the leading bytes: `"RABQINDX"`, then each index's legacy magic (IVF `RABQIDX1`, SymphonyQG quantized), then the unversioned fallbacks the readers accept today. Legacy files have no cosine metric, seed or 64-bit IDs; they load as `seed_known = false` with 32-bit IDs, as they do in 0.8. The frozen fixtures in `tests/fixtures/persistence/` keep covering every layout.
+Readers dispatch on the leading bytes: `"RABQINDX"`, then each index's legacy magic (IVF `RABQIDX1` and `RBFQRAW1`, SymphonyQG quantized), then the unversioned fallbacks the readers accept today. Legacy files have no cosine metric, seed or 64-bit IDs; they load as `seed_known = false` with 32-bit IDs, as they do in 0.8. The frozen fixtures in `tests/fixtures/persistence/` keep covering every layout.
 
 ### Compatibility rules
 
@@ -372,7 +372,3 @@ Readers dispatch on the leading bytes: `"RABQINDX"`, then each index's legacy ma
 - An older release reads a newer format-2 file or rejects it with an error naming the problem; it never misreads it. Older releases reject `version` values other than 2, unknown `index_kind`, `metric` or `id_bits` values, unknown required sections and unknown `incompat` bits.
 - An additive change appends header fields (raising `header_bytes`), adds sections, or adds feature bits, chosen by the table in [Feature flags](#feature-flags). A change that an older reader cannot detect from these is not allowed; it needs `version = 3`.
 - Every released change adds a frozen fixture. Synthetic "future" fixtures check the rules above: an unknown optional section loads; an unknown required section, an `incompat` bit or a larger `version` is rejected with its message; a `ro_compat` bit loads read-only; a longer header loads.
-
-### Open questions
-
-- Whether the header should be a [blob](#blobs) kind instead of its own magic. Proposed: its own magic, as above. A blob checksums its whole body, which is too costly for large index files, so index files get their own container and nest blobs in sections.
