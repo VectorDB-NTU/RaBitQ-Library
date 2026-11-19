@@ -25,6 +25,7 @@
 #include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
@@ -534,12 +535,8 @@ class LloydKMeans : public Parameters {
                 std::string(Assignment::kName) + " input dimensions overflow ptrdiff_t"
             );
         }
-        // Leave headroom for products of squared distances in graph pruning,
-        // as well as quantized reconstruction and rotated residuals.
-        const double max_coordinate = std::sqrt(
-            std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
-            (64.0 * static_cast<double>(d))
-        );
+        // The index bound, so training accepts every point the indexes accept.
+        const float max_coordinate = max_coordinate_magnitude(d);
         bool in_range = true;
         bool finite = true;
 #pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
@@ -548,7 +545,7 @@ class LloydKMeans : public Parameters {
              ++index) {
             const size_t i = static_cast<size_t>(index);
             finite = finite && std::isfinite(x[i]);
-            in_range = in_range && std::abs(static_cast<double>(x[i])) <= max_coordinate;
+            in_range = in_range && std::abs(x[i]) <= max_coordinate;
         }
         if (!finite) {
             throw std::invalid_argument(

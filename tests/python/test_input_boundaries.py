@@ -344,3 +344,41 @@ def test_build_rejects_bad_coordinates_without_building(index_kind, value):
         with pytest.raises(ValueError):
             index.add(bad_data, cluster_ids=ids, num_threads=1)
     assert len(index) == 0
+
+
+@pytest.mark.parametrize("model", ["ivf", "hnsw", "qgkmeans", "rabitqkmeans"])
+def test_training_accepts_coordinates_at_the_index_bound(model):
+    # At dim 64 the float32 bound rounds above the exact real bound.
+    exact = np.sqrt(np.sqrt(np.float64(np.finfo(np.float32).max)) / (64.0 * 64))
+    bound = np.float32(exact)
+    assert np.float64(bound) > exact
+    data = np.random.default_rng(5).normal(size=(400, 64)).astype(np.float32)
+    data[5, 3] = bound
+    data[6, 4] = -bound
+
+    def fresh():
+        if model == "ivf":
+            return IvfIndex(64, 4, nbits=4)
+        if model == "hnsw":
+            return HnswIndex(64, nbits=4, num_clusters=4)
+        return (QGKMeans if model == "qgkmeans" else RaBitQKMeans)(64, 40, niter=2)
+
+    trained = fresh()
+    if model in ("ivf", "hnsw"):
+        trained.add(data, num_threads=1)  # the first add trains
+        assert len(trained) == 400
+    else:
+        trained.train(data)
+        trained.assign(data[5:7])
+
+    data[5, 3] = np.nextafter(bound, np.float32(np.inf))
+    message = "KMeans x exceeds the safe float32 coordinate range$"
+    # Index train reaches the k-means check first; HNSW add checks before training.
+    with pytest.raises(ValueError, match=message):
+        if model in ("ivf", "hnsw"):
+            fresh().train(data, num_threads=1)
+        else:
+            fresh().train(data)
+    if model not in ("ivf", "hnsw"):
+        with pytest.raises(ValueError, match=message):
+            trained.assign(data[5:7])

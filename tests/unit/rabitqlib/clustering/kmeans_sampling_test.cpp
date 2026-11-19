@@ -17,6 +17,7 @@
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -232,6 +233,43 @@ void check_assign_requires_training_and_valid_input(const std::string& name) {
     EXPECT_THROW(
         clustering.assign(1, points.data(), &assignment, &distance), std::runtime_error
     );
+}
+
+// Training and assignment accept exactly the coordinates the indexes accept.
+// At kDim the float32 bound rounds above the exact real bound, so a value equal
+// to it is the one an exact double comparison would wrongly reject.
+template <typename Clustering>
+void check_coordinate_bound_matches_index_check(const std::string& name) {
+    constexpr size_t kClusterCount = kClusters<Clustering>;
+    const float bound = max_coordinate_magnitude(kDim);
+    ASSERT_GT(
+        static_cast<double>(bound),
+        std::sqrt(
+            std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
+            (64.0 * static_cast<double>(kDim))
+        )
+    );
+    const size_t num_points = 2 * kClusterCount;
+    auto points = clustered_points(num_points, 67);
+    points[1] = bound;
+    points[kDim + 2] = -bound;
+    Clustering clustering(kDim, kClusterCount, test_parameters<Clustering>());
+    ASSERT_NO_THROW(clustering.train(num_points, points.data()));
+    PID assignment = kPidMax;
+    float distance = 0;
+    EXPECT_NO_THROW(clustering.assign(1, points.data(), &assignment, &distance));
+    EXPECT_LT(assignment, kClusterCount);
+
+    const std::string message = name + " x exceeds the safe float32 coordinate range";
+    points[1] = std::nextafter(bound, std::numeric_limits<float>::infinity());
+    try {
+        clustering.assign(1, points.data(), &assignment, &distance);
+        FAIL() << "Assigned a coordinate above the bound";
+    } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+    try {
+        clustering.train(num_points, points.data());
+        FAIL() << "Trained on a coordinate above the bound";
+    } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
 }
 
 // With sampling, train's final pass is assign() itself, including QGKMeans'
@@ -600,6 +638,14 @@ TEST(KMeansAssignTest, RaBitQRequiresTrainingAndValidInput) {
 
 TEST(KMeansAssignTest, QGRequiresTrainingAndValidInput) {
     check_assign_requires_training_and_valid_input<qgkmeans::QGKMeans>("QGKMeans");
+}
+
+TEST(KMeansAssignTest, RaBitQCoordinateBoundMatchesIndexCheck) {
+    check_coordinate_bound_matches_index_check<rabitqkmeans::RaBitQKMeans>("RaBitQKMeans");
+}
+
+TEST(KMeansAssignTest, QGCoordinateBoundMatchesIndexCheck) {
+    check_coordinate_bound_matches_index_check<qgkmeans::QGKMeans>("QGKMeans");
 }
 
 TEST(KMeansAssignTest, RaBitQMatchesFinalTrainingAssignment) {
