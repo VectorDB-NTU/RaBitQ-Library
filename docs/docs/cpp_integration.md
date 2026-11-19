@@ -107,6 +107,12 @@ find_package(rabitqlib CONFIG REQUIRED)
 target_link_libraries(my_program PRIVATE rabitqlib::index)
 ```
 
+To require a release, pass its version, for example
+`find_package(rabitqlib 0.9 CONFIG REQUIRED)`. Before 1.0 a minor release may break the
+API, so only the same minor release, at or above a requested patch, satisfies the request:
+0.9.x does, 0.8 and 0.10 do not. A version range must stay within one minor release, for
+example `0.9...<0.10`.
+
 For a non-system prefix, point CMake to the installation:
 
 ```bash

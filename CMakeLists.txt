@@ -326,7 +326,8 @@ configure_package_config_file(
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/rabitqlibConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
-    COMPATIBILITY SameMajorVersion
+    # Before 1.0 a minor release may break the API.
+    COMPATIBILITY SameMinorVersion
 )
 install(EXPORT rabitqlibTargets
     FILE rabitqlibTargets.cmake
