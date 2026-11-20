@@ -27,14 +27,14 @@ approximate nearest-neighbor search. See the [research papers](https://vectordb-
 
 ## News
 
+- **v0.9.0:** removes the Python forms 0.8 deprecated, saves index format 2, and adds
+  the cosine metric, `int64` IDs and C++ index classes that match the Python API
+  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.9.0/)).
 - **v0.8.5:** accepts the names 0.9 will use (`capacity`, `routing`, `ef_search`,
   k-means `nbits`) and deprecates the 0.8 spellings they replace
   ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.5/)).
 - **v0.8.4:** input validation reads each batch once instead of twice
   ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.4/)).
-- **v0.8.3:** provisional `rabitqlib.quant` module: rotate, quantize, pack and score
-  RaBitQ codes stored outside an index
-  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.3/)).
 
 Earlier versions: [all releases](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
 
@@ -62,7 +62,7 @@ settings, and limitations.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.8.5"
+python -m pip install --upgrade "rabitqlib>=0.9.0"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,

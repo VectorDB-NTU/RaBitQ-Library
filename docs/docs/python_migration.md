@@ -121,7 +121,7 @@ For C++ in 0.8, the existing index constructors and `construct` are unchanged, a
 `IVF::train` and `HierarchicalNSW::train` are the new training entry points; from
 0.9 the [IVF-RaBitQ](index/ivf.md#training-centroids-in-c) and
 [HNSW-RaBitQ](index/hnsw.md#training-centroids-in-c) pages describe `IvfIndex` and
-`HnswIndex` instead, and the [release notes](releases/unreleased.md#c-changes) map the
+`HnswIndex` instead, and the [release notes](releases/0.9.0.md#c-changes) map the
 0.8 classes to `IvfIndex`, `HnswIndex` and `SymqgIndex`. C++ behavior changes: since 0.8.0, saving an index without stored points
 throws `std::logic_error`; since 0.8.2, IVF and SymphonyQG searches pad `k` above
 the point count instead of throwing, and `default_training_parameters` runs 10
@@ -178,7 +178,7 @@ marked 0.8.5; the other replacements work on every release named.
 
 In C++, `QGKMeansParameters` takes the same three field renames in 0.9, without a
 transition release, and `FinalAssignmentMode::SymphonyQG` and the two statistics
-aliases are removed; see the [0.9 notes](releases/unreleased.md#c-changes).
+aliases are removed; see the [0.9 notes](releases/0.9.0.md#c-changes).
 
 Four changes come without a warning in 0.9. `HnswIndex()` without `seed=` draws a seed,
 as `IvfIndex` and `SymqgIndex` already do, instead of using 100: pass `seed=` (and
@@ -214,4 +214,4 @@ return. And `cp.final_assignment` reads back as a string, as described above.
   first, for example `ValueError` instead of `RuntimeError` for `nprobe=0` on an
   untrained index.
 
-See the [0.9 notes](releases/unreleased.md) for every change.
+See the [0.9 notes](releases/0.9.0.md) for every change.

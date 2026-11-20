@@ -14,7 +14,8 @@ nav:
   - C++ Integration: cpp_integration.md
   # Group by minor version: nested groups stay collapsed except the current page's.
   - Release notes:
-      - Unreleased: releases/unreleased.md
+      - "0.9":
+          - "0.9.0": releases/0.9.0.md
       - "0.8":
           - "0.8.5": releases/0.8.5.md
           - "0.8.4": releases/0.8.4.md
