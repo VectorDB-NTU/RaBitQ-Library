@@ -46,7 +46,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/fastscan/` | All 32-vector batch layouts, encoding adapters, packing, LUT/estimation and FastScan/HACC |
 | `include/rabitqlib/core/types.hpp`, `core/detail/eigen.hpp` | Numerical configuration/types and internal Eigen aliases, respectively |
 | `include/rabitqlib/index/types.hpp` | Point IDs and ANN candidate values; no Eigen dependency |
-| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
+| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, shared Lloyd training, and QGEMeans mini-batch e-means over the QGKMeans graph assigner |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
 | `src/core/` | Compiled stable core v1 API and provisional API implementations, and the frozen `faster_config` scale table |
@@ -1054,6 +1054,11 @@ backends.
 Indexed float32 rows accumulate into float64 sums through the matrix backends, preserving
 per-cluster point order without additional workspace.
 
+**QGEMeans mini-batch updates**
+
+Scalar float32 per-cluster sums in mini-batch member order, as the Faiss e-means reference;
+objectives are summed per cluster, then in cluster order, so they do not depend on scheduling.
+
 **HNSW-RaBitQ search and IVF-RaBitQ centroid routing**
 
 Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher.
@@ -1070,7 +1075,7 @@ caller-owned.
 
 **Example KMeans training**
 
-Explicit RaBitQKMeans flat or QGKMeans graph assignment; FAISS is an optional comparison
+Explicit RaBitQKMeans flat, QGKMeans graph or QGEMeans mini-batch assignment; FAISS is an optional comparison
 dependency only.
 
 #### Portable builds and test coverage

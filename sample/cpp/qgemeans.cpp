@@ -67,6 +67,8 @@ int cluster_file(int argc, char** argv) {
     rabitqlib::load_vecs<float>(argv[1], data);
     rabitqlib::qgemeans::QGEMeansParameters parameters;
     parameters.verbose = true;
+    // Exact labels, as the other clustering examples save for the index builders.
+    parameters.final_assignment = rabitqlib::qgemeans::FinalAssignmentMode::Exact;
     rabitqlib::qgemeans::QGEMeans clustering(data.cols(), num_clusters, parameters);
     clustering.train(data.rows(), data.data());
 
