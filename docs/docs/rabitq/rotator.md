@@ -92,6 +92,9 @@ This implementation is based on the [FFHT library](https://github.com/FALCONN-LI
 
 ## Random orthogonal transformation
 This method samples a Gaussian matrix and orthogonalizes it with QR decomposition.
+Each column of the orthogonal factor takes the sign of the matching diagonal entry
+of the triangular factor, which makes the transform Haar distributed, that is,
+uniform over orthogonal matrices ([Mezzadri, 2007](https://arxiv.org/abs/math-ph/0609050), Section 5).
 It then multiplies each vector by the stored transform. The table describes stored
 space and per-vector rotation work when input and output dimensions are both $D$;
 QR construction is separate setup work.
