@@ -10,6 +10,7 @@
 #include <mutex>
 #include <numeric>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "rabitqlib/clustering/detail/kmeans.hpp"  // IWYU pragma: export
@@ -71,6 +72,47 @@ struct QGKMeansParameters {
 
 namespace detail {
 
+// Padded dimensions from which assignment caches each query's sum of coordinates.
+constexpr size_t kMinQuerySumDim = 512;
+
+// Checks the centroid-graph settings; component prefixes the error messages.
+inline void validate_graph_parameters(
+    const char* component,
+    size_t d,
+    size_t k,
+    uint32_t graph_degree,
+    uint32_t ef_build,
+    uint32_t ef_search,
+    uint32_t graph_build_iterations
+) {
+    if (d < 64 || d > rotator_impl::FhtKacRotator::kMaxDim) {
+        throw std::invalid_argument(
+            std::string(component) +
+            " currently requires dimensions in the range [64, 65536]"
+        );
+    }
+    if (graph_degree == 0 || graph_degree % fastscan::kBatchSize != 0) {
+        throw std::invalid_argument(
+            std::string(component) + " graph degree must be a positive multiple of 32"
+        );
+    }
+    if (k <= graph_degree) {
+        throw std::invalid_argument(
+            std::string(component) + " requires more centroids than the graph degree"
+        );
+    }
+    if (ef_build == 0 || ef_search == 0) {
+        throw std::invalid_argument(
+            std::string(component) + " ef_build and ef_search must be positive"
+        );
+    }
+    if (graph_build_iterations == 0) {
+        throw std::invalid_argument(
+            std::string(component) + " graph_build_iterations must be positive"
+        );
+    }
+}
+
 // One training call owns the storage; the public assign adapter can instead
 // borrow caller storage for one batch. State is read-only while workers run.
 class QuerySumCache {
@@ -81,8 +123,7 @@ class QuerySumCache {
 
    public:
     QuerySumCache(size_t padded_dim, const QGKMeansParameters& parameters) {
-        constexpr size_t kMinCachedDim = 512;
-        if (padded_dim >= kMinCachedDim &&
+        if (padded_dim >= kMinQuerySumDim &&
             (parameters.niter > 1 ||
              parameters.final_assignment != FinalAssignmentMode::Exact)) {
             state_ = State::Pending;
@@ -148,7 +189,8 @@ class QGAssigner {
         uint32_t num_threads = 0,
         uint32_t seed = 42,
         MetricType metric_type = METRIC_L2,
-        uint32_t quantization_bits = 0
+        uint32_t quantization_bits = 0,
+        const char* component = "QGKMeans"
     )
         : dim_(d)
         , num_clusters_(k)
@@ -157,7 +199,7 @@ class QGAssigner {
         , ef_search_(ef_search)
         , graph_build_iterations_(graph_build_iterations)
         , seed_(seed) {
-        validate_configuration(num_threads);
+        validate_configuration(num_threads, component);
         num_workers_ = static_cast<uint32_t>(resolve_num_threads(num_threads));
 
         graph_ = std::make_unique<symqg::QuantizedGraph<float>>(
@@ -366,31 +408,19 @@ class QGAssigner {
         failure.rethrow();
     }
 
-    void validate_configuration(uint32_t num_threads) const {
+    void validate_configuration(uint32_t num_threads, const char* component) const {
         if (num_threads > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
             throw std::invalid_argument("QGAssigner num_threads must fit in an OpenMP int");
         }
-        if (dim_ < 64 || dim_ > rotator_impl::FhtKacRotator::kMaxDim) {
-            throw std::invalid_argument(
-                "QGKMeans currently requires dimensions in the range [64, 65536]"
-            );
-        }
-        if (graph_degree_ == 0 || graph_degree_ % fastscan::kBatchSize != 0) {
-            throw std::invalid_argument(
-                "QGKMeans graph degree must be a positive multiple of 32"
-            );
-        }
-        if (num_clusters_ <= graph_degree_) {
-            throw std::invalid_argument(
-                "QGKMeans requires more centroids than the graph degree"
-            );
-        }
-        if (ef_build_ == 0 || ef_search_ == 0) {
-            throw std::invalid_argument("QGKMeans ef_build and ef_search must be positive");
-        }
-        if (graph_build_iterations_ == 0) {
-            throw std::invalid_argument("QGKMeans graph_build_iterations must be positive");
-        }
+        detail::validate_graph_parameters(
+            component,
+            dim_,
+            num_clusters_,
+            graph_degree_,
+            ef_build_,
+            ef_search_,
+            graph_build_iterations_
+        );
     }
 
     size_t dim_;

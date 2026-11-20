@@ -50,6 +50,8 @@ namespace detail {
 // Mini-batch e-means recipe of Algorithm 1 in arXiv 2611.09501, with the constants of
 // the FAISS reference implementation (faiss/contrib/e_means, MIT license): the
 // throughput batch-size law (d > 16), the step law, and a cosine schedule.
+// Prefixes error messages and progress output.
+constexpr const char* kName = "QGEMeans";
 constexpr double kAlphaMinFactor = 0.1;
 constexpr size_t kReviveEvery = 5;
 constexpr float kInitialMass = 1.0F / 65536.0F;
@@ -152,10 +154,10 @@ class BatchAssignment {
               cp.num_threads,
               cp.seed,
               METRIC_L2,
-              0
+              0,
+              kName
           ) {
-        constexpr size_t kMinCachedDim = 512;  // As qgkmeans::detail::QuerySumCache.
-        if (assigner_.graph_->padded_dim() >= kMinCachedDim) {
+        if (assigner_.graph_->padded_dim() >= qgkmeans::detail::kMinQuerySumDim) {
             query_sums_.resize(n);
         }
     }
@@ -228,23 +230,20 @@ class QGEMeans : public QGEMeansParameters {
         size_t n, const float* x, PID* point_assignments, float* point_distances
     ) const {
         validate_parameters();
-        if (!trained_ || centroids.size() != k * d) {
-            throw std::runtime_error("QGEMeans has not been trained");
-        }
         const uint32_t num_workers = resolved_num_workers();
-        clustering::detail::validate_points(
-            "QGEMeans", k, d, centroids.data(), num_workers, "centroids"
+        clustering::detail::assign_trained(
+            detail::kName,
+            trained_,
+            d,
+            k,
+            centroids,
+            n,
+            x,
+            point_assignments,
+            point_distances,
+            num_workers,
+            [&] { assign_points(n, x, num_workers, point_assignments, point_distances); }
         );
-        if (n == 0) {
-            return;
-        }
-        if (x == nullptr || point_assignments == nullptr || point_distances == nullptr) {
-            throw std::invalid_argument(
-                "QGEMeans assign input and output pointers must not be null"
-            );
-        }
-        clustering::detail::validate_points("QGEMeans", n, d, x, num_workers, "x");
-        assign_points(n, x, num_workers, point_assignments, point_distances);
     }
 
     size_t d;
@@ -260,7 +259,8 @@ class QGEMeans : public QGEMeansParameters {
     double final_obj = 0.0;
 
    private:
-    // Training state of one fit; committed to the public members at the end.
+    // Training state of one fit; committed to the public members at the end. The
+    // vectors after split_rng are scratch reused across mini-batches.
     struct State {
         std::vector<float> centroids;
         std::vector<float> mass;
@@ -274,18 +274,22 @@ class QGEMeans : public QGEMeansParameters {
         std::vector<size_t> members;
         std::vector<double> cluster_objectives;
         std::mt19937_64 split_rng;
+        std::vector<size_t> cursor;
+        std::vector<size_t> unused;
+        std::vector<double> draws;
+        std::vector<std::pair<double, size_t>> keys;
     };
 
     void fit(size_t n, const float* x, bool assign_all) {
         validate_parameters();
         if (x == nullptr) {
-            throw std::invalid_argument("QGEMeans x must not be null");
+            throw std::invalid_argument(std::string(detail::kName) + " x must not be null");
         }
         if (n < k) {
-            throw std::invalid_argument("QGEMeans requires n >= k");
+            throw std::invalid_argument(std::string(detail::kName) + " requires n >= k");
         }
         const uint32_t num_workers = resolved_num_workers();
-        clustering::detail::validate_points("QGEMeans", n, d, x, num_workers, "x");
+        clustering::detail::validate_points(detail::kName, n, d, x, num_workers, "x");
 
         const detail::Recipe recipe = detail::resolve_recipe(n, k, epochs, batch_size);
         detail::BatchAssignment graph(d, k, n, *this);
@@ -349,7 +353,7 @@ class QGEMeans : public QGEMeansParameters {
             }
             stats.push_back({epoch + 1, objective, shift, nsplit});
             if (verbose) {
-                std::cout << "QGEMeans epoch " << epoch + 1 << "/" << epochs
+                std::cout << detail::kName << " epoch " << epoch + 1 << "/" << epochs
                           << " | batch_size=" << recipe.batch_size
                           << " | objective=" << objective << " | shift=" << shift
                           << " | revived=" << nsplit << '\n';
@@ -362,29 +366,30 @@ class QGEMeans : public QGEMeansParameters {
         if (assign_all) {
             final_assignments.resize(n);
             final_distances.resize(n);
-            if (final_assignment == FinalAssignmentMode::Exact) {
-                clustering::detail::exact_assign(
-                    x,
-                    state.centroids.data(),
-                    n,
-                    d,
-                    k,
-                    false,
-                    num_workers,
-                    final_assignments.data(),
-                    final_distances.data()
-                );
-            } else {
-                graph.rebuild(state.centroids.data());
-                graph.search(
-                    state.centroids.data(),
-                    x,
-                    nullptr,
-                    n,
-                    final_assignments.data(),
-                    final_distances.data()
-                );
-            }
+            // The approximate pass reuses the training graph and its query sums.
+            clustering::detail::assign_with_mode(
+                final_assignment,
+                x,
+                state.centroids.data(),
+                n,
+                d,
+                k,
+                false,
+                num_workers,
+                final_assignments.data(),
+                final_distances.data(),
+                [&] {
+                    graph.rebuild(state.centroids.data());
+                    graph.search(
+                        state.centroids.data(),
+                        x,
+                        nullptr,
+                        n,
+                        final_assignments.data(),
+                        final_distances.data()
+                    );
+                }
+            );
             objective =
                 std::accumulate(final_distances.begin(), final_distances.end(), 0.0);
         }
@@ -423,6 +428,10 @@ class QGEMeans : public QGEMeansParameters {
         state.offsets.resize(k + 1);
         state.members.resize(batch);
         state.cluster_objectives.resize(k);
+        state.cursor.resize(k);
+        state.unused.reserve(k);
+        state.draws.resize(k);
+        state.keys.reserve(k);
     }
 
     // Per-centroid sums and counts of one batch, in float32 as the reference, over
@@ -436,11 +445,10 @@ class QGEMeans : public QGEMeansParameters {
             ++offsets[state.batch_assignments[i] + 1];
         }
         std::partial_sum(offsets.begin(), offsets.end(), offsets.begin());
-        {
-            std::vector<size_t> cursor(offsets.begin(), offsets.end() - 1);
-            for (size_t i = 0; i < count; ++i) {
-                state.members[cursor[state.batch_assignments[i]]++] = i;
-            }
+        auto& cursor = state.cursor;
+        std::copy(offsets.begin(), offsets.end() - 1, cursor.begin());
+        for (size_t i = 0; i < count; ++i) {
+            state.members[cursor[state.batch_assignments[i]]++] = i;
         }
         static_cast<void>(num_workers);
 #pragma omp parallel for num_threads(num_workers) schedule(dynamic, 16)
@@ -518,7 +526,8 @@ class QGEMeans : public QGEMeansParameters {
         }
         const float threshold =
             static_cast<float>(total) * detail::kUnusedThreshold / static_cast<float>(k);
-        std::vector<size_t> unused;
+        auto& unused = state.unused;
+        unused.clear();
         size_t donors = 0;
         for (size_t cluster = 0; cluster < k; ++cluster) {
             if (mass[cluster] < threshold) {
@@ -533,12 +542,12 @@ class QGEMeans : public QGEMeansParameters {
         }
         // Drawn only when something splits, as the reference does.
         std::uniform_real_distribution<double> uniform(0.0, 1.0);
-        std::vector<double> draws(k);
+        auto& draws = state.draws;
         for (auto& value : draws) {
             value = std::max(uniform(state.split_rng), std::numeric_limits<double>::min());
         }
-        std::vector<std::pair<double, size_t>> keys;
-        keys.reserve(donors);
+        auto& keys = state.keys;
+        keys.clear();
         for (size_t cluster = 0; cluster < k; ++cluster) {
             if (mass[cluster] >= threshold && mass[cluster] > 0) {
                 keys.emplace_back(
@@ -608,64 +617,39 @@ class QGEMeans : public QGEMeansParameters {
         PID* point_assignments,
         float* point_distances
     ) const {
-        if (final_assignment == FinalAssignmentMode::Exact) {
-            clustering::detail::exact_assign(
-                x,
-                centroids.data(),
-                n,
-                d,
-                k,
-                false,
-                num_workers,
-                point_assignments,
-                point_distances
-            );
-        } else {
-            graph_cache_.assign(
-                d,
-                k,
-                centroids.data(),
-                detail::graph_parameters(*this),
-                x,
-                n,
-                point_assignments,
-                point_distances
-            );
-        }
+        clustering::detail::assign_with_mode(
+            final_assignment,
+            x,
+            centroids.data(),
+            n,
+            d,
+            k,
+            false,
+            num_workers,
+            point_assignments,
+            point_distances,
+            [&] {
+                graph_cache_.assign(
+                    d,
+                    k,
+                    centroids.data(),
+                    detail::graph_parameters(*this),
+                    x,
+                    n,
+                    point_assignments,
+                    point_distances
+                );
+            }
+        );
     }
 
     void validate_parameters() const {
-        if (d == 0 || k == 0 || epochs == 0) {
-            throw std::invalid_argument("QGEMeans d, k, and epochs must be positive");
-        }
-        if (d < 64 || d > rotator_impl::FhtKacRotator::kMaxDim) {
-            throw std::invalid_argument(
-                "QGEMeans currently requires dimensions in the range [64, 65536]"
-            );
-        }
-        if (num_threads > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
-            throw std::invalid_argument("QGEMeans num_threads must fit in an OpenMP int");
-        }
-        if (final_assignment != FinalAssignmentMode::Approximate &&
-            final_assignment != FinalAssignmentMode::Exact) {
-            throw std::invalid_argument("QGEMeans final_assignment mode is invalid");
-        }
-        if (graph_degree == 0 || graph_degree % fastscan::kBatchSize != 0) {
-            throw std::invalid_argument(
-                "QGEMeans graph degree must be a positive multiple of 32"
-            );
-        }
-        if (k <= graph_degree) {
-            throw std::invalid_argument(
-                "QGEMeans requires more centroids than the graph degree"
-            );
-        }
-        if (ef_build == 0 || ef_search == 0) {
-            throw std::invalid_argument("QGEMeans ef_build and ef_search must be positive");
-        }
-        if (graph_build_iterations == 0) {
-            throw std::invalid_argument("QGEMeans graph_build_iterations must be positive");
-        }
+        clustering::detail::validate_common_parameters(
+            detail::kName, d, k, epochs, "epochs", num_threads, final_assignment
+        );
+        qgkmeans::detail::validate_graph_parameters(
+            detail::kName, d, k, graph_degree, ef_build, ef_search, graph_build_iterations
+        );
     }
 
     [[nodiscard]] uint32_t resolved_num_workers() const {

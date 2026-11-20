@@ -1,18 +1,12 @@
 #include "rabitqlib/clustering/qgemeans.hpp"
 
-#include <charconv>
 #include <cstddef>
 #include <exception>
 #include <iostream>
 #include <random>
-#include <stdexcept>
-#include <string>
-#include <system_error>
 #include <vector>
 
 #include "kmeans_example.hpp"
-#include "rabitqlib/core/detail/eigen.hpp"
-#include "rabitqlib/utils/io.hpp"
 
 namespace {
 
@@ -46,41 +40,6 @@ int run_demo() {
     return 0;
 }
 
-// Usage: qgemeans <data.fvecs> <num_clusters> <centroids.fvecs> <labels.ivecs>
-int cluster_file(int argc, char** argv) {
-    if (argc != 5) {
-        std::cerr << "Usage: " << argv[0]
-                  << " <data.fvecs> <num_clusters> <centroids.fvecs> <labels.ivecs>\n"
-                  << "Without arguments, run a synthetic clustering demo.\n";
-        return 1;
-    }
-    const std::string count(argv[2]);
-    size_t num_clusters = 0;
-    const auto parsed =
-        std::from_chars(count.data(), count.data() + count.size(), num_clusters);
-    if (parsed.ec != std::errc{} || parsed.ptr != count.data() + count.size() ||
-        num_clusters == 0) {
-        throw std::invalid_argument("num_clusters must be a positive integer");
-    }
-
-    rabitqlib::RowMajorArray<float> data;
-    rabitqlib::load_vecs<float>(argv[1], data);
-    rabitqlib::qgemeans::QGEMeansParameters parameters;
-    parameters.verbose = true;
-    // Exact labels, as the other clustering examples save for the index builders.
-    parameters.final_assignment = rabitqlib::qgemeans::FinalAssignmentMode::Exact;
-    rabitqlib::qgemeans::QGEMeans clustering(data.cols(), num_clusters, parameters);
-    clustering.train(data.rows(), data.data());
-
-    kmeans_example::write_vecs(
-        argv[3], clustering.centroids.data(), num_clusters, data.cols()
-    );
-    kmeans_example::write_vecs(argv[4], clustering.assignments.data(), data.rows(), 1);
-    std::cout << "Completed " << clustering.iteration_stats.size()
-              << " epochs; final objective=" << clustering.final_obj << '\n';
-    return 0;
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -88,7 +47,9 @@ int main(int argc, char** argv) {
         if (argc == 1) {
             return run_demo();
         }
-        return cluster_file(argc, argv);
+        return kmeans_example::cluster_file<
+            rabitqlib::qgemeans::QGEMeans,
+            rabitqlib::qgemeans::QGEMeansParameters>(argc, argv);
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';
         return 1;

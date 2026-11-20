@@ -286,6 +286,106 @@ inline void validate_points(
     }
 }
 
+// Checks the settings every clustering class shares. iterations is niter or epochs,
+// named by iterations_name in the error message.
+inline void validate_common_parameters(
+    const char* component,
+    size_t d,
+    size_t k,
+    size_t iterations,
+    const char* iterations_name,
+    uint32_t num_threads,
+    FinalAssignmentMode final_assignment
+) {
+    if (d == 0 || k == 0 || iterations == 0) {
+        throw std::invalid_argument(
+            std::string(component) + " d, k, and " + iterations_name + " must be positive"
+        );
+    }
+    if (d < 64 || d > rotator_impl::FhtKacRotator::kMaxDim) {
+        throw std::invalid_argument(
+            std::string(component) +
+            " currently requires dimensions in the range [64, 65536]"
+        );
+    }
+    if (num_threads > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
+        throw std::invalid_argument(
+            std::string(component) + " num_threads must fit in an OpenMP int"
+        );
+    }
+    if (final_assignment != FinalAssignmentMode::Approximate &&
+        final_assignment != FinalAssignmentMode::Exact) {
+        throw std::invalid_argument(
+            std::string(component) + " final_assignment mode is invalid"
+        );
+    }
+}
+
+// The shared public assign(): checks that a model is trained, with k * d valid
+// centroids, and validates the inputs, then calls assign_points() when n > 0.
+template <typename AssignPoints>
+void assign_trained(
+    const char* component,
+    bool trained,
+    size_t d,
+    size_t k,
+    const std::vector<float>& centroids,
+    size_t n,
+    const float* x,
+    const PID* point_assignments,
+    const float* point_distances,
+    uint32_t num_workers,
+    AssignPoints&& assign_points
+) {
+    if (!trained || centroids.size() != k * d) {
+        throw std::runtime_error(std::string(component) + " has not been trained");
+    }
+    validate_points(component, k, d, centroids.data(), num_workers, "centroids");
+    if (n == 0) {
+        return;
+    }
+    if (x == nullptr || point_assignments == nullptr || point_distances == nullptr) {
+        throw std::invalid_argument(
+            std::string(component) + " assign input and output pointers must not be null"
+        );
+    }
+    validate_points(component, n, d, x, num_workers, "x");
+    std::forward<AssignPoints>(assign_points)();
+}
+
+// Final assignment of n validated points: exhaustive for Exact, approximate()
+// otherwise. Requires n > 0 and outputs that do not overlap x or centroids.
+template <typename Approximate>
+void assign_with_mode(
+    FinalAssignmentMode final_assignment,
+    const float* x,
+    const float* centroids,
+    size_t n,
+    size_t d,
+    size_t k,
+    bool spherical,
+    uint32_t num_workers,
+    PID* point_assignments,
+    float* point_distances,
+    Approximate&& approximate
+) {
+    if (final_assignment == FinalAssignmentMode::Exact) {
+        exact_assign(
+            x,
+            centroids,
+            n,
+            d,
+            k,
+            spherical,
+            num_workers,
+            point_assignments,
+            point_distances
+        );
+    } else {
+        std::forward<Approximate>(approximate)();
+    }
+}
+
 // Copy the fields LloydKMeans reads, which every k-means parameter type shares,
 // leaving the method-specific ones of `to` unchanged. Keep this list and the
 // using-declarations below the same.
@@ -498,25 +598,20 @@ class LloydKMeans : public Parameters {
         size_t n, const float* x, PID* point_assignments, float* point_distances
     ) const {
         validate_parameters();
-        if (centroids.size() != k * d ||
-            !Assignment::has_model_state(assignment_state_, d)) {
-            throw std::runtime_error(
-                std::string(Assignment::kName) + " has not been trained"
-            );
-        }
         const uint32_t num_workers = resolved_num_workers();
-        validate_points(k, centroids.data(), num_workers, "centroids");
-        if (n == 0) {
-            return;
-        }
-        if (x == nullptr || point_assignments == nullptr || point_distances == nullptr) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) +
-                " assign input and output pointers must not be null"
-            );
-        }
-        validate_points(n, x, num_workers, "x");
-        assign_points(n, x, num_workers, point_assignments, point_distances);
+        detail::assign_trained(
+            Assignment::kName,
+            Assignment::has_model_state(assignment_state_, d),
+            d,
+            k,
+            centroids,
+            n,
+            x,
+            point_assignments,
+            point_distances,
+            num_workers,
+            [&] { assign_points(n, x, num_workers, point_assignments, point_distances); }
+        );
     }
 
     size_t d;
@@ -539,28 +634,9 @@ class LloydKMeans : public Parameters {
     };
 
     void validate_parameters() const {
-        if (d == 0 || k == 0 || niter == 0) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " d, k, and niter must be positive"
-            );
-        }
-        if (d < 64 || d > rotator_impl::FhtKacRotator::kMaxDim) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) +
-                " currently requires dimensions in the range [64, 65536]"
-            );
-        }
-        if (num_threads > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " num_threads must fit in an OpenMP int"
-            );
-        }
-        if (final_assignment != FinalAssignmentMode::Approximate &&
-            final_assignment != FinalAssignmentMode::Exact) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " final_assignment mode is invalid"
-            );
-        }
+        detail::validate_common_parameters(
+            Assignment::kName, d, k, niter, "niter", num_threads, final_assignment
+        );
         Assignment::validate_parameters(k, *this);
         if (!std::isfinite(early_stop_threshold) || early_stop_threshold < 0.0 ||
             early_stop_threshold > 1.0) {
@@ -589,32 +665,32 @@ class LloydKMeans : public Parameters {
         PID* point_assignments,
         float* point_distances
     ) const {
-        if (final_assignment == FinalAssignmentMode::Exact) {
-            detail::exact_assign(
-                x,
-                centroids.data(),
-                n,
-                d,
-                k,
-                spherical,
-                num_workers,
-                point_assignments,
-                point_distances
-            );
-        } else {
-            Assignment::assign_with_state(
-                d,
-                k,
-                centroids.data(),
-                x,
-                n,
-                num_workers,
-                *this,
-                assignment_state_,
-                point_assignments,
-                point_distances
-            );
-        }
+        detail::assign_with_mode(
+            final_assignment,
+            x,
+            centroids.data(),
+            n,
+            d,
+            k,
+            spherical,
+            num_workers,
+            point_assignments,
+            point_distances,
+            [&] {
+                Assignment::assign_with_state(
+                    d,
+                    k,
+                    centroids.data(),
+                    x,
+                    n,
+                    num_workers,
+                    *this,
+                    assignment_state_,
+                    point_assignments,
+                    point_distances
+                );
+            }
+        );
     }
 
     void initialize_centroids(const float* x, size_t n) {
