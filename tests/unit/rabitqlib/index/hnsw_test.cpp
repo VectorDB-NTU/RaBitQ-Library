@@ -1203,17 +1203,46 @@ TEST(HnswCosineTest, MatchesInnerProductOverNormalizedVectors) {
         );
     }
 
-    // construct normalizes its data too; the centroids are used as given.
-    std::vector<PID> cosine_ids(kCount, 0);
-    std::vector<PID> ip_ids(kCount, 0);
-    const std::vector<float> centroids(unit_points.begin(), unit_points.begin() + kDim);
+    // construct and set_centroids scale given centroids to unit length, as the data is,
+    // so centroids far from the unit sphere match their scaled copies.
+    std::vector<float> centroids(points.begin(), points.begin() + (kClusters * kDim));
+    for (auto& value : centroids) {
+        value *= 100.0F;  // like cluster means of unscaled data
+    }
+    const auto unit_centroids = rabitq_test::normalized_rows(centroids, kDim);
+    std::vector<PID> cosine_ids(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        cosine_ids[i] = static_cast<PID>(i % kClusters);
+    }
+    std::vector<PID> ip_ids = cosine_ids;
     HierarchicalNSW cosine(kCount, kDim, 5, 8, 50, 7, METRIC_COSINE);
-    cosine.construct(1, centroids.data(), kCount, points.data(), cosine_ids.data(), 1);
+    cosine.construct(
+        kClusters, centroids.data(), kCount, points.data(), cosine_ids.data(), 1
+    );
     HierarchicalNSW ip(kCount, kDim, 5, 8, 50, 7, METRIC_IP);
-    ip.construct(1, centroids.data(), kCount, unit_points.data(), ip_ids.data(), 1);
+    ip.construct(
+        kClusters, unit_centroids.data(), kCount, unit_points.data(), ip_ids.data(), 1
+    );
+    const auto expected = ip.search(unit_queries.data(), kQueries, 10, 64, 1);
+    EXPECT_EQ(cosine.search(queries.data(), kQueries, 10, 64, 1), expected);
+
+    HierarchicalNSW given(kCount, kDim, 5, 8, 50, 7, METRIC_COSINE);
+    given.set_centroids(kClusters, centroids.data());
+    given.add(points.data(), kCount, cosine_ids.data(), false, 1);
+    HierarchicalNSW given_ip(kCount, kDim, 5, 8, 50, 7, METRIC_IP);
+    given_ip.set_centroids(kClusters, unit_centroids.data());
+    given_ip.add(unit_points.data(), kCount, ip_ids.data(), false, 1);
+    given.save(cosine_file.path().c_str());
+    given_ip.save(ip_file.path().c_str());
+    rabitq_test::expect_same_sections_except_metric(
+        cosine_file.path(),
+        ip_file.path(),
+        rabitq_test::format2::IndexKind::Hnsw,
+        rabitq_test::kHnswSections
+    );
     EXPECT_EQ(
-        cosine.search(queries.data(), kQueries, 10, 64, 1),
-        ip.search(unit_queries.data(), kQueries, 10, 64, 1)
+        given.search(queries.data(), kQueries, 10, 64, 1),
+        given_ip.search(unit_queries.data(), kQueries, 10, 64, 1)
     );
 }
 

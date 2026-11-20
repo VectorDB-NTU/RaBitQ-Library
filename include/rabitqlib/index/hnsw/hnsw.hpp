@@ -112,7 +112,8 @@ class HierarchicalNSW {
      * these centroids; the first add into the empty graph links like construct.
      *
      * @param num_clusters Number of centroids, from 1 through 2^31
-     * @param centroids Centroid vectors (num_clusters * dim) in the original coordinates
+     * @param centroids Centroid vectors (num_clusters * dim) in the original coordinates;
+     * a cosine index scales them to unit length, as it does data
      */
     void set_centroids(size_t num_clusters, const float* centroids);
 
@@ -135,6 +136,7 @@ class HierarchicalNSW {
     );
 
     // Centroids and data use the original dimension; cluster_ids has num_points entries.
+    // A cosine index scales the data and the centroids to unit length.
     // Input buffers must remain valid until this synchronous call returns or throws;
     // the index retains no pointers to them afterward.
     // fast_quantization selects fixed-scale extra-bit quantization instead of exact scale
@@ -228,6 +230,10 @@ class HierarchicalNSW {
     // Borrows construct() input only while its workers run; cleared on success or failure.
     const float* construction_data_{nullptr};
 
+    // set_centroids with given = true scales the centroids of a cosine index to unit
+    // length, as data and queries are; train passes centroids trained on scaled data.
+    void set_centroids_impl(size_t num_clusters, const float* centroids, bool given);
+
     friend struct HnswTestAccess;
     friend struct detail::HnswSearchAccess;
 
@@ -248,7 +254,7 @@ class HierarchicalNSW {
     size_t base_layer_max_degree_{0};
     size_t ef_construction_{0};
     MetricType metric_type_{METRIC_L2};  // METRIC_IP for the cosine metric
-    bool cosine_{false};  // normalize data and queries; metric_type_ is METRIC_IP
+    bool cosine_{false};  // normalize data, queries, given centroids; metric_type_ is IP
 
     double level_multiplier_{0.0};
     // max_level_ == -1 and entry_point_id_ == kPidMax mark an empty graph.

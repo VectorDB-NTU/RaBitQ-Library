@@ -2171,6 +2171,96 @@ TEST(IvfCosineTest, ZeroVectorsHaveDistanceOne) {
     EXPECT_EQ(from_point.distances[zero_rank - from_point.ids.begin()], 1.0F);
 }
 
+// Given centroids are scaled to unit length, as data and queries are: a cosine index given
+// centroids far from the unit sphere matches an inner-product index given the scaled
+// centroids, and construct estimates distances as accurately.
+TEST(IvfCosineTest, ScalesGivenCentroidsToUnitLength) {
+    constexpr size_t kCount = 300;
+    constexpr size_t kQueries = 4;
+    const auto points = rabitq_test::rescaled_rows(random_rows(kCount, 36), kDynDim);
+    const auto queries = rabitq_test::rescaled_rows(random_rows(kQueries, 37), kDynDim);
+    auto centroids = random_rows(kDynNumClusters, 38);
+    for (auto& value : centroids) {
+        value *= 100.0F;  // like cluster means of unscaled data
+    }
+    const auto unit_points = rabitq_test::normalized_rows(points, kDynDim);
+    const auto unit_queries = rabitq_test::normalized_rows(queries, kDynDim);
+    const auto unit_centroids = rabitq_test::normalized_rows(centroids, kDynDim);
+    std::vector<PID> assigned(kCount);
+    for (size_t i = 0; i < kCount; ++i) {
+        assigned[i] = static_cast<PID>(i % kDynNumClusters);
+    }
+    const rabitq_test::TempFile cosine_file("rabitq_ivf_given_cosine.index");
+    const rabitq_test::TempFile ip_file("rabitq_ivf_given_ip.index");
+    for (const size_t total_bits : {size_t{1}, size_t{5}}) {
+        for (const auto initializer : {InitializerType::Flat, InitializerType::HNSW}) {
+            SCOPED_TRACE(
+                std::to_string(total_bits) + " bits, initializer " +
+                std::to_string(static_cast<int>(initializer))
+            );
+            IVF cosine(
+                kDynDim,
+                kDynNumClusters,
+                total_bits,
+                METRIC_COSINE,
+                7,
+                RotatorType::FhtKacRotator,
+                initializer
+            );
+            cosine.set_centroids(centroids.data(), 1);
+            cosine.add(points.data(), kCount, assigned.data(), false, 1);
+            IVF ip(
+                kDynDim,
+                kDynNumClusters,
+                total_bits,
+                METRIC_IP,
+                7,
+                RotatorType::FhtKacRotator,
+                initializer
+            );
+            ip.set_centroids(unit_centroids.data(), 1);
+            ip.add(unit_points.data(), kCount, assigned.data(), false, 1);
+            // The files differ only in the metric field, centroids included.
+            cosine.save(cosine_file.path().c_str());
+            ip.save(ip_file.path().c_str());
+            rabitq_test::expect_same_sections_except_metric(
+                cosine_file.path(),
+                ip_file.path(),
+                rabitq_test::format2::IndexKind::Ivf,
+                rabitq_test::kIvfSections
+            );
+            for (size_t q = 0; q < kQueries; ++q) {
+                const auto expected =
+                    search_everything(ip, unit_queries.data() + (q * kDynDim));
+                const auto actual =
+                    search_everything(cosine, queries.data() + (q * kDynDim));
+                EXPECT_EQ(actual.ids, expected.ids);
+                EXPECT_EQ(actual.distances, expected.distances);
+            }
+        }
+    }
+
+    // construct draws its rotation, so compare its estimates with exact distances.
+    IVF built(kCount, kDynDim, kDynNumClusters, 5, METRIC_COSINE);
+    built.construct(points.data(), centroids.data(), assigned.data(), false, 1);
+    double worst = 0;
+    for (size_t q = 0; q < kQueries; ++q) {
+        const auto hits = search_everything(built, queries.data() + (q * kDynDim));
+        for (size_t r = 0; r < hits.ids.size(); ++r) {
+            const float* point = unit_points.data() + (size_t{hits.ids[r]} * kDynDim);
+            const float* query = unit_queries.data() + (q * kDynDim);
+            double dot = 0;
+            for (size_t i = 0; i < kDynDim; ++i) {
+                dot += static_cast<double>(point[i]) * query[i];
+            }
+            worst = std::max(worst, std::abs(hits.distances[r] - (1.0 - dot)));
+        }
+    }
+    // Scaled centroids keep the worst error below 0.06 over many rotations; unscaled
+    // centroids give errors near 19.
+    EXPECT_LT(worst, 0.5);
+}
+
 uint32_t get_size(const std::string& bytes, size_t offset) {
     uint32_t value = 0;
     std::memcpy(&value, bytes.data() + offset, sizeof(value));

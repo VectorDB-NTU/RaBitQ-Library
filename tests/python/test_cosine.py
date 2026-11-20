@@ -104,10 +104,11 @@ def test_cosine_trained_or_given_centroids_match_inner_product(kind, setup, vect
         cosine.train(data[:200], num_threads=1)
         ip.train(normalized(data[:200]), num_threads=1)
     else:
-        # Centroids are used as given.
-        centroids = normalized(data[:4])
+        # Given centroids are scaled to unit length, as the data is, so centroids far
+        # from the unit sphere match their scaled copies.
+        centroids = data[:4] * np.float32(50)
         cosine.set_centroids(centroids)
-        ip.set_centroids(centroids)
+        ip.set_centroids(normalized(centroids))
     cosine.add(data, num_threads=1)
     ip.add(normalized(data), num_threads=1)
     ids, distances = cosine.search(queries, 10)

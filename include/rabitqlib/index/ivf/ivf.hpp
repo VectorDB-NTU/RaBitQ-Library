@@ -100,7 +100,7 @@ class IVF {
     std::unique_ptr<Rotator<float>> rotator_;
     std::vector<Cluster> clusters_;
     MetricType metric_type_ = METRIC_L2;  // METRIC_IP for the cosine metric
-    bool cosine_ = false;  // normalize data and queries; metric_type_ is METRIC_IP
+    bool cosine_ = false;  // normalize data, queries, given centroids; metric_type_ is IP
     float (*ip_func_)(const float*, const uint8_t*, size_t) = nullptr;
 
     static constexpr uint64_t kRawFormatMagic = 0x3157415251464252ULL;
@@ -162,6 +162,10 @@ class IVF {
     void configure(size_t total_bits);
 
     [[nodiscard]] std::unique_ptr<Initializer> make_initializer() const;
+
+    // set_centroids with given = true scales the centroids of a cosine index to unit
+    // length, as data and queries are; train passes centroids trained on scaled data.
+    void set_centroids_impl(const float* centroids, size_t num_threads, bool given);
 
     // Reset the index and allocate a new initializer and per-cluster storage
     void allocate_storage(const std::vector<size_t>& cluster_sizes);
@@ -299,7 +303,8 @@ class IVF {
      *
      * Builds the centroid initializer and empty clusters, so the index can add points.
      * An index created with a point count is built by construct instead, so this
-     * throws std::logic_error for it. The index is unchanged if this throws.
+     * throws std::logic_error for it. The index is unchanged if this throws. A cosine
+     * index scales the centroids to unit length, as it does data.
      *
      * @param centroids Centroid vectors (num_clusters() * dim)
      * @param num_threads Threads used to build the centroid initializer
@@ -311,7 +316,8 @@ class IVF {
     /**
      * @brief Quantize every point into its cluster and build the centroid initializer.
      *
-     * Replaces any existing contents of the index.
+     * Replaces any existing contents of the index. A cosine index scales the data and
+     * the centroids to unit length.
      *
      * @param data Data points (max_elements() * dim)
      * @param centroids Centroid vectors (num_clusters() * dim)

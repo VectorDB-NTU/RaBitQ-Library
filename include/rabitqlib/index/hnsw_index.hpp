@@ -100,6 +100,7 @@ class HnswIndex {
      * @brief Use the given centroids instead of training.
      *
      * Allowed while the index stores no points. The index is unchanged if this throws.
+     * A cosine index scales the centroids to unit length, as it does data.
      *
      * @param centroids num_clusters() * dim values
      */
