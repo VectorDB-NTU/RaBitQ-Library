@@ -46,7 +46,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/fastscan/` | All 32-vector batch layouts, encoding adapters, packing, LUT/estimation and FastScan/HACC |
 | `include/rabitqlib/core/types.hpp`, `core/detail/eigen.hpp` | Numerical configuration/types and internal Eigen aliases, respectively |
 | `include/rabitqlib/index/types.hpp` | Point IDs and ANN candidate values; no Eigen dependency |
-| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, shared Lloyd training, and QGEMeans mini-batch e-means over the QGKMeans graph assigner |
+| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, shared Lloyd training, QGEMeans mini-batch e-means, and the `QGAssigner` centroid graph both graph methods use (`qg_assigner.hpp`) |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
 | `src/core/` | Compiled stable core v1 API and provisional API implementations, and the frozen `faster_config` scale table |

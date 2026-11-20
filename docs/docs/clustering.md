@@ -192,7 +192,7 @@ Python those names still work, with a `DeprecationWarning`, until 0.9.
 | `graph_build_iterations` | `1` | PiPNN initialization followed by one refinement; values ≥2 request that many graph passes, ending in refinement. Independent of `niter`. |
 
 The seed also controls fallback neighbors; PiPNN uses fixed internal seeds.
-`QGAssigner` in `qgkmeans.hpp` supports repeated vector-to-centroid assignment
+`QGAssigner` in `qg_assigner.hpp` (also included by `qgkmeans.hpp`) supports repeated vector-to-centroid assignment
 without the clustering loop. To assign vectors with trained QGKMeans centroids,
 use [`assign`](#assign-new-vectors).
 

@@ -16,10 +16,9 @@
 #include <vector>
 
 #include "rabitqlib/clustering/detail/kmeans.hpp"  // IWYU pragma: export
+#include "rabitqlib/clustering/qg_assigner.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/core/rotator.hpp"
-#include "rabitqlib/fastscan/pack_codes.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/tools.hpp"
 

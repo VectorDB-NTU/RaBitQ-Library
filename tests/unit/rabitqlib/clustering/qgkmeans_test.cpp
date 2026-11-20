@@ -46,7 +46,9 @@ TEST(QGKMeansQuerySumTest, CachePolicyAndSuccessfulFillControlValidity) {
         QGKMeansParameters parameters;
         parameters.niter = configuration.iterations;
         parameters.final_assignment = configuration.final_assignment;
-        detail::QuerySumCache cache(configuration.dim, parameters);
+        detail::QuerySumCache cache(
+            configuration.dim, detail::reuses_query_sums(parameters)
+        );
         EXPECT_EQ(cache.cached(0), nullptr);
         if (!configuration.enabled) {
             // Disabled preparation must not attempt an allocation, even at this size.
