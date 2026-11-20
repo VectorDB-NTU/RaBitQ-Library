@@ -65,6 +65,7 @@
   - A missing sidecar of an earlier file still raises `Cannot open HNSW centroid sidecar`.
   - A failed HNSW-RaBitQ write raises `HNSW index file cannot be written` instead of `HNSW failed to write index file`.
 - `pickle.dumps(obj, protocol=0)` or `protocol=1` on a `rabitqlib` object no longer aborts the Python process. `quant.Rotator` and `quant.Query` now pickle with every protocol; the index, k-means, parameter and iteration-statistics classes raise `TypeError: cannot pickle ...`, as they already did with protocol 2 and higher, which include the default. Protocols 0 and 1 cannot reduce pybind11 objects ([pybind11#3745](https://github.com/pybind/pybind11/issues/3745)), so they now use the protocol-2 reduction.
+- `quant.Rotator(method="matrix")` now draws a Haar-distributed rotation, uniform over orthogonal matrices. It used the orthogonal factor of a Householder QR factorization as returned, whose determinant is fixed and whose first entry is always negative; each column now takes the sign of the matching diagonal entry of the triangular factor. RaBitQ's codes and estimator do not change when the same rotated coordinate changes sign in every vector and query, and the old rotation was Haar distributed up to such sign changes, so accuracy is not expected to change. A given `seed` now produces a different matrix; rotators saved with `to_bytes()` and saved indexes keep theirs.
 
 ## C++ changes
 
@@ -126,5 +127,7 @@ Four differences are not renames: `HnswIndex::add` uses every CPU unless `num_th
 - The vendored hnswlib adds `saveIndex(std::ostream&)` and `loadIndex(std::istream&, size_t bytes, ...)`; the path overloads are unchanged.
 
 - `rabitqlib::ceil_log2` in `rabitqlib/utils/tools.hpp` shifts a `size_t`, so an input of 2^32 or more is no longer undefined on 64-bit Windows, where `unsigned long` has 32 bits (#247). The library does not call it.
+
+- `MatrixRotator`, which `choose_rotator` returns for `RotatorType::MatrixRotator` and `IVF` and `QuantizedGraph` use when given it, draws a Haar-distributed rotation, as described for `quant.Rotator` above. A given seed now produces a different matrix; saved rotators and indexes keep theirs.
 
 - The installed CMake package satisfies `find_package(rabitqlib X.Y[.Z])` only when the major and minor versions match: `find_package(rabitqlib 0.8)` no longer finds 0.9, which `SameMajorVersion` compatibility allowed, and a version range must stay within one minor release, such as `0.9...<0.10`. Before 1.0 a minor release may break the API.
