@@ -90,7 +90,7 @@ For input shapes, distance conventions, memory estimates, and threading, see
 - **Bring your own storage:** use the [stable C++ core API](rabitq/core_api.md)
   to encode vectors and estimate distances in caller-owned buffers. Add
   [FastScan](cpp_integration.md#fastscan-integration) for batch scoring.
-- **Train clusters:** use [RaBitQKMeans or QGKMeans](clustering.md) to prepare
+- **Train clusters:** use [RaBitQKMeans, QGKMeans or QGEMeans](clustering.md) to prepare
   centroids and assignments for IVF-RaBitQ or HNSW-RaBitQ.
 
 ## Compare measured performance

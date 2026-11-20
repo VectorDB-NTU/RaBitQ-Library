@@ -99,6 +99,7 @@ jobs:
           tests/python/test_ivf.py::test_save_load_roundtrip
           tests/python/test_hnsw.py::test_save_load_roundtrip
           tests/python/test_symqg.py::test_save_load_roundtrip
+          tests/python/test_qgemeans.py::test_train_populates_outputs_per_epoch
           tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs
       - name: Install FAISS comparison dependency
@@ -148,5 +149,6 @@ jobs:
           tests/python/test_ivf.py::test_save_load_roundtrip
           tests/python/test_hnsw.py::test_save_load_roundtrip
           tests/python/test_symqg.py::test_save_load_roundtrip
+          tests/python/test_qgemeans.py::test_train_populates_outputs_per_epoch
           tests/python/test_qgkmeans.py::test_train_populates_faiss_style_outputs
           tests/python/test_rabitqkmeans.py::test_flat_parameters_and_outputs

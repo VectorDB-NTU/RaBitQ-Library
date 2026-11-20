@@ -8,7 +8,7 @@ foreach(binary IN ITEMS "${CORE}" "${CONSUMER}")
         message(FATAL_ERROR "OpenMP runtime symbol in disabled build: ${binary}")
     endif()
     # Check definitions AND unresolved references in the archive, plus the linked consumer.
-    if(symbols MATCHES "rabitqlib::(ivf|hnsw|symqg|qgkmeans|rabitqkmeans)::|hnswlib::")
+    if(symbols MATCHES "rabitqlib::(ivf|hnsw|symqg|qgemeans|qgkmeans|rabitqkmeans)::|hnswlib::")
         message(FATAL_ERROR "ANN symbols in ${binary}")
     endif()
     if(binary STREQUAL CORE OR COMPONENT STREQUAL "core")

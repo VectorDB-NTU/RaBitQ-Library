@@ -15,9 +15,11 @@ from ._rabitqlib import (
 from ._rabitqlib import (
     HnswIndex,
     IvfIndex,
+    QGEMeansParameters,
     QGKMeansParameters,
     RaBitQKMeansParameters,
     SymqgIndex,
+    _QGEMeans,
     _QGKMeans,
     _RaBitQKMeans,
 )
@@ -866,6 +868,7 @@ _QG_RENAMED = {
         ),
     ),
 }
+_patch_final_assignment(QGEMeansParameters)
 _patch_final_assignment(QGKMeansParameters)
 _patch_final_assignment(RaBitQKMeansParameters)
 
@@ -903,7 +906,10 @@ def __getattr__(name):
 
 
 class _KMeans:
-    """Shared result handling for the two clustering methods."""
+    """Shared result handling for the clustering methods."""
+
+    # True when the Python parameters never use the native name ef_build.
+    _python_graph_names = False
 
     def __init__(self, d, k, **kwargs):
         self.d = int(d)
@@ -975,8 +981,9 @@ class _KMeans:
             # keyword gets that name back; every 0.8 call keeps its message. A
             # subclass may not have run __init__, hence the getattr.
             message = str(error)
-            if "ef_build" not in message or "ef_construction" not in getattr(
-                self, "_keywords", ()
+            if "ef_build" not in message or not (
+                self._python_graph_names
+                or "ef_construction" in getattr(self, "_keywords", ())
             ):
                 raise
             raise ValueError(message.replace("ef_build", "ef_construction")) from None
@@ -1120,6 +1127,138 @@ class QGKMeans(_KMeans):
     _renamed_parameters = _QG_RENAMED
 
 
+class QGEMeans(_KMeans):
+    """Cluster vectors with mini-batch e-means and SymphonyQG graph assignment.
+
+    Parameters
+    ----------
+    d : int
+        Original vector dimension, from 64 through 65536.
+    k : int
+        Number of centroids; greater than max_degree and no more than the
+        number of training vectors.
+    epochs : int, optional
+        Positive number of passes over the training vectors. Default is 8.
+    batch_size : int, optional
+        Vectors per mini-batch, capped at the number of training vectors; 0
+        selects the e-means batch-size law. Default is 0.
+    verbose : bool, optional
+        Print training progress when True. Default is False.
+    seed : int, optional
+        Random seed. Default is 42.
+    num_threads : int, optional
+        Worker count; 0 selects the available CPU count,
+        capped by OMP_NUM_THREADS. Default is 0.
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' assigns through a centroid graph over the final
+        centroids; 'exact' uses exhaustive assignment against them. Default is
+        'approximate'.
+    max_degree : int, optional
+        Centroid graph degree; a positive multiple of 32. Default is 32.
+    ef_construction : int, optional
+        Positive centroid-graph construction search breadth. Default is 240.
+    ef_search : int, optional
+        Positive centroid-graph assignment search breadth. Default is 16.
+    graph_build_iterations : int, optional
+        Positive number of graph-building passes after initialization. Default
+        is 1.
+
+    Notes
+    -----
+    Each epoch visits the vectors in a seeded random order, in mini-batches.
+    Before every mini-batch a SymphonyQG graph is rebuilt over the current
+    centroids and searched for each vector's nearest centroid; centroids then
+    take the e-means mass-weighted step, and centroids with little mass are
+    periodically replaced by splitting heavy ones. The step size follows the
+    e-means law and a cosine schedule, and the last epoch's means become the
+    final centroids. train then assigns all vectors to them.
+
+    Training results are None until the first successful train call. Set cp
+    fields before training to customize subsequent runs. A failed train
+    preserves previous results.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from rabitqlib import QGEMeans
+    >>> x = np.random.default_rng(42).normal(size=(256, 64)).astype(np.float32)
+    >>> model = QGEMeans(64, 40, epochs=2, ef_construction=40, num_threads=1)
+    >>> objective = model.train(x)
+    >>> model.centroids.shape
+    (40, 64)
+    """
+
+    _parameters_type = QGEMeansParameters
+    _implementation_type = _QGEMeans
+    _renamed_parameters = {}
+    _python_graph_names = True
+
+    def train(self, x):
+        """Train centroids and retain the final assignments.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (n, d)
+            Vectors in the original, unpadded coordinates, with n >= k.
+            Converted to contiguous float32; a copy may be made.
+
+        Returns
+        -------
+        objective : float
+            Sum of the mini-batch assignment distances in the last epoch, each
+            measured before that batch's update. This can differ from
+            final_obj, which uses the returned assignments and final centroids.
+
+        Notes
+        -----
+        A failed fit preserves the last successful results. Returned arrays are
+        copies.
+        """
+        return super().train(x)
+
+    def assign(self, x):
+        """Assign vectors to the trained centroids.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (m, d)
+            Vectors in the original, unpadded coordinates, with finite
+            coordinates in the range accepted by train; m may be 0. Converted to
+            contiguous float32; a copy may be made.
+
+        Returns
+        -------
+        assignments : ndarray of uint32, shape (m,)
+            Centroid IDs.
+        distances : ndarray of float32, shape (m,)
+            Distances to the assigned centroids, as in the distances property.
+
+        Raises
+        ------
+        RuntimeError
+            If no train call has succeeded.
+
+        Notes
+        -----
+        Uses final_assignment and the other parameters of the last successful
+        train call, so each vector's result is independent of the other vectors
+        in x. Approximate assignment builds a centroid graph on first use and
+        reuses it in later calls. For the training vectors, the result
+        reproduces assignments and distances in both modes.
+        """
+        return super().assign(x)
+
+    @property
+    def obj(self):
+        """Per-epoch sums of mini-batch assignment distances, float64 array of shape (epochs,), or None before training."""
+        return super().obj
+
+    @property
+    def iteration_stats(self):
+        """Per-epoch statistics, or None before training: obj sums the mini-batch assignment distances, shift is the squared centroid displacement over the epoch and nsplit counts revived centroids."""
+        return super().iteration_stats
+
+
 class RaBitQKMeans(_KMeans):
     """Cluster vectors using flat RaBitQ assignment.
 
@@ -1189,6 +1328,8 @@ __all__ = [
     "HnswIndex",
     "IvfIndex",
     "KMeansIterationStats",
+    "QGEMeans",
+    "QGEMeansParameters",
     "QGKMeans",
     "QGKMeansIterationStats",
     "QGKMeansParameters",
