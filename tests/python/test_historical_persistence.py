@@ -204,6 +204,60 @@ def test_v083_graphs_load_and_migrate(name, tmp_path):
         np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
 
 
+# Index format 2 as release v0.9.0 wrote it; the bits follow the kind and the metric
+# ends each name. IVF-RaBitQ and HNSW-RaBitQ files have points 0 and 32 removed.
+V090 = {
+    "ivf4_flat_l2": "flat",
+    "ivf7_flatrabitq_cosine": "flat_rabitq",
+    "ivf32_hnsw_ip": "hnsw",
+    "ivf1_flat_matrix_l2": "flat",
+    "hnsw1_l2": None,
+    "hnsw5_cosine": None,
+    "hnsw9_ip": None,
+    "qg32_ip": None,
+    "qg4_cosine": None,
+    "qg8_l2": None,
+    "qg4_matrix_l2": None,
+}
+
+
+@pytest.mark.parametrize("name", V090)
+def test_v090_format2_loads_with_recorded_settings(name, tmp_path):
+    path = FIXTURES / "v0.9.0" / f"{name}.index"
+    lines = path.with_suffix(".expected").read_text().splitlines()
+    count, dim, nq, k = map(int, lines[0].split())
+    queries = np.fromstring(lines[1], sep=" ", dtype=np.float32).reshape(nq, dim)
+    results = np.loadtxt(lines[2:])
+    ids = results[:, 0].astype(np.int64).reshape(nq, k)
+    distances = results[:, 1].astype(np.float32).reshape(nq, k)
+    if name.startswith("ivf"):
+        cls, options, removed = IvfIndex, {"nprobe": 4}, 2
+    elif name.startswith("hnsw"):
+        cls, options, removed = HnswIndex, {"ef_search": 64}, 2
+    else:
+        cls, options, removed = SymqgIndex, {"ef_search": 64}, 0
+
+    resaved = tmp_path / "resaved.index"
+    original = cls.load(str(path))
+    original.save(str(resaved))
+    assert not path.with_name(path.name + ".hnsw").exists()
+    assert not resaved.with_name(resaved.name + ".hnsw").exists()
+    for index in (original, cls.load(str(resaved))):
+        assert (index.dim, index.metric, index.seed) == (dim, name.split("_")[-1], 42)
+        assert index.nbits == int(name.split("_")[0].lstrip("ivfhnswqg"))
+        assert index.num_stored_points == count
+        assert index.num_points == count - removed
+        if cls is IvfIndex:
+            assert index.routing == V090[name]
+        elif cls is HnswIndex:
+            assert (index.M, index.ef_construction) == (8, 64)
+        else:
+            assert (index.ef_construction, index.init) == (64, "pipnn")
+        actual_ids, actual_distances = index.search(queries, k, **options)
+        np.testing.assert_array_equal(actual_ids, ids)
+        np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
+
+
 def test_rejected_files_raise_format_error(tmp_path):
     assert issubclass(rabitqlib.FormatError, ValueError)
     assert issubclass(rabitqlib.FormatError, RuntimeError)

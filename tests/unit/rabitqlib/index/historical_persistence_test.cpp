@@ -18,9 +18,12 @@
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/hnsw_index.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/symqg/qg.hpp"
+#include "rabitqlib/index/symqg_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "temp_file.hpp"
 
@@ -204,6 +207,139 @@ INSTANTIATE_TEST_SUITE_P(
         HistoricalFixtureCase{"v0.8.3", "qg4_matrix_l2", 96, 130}
     ),
     [](const auto& info) { return info.param.name; }
+);
+
+// Index format 2 as release v0.9.0 wrote it, read through the supported index classes.
+// The metric ends each name; IVF-RaBitQ and HNSW-RaBitQ files have points 0 and 32 removed.
+class Format2FixtureTest : public ::testing::TestWithParam<const char*> {};
+
+TEST_P(Format2FixtureTest, LoadsSearchesAndResavesWithRecordedSettings) {
+    namespace fs = std::filesystem;
+    const std::string name = GetParam();
+    const fs::path directory = fs::path(RABITQ_TEST_FIXTURE_ROOT) / "v0.9.0";
+    const auto path = (directory / (name + ".index")).string();
+    std::ifstream expected(directory / (name + ".expected"));
+    ASSERT_TRUE(expected.is_open());
+    size_t count = 0, dim = 0, nq = 0, k = 0;
+    expected >> count >> dim >> nq >> k;
+    ASSERT_EQ(count, 130U);
+    ASSERT_EQ(dim, 65U);
+    ASSERT_EQ(nq, 3U);
+    ASSERT_EQ(k, 5U);
+    std::vector<float> queries(nq * dim), distances(nq * k), reference_distances(nq * k);
+    std::vector<Id> ids(nq * k), reference_ids(nq * k);
+    for (auto& value : queries) {
+        expected >> value;
+    }
+    for (size_t i = 0; i < ids.size(); ++i) {
+        expected >> reference_ids[i] >> reference_distances[i];
+    }
+    ASSERT_TRUE(expected.good());
+    const auto ends_with = [&name](const std::string& suffix) {
+        return name.size() >= suffix.size() &&
+               name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+    const MetricType metric =
+        ends_with("_cosine") ? METRIC_COSINE : (ends_with("_ip") ? METRIC_IP : METRIC_L2);
+    const rabitq_test::TempFile output("format2_" + name);
+    const fs::path output_path = fs::u8path(output.path());
+    // Loads the fixture, then the file it saves, and checks both.
+    const auto exercise = [&](const auto& load, const auto& check, size_t removed) {
+        for (const auto& source : {path, output.path()}) {
+            const auto index = load(source.c_str());
+            EXPECT_EQ(index.dim(), dim);
+            EXPECT_EQ(index.metric(), metric);
+            ASSERT_TRUE(index.seed().has_value());
+            EXPECT_EQ(*index.seed(), 42U);
+            EXPECT_EQ(index.num_stored_points(), count);
+            EXPECT_EQ(index.num_points(), count - removed);
+            check(index);
+            EXPECT_EQ(ids, reference_ids);
+            for (size_t i = 0; i < ids.size(); ++i) {
+                EXPECT_NEAR(
+                    distances[i],
+                    reference_distances[i],
+                    2e-4F * std::max(1.0F, std::abs(reference_distances[i]))
+                );
+            }
+            if (source == path) {
+                index.save(output.path().c_str());
+                const std::string saved = read_bytes(output_path);
+                EXPECT_EQ(saved.substr(0, 8), "RABQINDX");
+                index.save(output.path().c_str());
+                EXPECT_TRUE(read_bytes(output_path) == saved);
+            }
+        }
+        // The HNSW routing graph stays inside the file.
+        EXPECT_FALSE(fs::exists(path + ".hnsw"));
+        EXPECT_FALSE(fs::exists(fs::u8path(output.path() + ".hnsw")));
+    };
+    if (name.find("ivf") == 0) {
+        const auto routing =
+            name.find("_flatrabitq_") != std::string::npos
+                ? ivf::Routing::FlatRaBitQ
+                : (name.find("_hnsw_") != std::string::npos ? ivf::Routing::HNSW
+                                                            : ivf::Routing::Flat);
+        exercise(
+            [](const char* file) { return IvfIndex::load(file); },
+            [&](const IvfIndex& index) {
+                EXPECT_EQ(index.routing(), routing);
+                IvfSearchOptions options;
+                options.nprobe = 4;
+                index.search(queries.data(), nq, k, ids.data(), distances.data(), options);
+            },
+            2
+        );
+    } else {
+        GraphSearchOptions options;
+        options.ef_search = 64;
+        if (name.find("hnsw") == 0) {
+            exercise(
+                [](const char* file) { return HnswIndex::load(file); },
+                [&](const HnswIndex& index) {
+                    EXPECT_EQ(index.M(), 8U);
+                    EXPECT_EQ(index.ef_construction(), 64U);
+                    index.search(
+                        queries.data(), nq, k, ids.data(), distances.data(), options
+                    );
+                },
+                2
+            );
+        } else {
+            exercise(
+                [](const char* file) { return SymqgIndex::load(file); },
+                [&](const SymqgIndex& index) {
+                    ASSERT_TRUE(index.ef_construction().has_value());
+                    EXPECT_EQ(*index.ef_construction(), 64U);
+                    ASSERT_TRUE(index.init().has_value());
+                    EXPECT_EQ(*index.init(), symqg::QGInitialization::PiPNN);
+                    index.search(
+                        queries.data(), nq, k, ids.data(), distances.data(), options
+                    );
+                },
+                0
+            );
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    V090,
+    Format2FixtureTest,
+    ::testing::Values(
+        "ivf4_flat_l2",
+        "ivf7_flatrabitq_cosine",
+        "ivf32_hnsw_ip",
+        "ivf1_flat_matrix_l2",
+        "hnsw1_l2",
+        "hnsw5_cosine",
+        "hnsw9_ip",
+        "qg32_ip",
+        "qg4_cosine",
+        "qg8_l2",
+        "qg4_matrix_l2"
+    ),
+    [](const auto& info) { return std::string(info.param); }
 );
 // Damaged headers of the earlier layouts that pass the size checks raise FormatError
 // rather than the errors of the code that would use them.

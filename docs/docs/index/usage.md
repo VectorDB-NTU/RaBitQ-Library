@@ -198,7 +198,7 @@ routing graph.
 
 ## Index file compatibility
 
-The compatibility suite loads frozen files written by v0.5.2 and v0.8.3, compares
+The compatibility suite loads frozen files written by v0.5.2, v0.8.3 and v0.9.0, compares
 search IDs and distances, and verifies save/load migration and rejection of truncated
 or unsupported versions. Every index saves in
 [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2),
