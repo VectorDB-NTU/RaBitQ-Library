@@ -753,9 +753,13 @@ void HierarchicalNSW::construct(
     check_coordinates(data, num_points * dim_, dim_, "HNSW construction data");
     check_coordinates(centroids, num_clusters * dim_, dim_, "HNSW construction centroids");
     std::vector<float> normalized;
+    std::vector<float> scaled_centroids;
     if (cosine_) {
         normalized = index_detail::normalized_rows(data, num_points, dim_, num_threads);
         data = normalized.data();
+        scaled_centroids =
+            index_detail::normalized_rows(centroids, num_clusters, dim_, num_threads);
+        centroids = scaled_centroids.data();
     }
 
     try {
@@ -815,6 +819,12 @@ void HierarchicalNSW::link_exact(
 }
 
 void HierarchicalNSW::set_centroids(size_t num_clusters, const float* centroids) {
+    set_centroids_impl(num_clusters, centroids, /*given=*/true);
+}
+
+void HierarchicalNSW::set_centroids_impl(
+    size_t num_clusters, const float* centroids, bool given
+) {
     if (level0_record_bytes_ == 0) {
         throw std::logic_error("HNSW index must be initialized before setting centroids");
     }
@@ -831,6 +841,11 @@ void HierarchicalNSW::set_centroids(size_t num_clusters, const float* centroids)
         throw std::invalid_argument("HNSW centroids exceed addressable storage");
     }
     check_coordinates(centroids, num_clusters * dim_, dim_, "HNSW centroids");
+    std::vector<float> scaled;
+    if (cosine_ && given) {
+        scaled = index_detail::normalized_rows(centroids, num_clusters, dim_, 1);
+        centroids = scaled.data();
+    }
 
     // construct rotates centroids the same way, so both paths quantize identically.
     AlignedStorage rotated(
@@ -881,7 +896,7 @@ void HierarchicalNSW::train(
     }
     rabitqkmeans::RaBitQKMeans kmeans(dim_, num_clusters, cp);
     kmeans.train_centroids(num_points, data);
-    set_centroids(num_clusters, kmeans.centroids.data());
+    set_centroids_impl(num_clusters, kmeans.centroids.data(), /*given=*/false);
 }
 
 template <class Distance>

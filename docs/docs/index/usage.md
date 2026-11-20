@@ -33,11 +33,14 @@ the index classes do not expose a rotator choice.
 With `metric="cosine"` (C++ `METRIC_COSINE`), every index scales data and queries to
 unit length, stores the inner-product codes of the scaled vectors, and returns
 `1 - cos` as the distance, the inner-product distance `1 - dot` of unit vectors.
-Results equal those of a `metric="ip"` index built from the same vectors after this
-scaling. A zero vector stays zero, as in hnswlib and Faiss: its true distance to every
-vector is 1, which quantized storage estimates like any other distance. Centroids
-passed to `set_centroids` are used as given; `train`, and the first
-`add` that trains, compute them from the scaled vectors with spherical k-means.
+Centroids passed to `set_centroids` are scaled the same way, because the codes are
+residuals against them: centroids far from the unit sphere, such as the means of
+unscaled data, would ruin the estimates. `train`, and the first `add` that trains,
+compute centroids from the scaled vectors with spherical k-means and use them as
+computed. Results equal those of a `metric="ip"` index built from the same vectors,
+and given the same centroids, after this scaling. A zero vector stays zero, as in
+hnswlib and Faiss: its true distance to every vector is 1, which quantized storage
+estimates like any other distance.
 
 The index checks the original coordinates first, as above. Because it then trains on
 scaled copies, invalid training data is reported as `IVF training data ...` or

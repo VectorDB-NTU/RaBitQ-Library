@@ -421,7 +421,8 @@ Parameters
 ----------
 centroids : array_like of float, shape (num_clusters, dim)
     Centroids in the original, unpadded coordinates. Converted to
-    contiguous float32; a copy may be made.
+    contiguous float32; a copy may be made. A cosine index scales them
+    to unit length, as it does data.
 num_threads : int, optional
     Keyword-only. Worker count for rotating the centroids and building the
     centroid routing. None (default) and 0 select the available CPU count,

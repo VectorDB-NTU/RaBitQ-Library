@@ -277,6 +277,10 @@ std::unique_ptr<Initializer> IVF::make_initializer() const {
 }
 
 void IVF::set_centroids(const float* centroids, size_t num_threads) {
+    set_centroids_impl(centroids, num_threads, /*given=*/true);
+}
+
+void IVF::set_centroids_impl(const float* centroids, size_t num_threads, bool given) {
     if (rotator_ == nullptr) {
         throw std::logic_error("IVF must be configured before setting centroids");
     }
@@ -290,6 +294,11 @@ void IVF::set_centroids(const float* centroids, size_t num_threads) {
         throw std::invalid_argument("IVF centroids must not be null");
     }
     check_coordinates(centroids, num_clusters_ * dim_, dim_, "IVF centroids");
+    std::vector<float> scaled;
+    if (cosine_ && given) {
+        scaled = index_detail::normalized_rows(centroids, num_clusters_, dim_, num_threads);
+        centroids = scaled.data();
+    }
 
     // construct rotates centroids the same way, so both paths route identically.
     std::vector<float> rotated_centroids(num_clusters_ * padded_dim_);
@@ -369,7 +378,7 @@ void IVF::train(
         kmeans.train_centroids(num_points, data);
         centroids = std::move(kmeans.centroids);
     }
-    set_centroids(centroids.data(), cp.num_threads);
+    set_centroids_impl(centroids.data(), cp.num_threads, /*given=*/false);
 }
 
 void IVF::construct(
@@ -400,9 +409,13 @@ void IVF::construct(
     check_coordinates(data, max_elements_ * dim_, dim_, "IVF construction data");
     check_coordinates(centroids, num_clusters_ * dim_, dim_, "IVF construction centroids");
     std::vector<float> normalized;
+    std::vector<float> scaled_centroids;
     if (cosine_) {
         normalized = index_detail::normalized_rows(data, max_elements_, dim_, num_threads);
         data = normalized.data();
+        scaled_centroids =
+            index_detail::normalized_rows(centroids, num_clusters_, dim_, num_threads);
+        centroids = scaled_centroids.data();
     }
 
     allocate_storage(cluster_sizes);

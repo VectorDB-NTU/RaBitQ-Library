@@ -44,7 +44,7 @@
 
 ## Python changes
 
-- New `metric="cosine"` for `IvfIndex`, `HnswIndex` and `SymqgIndex` (#212). The index scales data and queries to unit length and returns `1 - cos`; results equal those of a `metric="ip"` index built from the scaled vectors. A zero vector stays zero, so its true distance to every vector is 1. The saved file records the metric, so a loaded index keeps scaling. `index.metric` can now return `"cosine"`, and an invalid metric raises `metric must be 'l2', 'ip' or 'cosine'`. See [the cosine metric](../index/usage.md#the-cosine-metric).
+- New `metric="cosine"` for `IvfIndex`, `HnswIndex` and `SymqgIndex` (#212). The index scales data, queries and centroids passed to `set_centroids` to unit length and returns `1 - cos`; results equal those of a `metric="ip"` index built from the scaled vectors and given the scaled centroids (#259). A zero vector stays zero, so its true distance to every vector is 1. The saved file records the metric, so a loaded index keeps scaling. `index.metric` can now return `"cosine"`, and an invalid metric raises `metric must be 'l2', 'ip' or 'cosine'`. See [the cosine metric](../index/usage.md#the-cosine-metric).
 - Point IDs are `int64` at the Python boundary (#211):
   - `search` returns `int64` IDs, and slots without a neighbor hold `-1` instead of `2**32 - 1`; their distance is still `inf`. Code that compares IDs with `2**32 - 1`, `0xFFFFFFFF` or `np.iinfo(np.uint32).max` must change; `np.isfinite(distances)`, recommended since 0.8.2, works before and after.
   - `add` returns `int64` IDs. `remove` already took any integer IDs and still rejects `-1` and other out-of-range values without removing anything.
