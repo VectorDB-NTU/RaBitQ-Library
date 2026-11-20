@@ -178,7 +178,7 @@ Locally, build both the examples and this checker first; missing executables oth
 ## Installed CMake package test
 
 After building the library, verify that another project can consume its installed
-headers and library. The consumer trains QGKMeans and RaBitQKMeans and checks
+headers and library. The consumer trains QGKMeans, QGEMeans and RaBitQKMeans and checks
 final assignments, distances, and objective against a scalar L2 reference.
 Use an absolute path for `<install-prefix>`:
 
