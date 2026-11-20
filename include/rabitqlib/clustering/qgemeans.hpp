@@ -410,9 +410,7 @@ class QGEMeans : public QGEMeansParameters {
             for (size_t cluster = 0; cluster < k; ++cluster) {
                 std::uniform_int_distribution<size_t> pick(cluster, n - 1);
                 std::swap(rows[cluster], rows[pick(rng)]);
-                std::copy_n(
-                    x + rows[cluster] * d, d, state.centroids.begin() + cluster * d
-                );
+                std::copy_n(x + rows[cluster] * d, d, state.centroids.data() + cluster * d);
             }
         }
         state.mass.assign(k, detail::kInitialMass);
