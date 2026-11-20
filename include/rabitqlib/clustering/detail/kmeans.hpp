@@ -241,6 +241,51 @@ inline void exact_assign(
     return indices;
 }
 
+// Checks n row-major vectors of d coordinates: n * d must fit in ptrdiff_t, and
+// every coordinate must be finite and within the clustering bound. component and
+// name prefix the error messages. Requires a non-null x and d > 0.
+inline void validate_points(
+    const char* component,
+    size_t n,
+    size_t d,
+    const float* x,
+    uint32_t num_workers,
+    const char* name
+) {
+    if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d) {
+        throw std::invalid_argument(
+            std::string(component) + " input dimensions overflow ptrdiff_t"
+        );
+    }
+    // Leave headroom for products of squared distances in graph pruning,
+    // as well as quantized reconstruction and rotated residuals.
+    const double max_coordinate = std::sqrt(
+        std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
+        (64.0 * static_cast<double>(d))
+    );
+    bool in_range = true;
+    bool finite = true;
+    static_cast<void>(num_workers);
+#pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
+    schedule(static)
+    for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n * d); ++index) {
+        const size_t i = static_cast<size_t>(index);
+        finite = finite && std::isfinite(x[i]);
+        in_range = in_range && std::abs(static_cast<double>(x[i])) <= max_coordinate;
+    }
+    if (!finite) {
+        throw std::invalid_argument(
+            std::string(component) + " " + name + " must contain only finite values"
+        );
+    }
+    if (!in_range) {
+        throw std::invalid_argument(
+            std::string(component) + " " + name +
+            " exceeds the safe float32 coordinate range"
+        );
+    }
+}
+
 // Copy the fields LloydKMeans reads, which every k-means parameter type shares,
 // leaving the method-specific ones of `to` unchanged. Keep this list and the
 // using-declarations below the same.
@@ -530,39 +575,7 @@ class LloydKMeans : public Parameters {
     void validate_points(
         size_t n, const float* x, uint32_t num_workers, const char* name
     ) const {
-        if (n > static_cast<size_t>(std::numeric_limits<std::ptrdiff_t>::max()) / d) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " input dimensions overflow ptrdiff_t"
-            );
-        }
-        // Leave headroom for products of squared distances in graph pruning,
-        // as well as quantized reconstruction and rotated residuals.
-        const double max_coordinate = std::sqrt(
-            std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
-            (64.0 * static_cast<double>(d))
-        );
-        bool in_range = true;
-        bool finite = true;
-#pragma omp parallel for num_threads(num_workers) reduction(&& : finite, in_range) \
-    schedule(static)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n * d);
-             ++index) {
-            const size_t i = static_cast<size_t>(index);
-            finite = finite && std::isfinite(x[i]);
-            in_range = in_range && std::abs(static_cast<double>(x[i])) <= max_coordinate;
-        }
-        if (!finite) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " " + name +
-                " must contain only finite values"
-            );
-        }
-        if (!in_range) {
-            throw std::invalid_argument(
-                std::string(Assignment::kName) + " " + name +
-                " exceeds the safe float32 coordinate range"
-            );
-        }
+        detail::validate_points(Assignment::kName, n, d, x, num_workers, name);
     }
 
     // Assigns validated points to the current centroids. Uses the state saved by

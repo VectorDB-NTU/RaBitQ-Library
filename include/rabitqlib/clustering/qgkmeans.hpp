@@ -26,6 +26,10 @@
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
 
+namespace rabitqlib::qgemeans::detail {
+class BatchAssignment;
+}  // namespace rabitqlib::qgemeans::detail
+
 namespace rabitqlib::qgkmeans {
 
 using clustering::FinalAssignmentMode;
@@ -131,6 +135,7 @@ class QuerySumCache {
 class QGAssigner {
     friend class detail::CentroidGraphCache;
     friend class detail::QGAssignment;
+    friend class qgemeans::detail::BatchAssignment;
 
    public:
     QGAssigner(
@@ -295,7 +300,8 @@ class QGAssigner {
     }
 
     // Searches each point independently. A non-empty query_order only changes
-    // scheduling; hints, if given, hold one centroid ID per point.
+    // scheduling; hints, if given, hold one centroid ID per point. Non-null rows
+    // map output i to input row rows[i], which also indexes the query-sum cache.
     void search_points(
         const float* centroids,
         const float* x,
@@ -305,7 +311,8 @@ class QGAssigner {
         const std::vector<uint32_t>& query_order,
         const PID* hints,
         const detail::QuerySumCache& query_sums,
-        const std::vector<std::unique_ptr<symqg::detail::SearchScratch>>& scratch
+        const std::vector<std::unique_ptr<symqg::detail::SearchScratch>>& scratch,
+        const size_t* rows = nullptr
     ) const {
         const auto distance_func = graph_->metric_type() == METRIC_IP
                                        ? dot_product_dis<float>
@@ -334,22 +341,23 @@ class QGAssigner {
                     visited_capacity = capacity;
                 }
                 const PID hint = hints == nullptr ? kPidMax : hints[i];
+                const size_t row = rows == nullptr ? i : rows[i];
                 symqg::detail::search_with_workspace(
                     *graph_,
-                    x + i * dim_,
+                    x + row * dim_,
                     1,
                     assignments + i,
                     distances + i,
                     worker_scratch.view(visited),
                     hint,
-                    query_sums.cached(i)
+                    query_sums.cached(row)
                 );
-                query_sums.store(i, worker_scratch.batch_query.g_k1xsumq());
+                query_sums.store(row, worker_scratch.batch_query.g_k1xsumq());
                 if (graph_->is_quantized()) {
                     // Keep objectives and returned distances relative to the original
                     // centroids; graph search scores are quantized estimates.
                     distances[i] = distance_func(
-                        x + i * dim_, centroids + assignments[i] * dim_, dim_
+                        x + row * dim_, centroids + assignments[i] * dim_, dim_
                     );
                 }
             } catch (...) { failure.capture(); }
