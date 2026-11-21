@@ -4,12 +4,12 @@
 #include <iostream>
 #include <vector>
 
+#include "querying_example.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/index/symqg_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
 using index_type = rabitqlib::SymqgIndex;
 using data_type = rabitqlib::RowMajorArray<float>;
@@ -98,8 +98,8 @@ int run(int argc, char** argv) {
         }
     }
 
-    auto avg_qps = rabitqlib::horizontal_avg(all_qps);
-    auto avg_recall = rabitqlib::horizontal_avg(all_recall);
+    auto avg_qps = querying_example::column_averages(all_qps);
+    auto avg_recall = querying_example::column_averages(all_recall);
 
     std::cout << "EF\tQPS\tRecall\n";
     for (size_t i = 0; i < avg_qps.size(); ++i) {

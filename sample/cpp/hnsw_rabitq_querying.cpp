@@ -6,12 +6,12 @@
 #include <ratio>
 #include <vector>
 
+#include "querying_example.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/index/hnsw_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
 std::vector<size_t> efs = {10,  20,  40,  50,  60,  80,  100, 150,  170,  190, 200,
                            250, 300, 400, 500, 600, 700, 800, 1000, 1500, 2000};
@@ -100,8 +100,8 @@ int run(int argc, char* argv[]) {
         }
     }
 
-    auto avg_qps = rabitqlib::horizontal_avg(all_qps);
-    auto avg_recall = rabitqlib::horizontal_avg(all_recall);
+    auto avg_qps = querying_example::column_averages(all_qps);
+    auto avg_recall = querying_example::column_averages(all_recall);
 
     std::cout << "EF\tQPS\tRecall\t"
 
