@@ -57,9 +57,11 @@ and clustering reject `METRIC_COSINE`.
 
 ## Index counts
 
-The unified count properties below are introduced in **0.7.0**. In particular,
-HNSW-RaBitQ's `num_points` now excludes removed records; see the
-[count migration guide](../modular_migration.md#unified-index-counts) when upgrading.
+`num_points` and `num_stored_points` were unified in **0.7.0**, when HNSW-RaBitQ's
+`num_points` started to exclude removed records; see the
+[count migration guide](../modular_migration.md#unified-index-counts) when upgrading
+from an earlier release. `capacity` is the property 0.7.0 called `max_elements`:
+Python renamed it in 0.8.5, and the C++ `HnswIndex` provides `capacity()` from 0.9.
 
 IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
 (the C++ classes use the same names with `()`):

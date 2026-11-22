@@ -159,7 +159,7 @@ listed above.
       <a href="https://github.com/antgroup/vsag"><img src="https://github.com/antgroup.png?size=96" width="40" height="40" alt="VSAG logo"><br>VSAG</a>
     </td>
     <td align="center" width="16%">
-      <a href="https://github.com/tensorchord/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="40" height="40" alt="VectorChord logo"><br>VectorChord</a>
+      <a href="https://github.com/supervc-stack/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="40" height="40" alt="VectorChord logo"><br>VectorChord</a>
     </td>
   </tr>
   <tr>
@@ -184,13 +184,13 @@ listed above.
   </tr>
   <tr>
     <td align="center" width="16%">
-      <a href="https://docs.lancedb.com/indexing/quantization#rabitq-quantization"><img src="https://github.com/lancedb.png?size=96" width="40" height="40" alt="LanceDB logo"><br>LanceDB</a>
+      <a href="https://docs.lancedb.com/oss/v0-41-0/indexing/vector-index#rabitq-quantization-rq"><img src="https://github.com/lancedb.png?size=96" width="40" height="40" alt="LanceDB logo"><br>LanceDB</a>
     </td>
     <td align="center" width="16%">
       <a href="https://docs.databricks.com/aws/en/oltp/projects/lakebase-vector"><img src="https://github.com/databricks.png?size=96" width="40" height="40" alt="Databricks logo"><br>Databricks</a>
     </td>
     <td align="center" width="16%">
-      <a href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/annindexes#quantized-codecs-methods"><img src="https://github.com/ClickHouse.png?size=96" width="40" height="40" alt="ClickHouse logo"><br>ClickHouse</a>
+      <a href="https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/annindexes#quantized-codecs-methods"><img src="https://github.com/ClickHouse.png?size=96" width="40" height="40" alt="ClickHouse logo"><br>ClickHouse</a>
     </td>
     <td align="center" width="16%">
       <a href="https://qdrant.tech/articles/turboquant-quantization/#1-bit-rabitq-bit-plane-scoring"><img src="https://github.com/qdrant.png?size=96" width="40" height="40" alt="Qdrant logo"><br>Qdrant</a>

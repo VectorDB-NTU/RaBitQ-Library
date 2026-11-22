@@ -2,7 +2,7 @@
 
 [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) combines the graph search
 of [QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0),
-from [NGT](https://github.com/yahoojapan/NGT), with batched RaBitQ distance estimation.
+from [NGT](https://github.com/NGT-labs/NGT), with batched RaBitQ distance estimation.
 FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.
 
@@ -170,8 +170,6 @@ earlier file still loads, without these settings, and saving it writes format 2.
 
 All three modes pad the rotated domain to a multiple of 32. Loading an older
 index preserves its saved padded dimension, including historical multiples of 64.
-Older library versions that enforce 64-dimension padding cannot load new files
-whose padded dimension is not a multiple of 64.
 
 ## Implementation details
 

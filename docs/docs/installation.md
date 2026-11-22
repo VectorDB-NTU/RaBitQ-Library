@@ -43,7 +43,9 @@ build can use scalar kernels without the FastScan CPU baseline.
 python -m pip install "rabitqlib>=0.9.0"
 ```
 
-For changes from 0.6.0, see the [0.7.0 upgrade notes](releases/0.7.0.md).
+To upgrade from 0.8, see the [migration guide](python_migration.md#from-08-to-09) and the
+[0.9.0 release notes](releases/0.9.0.md). For changes from 0.6.0, see the
+[0.7.0 upgrade notes](releases/0.7.0.md).
 
 Wheels target the platforms above and require no compiler or CMake.
 Every wheel bundles its OpenMP runtime (GNU OpenMP on Linux, LLVM OpenMP on

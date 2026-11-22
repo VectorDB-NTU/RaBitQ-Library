@@ -204,7 +204,7 @@ void HnswIndex::reserve(size_t num_points);
   threads finish in, because the slots are reserved as one block before the inserts start.
 - **num_points** of `reserve`: The capacity to preallocate; a smaller value changes nothing.
 
-In Python:
+In Python, with `vectors` a float32 array of new vectors of shape `(n, index.dim)`:
 
 ```python
 new_ids = index.add(vectors)                       # route to the nearest centroids
@@ -312,8 +312,7 @@ cannot train it, so call `train` or `set_centroids` before `add`.
 
 New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
 Loading preserves the saved padded dimension and rotation, so older indexes
-using multiples of 64 remain readable. Older library versions cannot load new
-files whose padded dimension is not a multiple of 64.
+using multiples of 64 remain readable.
 
 ## Implementation details
 

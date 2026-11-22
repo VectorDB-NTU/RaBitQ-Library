@@ -24,7 +24,8 @@ per centroid; the classes below default to training on every vector.
 
 ## Python
 
-Both classes have the same training and result interface:
+Both classes have the same training and result interface. Here `x` is a float32
+array of shape `(n, d)` and `queries` one of shape `(m, d)`:
 
 ```python
 from rabitqlib import QGKMeans, RaBitQKMeans

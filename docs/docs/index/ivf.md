@@ -129,11 +129,12 @@ rabitqlib::IvfIndex ivf(dim, num_clusters, options);
 ### Centroid routing
 
 `IvfOptions::routing` selects `ivf::Routing::Auto`, `Flat`, `FlatRaBitQ`, or
-`HNSW`. Python accepts `routing="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`:
+`HNSW`. Python accepts `routing="auto"`, `"flat"`, `"flat_rabitq"`, or `"hnsw"`; here
+`dim` and `num_clusters` are the vector dimension and the number of clusters:
 
 ```python
-index = IvfIndex(dim, num_clusters, nbits=4, routing="flat_rabitq")
-print(index.routing)  # resolved routing type
+routed = IvfIndex(dim, num_clusters, nbits=4, routing="flat_rabitq")
+print(routed.routing)  # resolved routing type
 ```
 
 ```c++
@@ -201,13 +202,15 @@ to train on a different sample. Training uses the settings in `index.cp`, a
 [`RaBitQKMeansParameters`](../clustering.md#rabitqkmeans) whose defaults differ
 from the k-means classes: 10 iterations, at most 256 sampled vectors per
 centroid (`max_points_per_centroid`), spherical k-means for `metric="ip"` and `"cosine"`, and
-`seed` equal to the index seed. Change fields before training:
+`seed` equal to the index seed. Change fields before training; in this example
+`sample` and `vectors` are float32 arrays of shape `(n, dim)`, and `sample` needs at
+least 1024 rows:
 
 ```python
-index = IvfIndex(dim, 1024, nbits=4, metric="ip")
-index.cp.niter = 20
-index.train(sample)  # num_threads=None uses index.cp.num_threads (0: all CPUs)
-index.add(vectors)
+ip_index = IvfIndex(dim, 1024, nbits=4, metric="ip")
+ip_index.cp.niter = 20
+ip_index.train(sample)  # num_threads=None uses ip_index.cp.num_threads (0: all CPUs)
+ip_index.add(vectors)
 ```
 
 - Up to 2,000 clusters, training uses RaBitQKMeans; above that it uses
@@ -351,7 +354,7 @@ void IvfIndex::reserve_cluster(size_t cluster_id, size_t num_points);
   to hold `num_points` vectors in total, counting the ones it already holds. It does
   nothing if the cluster already has that room. See [Cost of `add`](#cost-of-add).
 
-In Python:
+In Python, with `vectors` a float32 array of new vectors:
 
 ```python
 new_ids = index.add(vectors, num_threads=1, fast_quantization=False)
