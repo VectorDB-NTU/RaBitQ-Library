@@ -525,9 +525,9 @@ in place of extra-bit codes.
 
 New IVF files use index format 2 (`docs/formats.md`): the resolved initializer type
 is in `ivf_params`, and the routing data, including the HNSW graph, is a section of
-the one file. Earlier `RABQIDX1` v2 files store the initializer type; v1 files infer
-the historical Flat/HNSW choice at 20,000 clusters, independently of current auto
-selection. Those layouts keep HNSW routing in the `<file>.hnsw` sidecar. New IVF auto
+the one file. Earlier `RABQIDX1` v2 files store the initializer type; files without it
+(`RABQIDX1` v1, `RBFQRAW1` and unversioned files) infer the historical Flat/HNSW choice at
+20,000 clusters, independently of current auto selection. Those layouts keep HNSW routing in the `<file>.hnsw` sidecar. New IVF auto
 routing uses Flat below 5,000 clusters, Flat RaBitQ below 60,000, and HNSW otherwise.
 Legacy quantized files and raw v1 files infer 64-dimension padding.
 
@@ -546,7 +546,9 @@ The supported C++ index API is `IvfIndex`, `HnswIndex` and `SymqgIndex` in
 `include/rabitqlib/index/*_index.hpp`, with the names, defaults and behaviour of the Python
 classes, and their messages where those do not name Python values; the bindings wrap them.
 `ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `QGBuilder` stay installed for
-these classes and for `QGAssigner`, without documentation or a compatibility promise. Samples and
+these classes and for `QGAssigner`, without documentation or a compatibility promise. They are
+also the only writers of matrix-rotator files, which the supported classes do not offer but
+readers must keep loading (`tests/fixtures/persistence/v0.9.0/`). Samples and
 docs use the supported classes.
 
 Update the C++ declaration/implementation, the corresponding file in `python_bindings/`, Python
@@ -573,6 +575,8 @@ Use the [path conversion helper](#filesystem-paths) for file access. Preserve
 
 Frozen release-produced indexes and reference searches live in `tests/fixtures/persistence/`;
 keep their provenance and hashes, and do not regenerate them with the current writer.
+`tests/python/fixtures/` holds further frozen legacy index files and, under `quant/`, the
+`rabitqlib.quant` byte formats; the same rule applies.
 
 Index files are trusted input (see the [usage guide](docs/index/usage.md)): validate structure and sizes so
 that corrupt or mismatched files are reported before allocation, without treating a
@@ -695,7 +699,8 @@ counts from capacity only after construction completes.
 **Search outputs**
 
 `k` for requested result count, `result_ids` for ID-only output arrays, `distances` for
-their scores. `results` may hold complete distance/ID records.
+their scores. `results` may hold complete distance/ID records. The supported `*Index`
+classes keep the Python name `ids` for search output and `remove` input.
 
 **Search state**
 

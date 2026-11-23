@@ -159,7 +159,9 @@ replace building the code you change and running its affected tests. If another
 check needs a tool, compiler or CPU you do not have (for example clang-tidy 23 or
 a particular SIMD instruction set), say so in the PR and a maintainer will run it.
 See [CI routing](../docs/maintaining.md#checks-selected-by-changed-files)
-for details.
+for details. `main` requires a PR branch to be up to date with it before merging; when
+GitHub reports the branch is behind, update it (the **Update branch** button, or merge
+`main` into it) and let CI run again.
 
 You are responsible for every change you submit, including changes produced
 with automated tools: verify it yourself, report the results, and respond to

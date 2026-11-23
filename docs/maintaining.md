@@ -47,7 +47,7 @@ See [CI coverage](../tests/README.md#ci-coverage) for full-suite versus smoke-te
 ownership, dedicated FAISS comparisons, and emulated SIMD checks.
 
 The optional include-cleaner report is available through
-`./scripts/check-includes.sh` and no longer runs on every C++ change. Shared
+`./scripts/check-includes.sh`; CI does not run it. Shared
 headers still trigger broad regression suites; CI does not infer
 individual test dependencies from C++ function changes. Unknown paths run all
 checks. Retired example paths are recognized when deleted: `example.sh` and
@@ -68,8 +68,8 @@ cache from the repository's cache quota. Identical compilations within one job a
 reuse each other's output.
 The native-tuned `Ubuntu` job has no compiler cache: ccache keys `-march=native`
 literally, so objects built for one runner's CPU could otherwise be restored on a
-runner without those instructions. Windows keeps its existing Visual Studio build
-path, which does not support compiler launchers.
+runner without those instructions. Windows builds with Visual Studio, which does not
+support compiler launchers.
 
 The C++ change selection has a separate `cpp_core` output for the core/FastScan
 consumer matrix. Paths that only affect ANN indexes or clustering, such as
@@ -80,19 +80,17 @@ Numerical reference suites have one owner per compiler/platform and OpenMP mode.
 The full C++ jobs own OpenMP ON references; component consumer jobs retain their
 build/install/header/symbol checks without rebuilding those suites. OpenMP OFF
 runs the combined core/FastScan reference suite in the FastScan producer only.
-Across the component and Clang consumer matrices, this reduces producer reference
-builds from 20 to 5. The `add_subdirectory` and FetchContent source integrations run
+The `add_subdirectory` and FetchContent source integrations run
 for both OpenMP modes on the GCC Ubuntu partition and on the MSVC core OpenMP ON
 partition; the other partitions pass `-DRABITQ_INTEGRATIONS=PACKAGE` and check only
-the relocated installed package. This keeps 30 of the former 60 consumer integration
-configurations, with every compiler/platform and OpenMP mode still consuming the
-installed package.
+the relocated installed package, so every compiler/platform and OpenMP mode still
+consumes the installed package.
 `C++ static analysis` runs the complete configured library/binding compilation
-database in one job, replacing the two shards and their summary job.
+database in one job.
 
-Windows wheels build one CPython ABI per runner because a single Windows job
-was the longest check in a pull request; the other platforms build their ABIs
-sequentially in one job, and every platform keeps its existing summary check.
+Windows wheels build one CPython ABI per runner, because one job for all ABIs
+would be the longest check in a pull request; the other platforms build their ABIs
+sequentially in one job. Every platform has a summary check.
 
 Release tags and manual wheel builds always run the full wheel build. CI
 routing edits run the full relevant matrix on pull requests. After an already
@@ -250,11 +248,9 @@ other labels are preserved. Unrecognized titles produce a workflow warning and
 clear any previous automatic category. They do not block a contribution.
 Before merging, check the title and resulting label, especially for mixed changes.
 
-Manual labels are also recognized: `enhancement`, `bug`, `performance`,
-`documentation`, `build`/`ci`, `python`, and `dependencies`. They map to Added,
-Fixed, Performance, Documentation, Build and CI, Python, and Dependencies,
-respectively. `performance`, `build` and `ci` do not exist in the repository yet;
-create them before using them. If labels match several categories, the first matching category
+Manual labels are also recognized: `enhancement`, `bug`, `documentation`, `python`,
+and `dependencies`. They map to Added, Fixed, Documentation, Python, and Dependencies,
+respectively. Performance and Build and CI have only their `release:*` labels. If labels match several categories, the first matching category
 in the release configuration wins; keep manual and automatic labels consistent.
 PRs without a matching label appear under `Other changes`. Labels `duplicate`
 or `invalid` exclude a PR from release notes.

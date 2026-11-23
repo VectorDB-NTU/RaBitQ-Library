@@ -22,7 +22,6 @@ changelog:
     - title: Performance
       labels:
         - release:performance
-        - performance
 
     - title: Documentation
       labels:
@@ -32,8 +31,6 @@ changelog:
     - title: Build and CI
       labels:
         - release:build
-        - build
-        - ci
 
     - title: Python
       labels:
