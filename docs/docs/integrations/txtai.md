@@ -12,7 +12,7 @@ the downstream adapter at that revision; it is a source snapshot, not a verifica
 of every published txtai package. Consult the [current configuration reference][current-config]
 for later changes.
 
-rabitqlib 0.9 needs txtai TXTAI_RELEASE or later. txtai 9.14.0, the first release with
+rabitqlib 0.9 needs txtai 9.15.0 or later. txtai 9.14.0, the first release with
 the backend, uses call forms that 0.9 removes and fails with it; rabitqlib 0.8
 still accepts them, with deprecation warnings. Its `ann` extra only declares
 `rabitqlib>=0.5.1`, so with txtai 9.14.0 keep `rabitqlib<0.9`.
