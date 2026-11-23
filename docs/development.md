@@ -361,7 +361,8 @@ floats to integers, which is undefined for NaN. Keep the check at the boundary r
 than inside per-vector kernels. IVF and HNSW `train` are the exception: they pass
 training data only to k-means, which applies the same rule and bound in parallel
 before using it, so they skip the serial pass; `set_centroids` still checks the
-trained centroids.
+trained centroids. Cosine `train` keeps the serial check, because it normalizes the
+data before k-means sees it.
 
 **Python conversion**
 
@@ -464,7 +465,7 @@ fails instead of appearing to validate the change.
 ### Stable core API changes
 
 `core/api.hpp` is the source-stable float32 v1 boundary; the implementation is
-`src/core/api.cpp`. See [its contract](../docs/docs/rabitq/core_api.md). Keep the frozen
+`src/core/api.cpp`. See [its contract](docs/rabitq/core_api.md). Keep the frozen
 consumer, API unit tests and both `core_api_no_alloc_*` processes in the validation
 matrix. The scalar allocation process forces cached dispatch onto the exact event
 fallback. Do not replace that fallback with an approximate winner to avoid allocations.
@@ -573,7 +574,7 @@ Use the [path conversion helper](#filesystem-paths) for file access. Preserve
 Frozen release-produced indexes and reference searches live in `tests/fixtures/persistence/`;
 keep their provenance and hashes, and do not regenerate them with the current writer.
 
-Index files are trusted input (see the usage guide): validate structure and sizes so
+Index files are trusted input (see the [usage guide](docs/index/usage.md)): validate structure and sizes so
 that corrupt or mismatched files are reported before allocation, without treating a
 crafted file as a supported input.
 Readers throw `rabitqlib::FormatError` (`include/rabitqlib/index/format_error.hpp`) for
@@ -591,6 +592,10 @@ fixtures for the rules (`tests/unit/rabitqlib/index/format2_test.cpp`). Use fixe
 (earlier layouts store several `size_t` fields; keep their readers unchanged), validate sizes
 before allocation, check every read, and keep a compatibility fixture or an explicit rejection
 path. Changes to shared serialization helpers require auditing every format using them.
+Every `save` writes through `index_detail::save_replacing` (`src/index/file_replacement.hpp`),
+which writes a temporary sibling and renames it into place, so a failed save leaves an existing
+regular file unchanged (a symlink or other non-regular destination is written in place); a new
+writer must use it too.
 Every index still reads its earlier layouts: IVF-RaBitQ's `RABQIDX1` versions, its raw-vector
 layout `RBFQRAW1` and unversioned files, HNSW-RaBitQ's unversioned layout, and SymphonyQG's
 versioned quantized layout and raw fallback. Preserve those readers unless a breaking change is explicitly requested. When a writer moves to
@@ -861,7 +866,9 @@ index records.
 
 IVF/HNSW/SymphonyQG public index headers contain declarations and small accessors;
 they must not import encoding, scoring, rotator implementation, search scratch, Eigen
-or hnswlib. Operations compile in `src/index/{ivf,hnsw,qg}.cpp`; HNSW's per-ISA graph traversal
+or hnswlib. Operations compile in `src/index/{ivf,hnsw,qg}.cpp` and the supported classes in
+`src/index/{ivf,hnsw,symqg}_index.cpp`, whose shared argument checks live in
+`src/index/index_facade.hpp`; HNSW's per-ISA graph traversal
 templates live in `src/index/hnsw_search_impl.hpp`. Preserve the advanced `hnsw_quant.hpp`
 query-cache header. Installed-consumer tests poison implementation/vendor headers to
 check index header independence; `CoreModuleBoundary` also rejects batch declarations
@@ -954,7 +961,8 @@ HNSW-RaBitQ `remove` sets the high bit (`kRemovedMask`) of the stored cluster ID
 cap the number of clusters at 2^31, so no index written before `remove` existed has that bit set and
 nothing in an old file is reinterpreted. A file that has removals is rejected by releases 0.3.7
 through 0.5.1, whose `load` range-checks every cluster ID; that rejection is the compatibility path.
-This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW-RaBitQ code:
+It does not extend to index format 2, which the current writer uses: releases up to 0.8 cannot read
+current saves. This mark is unrelated to the `SearchBuffer` ID marker. Keep these rules when touching HNSW-RaBitQ code:
 
 - Read cluster IDs only through the masking accessors. Internal code (estimators,
   routing, and the `add` reconstruction) uses the unchecked private `stored_cluster_id`;

@@ -175,7 +175,7 @@ The three masks follow the ext4 superblock: they say what an older reader may do
 | Mask | A reader that does not know a set bit |
 | --- | --- |
 | `incompat_features` | Rejects the file; reading it would give wrong results |
-| `ro_compat_features` | May load and search; operations that change or save the index (`add`, `reserve`, `remove`, `save`) raise, because they would leave the unknown data stale. Rebuilding replaces that data and makes the index writable again: IVF-RaBitQ `construct`, or a new SymphonyQG build; HNSW-RaBitQ cannot be rebuilt in place |
+| `ro_compat_features` | May load and search; operations that change or save the index (`add`, `reserve`, `remove`, `save`) raise, because they would leave the unknown data stale. A new index built from the vectors is writable. The supported classes cannot rebuild a loaded index in place; only the internal `ivf::IVF::construct` can, for IVF-RaBitQ |
 | `compat_features` | Ignores the bit; `save` clears it |
 
 The error names the unknown bits and `writer_version`, such as "index file uses incompatible features 0x4 that this release does not know; written by rabitqlib 0.10.0".
