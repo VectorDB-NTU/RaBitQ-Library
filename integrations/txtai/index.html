@@ -317,7 +317,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -399,6 +399,8 @@
       
         
       
+        
+      
     
     
     
@@ -455,16 +457,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -485,7 +477,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -498,6 +490,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -708,10 +799,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -729,8 +820,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -853,10 +944,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -874,8 +965,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2058,10 +2149,16 @@
 <code>rabitq</code> ANN backend. Applications can select an IVF-RaBitQ or HNSW-RaBitQ index within txtai's
 embedding-search workflow, while txtai handles the surrounding application API
 and result conversion.</p>
-<p>This walkthrough was checked on October 21, 2026 against txtai commit
-<a href="https://github.com/neuml/txtai/tree/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b"><code>0ea7cb0d8234</code></a>. It describes the downstream adapter at that revision;
-it is a source snapshot, not a verification of every published txtai package.
-Consult the <a href="https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq">current configuration reference</a> for later changes.</p>
+<p>This walkthrough was checked on November 20, 2026 against txtai commit
+<a href="https://github.com/neuml/txtai/tree/86f3bad49de8fe3f1b2cb4b0f3e3166afb84820b"><code>86f3bad</code></a>, which moved the adapter to forms that rabitqlib 0.8.5 and 0.9
+accept (<a href="https://github.com/neuml/txtai/pull/1616">neuml/txtai#1616</a>). It describes
+the downstream adapter at that revision; it is a source snapshot, not a verification
+of every published txtai package. Consult the <a href="https://github.com/neuml/txtai/blob/master/docs/embeddings/configuration/ann.md#rabitq">current configuration reference</a>
+for later changes.</p>
+<p>rabitqlib 0.9 needs txtai 9.15.0 or later. txtai 9.14.0, the first release with
+the backend, uses call forms that 0.9 removes and fails with it; rabitqlib 0.8
+still accepts them, with deprecation warnings. Its <code>ann</code> extra only declares
+<code>rabitqlib&gt;=0.5.1</code>, so with txtai 9.14.0 keep <code>rabitqlib&lt;0.9</code>.</p>
 <h2 id="select-the-backend">Select the backend<a class="headerlink" href="#select-the-backend" title="Permanent link">&para;</a></h2>
 <p>In an existing txtai embeddings configuration, select <code>backend: rabitq</code> and add
 the corresponding settings. This fragment uses four-bit IVF-RaBitQ:</p>
@@ -2073,7 +2170,7 @@ the corresponding settings. This fragment uses four-bit IVF-RaBitQ:</p>
 <p>Keep your existing embedding model and other application settings. Install
 optional dependencies according to <a href="https://neuml.github.io/txtai/install/#ann">txtai's installation guide</a>; its
 adapter imports both <code>rabitqlib</code> and scikit-learn. The inspected
-<a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/setup.py">package configuration</a> declares <code>rabitqlib&gt;=0.7.0</code> in its <code>ann</code> extra. The fragment above selects
+<a href="https://github.com/neuml/txtai/blob/86f3bad49de8fe3f1b2cb4b0f3e3166afb84820b/setup.py">package configuration</a> declares <code>rabitqlib&gt;=0.8.5</code> in its <code>ann</code> extra. The fragment above selects
 the backend, rather than providing a complete model-and-data example.</p>
 <p><code>clusters</code> controls the KMeans centroid count in both modes: IVF-RaBitQ uses these
 centroids for partitioning, while HNSW-RaBitQ uses them for residual quantization.
@@ -2082,7 +2179,7 @@ centroids for partitioning, while HNSW-RaBitQ uses them for residual quantizatio
 for original-vector reranking. Measure recall and latency on representative
 queries when choosing precision and search parameters.</p>
 <h2 id="how-the-integration-works">How the integration works<a class="headerlink" href="#how-the-integration-works" title="Permanent link">&para;</a></h2>
-<p>The <a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/src/python/txtai/ann/dense/rabitq.py">adapter source</a> shows the boundary between the projects:</p>
+<p>The <a href="https://github.com/neuml/txtai/blob/86f3bad49de8fe3f1b2cb4b0f3e3166afb84820b/src/python/txtai/ann/dense/rabitq.py">adapter source</a> shows the boundary between the projects:</p>
 <table>
 <thead>
 <tr>
@@ -2095,11 +2192,11 @@ queries when choosing precision and search parameters.</p>
 <tr>
 <td>Build</td>
 <td>Converts embeddings to contiguous float32 and uses scikit-learn KMeans to produce centroids and assignments.</td>
-<td>Builds <code>IvfIndex</code> or <code>HnswIndex</code> with the inner-product metric.</td>
+<td>Creates <code>IvfIndex</code> or <code>HnswIndex</code> with the inner-product metric, takes the centroids with <code>set_centroids</code>, and adds the embeddings with <code>add(cluster_ids=...)</code>.</td>
 </tr>
 <tr>
 <td>Search</td>
-<td>Selects <code>nprobe</code> or <code>ef</code>, drops missing-result IDs, and converts returned distances to scores with <code>1 - distance</code>.</td>
+<td>Selects <code>nprobe</code> or <code>efsearch</code>, drops unfilled result slots by their infinite distance, and converts returned distances to scores with <code>1 - distance</code>.</td>
 <td>Searches the native index and returns IDs and distances; quantized modes return estimates, while IVF-RaBitQ raw mode uses original-vector reranking.</td>
 </tr>
 <tr>
@@ -2119,16 +2216,20 @@ APIs without implementing RaBitQ encoding or graph traversal itself.</p>
 <h2 id="boundaries-to-keep-in-mind">Boundaries to keep in mind<a class="headerlink" href="#boundaries-to-keep-in-mind" title="Permanent link">&para;</a></h2>
 <p>At the inspected revision, txtai enables append/delete only for IVF-RaBitQ. Its HNSW-RaBitQ
 adapter raises <code>NotImplementedError</code> for append/delete through the
-<a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/src/python/txtai/ann/base.py">ANN base class</a>, even though RaBitQ-Library itself supports HNSW-RaBitQ updates.
+<a href="https://github.com/neuml/txtai/blob/86f3bad49de8fe3f1b2cb4b0f3e3166afb84820b/src/python/txtai/ann/base.py">ANN base class</a>, even though RaBitQ-Library itself supports HNSW-RaBitQ updates.
 IVF-RaBitQ additions reuse the original clusters, and deletions retain their storage;
 txtai recommends rebuilding when new data differs enough to affect recall.
-See its <a href="https://github.com/neuml/txtai/blob/0ea7cb0d8234497e8ea9ed1a0f2f58492e00460b/docs/embeddings/configuration/ann.md#rabitq">versioned configuration documentation</a> for these limits.</p>
+See its <a href="https://github.com/neuml/txtai/blob/86f3bad49de8fe3f1b2cb4b0f3e3166afb84820b/docs/embeddings/configuration/ann.md#rabitq">versioned configuration documentation</a> for these limits.</p>
 <p>The adapter requests inner-product search and converts its <code>1 - dot</code> distance
 convention back to scores. For normalized database and query embeddings, these are cosine-similarity
 estimates in quantized modes; normalization does not remove quantization error.</p>
-<p>The source inspection establishes the integration path. It does not establish
-production deployment scale or a performance gain, and this configuration has
-not been exercised end to end in this documentation update.</p>
+<p>The first build adds with every available CPU, capped by <code>OMP_NUM_THREADS</code>, so an
+HNSW-RaBitQ graph built with several threads differs between runs even with the same
+<code>randomseed</code>. An index saved with rabitqlib 0.9 uses index format 2, which rabitqlib 0.8
+cannot read.</p>
+<p>txtai's RaBitQ tests pass with this adapter on rabitqlib 0.8.5 and on a 0.9 build.
+That establishes the integration path, not production deployment scale or a
+performance gain.</p>
 <p>For maintainer checks against future library versions, see the
 <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/development.md#downstream-compatibility-validation">downstream compatibility procedure</a>.</p>
 <p>To use the same indexes directly, follow the library's <a href="../../quick_start/">Python quick start</a>

@@ -317,7 +317,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -399,6 +399,8 @@
       
         
       
+        
+      
     
     
     
@@ -455,16 +457,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -485,7 +477,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -498,6 +490,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -708,10 +799,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -729,8 +820,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -853,10 +944,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -874,8 +965,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1492,6 +1583,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-cosine-metric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The cosine metric
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#index-counts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2029,6 +2131,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-cosine-metric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The cosine metric
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#index-counts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2102,7 +2215,8 @@
 SymphonyQG. Start with the <a href="../../quick_start/">Python quick start</a> for a complete example.</p>
 <h2 id="input-requirements">Input requirements<a class="headerlink" href="#input-requirements" title="Permanent link">&para;</a></h2>
 <p><code>IvfIndex</code>, <code>HnswIndex</code>, and <code>SymqgIndex</code> accept data and query arrays with shape
-<code>(count, dim)</code>, converted to contiguous float32. Their FHT/Kac rotation requires
+<code>(count, dim)</code>, converted to contiguous float32; the C++ classes of the same names
+take row-major float32 buffers. Their FHT/Kac rotation requires
 <code>64 &lt;= dim &lt;= 65536</code>. Supply the original dimension; the indexes pad internally
 to a multiple of 32. Queries and centroids must have the same original dimension
 as the indexed data.</p>
@@ -2115,17 +2229,41 @@ float32. <code>train</code>, <code>set_centroids</code>, <code>add</code> and <c
 <code>std::invalid_argument</code>) for NaN, infinite, or larger coordinates before changing
 the index. The C++ <code>quantize_*</code> encoders in <code>core/encoder.hpp</code> assume their
 callers have validated the input.</p>
-<p>These limits apply to the Python indexes. The C++ <a href="../../rabitq/core_api/">stable core API</a>
+<p>These limits apply to the index classes in both languages. The C++ <a href="../../rabitq/core_api/">stable core API</a>
 accepts working dimensions from 2, with multiples of 32 required for <code>SplitPacked</code>.
 C++ <a href="../../rabitq/rotator/">MatrixRotator</a> has separate dimension and storage requirements;
-the Python indexes do not expose a rotator choice.</p>
+the index classes do not expose a rotator choice.</p>
+<h2 id="the-cosine-metric">The cosine metric<a class="headerlink" href="#the-cosine-metric" title="Permanent link">&para;</a></h2>
+<p>With <code>metric="cosine"</code> (C++ <code>METRIC_COSINE</code>), every index scales data and queries to
+unit length, stores the inner-product codes of the scaled vectors, and returns
+<code>1 - cos</code> as the distance, the inner-product distance <code>1 - dot</code> of unit vectors.
+Centroids passed to <code>set_centroids</code> are scaled the same way, because the codes are
+residuals against them: centroids far from the unit sphere, such as the means of
+unscaled data, would ruin the estimates. <code>train</code>, and the first <code>add</code> that trains,
+compute centroids from the scaled vectors with spherical k-means and use them as
+computed. Results equal those of a <code>metric="ip"</code> index built from the same vectors,
+and given the same centroids, after this scaling. A zero vector stays zero, as in
+hnswlib and Faiss: its true distance to every vector is 1, which quantized storage
+estimates like any other distance.</p>
+<p>The index checks the original coordinates first, as above. Because it then trains on
+scaled copies, invalid training data is reported as <code>IVF training data ...</code> or
+<code>HNSW training data ...</code> rather than with the k-means message of the other metrics.
+<code>train</code>, <code>add</code> and construction scale a copy of their whole input, so they briefly
+need memory for one more float32 copy of it. To bound that for very large data, call
+<code>train</code> on a sample and <code>add</code> the data in several calls. Queries are scaled one at a
+time.</p>
+<p>The metric is stored in the <a href="#index-file-compatibility">index file</a>, so a loaded index
+keeps scaling its inputs. Releases up to 0.8 have no cosine metric: there, normalize
+vectors yourself and use <code>metric="ip"</code>. The core quantization APIs, FastScan queries
+and clustering reject <code>METRIC_COSINE</code>.</p>
 <h2 id="index-counts">Index counts<a class="headerlink" href="#index-counts" title="Permanent link">&para;</a></h2>
-<p>The unified count properties below are introduced in <strong>0.7.0</strong>. In particular,
-HNSW-RaBitQ's <code>num_points</code> now excludes removed records; see the
-<a href="../../modular_migration/#unified-index-counts">count migration guide</a> when upgrading.</p>
+<p><code>num_points</code> and <code>num_stored_points</code> were unified in <strong>0.7.0</strong>, when HNSW-RaBitQ's
+<code>num_points</code> started to exclude removed records; see the
+<a href="../../modular_migration/#unified-index-counts">count migration guide</a> when upgrading
+from an earlier release. <code>capacity</code> is the property 0.7.0 called <code>max_elements</code>:
+Python renamed it in 0.8.5, and the C++ <code>HnswIndex</code> provides <code>capacity()</code> from 0.9.</p>
 <p>IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
-(C++ uses the same names with <code>()</code>, and <code>max_elements()</code> for the capacity of all
-three indexes):</p>
+(the C++ classes use the same names with <code>()</code>):</p>
 <table>
 <thead>
 <tr>
@@ -2149,11 +2287,9 @@ three indexes):</p>
 </tbody>
 </table>
 <p><code>0 &lt;= num_points &lt;= num_stored_points</code>, and <code>num_stored_points &lt;= capacity</code> for
-HNSW-RaBitQ. Before 0.8.5 Python named the capacity <code>max_elements</code> on all three
-classes; that property is deprecated and is removed in 0.9. On <code>IvfIndex</code> and
-<code>SymqgIndex</code> it equals <code>num_stored_points</code>, except on an <code>IvfIndex</code> created in the
-0.7 form before <code>build</code>, where it is the declared row count. Before vectors are
-added, both point counts are zero; configured capacity may be nonzero. For
+HNSW-RaBitQ. Python's <code>max_elements</code> property, which 0.9 removed, was this capacity
+on <code>HnswIndex</code> and equal to <code>num_stored_points</code> on the other two classes. Before
+vectors are added, both point counts are zero; configured capacity may be nonzero. For
 all three indexes, <code>len(index)</code> equals <code>num_points</code>. <code>is_trained</code> reports
 whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by <code>train</code>, <code>set_centroids</code>,
 the first <code>add</code>, or <code>load</code>), and is always <code>True</code> for SymphonyQG.</p>
@@ -2161,12 +2297,12 @@ the first <code>add</code>, or <code>load</code>), and is always <code>True</cod
 start at the previous <code>num_stored_points</code>. Use this stored count for ID bounds,
 and <code>num_points</code> for a live count. Counts survive save/load.</p>
 <p>IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
-HNSW-RaBitQ's Python <code>add</code> grows its capacity geometrically, and <code>reserve</code> preallocates
-it (<code>resize</code> before 0.8.5). SymphonyQG has no incremental
+HNSW-RaBitQ's <code>add</code> grows its capacity geometrically, and <code>reserve</code> preallocates
+it. SymphonyQG has no incremental
 updates: <code>add</code> builds the graph once, and both counts are equal afterwards.</p>
 <p><code>repr(index)</code> shows dimension, metric, quantization bits and live point count,
-plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
-the resolved routing strategy, and SymphonyQG includes its degree bound. The summary
+plus the training state for IVF/HNSW. IVF/HNSW also show stored count and centroid count; HNSW includes
+its capacity, IVF the resolved routing strategy, and SymphonyQG its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.</p>
 <h2 id="estimate-storage">Estimate storage<a class="headerlink" href="#estimate-storage" title="Permanent link">&para;</a></h2>
 <p>The following estimates describe the main float32 index storage, not total process
@@ -2213,7 +2349,7 @@ indexes use <code>D = 32 * ceil(d / 32)</code>; loaded indexes retain their save
 <code>sum(32 * ceil(n_c / 32)) * (D/8 + 12)</code> bytes. Extra codes/raw vectors and IDs
 use the stored point count. Small clusters therefore increase padding overhead.
 Centroids, routing structures and cluster metadata are additional.</p>
-<p>HNSW-RaBitQ allocates base-layer records for <code>max_elements</code>, including unused capacity.
+<p>HNSW-RaBitQ allocates base-layer records for its whole <code>capacity</code>, including unused capacity.
 Upper-layer edges, label maps, locks, visited lists and other bookkeeping are
 additional. Removing points does not reclaim their storage in either IVF-RaBitQ or HNSW-RaBitQ.</p>
 <p>SymphonyQG stores a one-bit code and two factors <strong>for each neighbor in each row</strong>,
@@ -2244,12 +2380,12 @@ construction, updates, and file I/O. The following contract applies to
 </thead>
 <tbody>
 <tr>
-<td><code>search</code>, <code>search_batch</code>, <code>save</code>, <code>repr</code>, and property reads</td>
+<td><code>search</code>, <code>save</code>, <code>repr</code>, and property reads</td>
 <td>May run together</td>
 </tr>
 <tr>
-<td><code>train</code>, <code>set_centroids</code>, <code>build</code>, <code>add</code>, <code>remove</code>, <code>reserve</code>, <code>reserve_cluster</code>, <code>resize</code>, and setting <code>cp</code>, where available</td>
-<td>Require exclusive access, except SymphonyQG's <code>train</code>, which only checks its input and may run with reads</td>
+<td><code>train</code>, <code>set_centroids</code>, <code>add</code>, <code>remove</code>, <code>reserve</code>, <code>reserve_cluster</code>, and setting <code>cp</code>, where available</td>
+<td>Require exclusive access, except SymphonyQG's <code>train</code>, which only checks its input, and an HNSW-RaBitQ <code>reserve</code> within the current capacity, which changes nothing; both may run with reads</td>
 </tr>
 </tbody>
 </table>
@@ -2258,7 +2394,7 @@ construction, updates, and file I/O. The following contract applies to
 It does not wait or queue an update. Access protection includes Python input
 conversion and is released when the operation returns or raises an exception.
 Different index objects can operate independently. Concurrent saves must use
-different output paths, including any sidecar files.</p>
+different output paths.</p>
 <p>Search parameters such as <code>ef_search</code>, <code>nprobe</code>, precision, and <code>num_threads</code> belong to
 each call. When using a Python thread pool, consider <code>num_threads=1</code> to avoid
 starting multiple native worker pools. Keep input arrays and any shared backing
@@ -2274,33 +2410,40 @@ example Faiss or PyTorch wheels) can crash when more than one of them starts
 worker threads in the same process; set <code>OMP_NUM_THREADS=1</code> before the first
 native call, or pass <code>num_threads=1</code>, in such processes.
 <code>train</code> and <code>add</code> on every index, and IVF-RaBitQ <code>set_centroids</code>, default to all
-CPUs (<code>None</code> or <code>0</code>); the clustering classes default to <code>0</code>. <code>search</code> defaults to one thread (<code>None</code> or <code>1</code>),
-as do the deprecated <code>build</code>, which requires an integer, and <code>search_batch</code>.
+CPUs (<code>None</code> or <code>0</code>); the clustering classes default to <code>0</code>. <code>search</code> defaults to one thread (<code>None</code> or <code>1</code>).
 Multithreaded HNSW-RaBitQ <code>add</code> links points in a nondeterministic order, and so
 does a multithreaded build of IVF-RaBitQ's HNSW centroid routing by <code>train</code>,
-<code>set_centroids</code> or the first <code>add</code>; pass <code>num_threads=1</code> when a build must be
-reproducible.
+<code>set_centroids</code> or the first <code>add</code>; pass <code>num_threads=1</code>, and <code>seed=</code> to the
+constructor, when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.</p>
 <p>C++ paths use UTF-8 on Windows and native path bytes on POSIX.
 Python <code>save</code>/<code>load</code> accept strings, <code>pathlib.Path</code> and <code>os.PathLike</code> objects;
 existing <code>bytes</code> and <code>bytearray</code> paths remain supported. POSIX paths preserve native
 bytes, but non-UTF-8 filenames require filesystem support. Windows byte paths use
-UTF-8. Embedded null characters are rejected before file access. IVF HNSW sidecars
-use the same path conversion.</p>
+UTF-8. Embedded null characters are rejected before file access. The HNSW sidecars
+of IVF files from earlier releases use the same path conversion.</p>
 <p><code>save</code> writes a temporary file beside the destination and renames it into place, so a
 failed save leaves an existing index unchanged. A replaced file keeps its permission
 bits, but not its owner or other hard links. Symbolic links and other non-regular
-destinations are written in place. IVF renames its HNSW sidecar before the index file;
-a failure between the two renames can leave a new sidecar beside the old index.</p>
+destinations are written in place. IVF-RaBitQ writes one file that includes its HNSW
+routing graph.</p>
 <h2 id="index-file-compatibility">Index file compatibility<a class="headerlink" href="#index-file-compatibility" title="Permanent link">&para;</a></h2>
-<p>The compatibility suite loads frozen files written by v0.5.2, compares search
-IDs and distances, and verifies save/load migration and rejection of truncated
-or unsupported versions. See the
+<p>The compatibility suite loads frozen files written by v0.5.2, v0.8.3 and v0.9.0, compares
+search IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. Every index saves in
+<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2">index format 2</a>,
+which releases up to 0.8 cannot read, and which records the construction seed. See the
 <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence">fixture provenance and coverage</a>.
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before
 downgrading the library.</p>
+<p>A truncated, corrupt, mismatched or unsupported file raises <code>rabitqlib.FormatError</code>,
+a subclass of both <code>ValueError</code> and <code>RuntimeError</code>, so <code>except RuntimeError</code>
+handlers still catch it. A file that cannot be opened raises a plain <code>RuntimeError</code>;
+a read that fails after opening looks like truncation and raises <code>FormatError</code>.
+C++ loaders throw <code>rabitqlib::FormatError</code> from <code>rabitqlib/index/format_error.hpp</code>,
+a subclass of <code>std::runtime_error</code>.</p>
 <p>Index files are trusted input. Loaders validate structure and reject truncated,
 inconsistent, or unsupported files so that mistakes are reported, but they are
 not a security boundary: a crafted file can make <code>load</code> allocate its stored

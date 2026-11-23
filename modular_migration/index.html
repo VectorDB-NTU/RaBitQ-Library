@@ -317,7 +317,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -399,6 +399,8 @@
       
         
       
+        
+      
     
     
     
@@ -455,16 +457,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -485,7 +477,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -498,6 +490,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -708,10 +799,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -729,8 +820,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -853,10 +944,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -874,8 +965,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2436,12 +2527,13 @@ is unchanged; custom thread-pool and SIMD registration remain unsupported.</p>
 in C++ and Python.</p>
 <p>Compared with the 0.6.0 Python API, IVF-RaBitQ adds <code>num_points</code> and <code>num_stored_points</code>,
 HNSW-RaBitQ adds <code>num_stored_points</code>, and SymphonyQG adds <code>max_elements</code> and
-<code>num_stored_points</code>.</p>
+<code>num_stored_points</code>. 0.9 removes the Python <code>max_elements</code> property; see the
+<a href="../python_migration/#from-08-to-09">migration guide</a>.</p>
 <p><strong>HNSW-RaBitQ <code>num_points</code> now excludes removed records.</strong> Use <code>num_stored_points</code> for
 ID bounds, append offsets, and minimum resize capacity. Use <code>num_points</code> for a
 live count, without subtracting a separate deletion counter.</p>
-<p>The IVF-RaBitQ constructor keyword <code>max_elements</code> still specifies the required initial
-build size; 0.8 deprecates it (see <a href="../python_migration/">Migrating to 0.8</a>). SymphonyQG's C++ <code>num_vertices()</code> still returns the configured graph
+<p>In 0.7, the IVF-RaBitQ constructor keyword <code>max_elements</code> still specified the required
+initial build size; 0.8 deprecated it and 0.9 removed it (see the <a href="../python_migration/">migration guide</a>). SymphonyQG's C++ <code>num_vertices()</code> still returns the configured graph
 size for builders. Existing index files need no conversion: loading recovers
 counts from their removal markers.</p>
 <h2 id="downstream-rollout">Downstream rollout<a class="headerlink" href="#downstream-rollout" title="Permanent link">&para;</a></h2>

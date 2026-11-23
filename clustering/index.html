@@ -317,7 +317,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -399,6 +399,8 @@
       
         
       
+        
+      
     
     
     
@@ -455,16 +457,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -485,7 +477,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -498,6 +490,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -708,10 +799,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -729,8 +820,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -853,10 +944,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -874,8 +965,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2285,12 +2376,13 @@ per centroid; the classes below default to training on every vector.</p>
 <td><a href="#qgkmeans">QGKMeans</a></td>
 <td>SymphonyQG centroid graph</td>
 <td>Larger cluster counts</td>
-<td><code>n &gt;= k &gt; max_degree</code> (C++ <code>graph_degree</code>; default 32)</td>
+<td><code>n &gt;= k &gt; max_degree</code> (default 32)</td>
 </tr>
 </tbody>
 </table>
 <h2 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h2>
-<p>Both classes have the same training and result interface:</p>
+<p>Both classes have the same training and result interface. Here <code>x</code> is a float32
+array of shape <code>(n, d)</code> and <code>queries</code> one of shape <code>(m, d)</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">QGKMeans</span><span class="p">,</span> <span class="n">RaBitQKMeans</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">kmeans</span> <span class="o">=</span> <span class="n">RaBitQKMeans</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="n">niter</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
@@ -2449,13 +2541,12 @@ the best estimated distance. The model keeps this mean of the training points
 encodes new vectors around it.</p>
 <p>Each iteration compares every training point with every centroid. The batch size of 32
 is not a cluster-count limit. This method uses one-bit point codes throughout;
-it has no graph parameters or <code>nbits</code> (C++ <code>quantization_bits</code>) setting.</p>
+it has no graph parameters or <code>nbits</code> setting.</p>
 <h3 id="qgkmeans">QGKMeans<a class="headerlink" href="#qgkmeans" title="Permanent link">&para;</a></h3>
 <p>QGKMeans builds a SymphonyQG graph over the centroids and uses previous
-assignments as search hints. Its additional parameters are below, under their Python
-names since 0.8.5. C++ and Python before 0.8.5 name the first three
-<code>quantization_bits</code> (with <code>0</code> for raw storage), <code>graph_degree</code> and <code>ef_build</code>; in
-Python those names still work, with a <code>DeprecationWarning</code>, until 0.9.</p>
+assignments as search hints. Its additional parameters are below; C++ and Python use
+the same names. Before 0.9 the first three were <code>quantization_bits</code> (with <code>0</code> for raw
+storage), <code>graph_degree</code> and <code>ef_build</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2511,14 +2602,14 @@ same graph search. Approximate training objectives need not decrease monotonical
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">kmeans</span> <span class="o">=</span> <span class="n">RaBitQKMeans</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="n">final_assignment</span><span class="o">=</span><span class="s2">"exact"</span><span class="p">)</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">kmeans</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
 </code></pre></div>
-<p>Python takes the strings <code>'approximate'</code> and <code>'exact'</code> since 0.8.5. The
-<code>FinalAssignmentMode</code> members <code>Approximate</code>, <code>Exact</code> and the legacy alias <code>SymphonyQG</code>
-are still accepted until 0.9, and <code>cp.final_assignment</code> reads back as a member
-until then; importing <code>FinalAssignmentMode</code> raises a <code>DeprecationWarning</code>.</p>
+<p>Python takes the strings <code>'approximate'</code> and <code>'exact'</code>, and <code>cp.final_assignment</code>
+reads back as one of them. 0.9 removed the <code>FinalAssignmentMode</code> enum from the Python
+package.</p>
 <p>In C++, set <code>parameters.final_assignment</code> to
 <code>rabitqlib::rabitqkmeans::FinalAssignmentMode::Exact</code> or
 <code>rabitqlib::qgkmeans::FinalAssignmentMode::Exact</code>; both names refer to the same
-enum. Training still uses the selected approximate assignment algorithm.</p>
+enum, whose values are <code>Approximate</code> and <code>Exact</code> (0.9 removed the alias
+<code>SymphonyQG</code>). Training still uses the selected approximate assignment algorithm.</p>
 <p>Exact final assignment screens all centroids with blocked GEMM and refines
 possible winners in float64; ties select the smallest centroid index. Returned
 distances remain float32. Work is proportional to <code>n * k * d</code>; large coordinate

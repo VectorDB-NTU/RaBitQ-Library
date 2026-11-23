@@ -317,7 +317,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -399,6 +399,8 @@
       
         
       
+        
+      
     
     
     
@@ -455,16 +457,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -485,7 +477,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -498,6 +490,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -708,10 +799,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -729,8 +820,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -853,10 +944,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -874,8 +965,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2534,7 +2625,7 @@
 
 
 <h1 id="hnsw-rabitq">HNSW-RaBitQ<a class="headerlink" href="#hnsw-rabitq" title="Permanent link">&para;</a></h1>
-<p>C++ callers include <code>rabitqlib/index/hnsw/hnsw.hpp</code> and link <code>rabitqlib::index</code>.
+<p>C++ callers include <code>rabitqlib/index/hnsw_index.hpp</code> and link <code>rabitqlib::index</code>.
 <a href="https://arxiv.org/abs/1603.09320">HNSW</a> is a popular graph-based index.
 HNSW-RaBitQ combines HNSW graph traversal with RaBitQ quantization. Under
 comparable quantization settings, HNSW-RaBitQ typically uses more memory
@@ -2547,8 +2638,8 @@ degree, and index parameters.</p>
 <code>data</code> and <code>queries</code>, then use those same arrays with HNSW-RaBitQ:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rabitqlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">HnswIndex</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">index</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">M</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># nbits=7 by default</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># trains 16 centroids, then links; 1 thread is reproducible</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">index</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">M</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">ef_construction</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="mi">7</span><span class="p">)</span>  <span class="c1"># nbits=7 by default</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># trains 16 centroids, then links; a seed and 1 thread are reproducible</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">ids</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>  <span class="c1"># ef_search defaults to max(k, 64)</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">index</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">"hnsw.index"</span><span class="p">)</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">loaded</span> <span class="o">=</span> <span class="n">HnswIndex</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"hnsw.index"</span><span class="p">)</span>
@@ -2558,32 +2649,35 @@ degree, and index parameters.</p>
 <code>num_clusters</code>, it trains one centroid per row, and <code>num_clusters</code> then reports
 the row count. An empty first <code>add</code> raises <code>RuntimeError</code>.
 <code>train</code> and <code>set_centroids</code> work as for <a href="../ivf/#training-centroids-in-python">IVF-RaBitQ</a>,
-with <code>num_clusters</code> centroids (default 16) and always RaBitQKMeans; <code>index.cp</code>
-starts from the same defaults with <code>seed</code>'s low 32 bits. The first <code>add</code> into the
+with <code>num_clusters</code> centroids (default 16) and always RaBitQKMeans, but
+<code>set_centroids</code> takes no <code>num_threads</code>; <code>index.cp</code>
+starts from the same defaults with the index <code>seed</code>. The first <code>add</code> into the
 empty index links vectors with their exact coordinates, like the 0.7 <code>build</code>;
 later adds link through the stored codes (see <a href="#recall-after-add">Recall after <code>add</code></a>),
 so add most vectors in the first call.</p>
 <h3 id="c">C++<a class="headerlink" href="#c" title="Permanent link">&para;</a></h3>
-<p>Link <code>rabitqlib::index</code>. Here <code>data</code>, <code>centroids</code> and <code>queries</code> are row-major
-<code>std::vector&lt;float&gt;</code> buffers with original dimension <code>dim</code>; <code>cluster_ids</code> is a
-<code>std::vector&lt;rabitqlib::PID&gt;</code> with one centroid ID per data row. Supply at least
-ten points for this example.</p>
+<p><code>rabitqlib::HnswIndex</code> has the names, defaults and behaviour of the Python class.
+Here <code>data</code> and <code>queries</code> are row-major <code>std::vector&lt;float&gt;</code> buffers with
+dimension <code>dim</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/index/hnsw/hnsw.hpp&gt;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/index/hnsw_index.hpp&gt;</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1">// Constructor order: capacity, dimension, total bits, M, ef_construction.</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">hnsw</span><span class="o">::</span><span class="n">HierarchicalNSW</span><span class="w"> </span><span class="n">index</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p">);</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">index</span><span class="p">.</span><span class="n">construct</span><span class="p">(</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="n">centroids</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">centroids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="n">cluster_ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="mi">1</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="p">);</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="k">auto</span><span class="w"> </span><span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">index</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">queries</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">index</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="s">"hnsw.index"</span><span class="p">);</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">hnsw</span><span class="o">::</span><span class="n">HierarchicalNSW</span><span class="w"> </span><span class="n">loaded</span><span class="p">;</span>
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">loaded</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="s">"hnsw.index"</span><span class="p">);</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">HnswOptions</span><span class="w"> </span><span class="n">options</span><span class="p">;</span><span class="w">  </span><span class="c1">// set the fields by name; nbits is 7 by default</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">options</span><span class="p">.</span><span class="n">ef_construction</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">100</span><span class="p">;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">options</span><span class="p">.</span><span class="n">seed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">7</span><span class="p">;</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">HnswIndex</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">options</span><span class="p">);</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">AddOptions</span><span class="w"> </span><span class="n">add_options</span><span class="p">;</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">add_options</span><span class="p">.</span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w">  </span><span class="c1">// with the seed, a reproducible graph</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">index</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">add_options</span><span class="p">);</span><span class="w">  </span><span class="c1">// trains 16 centroids, then links</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="k">const</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_queries</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">queries</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">dim</span><span class="p">;</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">Id</span><span class="o">&gt;</span><span class="w"> </span><span class="n">ids</span><span class="p">(</span><span class="n">num_queries</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="w"> </span><span class="n">distances</span><span class="p">(</span><span class="n">num_queries</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">10</span><span class="p">);</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">index</span><span class="p">.</span><span class="n">search</span><span class="p">(</span><span class="n">queries</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="w"> </span><span class="n">ids</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">distances</span><span class="p">.</span><span class="n">data</span><span class="p">());</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">index</span><span class="p">.</span><span class="n">save</span><span class="p">(</span><span class="s">"hnsw.index"</span><span class="p">);</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="k">auto</span><span class="w"> </span><span class="n">loaded</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">HnswIndex</span><span class="o">::</span><span class="n">load</span><span class="p">(</span><span class="s">"hnsw.index"</span><span class="p">);</span>
 </code></pre></div>
-<p>C++ results are per-query vectors of <code>(distance, ID)</code> pairs. For build setup,
-see <a href="../../cpp_integration/">C++ integration</a>.</p>
+<p>For build setup, see <a href="../../cpp_integration/">C++ integration</a>.</p>
 <h2 id="parameters-and-limits">Parameters and limits<a class="headerlink" href="#parameters-and-limits" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2595,43 +2689,46 @@ see <a href="../../cpp_integration/">C++ integration</a>.</p>
 <tbody>
 <tr>
 <td><code>dim</code></td>
-<td>Original input dimension; Python supports 64–65,536 and pads internally.</td>
+<td>Original input dimension, 64–65,536; the index pads internally.</td>
 </tr>
 <tr>
-<td><code>nbits</code> / C++ <code>total_bits</code></td>
-<td>1–9 total bits including the sign bit. Python's keyword-only <code>nbits</code> defaults to 7; C++ requires it. Raw-vector storage is not supported.</td>
+<td><code>nbits</code></td>
+<td>1–9 total bits including the sign bit; defaults to 7. Raw-vector storage is not supported.</td>
 </tr>
 <tr>
 <td><code>num_clusters</code></td>
-<td>Python keyword, default 16: centroids <code>train</code> or the first <code>add</code> learns, or <code>set_centroids</code> supplies; the first <code>add</code> caps it at its row count.</td>
+<td>Default 16: centroids <code>train</code> or the first <code>add</code> learns, or <code>set_centroids</code> supplies; the first <code>add</code> caps it at its row count.</td>
 </tr>
 <tr>
 <td><code>M</code>, <code>ef_construction</code></td>
-<td>Graph connectivity and construction search budget; Python defaults are 16 and 200, and the index reports both as properties. <code>M</code> must be at least 2 and is capped at 10,000; <code>ef_construction</code> is raised to at least <code>M</code>. The base layer keeps up to <code>2 * M</code> edges per node.</td>
+<td>Graph connectivity and construction search budget; defaults are 16 and 200, and the index reports both. <code>M</code> must be at least 2 and is capped at 10,000; <code>ef_construction</code> is raised to at least <code>M</code>. The base layer keeps up to <code>2 * M</code> edges per node.</td>
 </tr>
 <tr>
 <td><code>metric</code>, <code>seed</code></td>
-<td>Python defaults are <code>"l2"</code> and 100; <code>"ip"</code> is also supported. <code>seed</code> was called <code>random_seed</code> before 0.8. A seed is in <code>[0, 2**32 - 1]</code>; larger values are deprecated since 0.8.5, and 0.9 draws a seed when it is omitted.</td>
+<td><code>metric</code> defaults to L2 (Python <code>"l2"</code>); inner product and <a href="../usage/#the-cosine-metric">cosine</a> are also supported. <code>seed</code> is the graph and rotation seed in <code>[0, 2**32 - 1]</code> and the initial <code>cp.seed</code>. The default (Python <code>None</code>, an empty C++ <code>std::optional</code>) draws one at random (it was 100 before 0.9); <code>seed</code> reports it.</td>
 </tr>
 <tr>
-<td><code>capacity</code> (C++ <code>max_elements()</code>)</td>
-<td>Python reports the current capacity, which <code>add</code> grows geometrically (at least doubling) and <code>reserve</code> can preallocate; they were named <code>max_elements</code> and <code>resize</code> before 0.8.5. C++ <code>add</code> never grows it.</td>
+<td><code>capacity</code></td>
+<td>The current capacity, which <code>add</code> grows geometrically (at least doubling) and <code>reserve</code> can preallocate; in Python they replace <code>max_elements</code> and <code>resize</code>, which 0.9 removed.</td>
 </tr>
 <tr>
 <td><code>k</code>, <code>ef_search</code></td>
-<td>Positive result count and search window. <code>k</code> may exceed the stored point count; Python pads missing results, while C++ returns fewer pairs. An omitted or <code>None</code> <code>ef_search</code> uses <code>max(k, 64)</code> in Python (0 does the same and is deprecated since 0.8.5), a smaller value is raised to at least <code>k</code>, and a value above the stored point count is clamped to it. Python named it <code>ef</code> before 0.8.5.</td>
+<td>Result count, from 1 to 2^31, and search window. <code>k</code> may exceed the stored point count; missing results are padded with ID <code>-1</code> (C++ <code>kNoId</code>) and <code>+inf</code>. An omitted <code>ef_search</code> (Python <code>None</code>) uses <code>max(k, 64)</code>, an explicit 0 raises <code>ValueError</code> (C++ <code>std::invalid_argument</code>), a smaller value is raised to at least <code>k</code>, and a value above the stored point count is clamped to it. It replaces <code>ef</code>, which 0.9 removed.</td>
 </tr>
 </tbody>
 </table>
+<p>In C++, the construction settings are fields of <code>HnswOptions</code>, and <code>ef_search</code>
+and <code>num_threads</code> fields of <code>GraphSearchOptions</code>.</p>
 <p><code>seed</code> controls graph levels and the FHT/Kac rotation (using its low 32 bits).
 With identical inputs and parameters, single-threaded construction is reproducible
-within the same build environment. Python <code>train</code> and <code>add</code> default to every
-available CPU, so <strong>default builds are not reproducible</strong>: pass <code>num_threads=1</code> to
-<code>add</code> when you need the same graph again. Different toolchains or SIMD backends can
+within the same build environment. A seed is drawn unless one is given, and
+<code>train</code> and <code>add</code> default to every available CPU, so <strong>default builds are not
+reproducible</strong>: pass a seed to the constructor and one thread to <code>add</code> when you
+need the same graph again. Different toolchains or SIMD backends can
 still change results. Loading restores the saved rotation.</p>
 <p>Results use squared L2 or <code>1 - dot</code> estimates, ordered from smallest to largest.
-Python fills missing results with ID <code>2**32 - 1</code> and distance <code>+inf</code>; C++ returns
-only the available pairs. See <a href="../../quick_start/#read-the-results">result handling</a>
+IDs are <code>int64</code> (C++ <code>rabitqlib::Id</code>), and missing results hold ID <code>-1</code> and distance
+<code>+inf</code>. See <a href="../../quick_start/#read-the-results">result handling</a>
 and the shared <a href="../usage/">input, count and concurrency contracts</a>.</p>
 <h2 id="index-construction">Index construction<a class="headerlink" href="#index-construction" title="Permanent link">&para;</a></h2>
 <p>The graph is built by incrementally inserting raw data vectors. Raw vectors
@@ -2639,110 +2736,98 @@ are used to construct and prune graph links, but the completed index stores
 the links, centroids, cluster IDs, labels, RaBitQ codes, and factors rather
 than a copy of the raw dataset. Total bit widths from 1 through 9 are
 supported.</p>
-<p><code>construct()</code> is synchronous. Keep its input buffers valid for the entire call;
-the index retains no pointers to them after it returns or throws. The borrowed
-input pointer and search candidate helpers are private implementation details;
-see the <a href="../../modular_migration/#public-and-implementation-interfaces">C++ migration guide</a>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HierarchicalNSW::construct</span><span class="p">(</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_clusters</span><span class="p">,</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">centroids</span><span class="p">,</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="p">,</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">numeric_limits</span><span class="o">&lt;</span><span class="kt">size_t</span><span class="o">&gt;::</span><span class="n">max</span><span class="p">(),</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">fast_quantization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">);</span>
+<p><code>add</code> is synchronous. Keep its input buffers valid for the entire call; the
+index retains no pointers to them after it returns or throws.</p>
+<p>To build from centroids computed elsewhere, for example by
+<a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>, set them and pass each vector's
+cluster:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">HnswOptions</span><span class="w"> </span><span class="n">options</span><span class="p">;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">options</span><span class="p">.</span><span class="n">num_clusters</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">num_clusters</span><span class="p">;</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">HnswIndex</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="n">options</span><span class="p">);</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">index</span><span class="p">.</span><span class="n">set_centroids</span><span class="p">(</span><span class="n">centroids</span><span class="p">.</span><span class="n">data</span><span class="p">());</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">AddOptions</span><span class="w"> </span><span class="n">add_options</span><span class="p">;</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="n">add_options</span><span class="p">.</span><span class="n">cluster_ids</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cluster_ids</span><span class="p">.</span><span class="n">data</span><span class="p">();</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="n">index</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span><span class="w"> </span><span class="n">add_options</span><span class="p">);</span>
 </code></pre></div>
 <ul>
-<li><strong>data</strong>: Vectors in the original input coordinates.</li>
-<li><strong>num_points</strong>: The number of data vectors.</li>
-<li><strong>centroids</strong>: Centroids computed by <a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>; the examples use <code>num_clusters = 16</code>.</li>
-<li><strong>cluster_ids</strong>: Array of length <code>num_points</code>; every entry must be in the range <code>[0, num_clusters)</code>.</li>
-<li><strong>num_threads</strong>: Number of threads to use (default: every available thread; <code>0</code> also auto-selects).</li>
+<li><strong>centroids</strong>: <code>num_clusters</code> centroids in the original input coordinates; the examples use 16.</li>
+<li><strong>cluster_ids</strong>: One entry per vector, each in <code>[0, num_clusters)</code>.</li>
+<li><strong>num_threads</strong>: Worker count; no value, the default, uses every available CPU, and <code>0</code> also auto-selects.</li>
 <li><strong>fast_quantization</strong>: Use calibrated scaling instead of per-vector scale search; see <a href="../../rabitq/quantizer/#implementations">encoding paths</a>.</li>
 </ul>
 <h3 id="training-centroids-in-c">Training centroids in C++<a class="headerlink" href="#training-centroids-in-c" title="Permanent link">&para;</a></h3>
-<p>Instead of passing centroids to <code>construct</code>, train or set them on an empty
-index, then add the points:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/index/hnsw/hnsw.hpp&gt;</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/index/training.hpp&gt;</span>
+<p><code>HnswIndex</code> trains as the Python class does. <code>cp()</code> returns the training
+settings; include <code>rabitqlib/clustering/rabitqkmeans.hpp</code> to change them:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/clustering/rabitqkmeans.hpp&gt;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;rabitqlib/index/hnsw_index.hpp&gt;</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">hnsw</span><span class="o">::</span><span class="n">HierarchicalNSW</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span><span class="n">max_elements</span><span class="p">,</span><span class="w"> </span><span class="n">dim</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="mi">200</span><span class="p">);</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">index</span><span class="p">.</span><span class="n">train</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">            </span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">default_training_parameters</span><span class="p">(</span><span class="n">rabitqlib</span><span class="o">::</span><span class="n">METRIC_L2</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p">));</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1">// Or supply centroids: index.set_centroids(num_clusters, centroids.data());</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">rabitqlib</span><span class="o">::</span><span class="n">HnswIndex</span><span class="w"> </span><span class="nf">index</span><span class="p">(</span><span class="n">dim</span><span class="p">);</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">index</span><span class="p">.</span><span class="n">cp</span><span class="p">().</span><span class="n">niter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span><span class="p">;</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">index</span><span class="p">.</span><span class="n">train</span><span class="p">(</span><span class="n">sample</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_samples</span><span class="p">);</span><span class="w">  </span><span class="c1">// no thread count: cp().num_threads</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1">// Or supply centroids: index.set_centroids(centroids.data());</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">index</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">(),</span><span class="w"> </span><span class="n">num_points</span><span class="p">);</span>
 </code></pre></div>
 <ul>
-<li><code>train(num_clusters, num_points, data, cp)</code> trains centroids with
-  <a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>; <code>num_points</code> must be at least
-  <code>num_clusters</code>. Points are assigned by <code>add</code>, not by training. See the
-  <a href="../ivf/#training-centroids-in-c">IVF-RaBitQ defaults</a> for
-  <code>default_training_parameters</code>.</li>
-<li>The first <code>add</code> into an empty graph links points with their exact vectors, as
-  <code>construct</code> does; with one thread it produces the same index as <code>construct</code>
-  with the same centroids and cluster IDs. If it fails, the graph is left empty
-  and the centroids are kept. Later adds link through the stored codes; see
+<li><code>train</code>, <code>set_centroids</code> and the first <code>add</code> follow the Python rules above.
+  Training always uses <a href="../../clustering/#rabitqkmeans">RaBitQKMeans</a>; points are
+  assigned by <code>add</code>, not by training.</li>
+<li>The first <code>add</code> into an empty graph links points with their exact vectors. If
+  it fails, the graph is left empty. Centroids set by <code>train</code> or <code>set_centroids</code>
+  are kept, and a first <code>add</code> that trained leaves the index untrained. Later adds link
+  through the stored codes; see
   <a href="#how-added-points-are-linked">how added points are linked</a>.</li>
-<li><code>train</code> and <code>set_centroids</code> replace the centroids only while the index stores
-  no points, removed ones included; otherwise they throw <code>std::logic_error</code>.
-  A failed call leaves the index unchanged. <code>construct</code> needs an untrained index,
-  so after either call it throws <code>std::logic_error</code>; use <code>add</code> instead.</li>
-<li><code>is_trained()</code> reports whether centroids are set. Before that, <code>add</code> throws
-  <code>std::logic_error</code>; searching an empty index, trained or not, returns no results.</li>
-<li><code>save</code> throws <code>std::logic_error</code> for an index without stored points, trained
-  or not. Earlier releases saved an untrained empty index; such files still load.</li>
+<li>Arguments outside their range throw <code>std::invalid_argument</code> (Python
+  <code>ValueError</code>), and a call in the wrong state throws <code>std::logic_error</code> (Python
+  <code>RuntimeError</code>), with the Python messages except where those name Python values
+  such as <code>None</code>.</li>
+<li><code>is_trained()</code> reports whether centroids are set. A trained index without
+  points pads every <code>search</code> result slot with <code>kNoId</code> and <code>+inf</code>; <code>save</code> throws
+  <code>std::logic_error</code> until the index stores at least one point. Earlier
+  releases saved an untrained empty index; such files still load, and without a
+  recorded seed they need <code>train</code> or <code>set_centroids</code> before <code>add</code>.</li>
 </ul>
 <h2 id="querying">Querying<a class="headerlink" href="#querying" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="kt">float</span><span class="p">,</span><span class="w"> </span><span class="n">PID</span><span class="o">&gt;&gt;&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">search</span><span class="p">(</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HnswIndex::search</span><span class="p">(</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">queries</span><span class="p">,</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_queries</span><span class="p">,</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">k</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">ef_search</span><span class="p">,</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">);</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="n">Id</span><span class="o">*</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">distances</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">GraphSearchOptions</span><span class="o">&amp;</span><span class="w"> </span><span class="n">options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
 </code></pre></div>
 <ul>
-<li><strong>queries</strong>: Query vectors in the original input coordinates.</li>
-<li><strong>num_queries</strong>: The number of query vectors.</li>
+<li><strong>queries</strong>: <code>num_queries</code> query vectors in the original input coordinates.</li>
 <li><strong>k</strong>: The number of nearest neighbors to search.</li>
-<li><strong>ef_search</strong>: The size of the candidate set for searching HNSW-RaBitQ base layer.</li>
-<li><strong>num_threads</strong>: Number of threads to use. Each query is processed by one thread.</li>
+<li><strong>ids</strong>, <strong>distances</strong>: Output buffers of <code>num_queries * k</code> values; <code>distances</code> may be <code>nullptr</code>.</li>
+<li><strong>options.ef_search</strong>: The size of the candidate set for searching the base layer.</li>
+<li><strong>options.num_threads</strong>: Number of threads to use (default 1). Each query is processed by one thread.</li>
 </ul>
-<p>The search window belongs to each call, so concurrent C++ searches can use
+<p>The search window belongs to each call, so concurrent searches can use
 different <code>ef_search</code> values and separate outputs while the index is unchanged.
-Python follows the shared <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
+See the shared <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <h2 id="updating-an-index">Updating an index<a class="headerlink" href="#updating-an-index" title="Permanent link">&para;</a></h2>
-<p>A constructed or loaded index supports <code>add()</code>, <code>resize()</code> (Python <code>reserve</code>),
-and <code>remove()</code> without the original data; C++ also adds to a
-<a href="#training-centroids-in-c">trained</a> index. Adding points and resizing preserve
-the index file format; files with removals have
-<a href="#how-removal-is-stored">compatibility restrictions</a>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">PID</span><span class="o">&gt;</span><span class="w"> </span><span class="n">HierarchicalNSW</span><span class="o">::</span><span class="n">add</span><span class="p">(</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">cluster_ids</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">nullptr</span><span class="p">,</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">fast_quantization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">,</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">);</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HierarchicalNSW::resize</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">new_max_elements</span><span class="p">);</span>
+<p>A trained index supports <code>add()</code>, <code>reserve()</code> and <code>remove()</code> without the original
+data. Every loaded index is trained, except one loaded from a file saved before
+training (see below). <code>save</code> always writes index format 2; see
+<a href="#persistence">persistence</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">Id</span><span class="w"> </span><span class="nf">HnswIndex::add</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="kt">float</span><span class="o">*</span><span class="w"> </span><span class="n">data</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">AddOptions</span><span class="o">&amp;</span><span class="w"> </span><span class="n">options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{});</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kt">void</span><span class="w"> </span><span class="nf">HnswIndex::reserve</span><span class="p">(</span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">);</span>
 </code></pre></div>
 <ul>
 <li><strong>data</strong>, <strong>num_points</strong>: <code>num_points</code> new vectors in the original coordinates. Vector <code>i</code> receives
-  the label <code>num_stored_points() + i</code>, so labels stay dense, and <code>add</code> returns them.</li>
-<li><strong>cluster_ids</strong>: The cluster of each new vector, in <code>[0, num_clusters)</code>. When it
+  the ID <code>num_stored_points() + i</code>, so IDs stay dense; <code>add</code> returns the first.</li>
+<li><strong>options.cluster_ids</strong>: The cluster of each new vector, in <code>[0, num_clusters)</code>. When it
   is <code>nullptr</code>, each vector goes to its nearest centroid, chosen the same way a
   query is routed.</li>
-<li><strong>fast_quantization</strong>, <strong>num_threads</strong>: Same meaning as in <code>construct</code>, but <code>add</code> defaults
-  to one thread, which keeps the resulting links deterministic; pass <code>0</code> to auto-select. A point keeps the label
-  <code>num_stored_points() + i</code> whatever order the threads finish in, because the slots are
-  reserved as one block before the inserts start.</li>
-<li><strong>new_max_elements</strong>: The new capacity. It must be at least <code>num_stored_points()</code>.
-  In C++, initialize the index through its parameterized constructor or <code>load</code>
-  before calling <code>resize</code>.</li>
+<li><strong>options.fast_quantization</strong>, <strong>options.num_threads</strong>: As in <a href="#index-construction">index construction</a>.
+  With more than one thread the links vary between runs; one thread keeps them
+  deterministic. A point keeps the ID <code>num_stored_points() + i</code> whatever order the
+  threads finish in, because the slots are reserved as one block before the inserts start.</li>
+<li><strong>num_points</strong> of <code>reserve</code>: The capacity to preallocate; a smaller value changes nothing.</li>
 </ul>
-<p>In Python, <code>add</code> grows the capacity when needed:</p>
+<p>In Python, with <code>vectors</code> a float32 array of new vectors of shape <code>(n, index.dim)</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">new_ids</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>                       <span class="c1"># route to the nearest centroids</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1"># Alternatively, choose the clusters instead of the call above:</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># new_ids = index.add(vectors, cluster_ids=labels)</span>
@@ -2751,21 +2836,19 @@ the index file format; files with removals have
 <a href="../usage/#threading-and-file-paths">concurrency contract</a>.</p>
 <p><code>add</code> prepares the result IDs, quantized vectors, and link-list allocations before
 changing the graph or point count. A failure during preparation leaves those
-unchanged. A failure during graph linking can leave the batch counted in
+unchanged. A failure while linking a later batch can leave it counted in
 <code>num_stored_points()</code> with only some points reachable through the graph. The index
 remains safe to search, save, load, and destroy; inspect <code>num_stored_points()</code> before
 retrying, or rebuild to restore full reachability.</p>
 <h3 id="capacity">Capacity<a class="headerlink" href="#capacity" title="Permanent link">&para;</a></h3>
 <p>See the shared <a href="../usage/#index-counts">index count contract</a>. Removed
 records still occupy capacity.</p>
-<p>C++ <code>add</code> never grows the index: it rejects a whole batch whose size exceeds
-<code>max_elements() - num_stored_points()</code>, and <code>resize</code> is the only way to raise
-that. Python <code>add</code> grows the capacity first when the batch does not fit, to at least
-double it, and <code>reserve(num_points)</code> preallocates it (since 0.8.5; <code>resize</code> still works,
-with a <code>DeprecationWarning</code>, until 0.9, and <code>capacity</code> replaces <code>max_elements</code>). Reserving capacity avoids reallocating and copying the whole base-layer record storage during <code>add</code>.
+<p><code>add</code> grows the capacity first when the batch does not fit, to at least
+double it, and <code>reserve(num_points)</code> preallocates it; <code>reserve</code> never shrinks the
+capacity. Reserving capacity avoids reallocating and copying the whole base-layer record storage during <code>add</code>.
 It does not make insertion allocation-free: batch scratch, upper-layer link lists,
 and label-map entries still require allocations, and the label map may rehash.</p>
-<p><code>resize</code> rebuilds the base-layer storage and copies it, so it needs memory for
+<p>Growing the capacity rebuilds the base-layer storage and copies it, so it needs memory for
 both copies while it runs and costs time proportional to the whole index. It
 invalidates every pointer into the index. The per-node upper-layer link lists are
 not copied, only their pointer table.</p>
@@ -2776,12 +2859,12 @@ the index grows many times beyond its original size, recall can drop. Rebuild
 from the original data with new centroids when recall matters more than the cost
 of a rebuild.</p>
 <h3 id="removing-points">Removing points<a class="headerlink" href="#removing-points" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">HierarchicalNSW::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">PID</span><span class="o">*</span><span class="w"> </span><span class="n">labels</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_points</span><span class="p">);</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kt">size_t</span><span class="w"> </span><span class="nf">HnswIndex::remove</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">Id</span><span class="o">*</span><span class="w"> </span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="kt">size_t</span><span class="w"> </span><span class="n">num_ids</span><span class="p">);</span>
 </code></pre></div>
 <ul>
-<li><strong>labels</strong>, <strong>num_points</strong>: <code>num_points</code> labels of the points to remove, as returned by <code>add</code> and
-  <code>search</code>. Every label must be in the index; nothing is removed if one is not.
-  <code>remove</code> returns how many points were newly removed, so repeating a label or a
+<li><strong>ids</strong>, <strong>num_ids</strong>: IDs of the points to remove, as returned by <code>add</code> and
+  <code>search</code>. Every ID must be in <code>[0, num_stored_points())</code>; nothing is removed if one is not.
+  <code>remove</code> returns how many points were newly removed, so repeating an ID or a
   call is safe.</li>
 </ul>
 <p>In Python:</p>
@@ -2790,16 +2873,15 @@ of a rebuild.</p>
 <p>A removed point keeps its codes, its links, and its place in the graph. Search
 still walks through it and <code>add</code> may link new points to it, which keeps the graph
 connected, as in hnswlib. Search never returns it, so a query can get fewer than
-<code>k</code> results once points are removed: in Python the missing slots hold <code>kPidMax</code>
-(<code>2**32 - 1</code>) with an infinite distance. Removed points still count in
+<code>k</code> results once points are removed: the missing slots hold ID <code>-1</code> (C++ <code>kNoId</code>)
+with an infinite distance. Removed points still count in
 <code>num_stored_points()</code> and cannot be restored. Removal requires the same
 exclusive access as other updates.</p>
 <h4 id="choosing-ef_search-after-removals">Choosing <code>ef_search</code> after removals<a class="headerlink" href="#choosing-ef_search-after-removals" title="Permanent link">&para;</a></h4>
 <p>Removed points still take slots in the <code>ef_search</code> candidate set, so a search with
-<code>ef_search</code> close to <code>k</code> finds fewer live points as removals accumulate. C++ search
-uses <code>max(ef_search, k)</code>, clamped to <code>num_stored_points()</code>. Python uses <code>max(k, 64)</code>
-when <code>ef_search</code> is omitted (it was named <code>ef</code> before 0.8.5); an explicit value is also raised to at least <code>k</code>,
-and both are clamped to the stored point count.
+<code>ef_search</code> close to <code>k</code> finds fewer live points as removals accumulate. Search uses
+<code>max(k, 64)</code> when <code>ef_search</code> is omitted; an explicit value is raised to at least
+<code>k</code>, and both are clamped to the stored point count.
 To keep about the same number of live candidates as before the removals, scale
 the effective window by the share of live points (search clamps the result to
 <code>num_stored_points()</code>):</p>
@@ -2808,26 +2890,25 @@ the effective window by the share of live points (search clamps the result to
 <p>Callers that track how many points they removed can apply this directly.</p>
 <h2 id="persistence">Persistence<a class="headerlink" href="#persistence" title="Permanent link">&para;</a></h2>
 <h3 id="how-removal-is-stored">How removal is stored<a class="headerlink" href="#how-removal-is-stored" title="Permanent link">&para;</a></h3>
-<p><code>remove</code> sets the high bit of the point's stored cluster ID. <code>construct</code> and <code>load</code>
-limit the number of clusters to 2^31, so no real cluster ID has that bit, and
+<p><code>remove</code> sets the high bit of the point's stored cluster ID. Setting centroids and
+<code>load</code> limit the number of clusters to 2^31, so no real cluster ID has that bit, and
 every reader of the cluster ID masks it off. The mark lives in the base layer, so
-it survives <code>save</code>, <code>load</code>, and <code>resize</code>, and a file without removals is
-unchanged.</p>
-<p>In C++, <code>cluster_id_of(internal_id)</code> returns a stored record's cluster with the
-mark masked off; removed points keep their cluster. It takes an internal ID from 0
-through <code>num_stored_points() - 1</code>, which matches the label only for points added
-in order. It throws <code>std::logic_error</code> on a default-constructed index that has
-not been loaded, and <code>std::invalid_argument</code> for an ID not below
-<code>num_stored_points()</code>, including any ID before <code>construct</code>. Python does not
-expose it.</p>
-<p>A file that has removals cannot be read by earlier releases. Releases 0.3.7
+it survives <code>save</code>, <code>load</code>, and capacity growth, and a file without removals
+carries no marks.</p>
+<p>In the layout written before 0.9, a file that has removals cannot be read by
+releases before 0.5.2. Releases 0.3.7
 through 0.5.1 check every cluster ID on <code>load</code> and reject the file as invalid
 instead of returning removed points. Releases before 0.3.7 do not check cluster
 IDs, so do not open such a file with them.</p>
+<p><code>save</code> writes <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2">index format 2</a>, which also records the construction seed, so
+<code>seed</code> survives a reload. Releases up to 0.8 cannot read these files; every earlier
+file still loads, without a recorded seed, and saving it writes format 2.
+The C++ API of earlier releases could also save an index before training it. Such a
+file loads untrained, with <code>num_clusters</code> 16; without a recorded seed its first <code>add</code>
+cannot train it, so call <code>train</code> or <code>set_centroids</code> before <code>add</code>.</p>
 <p>New HNSW-RaBitQ indexes pad dimensions to multiples of 32 for all supported bit widths.
 Loading preserves the saved padded dimension and rotation, so older indexes
-using multiples of 64 remain readable. Older library versions cannot load new
-files whose padded dimension is not a multiple of 64.</p>
+using multiples of 64 remain readable.</p>
 <h2 id="implementation-details">Implementation details<a class="headerlink" href="#implementation-details" title="Permanent link">&para;</a></h2>
 <h3 id="construction">Construction<a class="headerlink" href="#construction" title="Permanent link">&para;</a></h3>
 <p>During construction, we first rotate the centroids and then insert each element one by one. For each element:</p>
@@ -2890,11 +2971,12 @@ allowing search to walk through it. A removed entry point keeps the estimate
 already computed for it (the full-bits one when nbits &gt; 1). A removed neighbor
 is not refined and uses its 1-bit estimate for window admission.</p>
 <h3 id="how-added-points-are-linked">How added points are linked<a class="headerlink" href="#how-added-points-are-linked" title="Permanent link">&para;</a></h3>
-<p><code>construct</code> borrows the caller's vectors and links points using exact distances
-between them. That pointer is not retained, so <code>add</code> cannot use it, and instead
-scores candidates with the estimator the search already uses: the vector being
-compared against is rebuilt from its stored RaBitQ code, sign bit and extra bits
-together, and the other side is scored straight from its codes. This is the same
+<p>The first <code>add</code> into an empty graph borrows the caller's vectors and links points
+using exact distances between them. That pointer is not retained, so later adds
+cannot use it, and instead score candidates with the estimator the search already
+uses: the vector being compared against is rebuilt from its stored RaBitQ code,
+sign bit and extra bits together, and the other side is scored straight from its
+codes. This is the same
 approach quantized SymphonyQG construction takes.</p>
 <p>Graph quality therefore depends on how a point arrived.</p>
 <p>Save/load preserves the existing graph and rotation, but not the random generator

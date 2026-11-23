@@ -16,7 +16,7 @@
         <link rel="prev" href="../installation/">
       
       
-        <link rel="next" href="../releases/0.8.5/">
+        <link rel="next" href="../releases/0.9.0/">
       
       
         
@@ -317,7 +317,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -584,6 +584,8 @@
       
         
       
+        
+      
     
     
     
@@ -640,16 +642,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -670,7 +662,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -683,6 +675,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -893,10 +984,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -914,8 +1005,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1038,10 +1129,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -1059,8 +1150,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2311,7 +2402,9 @@ See the <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/tests/
 for Linux ARM64, Windows, and Apple Silicon.</p>
 <h2 id="c-examples">C++ examples<a class="headerlink" href="#c-examples" title="Permanent link">&para;</a></h2>
 <p>ANN example executables are written to <code>bin/</code>. Their source demonstrates complete
-indexing and querying workflows:</p>
+indexing and querying workflows with the index classes <code>IvfIndex</code>, <code>HnswIndex</code> and
+<code>SymqgIndex</code> from <code>rabitqlib/index/ivf_index.hpp</code>, <code>hnsw_index.hpp</code> and
+<code>symqg_index.hpp</code>, which <code>rabitqlib::index</code> provides:</p>
 <ul>
 <li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp">IVF-RaBitQ</a></li>
 <li><a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp">HNSW-RaBitQ</a></li>
@@ -2323,10 +2416,10 @@ indexing and querying workflows:</p>
 <h2 id="use-in-another-c-project">Use in another C++ project<a class="headerlink" href="#use-in-another-c-project" title="Permanent link">&para;</a></h2>
 <p>The <a href="../rabitq/core_api/">core quantization v1 API</a> has a C++ source-compatibility contract.
 Other C++ APIs may evolve, and no cross-version C++ binary ABI is promised.
-Pin the <code>v0.8.5</code> release and include RaBitQ-Library as a Git submodule:</p>
+Pin the <code>v0.9.0</code> release and include RaBitQ-Library as a Git submodule:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>submodule<span class="w"> </span>add<span class="w"> </span>https://github.com/VectorDB-NTU/RaBitQ-Library.git<span class="w"> </span>third_party/rabitqlib
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>git<span class="w"> </span>submodule<span class="w"> </span>update<span class="w"> </span>--init<span class="w"> </span>--recursive
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>v0.8.5
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>git<span class="w"> </span>-C<span class="w"> </span>third_party/rabitqlib<span class="w"> </span>checkout<span class="w"> </span>v0.9.0
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>git<span class="w"> </span>add<span class="w"> </span>third_party/rabitqlib
 </code></pre></div>
 <p>Add the library and link its namespaced target in your <code>CMakeLists.txt</code>:</p>
@@ -2354,6 +2447,11 @@ environments. Disable native optimization for use on other CPUs:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="p">)</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::index</span><span class="p">)</span>
 </code></pre></div>
+<p>To require a release, pass its version, for example
+<code>find_package(rabitqlib 0.9 CONFIG REQUIRED)</code>. Before 1.0 a minor release may break the
+API, so only the same minor release, at or above a requested patch, satisfies the request:
+0.9.x does, 0.8 and 0.10 do not. A version range must stay within one minor release, for
+example <code>0.9...&lt;0.10</code>.</p>
 <p>For a non-system prefix, point CMake to the installation:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
@@ -2532,13 +2630,13 @@ MODULE, not a C++ link library, and is not exported as a C++ <code>find_package<
         
         
           
-          <a href="../releases/0.8.5/" class="md-footer__link md-footer__link--next" aria-label="Next: 0.8.5">
+          <a href="../releases/0.9.0/" class="md-footer__link md-footer__link--next" aria-label="Next: 0.9.0">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                0.8.5
+                0.9.0
               </div>
             </div>
             <div class="md-footer__button md-icon">

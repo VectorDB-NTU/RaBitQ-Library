@@ -27,7 +27,7 @@
     
     
       
-        <title>Migrating to 0.8 - RaBitQ Library</title>
+        <title>Migrating to 0.9 - RaBitQ Library</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#migrating-python-code-from-07-to-08" class="md-skip">
+        <a href="#migrating-python-code-to-09" class="md-skip">
           Skip to content
         </a>
       
@@ -109,7 +109,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Migrating to 0.8
+              Migrating to 0.9
             
           </span>
         </div>
@@ -326,7 +326,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -344,7 +344,7 @@
   <span class="md-ellipsis">
     
   
-    Migrating to 0.8
+    Migrating to 0.9
   
 
     
@@ -518,6 +518,8 @@
       
         
       
+        
+      
     
     
     
@@ -574,16 +576,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -604,7 +596,7 @@
   <span class="md-ellipsis">
     
   
-    0.8
+    0.9
   
 
     
@@ -617,6 +609,105 @@
         
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    0.9
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../releases/0.9.0/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.9.0
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    0.8
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -827,10 +918,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
             
   
   
@@ -848,8 +939,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -972,10 +1063,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_4" >
         
           
-          <label class="md-nav__link" for="__nav_6_3" id="__nav_6_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
             
   
   
@@ -993,8 +1084,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2129,28 +2220,31 @@
   
 
 
-<h1 id="migrating-python-code-from-07-to-08">Migrating Python code from 0.7 to 0.8<a class="headerlink" href="#migrating-python-code-from-07-to-08" title="Permanent link">&para;</a></h1>
-<p>In 0.8, <code>IvfIndex</code>, <code>HnswIndex</code> and <code>SymqgIndex</code> follow a <code>train</code> → <code>add</code> →
+<h1 id="migrating-python-code-to-09">Migrating Python code to 0.9<a class="headerlink" href="#migrating-python-code-to-09" title="Permanent link">&para;</a></h1>
+<p>Since 0.8, <code>IvfIndex</code>, <code>HnswIndex</code> and <code>SymqgIndex</code> follow a <code>train</code> → <code>add</code> →
 <code>search</code> workflow, as Faiss indexes do; since 0.8.2 the first <code>add</code> trains, so
 construct → <code>add</code> → <code>search</code> is enough, and <code>train</code> remains for training on a
 sample. IVF-RaBitQ and HNSW-RaBitQ learn their own centroids, so you no longer
 run k-means and pass the centroids and assignments to <code>build</code>; SymphonyQG has
 nothing to train and builds its graph in <code>add</code>. Code written for 0.7
-still runs in 0.8. Each old form raises a <code>DeprecationWarning</code> at your call site
-and will be removed in <strong>0.9</strong>.</p>
+still runs in 0.8, where each old form raises a <code>DeprecationWarning</code> at your call
+site. <strong>0.9 removes those forms</strong>: a removed call raises <code>TypeError</code>, and a removed
+attribute <code>AttributeError</code>.</p>
 <p>If your code already uses the 0.8 forms, go to
-<a href="#from-08-to-09">From 0.8 to 0.9</a>: 0.9 renames some of them, and 0.8.5 accepts
-the new names.</p>
-<p>Unless an item below says otherwise, a 0.7 call that raises a deprecation
-warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
-<code>add(x)</code> and <code>search</code>, follow the 0.8 rules.</p>
+<a href="#from-08-to-09">From 0.8 to 0.9</a>: 0.9 renames some of them. 0.8.5 accepts both
+spellings, so you can make every change on 0.8.5, with its warnings as a guide,
+before upgrading.</p>
+<p>The tables below give each replacement in its 0.9 spelling. In 0.8, a 0.7 call
+that raises a deprecation warning keeps its 0.7 behavior unless an item says
+otherwise, and calls that are valid in both versions, such as <code>add(x)</code> and
+<code>search</code>, follow the 0.8 rules.</p>
 <h2 id="ivf-rabitq-and-hnsw-rabitq">IVF-RaBitQ and HNSW-RaBitQ<a class="headerlink" href="#ivf-rabitq-and-hnsw-rabitq" title="Permanent link">&para;</a></h2>
 <h3 id="old-and-new-calls">Old and new calls<a class="headerlink" href="#old-and-new-calls" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
 <th>0.7</th>
-<th>0.8</th>
+<th>Since 0.8</th>
 </tr>
 </thead>
 <tbody>
@@ -2164,7 +2258,7 @@ warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 </tr>
 <tr>
 <td><code>HnswIndex(dim, max_elements, M=16, ef_construction=200, nbits=8, metric="l2", random_seed=100)</code></td>
-<td><code>HnswIndex(dim, nbits=..., num_clusters=16, M=16, ef_construction=200, metric="l2", seed=100)</code>; capacity grows on <code>add</code>, and <code>reserve(n)</code> preallocates it (<code>resize(n)</code> before 0.8.5)</td>
+<td><code>HnswIndex(dim, nbits=..., num_clusters=16, M=16, ef_construction=200, metric="l2", seed=None)</code> (<code>seed=100</code> in 0.8); capacity grows on <code>add</code>, and <code>reserve(n)</code> preallocates it (<code>resize(n)</code> before 0.8.5)</td>
 </tr>
 <tr>
 <td><code>HnswIndex(..., random_seed=s)</code></td>
@@ -2189,10 +2283,10 @@ warning keeps its 0.7 behavior. Calls that are valid in both versions, such as
 </tbody>
 </table>
 <p>Except for <code>dim</code> and IVF-RaBitQ's <code>num_clusters</code>, constructor arguments are
-keyword-only in 0.8. Since 0.8.2, <code>nbits</code> defaults to 7 (0.8.0 and 0.8.1 required
-it). HNSW-RaBitQ used to default to <code>nbits=8</code>; the old form keeps that default.</p>
+keyword-only since 0.8. Since 0.8.2, <code>nbits</code> defaults to 7 (0.8.0 and 0.8.1 required
+it). HNSW-RaBitQ used to default to <code>nbits=8</code>.</p>
 <p><code>train</code> uses the settings in <code>index.cp</code>: 10 iterations (25 before 0.8.2), at most 256 sampled
-vectors per centroid, spherical k-means for <code>metric="ip"</code>, and the index seed.
+vectors per centroid, spherical k-means for <code>metric="ip"</code> (and, from 0.9, <code>"cosine"</code>), and the index seed.
 See <a href="../index/ivf/#training-centroids-in-python">IVF-RaBitQ training</a> for the
 details and for <code>set_centroids</code>. The <a href="../clustering/">clustering classes</a> still
 work if you want to run k-means yourself.</p>
@@ -2204,11 +2298,10 @@ work if you want to run k-means yourself.</p>
   the same default and takes <code>num_threads</code>; before, it always used every CPU and
   ignored <code>OMP_NUM_THREADS</code>. This applies to every <code>add</code> call that does not
   pass <code>num_threads</code>, including 0.7 code such as <code>index.add(x)</code>, without a
-  warning. <code>search</code> still defaults to one thread, and the deprecated <code>build</code>
-  keeps its default of 1.</li>
+  warning. <code>search</code> still defaults to one thread.</li>
 <li><strong>HNSW-RaBitQ builds are not reproducible by default.</strong> With more than one
   thread, <code>add</code> links points in a nondeterministic order. Pass <code>num_threads=1</code>
-  to <code>add</code> for the same graph on every run. With one thread and the same seed,
+  to <code>add</code>, and since 0.9 a <code>seed</code>, for the same graph on every run. With one thread and the same seed,
   <code>set_centroids</code> followed by <code>add</code> produces exactly the index that 0.7 <code>build</code>
   produced from the same centroids and cluster IDs.</li>
 <li><strong>IVF-RaBitQ HNSW routing builds are not reproducible by default.</strong> 0.7 <code>build</code>
@@ -2219,11 +2312,10 @@ work if you want to run k-means yourself.</p>
 <li><strong><code>k</code> above the point count.</strong> 0.8.0 and 0.8.1 raised <code>ValueError</code> when <code>k</code>
   exceeded <code>num_stored_points</code> (HNSW-RaBitQ) or the point count (IVF-RaBitQ,
   SymphonyQG). Since 0.8.2, every index accepts any <code>k &gt;= 1</code> and fills missing
-  slots with ID <code>2**32 - 1</code> and distance <code>inf</code>; test <code>np.isfinite(distances)</code>.</li>
+  slots with ID <code>2**32 - 1</code> (<code>-1</code> since 0.9) and distance <code>inf</code>; test
+  <code>np.isfinite(distances)</code>, which works in both.</li>
 <li><strong>HNSW-RaBitQ capacity grows.</strong> <code>add</code> resizes the index, at least doubling it,
-  instead of raising <code>ValueError</code> when the batch does not fit. This also applies
-  to <code>add</code> on indexes created in the old form, and to the deprecated <code>build</code>,
-  which no longer rejects more rows than <code>max_elements</code>.</li>
+  instead of raising <code>ValueError</code> when the batch does not fit.</li>
 <li><strong>State errors.</strong> Calling <code>add</code> with <code>cluster_ids</code>, <code>search</code>, <code>remove</code>,
   <code>reserve_cluster</code> (<code>reserve</code> before 0.8.5) or <code>save</code> before training raises <code>RuntimeError("IvfIndex must be
   trained or loaded before ...")</code>; the 0.7 message said "built". Since 0.8.2,
@@ -2231,19 +2323,16 @@ work if you want to run k-means yourself.</p>
   cannot be saved. <code>repr</code> shows <code>is_trained</code> instead of <code>is_built</code>.</li>
 <li><strong>Seeds.</strong> <code>IvfIndex</code> still draws a random rotation seed by default, and now
   reports it as <code>index.seed</code>; pass it back as <code>seed=</code> to reproduce an index.
-  Indexes loaded from files report <code>seed=None</code>.</li>
+  Indexes loaded from files written by releases up to 0.8 report <code>seed=None</code>.</li>
 <li><strong>HNSW-RaBitQ <code>num_clusters</code></strong> reports the configured count (16 by default)
   before training, where 0.7 reported 0 before <code>build</code>.</li>
-<li>An <code>IvfIndex</code> created with <code>max_elements</code> is filled by <code>build</code>; <code>train</code> and
-  <code>set_centroids</code> raise <code>RuntimeError</code> for it. Create the index in the 0.8 form
-  to train it.</li>
 </ul>
 <h2 id="symphonyqg">SymphonyQG<a class="headerlink" href="#symphonyqg" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>0.7</th>
-<th>0.8</th>
+<th>Since 0.8</th>
 </tr>
 </thead>
 <tbody>
@@ -2261,7 +2350,7 @@ work if you want to run k-means yourself.</p>
 </tr>
 <tr>
 <td><code>index.search_batch(q, k, ef)</code></td>
-<td><code>index.search(q, k, ef)</code>; <code>ef</code> is now optional</td>
+<td><code>index.search(q, k, ef_search)</code>; the breadth is now optional</td>
 </tr>
 <tr>
 <td><code>index.quantization_bits</code></td>
@@ -2276,27 +2365,29 @@ work if you want to run k-means yourself.</p>
 <p><code>train(x)</code> exists for a uniform workflow but only checks <code>x</code> as <code>add</code> would,
 and <code>is_trained</code> is always <code>True</code>. <code>add</code> builds the graph from all vectors and can run only once;
 a second <code>add</code>, or <code>add</code> on a loaded index, raises <code>RuntimeError</code>, as Faiss's
-NSG index does. The deprecated <code>build</code> keeps its 0.7 behavior: it replaces any
-existing graph and, unless you passed <code>seed</code>, draws a new random seed each time.</p>
+NSG index does; create a new index to rebuild, where 0.7 <code>build</code> replaced the
+existing graph.</p>
 <p><code>search</code> now treats its breadth (<code>ef_search</code>; <code>ef</code> before 0.8.5) like HNSW-RaBitQ:
 omitted, it uses
 <code>max(k, 64)</code> (<code>max(k, 10)</code> before 0.8.2), and a smaller one is raised to <code>k</code>. In 0.7, both raised
-<code>ValueError</code>. <code>add</code> uses every CPU by default, while the deprecated <code>build</code>
-keeps one thread. The seed now also drives graph construction: without <code>seed</code>,
+<code>ValueError</code>. <code>add</code> uses every CPU by default, where <code>build</code> used one thread.
+The seed now also drives graph construction: without <code>seed</code>,
 each index draws one random seed and reports it as <code>index.seed</code>; 0.7 drew
 separate random seeds for the rotation and the graph. Before vectors are added,
 <code>search</code> and <code>save</code> raise <code>RuntimeError("SymqgIndex has no vectors; ...")</code>.</p>
 <h2 id="files-and-c">Files and C++<a class="headerlink" href="#files-and-c" title="Permanent link">&para;</a></h2>
-<p>Saved files are unchanged, and so is the <code>max_elements</code> property up to 0.8.4 (see
+<p>Saved files are unchanged in 0.8, and so is the <code>max_elements</code> property up to 0.8.4 (see
 <a href="#from-08-to-09">From 0.8 to 0.9</a>). <code>HnswIndex.search</code>
 without a search breadth uses <code>max(k, 64)</code> since 0.8.2 (<code>max(k, 10)</code> before), which changes
 its results and latency; pass the breadth as the third argument to keep the old window. Files written by 0.7
 load as trained indexes, except empty, untrained HNSW-RaBitQ files, which need
 <code>train</code> before <code>add</code>.</p>
-<p>For C++, the existing constructors and <code>construct</code> are unchanged; see
-<a href="../index/ivf/#training-centroids-in-c">IVF-RaBitQ</a> and
-<a href="../index/hnsw/#training-centroids-in-c">HNSW-RaBitQ</a> for the new training entry
-points. C++ behavior changes: since 0.8.0, saving an index without stored points
+<p>For C++ in 0.8, the existing index constructors and <code>construct</code> are unchanged, and
+<code>IVF::train</code> and <code>HierarchicalNSW::train</code> are the new training entry points; from
+0.9 the <a href="../index/ivf/#training-centroids-in-c">IVF-RaBitQ</a> and
+<a href="../index/hnsw/#training-centroids-in-c">HNSW-RaBitQ</a> pages describe <code>IvfIndex</code> and
+<code>HnswIndex</code> instead, and the <a href="../releases/0.9.0/#c-changes">release notes</a> map the
+0.8 classes to <code>IvfIndex</code>, <code>HnswIndex</code> and <code>SymqgIndex</code>. C++ behavior changes: since 0.8.0, saving an index without stored points
 throws <code>std::logic_error</code>; since 0.8.2, IVF and SymphonyQG searches pad <code>k</code> above
 the point count instead of throwing, and <code>default_training_parameters</code> runs 10
 iterations. See the <a href="../releases/0.8.2/#c-changes">0.8.2 notes</a>.</p>
@@ -2304,7 +2395,8 @@ iterations. See the <a href="../releases/0.8.2/#c-changes">0.8.2 notes</a>.</p>
 <p>0.9 gives the three index classes one name for each concept
 (<a href="https://github.com/VectorDB-NTU/RaBitQ-Library/issues/232">#232</a>). Since 0.8.5 the
 0.8 form in the first column raises a <code>DeprecationWarning</code> at your call site; 0.9
-removes it.</p>
+removes it. A removed name or call form then raises <code>AttributeError</code> or <code>TypeError</code>,
+and a zero breadth or an out-of-range seed raises <code>ValueError</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2317,7 +2409,7 @@ removes it.</p>
 <tr>
 <td><code>IvfIndex.max_elements</code>, <code>SymqgIndex.max_elements</code></td>
 <td><code>num_stored_points</code></td>
-<td>Every 0.8 release. The two are equal, except on an <code>IvfIndex</code> created in the 0.7 form before <code>build</code>.</td>
+<td>Every 0.8 release. The two are equal in 0.8, except on an <code>IvfIndex</code> created in the 0.7 form before <code>build</code>.</td>
 </tr>
 <tr>
 <td><code>HnswIndex.max_elements</code></td>
@@ -2412,11 +2504,43 @@ normalize the value:</p>
 </code></pre></div>
 <p>Code that must also run on releases before 0.8.5 needs a version check for the rows
 marked 0.8.5; the other replacements work on every release named.</p>
-<p>Three changes come without a warning in 0.9. <code>HnswIndex()</code> without <code>seed=</code> draws a seed,
+<p>In C++, <code>QGKMeansParameters</code> takes the same three field renames in 0.9, without a
+transition release, and <code>FinalAssignmentMode::SymphonyQG</code> and the two statistics
+aliases are removed; see the <a href="../releases/0.9.0/#c-changes">0.9 notes</a>.</p>
+<p>Four changes come without a warning in 0.9. <code>HnswIndex()</code> without <code>seed=</code> draws a seed,
 as <code>IvfIndex</code> and <code>SymqgIndex</code> already do, instead of using 100: pass <code>seed=</code> (and
 <code>num_threads=1</code> to <code>add</code>) if you rely on a reproducible build. <code>repr(index)</code> prints
-<code>capacity=</code> and <code>routing=</code> where it prints <code>max_elements=</code> and <code>initializer=</code>. And
-<code>cp.final_assignment</code> reads back as a string, as described above.</p>
+<code>capacity=</code> for <code>HnswIndex</code> and <code>routing=</code> for <code>IvfIndex</code> where it prints <code>max_elements=</code>
+and <code>initializer=</code>, and no longer prints <code>max_elements=</code> for <code>IvfIndex</code>. The metric
+spelling <code>"innerproduct"</code> raises <code>ValueError</code> on the index classes and in
+<code>rabitqlib.quant</code>: use <code>"ip"</code>, which every release accepts and the <code>metric</code> properties
+return. And <code>cp.final_assignment</code> reads back as a string, as described above.</p>
+<p>0.9 also changes behavior that no warning can announce:</p>
+<ul>
+<li><code>search</code> and <code>add</code> return <code>int64</code> IDs, with <code>-1</code> instead of <code>2**32 - 1</code> for a missing
+  result.</li>
+<li><code>save</code> writes index format 2, which releases up to 0.8 cannot read, and <code>load</code>
+  restores the seed of such a file. Files from earlier releases still load, without a
+  recorded seed.</li>
+<li>An <code>IvfIndex</code> with HNSW routing stores the routing graph in the index file, so <code>save</code>
+  no longer writes a <code>&lt;file&gt;.hnsw</code> sidecar. A sidecar left by an earlier save is not
+  removed; the new file does not use it.</li>
+<li><code>load</code> raises the new <code>rabitqlib.FormatError</code> for a truncated, corrupt, mismatched or
+  unsupported file. It subclasses <code>RuntimeError</code>, which these errors raised before, and
+  <code>ValueError</code>; <code>rabitqlib.quant.FormatError</code> is now the same class. A file that cannot
+  be opened, or the missing sidecar of an earlier file, still raises a plain
+  <code>RuntimeError</code>. The messages for damaged files change, so match the exception class
+  rather than its text.</li>
+<li>The index classes are the extension's own classes, without Python wrappers. A wrong
+  argument raises pybind11's <code>TypeError</code>, which lists the supported signatures, instead
+  of messages such as <code>IvfIndex() got an unexpected keyword argument 'x'</code>, and
+  <code>inspect.signature()</code> no longer works on their constructors and methods; <code>help()</code> and
+  the type stubs describe them.</li>
+<li>A call with both an invalid argument and the wrong state may report the argument
+  first, for example <code>ValueError</code> instead of <code>RuntimeError</code> for <code>nprobe=0</code> on an
+  untrained index.</li>
+</ul>
+<p>See the <a href="../releases/0.9.0/">0.9 notes</a> for every change.</p>
 
 
 
