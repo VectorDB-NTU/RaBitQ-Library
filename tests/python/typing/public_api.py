@@ -8,15 +8,12 @@ import numpy as np
 import numpy.typing as npt
 import rabitqlib
 from rabitqlib import (
-    FinalAssignmentMode,
     HnswIndex,
     IvfIndex,
     KMeansIterationStats,
     QGKMeans,
-    QGKMeansIterationStats,
     QGKMeansParameters,
     RaBitQKMeans,
-    RaBitQKMeansIterationStats,
     RaBitQKMeansParameters,
     SymqgIndex,
     quant,
@@ -37,16 +34,16 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
         index.set_centroids(x[:2])
         assert_type(index.is_trained, bool)
         assert_type(index.seed, int | None)
-        assert_type(index.add(x, cluster_ids=labels), npt.NDArray[np.uint32])
+        assert_type(index.add(x, cluster_ids=labels), npt.NDArray[np.int64])
         assert_type(index.remove([0, 1]), int)
         assert_type(index.dim, int)
         assert_type(len(index), int)
         index.save("index.bin")
     ids, distances = ivf.search(x, k=5, nprobe=2)
-    assert_type(ids, npt.NDArray[np.uint32])
+    assert_type(ids, npt.NDArray[np.int64])
     assert_type(distances, npt.NDArray[np.float32])
     assert_type(
-        hnsw.search(x, 5), tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]
+        hnsw.search(x, 5), tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]]
     )
     graph.train(x)
     graph.add(x, num_threads=1)
@@ -55,15 +52,22 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(len(graph), int)
     assert_type(
         graph.search(x, 5),
-        tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]],
+        tuple[npt.NDArray[np.int64], npt.NDArray[np.float32]],
     )
     assert_type(IvfIndex.load("index.bin"), IvfIndex)
     assert_type(HnswIndex.load("index.bin"), HnswIndex)
     assert_type(SymqgIndex.load("index.bin"), SymqgIndex)
     ivf.reserve_cluster(0, 128)
     hnsw.reserve(256)
-    qg = QGKMeans(64, 40, niter=2, nbits=4)
+    assert_type(hnsw.capacity, int)
+    assert_type(ivf.num_stored_points, int)
+    ivf.search(x, 5, 1, high_accuracy=None, num_threads=1)
+    hnsw.search(x, 5, 32, num_threads=1)
+    graph.search(x, 5, ef_search=32, num_threads=1)
+    qg = QGKMeans(64, 40, niter=2, nbits=4, max_degree=32, ef_construction=100)
     flat = RaBitQKMeans(64, 2, final_assignment="exact")
+    assert_type(qg.cp.nbits, int)
+    assert_type(flat.cp.final_assignment, Literal["approximate", "exact"])
     assert_type(qg.cp, QGKMeansParameters)
     assert_type(flat.cp, RaBitQKMeansParameters)
     for model in (qg, flat):
@@ -80,33 +84,64 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
         if model.iteration_stats is not None:
             assert_type(model.iteration_stats[0], KMeansIterationStats)
     qg.cp.final_assignment = "approximate"
-    ivf.search(x, "five", 2)  # type: ignore[call-overload]
+    ivf.search(x, "five", 2)  # type: ignore[arg-type]
     ivf.dim = 16  # type: ignore[misc]
     qg.cp.niter = "two"  # type: ignore[assignment]
     RaBitQKMeans(64, 2, graph_degree=32)  # type: ignore[call-arg]
-    hnsw.search(x, 5, nprobe=2)  # type: ignore[call-overload]
-    IvfIndex(64, 2, 4)  # type: ignore[call-overload]
+    hnsw.search(x, 5, nprobe=2)  # type: ignore[call-arg]
+    IvfIndex(64, 2, 4)  # type: ignore[call-arg]
     hnsw.train(x, 1)  # type: ignore[call-arg]
     qg.cp.final_assignment = "Exact"  # type: ignore[assignment]
-    QGKMeans(64, 40, ef_build=1, bogus=1)  # type: ignore[call-overload]
+    QGKMeans(64, 40, ef_build=1, bogus=1)  # type: ignore[call-arg]
 
 
-def deprecated_forms_still_type_check(qg: QGKMeans, flat: RaBitQKMeans) -> None:
-    # Accepted until 0.9; the stubs mark them deprecated without rejecting them.
-    RaBitQKMeans(64, 2, final_assignment=FinalAssignmentMode.Exact)
-    QGKMeans(64, 40, final_assignment=FinalAssignmentMode.Approximate)
-    qg.cp.final_assignment = FinalAssignmentMode.Exact
-    assert_type(flat.cp.final_assignment, FinalAssignmentMode)
-    QGKMeans(64, 40, quantization_bits=4, niter=2)
-    QGKMeans(64, 40, graph_degree=32, ef_build=100)
-
-
-def stats_alias(stats: RaBitQKMeansIterationStats) -> QGKMeansIterationStats:
-    return stats
-
-
-def stats_name(stats: QGKMeansIterationStats) -> KMeansIterationStats:
-    return stats
+def reject_removed_forms(
+    ivf: IvfIndex,
+    hnsw: HnswIndex,
+    graph: SymqgIndex,
+    qg: QGKMeans,
+    x: npt.NDArray[np.float32],
+    labels: npt.NDArray[np.uint32],
+) -> None:
+    # The 0.7 call forms and the 0.8 spellings that 0.9 removed.
+    IvfIndex(64, 80, 1, 4)  # type: ignore[arg-type, call-arg]
+    IvfIndex(dim=64, max_elements=80, num_clusters=1, nbits=4)  # type: ignore[call-arg]
+    IvfIndex(64, 1, initializer="flat")  # type: ignore[call-arg]
+    IvfIndex(64, 1, metric="innerproduct")  # type: ignore[arg-type]
+    HnswIndex(64, 80)  # type: ignore[call-arg]
+    HnswIndex(64, max_elements=80)  # type: ignore[call-arg]
+    HnswIndex(64, random_seed=5)  # type: ignore[call-arg]
+    SymqgIndex(64, 32, "l2", 4)  # type: ignore[arg-type, call-arg]
+    SymqgIndex(64, quantization_bits=0)  # type: ignore[call-arg]
+    ivf.build(x, x[:1], labels)  # type: ignore[attr-defined]
+    hnsw.build(x, x[:1], labels)  # type: ignore[attr-defined]
+    graph.build(x, 40)  # type: ignore[attr-defined]
+    ivf.add(x, labels)  # type: ignore[call-arg]
+    hnsw.add(x, labels)  # type: ignore[call-arg]
+    ivf.is_built  # type: ignore[attr-defined]
+    graph.is_built  # type: ignore[attr-defined]
+    ivf.max_elements  # type: ignore[attr-defined]
+    hnsw.max_elements  # type: ignore[attr-defined]
+    graph.max_elements  # type: ignore[attr-defined]
+    ivf.initializer  # type: ignore[attr-defined]
+    ivf.reserve(0, 8)  # type: ignore[attr-defined]
+    hnsw.resize(128)  # type: ignore[attr-defined]
+    graph.quantization_bits  # type: ignore[attr-defined]
+    graph.search_batch(x, 5, 32)  # type: ignore[attr-defined]
+    ivf.search(x, 5, 1, None)  # type: ignore[call-arg]
+    hnsw.search(x, 5, ef=32)  # type: ignore[call-arg]
+    hnsw.search(x, 5, 32, 1)  # type: ignore[call-arg]
+    graph.search(x, 5, ef=32)  # type: ignore[call-arg]
+    graph.search(x, 5, 32, 1)  # type: ignore[call-arg]
+    QGKMeans(64, 40, quantization_bits=4)  # type: ignore[call-arg]
+    QGKMeans(64, 40, graph_degree=32)  # type: ignore[call-arg]
+    QGKMeans(64, 40, ef_build=100)  # type: ignore[call-arg]
+    qg.cp.quantization_bits = 4  # type: ignore[attr-defined]
+    qg.cp.graph_degree = 32  # type: ignore[attr-defined]
+    qg.cp.ef_build = 100  # type: ignore[attr-defined]
+    rabitqlib.FinalAssignmentMode  # type: ignore[attr-defined]
+    rabitqlib.QGKMeansIterationStats  # type: ignore[attr-defined]
+    rabitqlib.RaBitQKMeansIterationStats  # type: ignore[attr-defined]
 
 
 def check_parameter_reads(
@@ -152,7 +187,7 @@ def check_numpy_scalars() -> None:
     ids, distances = ivf.search(
         x[:2], k=np.int64(3), nprobe=np.int64(1), high_accuracy=np.bool_(True)
     )
-    assert_type(ids, npt.NDArray[np.uint32])
+    assert_type(ids, npt.NDArray[np.int64])
     assert_type(distances, npt.NDArray[np.float32])
     hnsw.reserve(np.int64(100))
     hnsw.search(x[:2], np.int64(3), ef_search=np.int64(10))
@@ -189,12 +224,9 @@ def check_numpy_scalars() -> None:
     qg.cp.ef_search = np.int64(16)
     qg.cp.graph_build_iterations = np.int64(1)
     qg.cp.nbits = np.int64(4)
-    members = FinalAssignmentMode.__members__
-    assert_type(members, dict[str, FinalAssignmentMode])
-    assert_type(members["Exact"], FinalAssignmentMode)
-    assert members["Exact"] == FinalAssignmentMode.Exact
-    assert members["SymphonyQG"] == members["Approximate"]
-    assert FinalAssignmentMode(np.int64(1)) == members["Exact"]
+    for mode in ("approximate", "exact"):
+        qg.cp.final_assignment = mode
+        assert qg.cp.final_assignment == mode
 
 
 def check_input_contracts() -> None:
@@ -203,11 +235,7 @@ def check_input_contracts() -> None:
     centroids = x.mean(axis=0, keepdims=True)
     signed = np.zeros(80, dtype=np.int64)
     unsigned = np.zeros(80, dtype=np.uint32)
-    metrics: tuple[Literal["l2", "ip", "innerproduct"], ...] = (
-        "l2",
-        "ip",
-        "innerproduct",
-    )
+    metrics: tuple[Literal["l2", "ip", "cosine"], ...] = ("l2", "ip", "cosine")
     for metric in metrics:
         ivf = IvfIndex(64, 1, nbits=4, metric=metric)
         HnswIndex(64, nbits=4, metric=metric)
@@ -244,6 +272,7 @@ def check_input_contracts() -> None:
         graph.add(x)
     # Returned option values must be usable as inputs without casts.
     IvfIndex(64, 1, nbits=4, metric=ivf.metric, routing=ivf.routing)
+    assert_type(ivf.metric, Literal["l2", "ip", "cosine"])
 
 
 def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
@@ -253,11 +282,11 @@ def reject_invalid_inputs(x: npt.NDArray[np.float32]) -> None:
     ivf = IvfIndex(64, 1, nbits=4)
     hnsw = HnswIndex(64, nbits=4)
     graph = SymqgIndex(64)
-    IvfIndex(64, 1, nbits=4, metric="cosine")  # type: ignore[call-overload]
-    HnswIndex(64, nbits=4, metric="L2")  # type: ignore[call-overload]
-    SymqgIndex(64, metric="inner_product")  # type: ignore[call-overload]
-    IvfIndex(64, 1, nbits=4, routing="flat_rabit")  # type: ignore[call-overload]
-    SymqgIndex(64, init="pippn")  # type: ignore[call-overload]
+    IvfIndex(64, 1, nbits=4, metric="cos")  # type: ignore[arg-type]
+    HnswIndex(64, nbits=4, metric="L2")  # type: ignore[arg-type]
+    SymqgIndex(64, metric="inner_product")  # type: ignore[arg-type]
+    IvfIndex(64, 1, nbits=4, routing="flat_rabit")  # type: ignore[arg-type]
+    SymqgIndex(64, init="pippn")  # type: ignore[arg-type]
     graph.add(x, 1)  # type: ignore[call-arg]
     ivf.add(x, cluster_ids=[0.0] * 80)  # type: ignore[list-item]
     hnsw.add(x, cluster_ids=float_ids)  # type: ignore[arg-type]

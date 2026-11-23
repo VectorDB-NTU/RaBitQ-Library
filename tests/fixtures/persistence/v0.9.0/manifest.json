@@ -1,0 +1,32 @@
+{
+  "source_tag": "v0.9.0",
+  "source_commit": "9c7c4a5a391c46ee17b51bd4a8844bf374d63cea",
+  "writer": "tests/fixtures/persistence/v0.9.0/generate.cpp",
+  "producer": "Linux x86-64, g++ 14.3.0, Release, one thread, native optimization OFF",
+  "byte_order": "little",
+  "size_t_bytes": 8,
+  "sha256": {
+    "v0.9.0/hnsw1_l2.expected": "00af920380168a49f0739b9f180a764c3fac3bbc3a7b31b6acbbf0ecd621f62a",
+    "v0.9.0/hnsw1_l2.index": "6b094315dfeab27b648dac74cfd5ec3f6378134a42b8538ff871944422205afd",
+    "v0.9.0/hnsw5_cosine.expected": "12959b3bbb531adac752e05d08970952302ce9132bd471011b79db7fcef17a23",
+    "v0.9.0/hnsw5_cosine.index": "95145b67d0c30247641b7c03c9de3d318e51e6e7be051ab8b8c90eebda4270b7",
+    "v0.9.0/hnsw9_ip.expected": "d675cb061e65df4699e27cf44c0ca6d66c33c2bf4794a1a34937756c00b2ea6e",
+    "v0.9.0/hnsw9_ip.index": "01d930e926a654759640f799d782f882c3fd49ebea13bcf36ef32f4c1c7e578d",
+    "v0.9.0/ivf1_flat_matrix_l2.expected": "56c05f0d88de854c4d5d2dd7791b1e925b81db7584d398478b323f18066c5994",
+    "v0.9.0/ivf1_flat_matrix_l2.index": "e1f658f16baa4a89ff3a53ece7314b732c3efbb3bddd42e9d002ab05f4df8165",
+    "v0.9.0/ivf32_hnsw_ip.expected": "1e08fd7ae0e84825b6e85bd2ff36c45f1e5670a97798ade5de2cf8c94c4ff992",
+    "v0.9.0/ivf32_hnsw_ip.index": "c0748368bea15a1505e8205636a032dff1f956386f5d21567ecc280fc63df6d1",
+    "v0.9.0/ivf4_flat_l2.expected": "ba1cc9f717d5273cd89fee5d4ce535f1e8c4df085a2095aff51f5cd4717f8d17",
+    "v0.9.0/ivf4_flat_l2.index": "eb9da556a6c81a6242aeda5d5e255d857182697a087c1074e6a84a058e130320",
+    "v0.9.0/ivf7_flatrabitq_cosine.expected": "4d14d9304617f07cc23ced5277a31ce8936ec7aab8662e319ab143ba2336095c",
+    "v0.9.0/ivf7_flatrabitq_cosine.index": "e7dfe8f31f9df5a82b72124434c57d5524a6503637a3ff223380348fec92667c",
+    "v0.9.0/qg32_ip.expected": "3ecb6604dce2108556e5e48130d4e9902d7ef7f0ef81aba39a3caa40b62230fe",
+    "v0.9.0/qg32_ip.index": "1910a45675b90dd0d08700ba01e365179f6de10e0365ef3696571ad667ecd8c9",
+    "v0.9.0/qg4_cosine.expected": "07b1be3375afa7746cb74ca2c69410c59c6adfb479e4fbb861db9dad6f01ed30",
+    "v0.9.0/qg4_cosine.index": "131f62a461b0b627c82d8b58ba9f54b13a7a53853390c51d5d799c175c7fecb1",
+    "v0.9.0/qg4_matrix_l2.expected": "b892c11a3138e9f7590bb22806ad870f0f24957be5f2ccd604823dd997b2ec6c",
+    "v0.9.0/qg4_matrix_l2.index": "c4f93a05d44e6952fec1d0af1206cb6a17456ef6ce4e96522ae8ad2ce55dc556",
+    "v0.9.0/qg8_l2.expected": "85b16ad29dbf84336415217c94e343834c9072db05702add532b72802904bc1e",
+    "v0.9.0/qg8_l2.index": "b09e7044dc71ea81e0ceb5c170bb69c766a10f517b0f970000b57d7d7270cb10"
+  }
+}

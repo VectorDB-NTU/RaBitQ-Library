@@ -52,6 +52,20 @@ foreach(header IN ITEMS
 endforeach()
 target_include_directories(index_header_boundary BEFORE PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/forbidden")
+# The supported index classes also hide the existing index classes and k-means.
+add_executable(index_api_header_boundary
+    index_api_headers_main.cpp hnsw_index_headers.cpp ivf_index_headers.cpp
+    symqg_index_headers.cpp)
+target_link_libraries(index_api_header_boundary PRIVATE rabitqlib::index)
+foreach(header IN ITEMS index/ivf/ivf.hpp index/ivf/cluster.hpp index/hnsw/hnsw.hpp
+        index/symqg/qg.hpp index/symqg/qg_builder.hpp clustering/rabitqkmeans.hpp)
+    get_filename_component(directory "${header}" DIRECTORY)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/index-api-forbidden/rabitqlib/${directory}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/index-api-forbidden/rabitqlib/${header}"
+        "#error Index API header imports an implementation dependency\n")
+endforeach()
+target_include_directories(index_api_header_boundary BEFORE PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/forbidden" "${CMAKE_CURRENT_BINARY_DIR}/index-api-forbidden")
 add_library(hnsw_quant_header_boundary OBJECT hnsw_quant_headers.cpp)
 target_link_libraries(hnsw_quant_header_boundary PRIVATE rabitqlib::index)
 add_library(symqg_scratch_header_boundary OBJECT symqg_scratch_headers.cpp)
@@ -68,6 +82,7 @@ target_include_directories(index_types_boundary BEFORE PRIVATE
 enable_testing()
 add_test(NAME rabitqlib_consumer COMMAND rabitqlib_consumer)
 add_test(NAME index_header_boundary COMMAND index_header_boundary)
+add_test(NAME index_api_header_boundary COMMAND index_api_header_boundary)
 
 # Inspect evaluated, transitive usage requirements rather than just the direct
 # properties of the public interface target. This works with multi-config builds.

@@ -229,6 +229,9 @@ Use lowercase prefixes, a space after the colon and a nonempty summary, for exam
 `fix(ivf): update only affected clusters`. A scope and a `!` marker before the
 colon are optional. The marker does not change the category or authorize a
 breaking change; compatibility decisions still follow the project rules.
+Add the manual label `release:breaking` to a merged breaking change: its category,
+Breaking changes, comes first, so the PR is listed there instead of under its
+automatic category.
 For dependency-only changes, use `deps:` rather than `chore(deps):`.
 
 The workflow creates its repository labels as needed and updates only the

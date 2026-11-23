@@ -6,15 +6,14 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <ios>
-#include <iterator>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
 
+#include "format2_file.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
@@ -75,8 +74,11 @@ struct Fixture {
         );
         index.construct(data.data(), data.data(), ids.data(), false, 1);
         index.save(path.c_str());
-        std::ifstream file(path + ".hnsw", std::ios::binary);
-        original.assign(std::istreambuf_iterator<char>(file), {});
+        // The routing graph is the HNSW-routing section of the format-2 index file.
+        const std::string graph = rabitq_test::read_format2_section(
+            path, rabitq_test::format2::IndexKind::Ivf, rabitq_test::kIvfSections, 260
+        );
+        original.assign(graph.begin(), graph.end());
         level0_record_bytes = read_at<size_t>(original, 3 * sizeof(size_t));
         max_m = read_at<size_t>(original, kMaxMOffset);
         max_m0 = read_at<size_t>(original, kMaxMOffset + sizeof(size_t));
@@ -104,15 +106,20 @@ struct Fixture {
     ~Fixture() {
         std::error_code ignored;
         std::filesystem::remove(path, ignored);
-        std::filesystem::remove(path + ".hnsw", ignored);
     }
+    // Store `bytes` as the index file's routing graph.
     void save(const std::vector<char>& bytes) const {
-        std::ofstream file(path + ".hnsw", std::ios::binary | std::ios::trunc);
-        file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        rabitq_test::replace_format2_section(
+            path,
+            rabitq_test::format2::IndexKind::Ivf,
+            rabitq_test::kIvfSections,
+            260,
+            std::string(bytes.begin(), bytes.end())
+        );
     }
 };
 
-TEST(IvfHnswSidecarGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
+TEST(IvfHnswRoutingGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         Fixture fixture(metric);
         const auto reject = [&](const char* name, auto corrupt, const char* message) {
@@ -123,7 +130,7 @@ TEST(IvfHnswSidecarGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
             ivf::IVF loaded;
             try {
                 loaded.load(fixture.path.c_str());
-                FAIL() << "damaged sidecar was accepted";
+                FAIL() << "damaged routing graph was accepted";
             } catch (const std::runtime_error& error) {
                 EXPECT_STREQ(error.what(), message);
             }
@@ -257,7 +264,7 @@ TEST(IvfHnswSidecarGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
         reject(
             "truncated upper length",
             [&](auto& b) { b.resize(fixture.upper_offsets.back() + 2); },
-            "Truncated HNSW centroid sidecar"
+            "Truncated HNSW centroid graph"
         );
         reject(
             "truncated upper links",
@@ -287,7 +294,7 @@ TEST(IvfHnswSidecarGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
         reject(
             "truncated header",
             [](auto& b) { b.resize(4); },
-            "Truncated HNSW centroid sidecar"
+            "Truncated HNSW centroid graph"
         );
         reject(
             "trailing byte",
@@ -297,7 +304,7 @@ TEST(IvfHnswSidecarGraphTest, PublicLoadRejectsCorruptStructureAndCanRetry) {
     }
 }
 
-TEST(IvfHnswSidecarGraphTest, DisconnectedGraphCannotReadEmptyResults) {
+TEST(IvfHnswRoutingGraphTest, DisconnectedGraphCannotReadEmptyResults) {
     for (const auto metric : {METRIC_L2, METRIC_IP}) {
         Fixture fixture(metric);
         auto bytes = fixture.original;

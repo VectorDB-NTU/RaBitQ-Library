@@ -5,9 +5,11 @@ import json
 import struct
 from pathlib import Path
 
+import format2_file
 import numpy as np
 import pytest
-from rabitqlib import HnswIndex, IvfIndex, SymqgIndex
+import rabitqlib
+from rabitqlib import HnswIndex, IvfIndex, SymqgIndex, quant
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "persistence"
 NAMES = [
@@ -30,7 +32,7 @@ def reference(name):
         if name.startswith("ivf")
         else (HnswIndex if name.startswith("hnsw") else SymqgIndex)
     )
-    options = {"nprobe": 1} if name.startswith("ivf") else {"ef": 64}
+    options = {"nprobe": 1} if name.startswith("ivf") else {"ef_search": 64}
     return path, cls, count, queries, ids, distances, options
 
 
@@ -47,7 +49,7 @@ def test_fixture_hashes_match_pinned_manifest():
             ), filename
     expected = {
         path.relative_to(FIXTURES).as_posix()
-        for suffix in ("*.index", "*.expected")
+        for suffix in ("*.index", "*.hnsw", "*.expected")
         for path in FIXTURES.rglob(suffix)
     }
     assert expected
@@ -65,7 +67,8 @@ def test_historical_load_search_and_resave(name, tmp_path):
         assert index.metric == name.rsplit("_", 1)[1]
         assert index.num_stored_points == count
         assert index.num_points == count - (0 if cls is SymqgIndex else 1)
-        assert index.max_elements >= index.num_stored_points
+        if cls is HnswIndex:
+            assert index.capacity >= index.num_stored_points
         actual_ids, actual_distances = index.search(queries, 5, **options)
         np.testing.assert_array_equal(actual_ids, ids)
         # Distances may differ across AVX2, AVX-512, NEON, and compiler reductions.
@@ -106,10 +109,9 @@ def test_ivf_v1_header_uses_historical_payload_and_padding(name, tmp_path):
     destination = tmp_path / "ivf-v1.index"
     destination.write_bytes(header + payload)
     index = cls.load(str(destination))
-    assert index.initializer == "flat"
+    assert index.routing == "flat"
     assert index.num_stored_points == count
     assert index.num_points == count - 1
-    assert index.max_elements == count
     actual_ids, actual_distances = index.search(queries, 5, **options)
     np.testing.assert_array_equal(actual_ids, ids)
     np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
@@ -125,3 +127,220 @@ def test_ivf_v1_header_uses_historical_payload_and_padding(name, tmp_path):
         RuntimeError, match="^Invalid padded dimension in IVF index file$"
     ):
         cls.load(str(destination))
+
+
+# The last IVF layout before format 2: RABQIDX1 version 2 and the HNSW sidecar.
+V083_IVF = [
+    ("ivf4_flat_l2", "flat"),
+    ("ivf7_flatrabitq_ip", "flat_rabitq"),
+    ("ivf4_hnsw_l2", "hnsw"),
+    ("ivf32_hnsw_ip", "hnsw"),
+    ("ivf1_flat_matrix_l2", "flat"),
+]
+
+
+@pytest.mark.parametrize("name,initializer", V083_IVF)
+def test_v083_ivf_loads_and_migrates_without_loss(name, initializer, tmp_path):
+    path = FIXTURES / "v0.8.3" / f"{name}.index"
+    lines = path.with_suffix(".expected").read_text().splitlines()
+    count, dim, nq, k = map(int, lines[0].split())
+    queries = np.fromstring(lines[1], sep=" ", dtype=np.float32).reshape(nq, dim)
+    results = np.loadtxt(lines[2:])
+    ids = results[:, 0].astype(np.uint32).reshape(nq, k)
+    distances = results[:, 1].astype(np.float32).reshape(nq, k)
+
+    index = IvfIndex.load(str(path))
+    assert index.routing == initializer
+    assert index.num_stored_points == count
+    assert index.num_points == count - 1
+    destination = tmp_path / "migrated.index"
+    index.save(str(destination))
+    assert not Path(str(destination) + ".hnsw").exists()
+    for loaded in (index, IvfIndex.load(str(destination))):
+        actual_ids, actual_distances = loaded.search(queries, k, nprobe=4)
+        np.testing.assert_array_equal(actual_ids, ids)
+        np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
+
+    # Format 2 keeps every byte: converting back reproduces the 0.8.3 files, which
+    # also checks the converter that other tests use to build earlier layouts.
+    main, sidecar = format2_file.to_rabqidx1(destination.read_bytes())
+    assert main == path.read_bytes()
+    original_sidecar = Path(str(path) + ".hnsw")
+    if initializer == "hnsw":
+        assert sidecar == original_sidecar.read_bytes()
+    else:
+        assert sidecar is None and not original_sidecar.exists()
+
+
+# The last HNSW-RaBitQ and SymphonyQG layouts before format 2.
+V083_GRAPHS = ["hnsw1_l2", "hnsw5_ip", "hnsw9_l2", "qg0_ip", "qg4_l2", "qg8_ip"]
+V083_GRAPHS += ["qg4_matrix_l2"]
+
+
+@pytest.mark.parametrize("name", V083_GRAPHS)
+def test_v083_graphs_load_and_migrate(name, tmp_path):
+    path = FIXTURES / "v0.8.3" / f"{name}.index"
+    lines = path.with_suffix(".expected").read_text().splitlines()
+    count, dim, nq, k = map(int, lines[0].split())
+    queries = np.fromstring(lines[1], sep=" ", dtype=np.float32).reshape(nq, dim)
+    results = np.loadtxt(lines[2:])
+    ids = results[:, 0].astype(np.uint32).reshape(nq, k)
+    distances = results[:, 1].astype(np.float32).reshape(nq, k)
+    cls = HnswIndex if name.startswith("hnsw") else SymqgIndex
+
+    original = cls.load(str(path))
+    assert original.seed is None  # earlier layouts do not record it
+    if cls is SymqgIndex:
+        assert (original.ef_construction, original.init) == (None, None)
+    destination = tmp_path / "migrated.index"
+    original.save(str(destination))
+    assert destination.read_bytes()[:8] == format2_file.MAGIC
+    for index in (original, cls.load(str(destination))):
+        assert index.num_stored_points == count
+        assert index.num_points == count - (1 if cls is HnswIndex else 0)
+        assert index.seed is None
+        actual_ids, actual_distances = index.search(queries, k, ef_search=64)
+        np.testing.assert_array_equal(actual_ids, ids)
+        np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
+
+
+# Index format 2 as release v0.9.0 wrote it; the bits follow the kind and the metric
+# ends each name. IVF-RaBitQ and HNSW-RaBitQ files have points 0 and 32 removed.
+V090 = {
+    "ivf4_flat_l2": "flat",
+    "ivf7_flatrabitq_cosine": "flat_rabitq",
+    "ivf32_hnsw_ip": "hnsw",
+    "ivf1_flat_matrix_l2": "flat",
+    "hnsw1_l2": None,
+    "hnsw5_cosine": None,
+    "hnsw9_ip": None,
+    "qg32_ip": None,
+    "qg4_cosine": None,
+    "qg8_l2": None,
+    "qg4_matrix_l2": None,
+}
+
+
+@pytest.mark.parametrize("name", V090)
+def test_v090_format2_loads_with_recorded_settings(name, tmp_path):
+    path = FIXTURES / "v0.9.0" / f"{name}.index"
+    lines = path.with_suffix(".expected").read_text().splitlines()
+    count, dim, nq, k = map(int, lines[0].split())
+    queries = np.fromstring(lines[1], sep=" ", dtype=np.float32).reshape(nq, dim)
+    results = np.loadtxt(lines[2:])
+    ids = results[:, 0].astype(np.int64).reshape(nq, k)
+    distances = results[:, 1].astype(np.float32).reshape(nq, k)
+    if name.startswith("ivf"):
+        cls, options, removed = IvfIndex, {"nprobe": 4}, 2
+    elif name.startswith("hnsw"):
+        cls, options, removed = HnswIndex, {"ef_search": 64}, 2
+    else:
+        cls, options, removed = SymqgIndex, {"ef_search": 64}, 0
+
+    resaved = tmp_path / "resaved.index"
+    original = cls.load(str(path))
+    original.save(str(resaved))
+    assert not path.with_name(path.name + ".hnsw").exists()
+    assert not resaved.with_name(resaved.name + ".hnsw").exists()
+    for index in (original, cls.load(str(resaved))):
+        assert (index.dim, index.metric, index.seed) == (dim, name.split("_")[-1], 42)
+        assert index.nbits == int(name.split("_")[0].lstrip("ivfhnswqg"))
+        assert index.num_stored_points == count
+        assert index.num_points == count - removed
+        if cls is IvfIndex:
+            assert index.routing == V090[name]
+        elif cls is HnswIndex:
+            assert (index.M, index.ef_construction) == (8, 64)
+        else:
+            assert (index.ef_construction, index.init) == (64, "pipnn")
+        actual_ids, actual_distances = index.search(queries, k, **options)
+        np.testing.assert_array_equal(actual_ids, ids)
+        np.testing.assert_allclose(actual_distances, distances, rtol=2e-4, atol=2e-4)
+
+
+def test_rejected_files_raise_format_error(tmp_path):
+    assert issubclass(rabitqlib.FormatError, ValueError)
+    assert issubclass(rabitqlib.FormatError, RuntimeError)
+    assert rabitqlib.FormatError.__module__ == "rabitqlib"
+    assert quant.FormatError is rabitqlib.FormatError
+    for name, cls in [
+        ("ivf4_flat_l2", IvfIndex),
+        ("hnsw1_l2", HnswIndex),
+        ("qg4_l2", SymqgIndex),
+    ]:
+        legacy = (FIXTURES / "v0.8.3" / f"{name}.index").read_bytes()
+        damaged = tmp_path / f"{name}.index"
+        damaged.write_bytes(legacy[: len(legacy) // 2])
+        with pytest.raises(rabitqlib.FormatError):
+            cls.load(str(damaged))
+        migrated = tmp_path / f"{name}-format2.index"
+        cls.load(str(FIXTURES / "v0.8.3" / f"{name}.index")).save(str(migrated))
+        payload = migrated.read_bytes()
+        migrated.write_bytes(payload[:-1])
+        with pytest.raises(rabitqlib.FormatError, match="index file"):
+            cls.load(str(migrated))
+    # Damaged headers that pass the size checks, as in the C++ historical tests.
+    ivf = (FIXTURES / "v0.8.3" / "ivf4_flat_l2.index").read_bytes()
+    qg = bytearray((FIXTURES / "v0.8.3" / "qg4_l2.index").read_bytes())
+    struct.pack_into("<Q", qg, 28, 33)  # an FHT/Kac dimension below 64
+    migrated = tmp_path / "qg4_l2-resaved.index"
+    SymqgIndex.load(str(FIXTURES / "v0.8.3" / "qg4_l2.index")).save(str(migrated))
+    params = bytearray(migrated.read_bytes())
+    offset, _ = format2_file.sections(params)[format2_file.QG_PARAMS]
+    struct.pack_into("<Q", params, offset, 2**30)  # degree bound
+    struct.pack_into("<Q", params, 88, 2**31)  # point count
+    format2_file.reseal(params)
+    for cls, data, message in [
+        (IvfIndex, ivf[:20], "IVF index file is truncated"),
+        (SymqgIndex, bytes(qg), "Unsupported dimension for FhtKacRotator"),
+        (SymqgIndex, bytes(params), "records too large to address"),
+    ]:
+        damaged = tmp_path / "header.index"
+        damaged.write_bytes(data)
+        with pytest.raises(rabitqlib.FormatError, match=message):
+            cls.load(str(damaged))
+    # Failing to open a file is not a format error.
+    with pytest.raises(RuntimeError) as missing:
+        IvfIndex.load(str(tmp_path / "missing.index"))
+    assert not isinstance(missing.value, rabitqlib.FormatError)
+
+
+def test_non_ascii_writer_version_still_raises_format_error(tmp_path):
+    # Readers do not validate writer_version, but its bytes reach the message.
+    migrated = tmp_path / "ivf.index"
+    IvfIndex.load(str(FIXTURES / "v0.8.3" / "ivf4_flat_l2.index")).save(str(migrated))
+    data = bytearray(migrated.read_bytes())
+    data[112:128] = b"0.9\xff\x01".ljust(16, b"\0")
+    data[16:24] = (4).to_bytes(8, "little")  # an unknown incompat feature bit
+    format2_file.reseal(data)
+    migrated.write_bytes(bytes(data))
+    with pytest.raises(
+        rabitqlib.FormatError, match=r"written by rabitqlib 0\.9\\xff\\x01$"
+    ):
+        IvfIndex.load(str(migrated))
+
+
+def test_untrained_hnsw_file_from_v072_loads_and_trains(tmp_path):
+    # The C++ API of releases before 0.8 could save an index before training it;
+    # without centroids or a recorded seed, the first add cannot train it.
+    index = HnswIndex.load(str(FIXTURES / "v0.7.2" / "hnsw4_empty_l2.index"))
+    assert (len(index), index.dim, index.nbits, index.metric) == (0, 65, 4, "l2")
+    assert (index.capacity, index.num_clusters, index.seed) == (130, 16, None)
+    assert not index.is_trained
+    data = np.random.default_rng(21).normal(size=(200, 65)).astype(np.float32)
+    with pytest.raises(
+        RuntimeError,
+        match="^HnswIndex loaded from an untrained file must be trained before add; "
+        "call train or set_centroids$",
+    ):
+        index.add(data, num_threads=1)
+    index.train(data, num_threads=1)
+    index.add(data, num_threads=1)
+    ids, _ = index.search(data[:3], 5)
+    resaved = tmp_path / "resaved.index"
+    index.save(str(resaved))
+    reloaded = HnswIndex.load(str(resaved))
+    assert reloaded.is_trained
+    assert len(reloaded) == 200
+    assert reloaded.num_clusters == 16
+    np.testing.assert_array_equal(reloaded.search(data[:3], 5)[0], ids)

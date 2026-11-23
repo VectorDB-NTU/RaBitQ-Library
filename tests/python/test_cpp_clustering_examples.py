@@ -33,8 +33,10 @@ def read_vecs(path, rows, cols, dtype):
 
 
 @pytest.mark.parametrize("method,k", [("qgkmeans", 33), ("rabitqkmeans", 16)])
-@pytest.mark.parametrize("metric", ["l2", "ip"])
-def test_cpp_clustering_file_outputs(tmp_path, method, k, metric):
+@pytest.mark.parametrize("index_metric", ["l2", "ip", "cosine"])
+def test_cpp_clustering_file_outputs(tmp_path, method, k, index_metric):
+    # The clustering examples take l2 or ip; unit vectors cluster alike for cosine.
+    metric = "l2" if index_metric == "l2" else "ip"
     data = np.random.default_rng(42).standard_normal((512, 65)).astype(np.float32)
     if metric == "ip":
         data /= np.linalg.norm(data, axis=1, keepdims=True)
@@ -75,7 +77,7 @@ def test_cpp_clustering_file_outputs(tmp_path, method, k, metric):
             labels_path,
             3,
             index_path,
-            metric,
+            index_metric,
         )
     else:
         result = run_cpp(
@@ -87,7 +89,7 @@ def test_cpp_clustering_file_outputs(tmp_path, method, k, metric):
             32,
             5,
             index_path,
-            metric,
+            index_metric,
         )
     assert result.returncode == 0, result.stdout + result.stderr
     result = run_cpp(
@@ -95,10 +97,29 @@ def test_cpp_clustering_file_outputs(tmp_path, method, k, metric):
         "ivf" if method == "qgkmeans" else "hnsw",
         index_path,
         source,
-        metric,
+        index_metric,
         3 if method == "qgkmeans" else 5,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "example,args",
+    [
+        ("ivf_rabitq_indexing", ["data.fvecs", "c.fvecs", "ids.ivecs", 3, "index"]),
+        (
+            "hnsw_rabitq_indexing",
+            ["data.fvecs", "c.fvecs", "ids.ivecs", 16, 32, 5, "index"],
+        ),
+        ("symqg_indexing", ["data.fvecs", 32, 64, "index"]),
+    ],
+)
+def test_cpp_indexing_examples_reject_unknown_metric(tmp_path, example, args):
+    args = [tmp_path / arg if isinstance(arg, str) else arg for arg in args]
+    result = run_cpp(example, *args, "dot")
+    assert result.returncode == 1
+    assert "Metric type must be l2, ip or cosine" in result.stderr
+    assert not (tmp_path / "index").exists()
 
 
 @pytest.mark.parametrize("method", ["qgkmeans", "rabitqkmeans"])

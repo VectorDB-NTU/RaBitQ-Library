@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(RaBitQLib VERSION 0.8.5 LANGUAGES CXX)
+project(RaBitQLib VERSION 0.9.0 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
@@ -84,6 +84,7 @@ endfunction()
 
 set(RABITQ_CORE_SOURCES
     src/core/api.cpp
+    src/core/blob.cpp
     src/core/fast_scale_table.cpp
     src/core/provisional.cpp
     src/utils/cpu_features.cpp
@@ -247,12 +248,16 @@ if(RABITQ_BUILD_FASTSCAN)
 endif()
 if(RABITQ_BUILD_INDEX)
     add_library(rabitq_index STATIC
+        src/index/format2.cpp
         src/index/hnsw.cpp
+        src/index/hnsw_index.cpp
         src/index/ivf.cpp
+        src/index/ivf_index.cpp
         src/index/ivf_initializer.cpp
         src/index/ivf_search.cpp
         src/index/qg.cpp
         src/index/qg_builder.cpp
+        src/index/symqg_index.cpp
         src/index/pipnn.cpp
         src/index/hnsw_dispatch.cpp
         src/index/hnsw_search_generic.cpp
@@ -261,6 +266,10 @@ if(RABITQ_BUILD_INDEX)
     )
     add_library(rabitqlib::index ALIAS rabitq_index)
     target_link_libraries(rabitq_index PUBLIC rabitq_fastscan)
+    # Index files record the library version that wrote them.
+    target_compile_definitions(rabitq_index PRIVATE
+        RABITQ_LIBRARY_VERSION="${PROJECT_VERSION}"
+    )
     set_target_properties(rabitq_index PROPERTIES
         EXPORT_NAME index
         POSITION_INDEPENDENT_CODE ON
@@ -317,7 +326,8 @@ configure_package_config_file(
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/rabitqlibConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
-    COMPATIBILITY SameMajorVersion
+    # Before 1.0 a minor release may break the API.
+    COMPATIBILITY SameMinorVersion
 )
 install(EXPORT rabitqlibTargets
     FILE rabitqlibTargets.cmake

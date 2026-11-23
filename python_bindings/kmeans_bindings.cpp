@@ -73,7 +73,14 @@ py::tuple assign(const Clustering& clustering, py::handle x) {
 
 template <typename Parameters>
 void bind_training_parameters(py::class_<Parameters>& binding) {
-    binding.def(py::init<>(), "Create parameters with their documented defaults.")
+    binding
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
+        .def(py::init<>(), "Create parameters with their documented defaults.")
         .def_readwrite(
             "niter",
             &Parameters::niter,
@@ -110,16 +117,40 @@ void bind_training_parameters(py::class_<Parameters>& binding) {
             &Parameters::num_threads,
             R"doc(Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0.)doc"
         )
-        .def_readwrite(
+        .def_property(
             "final_assignment",
-            &Parameters::final_assignment,
-            R"doc(Approximate uses the training assignment method; Exact uses exhaustive assignment against final centroids. Default is FinalAssignmentMode.Approximate.)doc"
+            [](const Parameters& parameters) {
+                return std::string(
+                    parameters.final_assignment == clustering::FinalAssignmentMode::Exact
+                        ? "exact"
+                        : "approximate"
+                );
+            },
+            [](Parameters& parameters, const std::string& value) {
+                if (value == "approximate") {
+                    parameters.final_assignment =
+                        clustering::FinalAssignmentMode::Approximate;
+                } else if (value == "exact") {
+                    parameters.final_assignment = clustering::FinalAssignmentMode::Exact;
+                } else {
+                    throw std::invalid_argument(
+                        "final_assignment must be 'approximate' or 'exact'"
+                    );
+                }
+            },
+            R"doc('approximate' uses the training assignment method; 'exact' uses exhaustive assignment against final centroids. Default is 'approximate'.)doc"
         );
 }
 
 template <typename Clustering, typename Parameters>
 void bind_clustering(py::module_& m, const char* native_name, const char* public_name) {
     py::class_<Clustering>(m, native_name)
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .def(py::init<size_t, size_t, const Parameters&>())
         .def("train", &train<Clustering>, py::arg("x"))
         .def("assign", &assign<Clustering>, py::arg("x"))
@@ -165,22 +196,11 @@ void bind_clustering(py::module_& m, const char* native_name, const char* public
 
 void register_kmeans(py::module_& m) {
     using namespace rabitqlib::python_bindings;
-    using rabitqlib::qgkmeans::FinalAssignmentMode;
+    using rabitqlib::clustering::KMeansIterationStats;
     using rabitqlib::qgkmeans::QGKMeans;
-    using rabitqlib::qgkmeans::QGKMeansIterationStats;
     using rabitqlib::qgkmeans::QGKMeansParameters;
     using rabitqlib::rabitqkmeans::RaBitQKMeans;
     using rabitqlib::rabitqkmeans::RaBitQKMeansParameters;
-
-    py::enum_<FinalAssignmentMode>(
-        m, "FinalAssignmentMode", R"doc(Final centroid assignment policy.
-
-Approximate uses the selected clustering algorithm. SymphonyQG is a
-compatibility alias for Approximate. Exact performs exhaustive assignment.)doc"
-    )
-        .value("Approximate", FinalAssignmentMode::Approximate)
-        .value("SymphonyQG", FinalAssignmentMode::SymphonyQG)
-        .value("Exact", FinalAssignmentMode::Exact);
 
     py::class_<QGKMeansParameters> qg_parameters(
         m, "QGKMeansParameters", R"doc(Mutable training settings for QGKMeans.
@@ -193,13 +213,13 @@ on QGKMeans.)doc"
     bind_training_parameters(qg_parameters);
     qg_parameters
         .def_readwrite(
-            "graph_degree",
-            &QGKMeansParameters::graph_degree,
+            "max_degree",
+            &QGKMeansParameters::max_degree,
             R"doc(Centroid graph degree; a positive multiple of 32. Default is 32.)doc"
         )
         .def_readwrite(
-            "ef_build",
-            &QGKMeansParameters::ef_build,
+            "ef_construction",
+            &QGKMeansParameters::ef_construction,
             R"doc(Positive centroid-graph construction search breadth. Default is 240.)doc"
         )
         .def_readwrite(
@@ -213,9 +233,9 @@ on QGKMeans.)doc"
             R"doc(Positive number of graph-building passes after initialization. Default is 1.)doc"
         )
         .def_readwrite(
-            "quantization_bits",
-            &QGKMeansParameters::quantization_bits,
-            R"doc(Centroid storage: 0 for raw float32, or 4 or 8 for RaBitQ. Default is 0.)doc"
+            "nbits",
+            &QGKMeansParameters::nbits,
+            R"doc(Centroid storage: 32 for raw float32, or 4 or 8 for RaBitQ. Default is 32.)doc"
         );
 
     py::class_<RaBitQKMeansParameters> flat_parameters(
@@ -228,32 +248,37 @@ on RaBitQKMeans.)doc"
     );
     bind_training_parameters(flat_parameters);
 
-    py::class_<QGKMeansIterationStats>(
+    py::class_<KMeansIterationStats>(
         m,
-        "QGKMeansIterationStats",
+        "KMeansIterationStats",
         R"doc(Read-only statistics for one completed clustering iteration.)doc"
     )
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
         .def_readonly(
             "iteration",
-            &QGKMeansIterationStats::iteration,
+            &KMeansIterationStats::iteration,
             R"doc(Iteration number, starting at 1.)doc"
         )
         .def_readonly(
             "obj",
-            &QGKMeansIterationStats::obj,
+            &KMeansIterationStats::obj,
             R"doc(Objective measured before the centroid update.)doc"
         )
         .def_readonly(
             "shift",
-            &QGKMeansIterationStats::shift,
+            &KMeansIterationStats::shift,
             R"doc(Total squared centroid displacement during the update.)doc"
         )
         .def_readonly(
             "nsplit",
-            &QGKMeansIterationStats::nsplit,
+            &KMeansIterationStats::nsplit,
             R"doc(Number of empty centroids repaired by splitting.)doc"
         );
-    m.attr("RaBitQKMeansIterationStats") = m.attr("QGKMeansIterationStats");
 
     bind_clustering<QGKMeans, QGKMeansParameters>(m, "_QGKMeans", "QGKMeans");
     bind_clustering<RaBitQKMeans, RaBitQKMeansParameters>(

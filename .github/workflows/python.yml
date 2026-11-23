@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main", "master"]
   pull_request:
-    branches: ["main", "master"]
+    branches: ["main", "master", "dev/0.9"]
 
 concurrency:
   group: ${{ github.event.pull_request.number || github.sha }}-${{ github.workflow }}

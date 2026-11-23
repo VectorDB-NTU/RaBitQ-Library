@@ -4,15 +4,14 @@
 #include <exception>
 #include <iostream>
 #include <ratio>
-#include <utility>
 #include <vector>
 
+#include "querying_example.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
-#include "rabitqlib/index/hnsw/hnsw.hpp"
+#include "rabitqlib/index/hnsw_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
 std::vector<size_t> efs = {10,  20,  40,  50,  60,  80,  100, 150,  170,  190, 200,
                            250, 300, 400, 500, 600, 700, 800, 1000, 1500, 2000};
@@ -20,8 +19,7 @@ std::vector<size_t> efs = {10,  20,  40,  50,  60,  80,  100, 150,  170,  190, 2
 size_t test_round = 3;
 size_t topk = 10;
 
-using PID = rabitqlib::PID;
-using index_type = rabitqlib::hnsw::HierarchicalNSW;
+using index_type = rabitqlib::HnswIndex;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
@@ -45,9 +43,7 @@ int run(int argc, char* argv[]) {
     size_t nq = query.rows();
     size_t total_count = nq * topk;
 
-    index_type hnsw;
-
-    hnsw.load(index_file);
+    auto hnsw = index_type::load(index_file);
 
     rabitqlib::StopW stopw;
 
@@ -66,10 +62,13 @@ int run(int argc, char* argv[]) {
             size_t total_correct = 0;
             float total_time = 0;
 
+            std::vector<rabitqlib::Id> results(nq * topk);
+            rabitqlib::GraphSearchOptions options;
+            options.ef_search = ef;
+
             auto start = std::chrono::high_resolution_clock::now();
 
-            std::vector<std::vector<std::pair<float, PID>>> res =
-                hnsw.search(query.data(), nq, topk, ef, 1);
+            hnsw.search(query.data(), nq, topk, results.data(), nullptr, options);
 
             auto end = std::chrono::high_resolution_clock::now();
 
@@ -81,8 +80,9 @@ int run(int argc, char* argv[]) {
             for (size_t i = 0; i < nq; i++) {
                 for (size_t j = 0; j < topk; j++) {
                     for (size_t k = 0; k < topk; k++) {
-                        if (gt(static_cast<Eigen::Index>(i),
-                               static_cast<Eigen::Index>(k)) == res[i][j].second) {
+                        if (static_cast<rabitqlib::Id>(gt(
+                                static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(k)
+                            )) == results[i * topk + j]) {
                             total_correct++;
                             break;
                         }
@@ -100,8 +100,8 @@ int run(int argc, char* argv[]) {
         }
     }
 
-    auto avg_qps = rabitqlib::horizontal_avg(all_qps);
-    auto avg_recall = rabitqlib::horizontal_avg(all_recall);
+    auto avg_qps = querying_example::column_averages(all_qps);
+    auto avg_recall = querying_example::column_averages(all_recall);
 
     std::cout << "EF\tQPS\tRecall\t"
 

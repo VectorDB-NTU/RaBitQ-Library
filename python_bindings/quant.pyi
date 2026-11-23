@@ -8,6 +8,7 @@ from typing import Any, Literal, overload
 
 import numpy as np
 import numpy.typing as npt
+from rabitqlib import FormatError as FormatError
 
 __all__ = [
     "ESTIMATE_DTYPE",
@@ -36,9 +37,6 @@ QUERY_TERMS_DTYPE: np.dtype[np.void]
 PACKED_CODES_VERSION: int
 FACTORS_VERSION: int
 FASTSCAN_BLOCKS_VERSION: int
-
-class FormatError(ValueError):
-    """Corrupt or incompatible serialized bytes. A subclass of ValueError."""
 
 class Rotator:
     """A seeded rotation from the original dimension to the padded working space."""
@@ -83,7 +81,7 @@ class Rotator:
     def __deepcopy__(self, memo: Any) -> Rotator:
         """Return self; rotators are immutable."""
 
-_Metric = Literal["l2", "ip", "innerproduct"]
+_Metric = Literal["l2", "ip"]
 
 class Query:
     """A rotated, padded query for scoring codes in the working space."""

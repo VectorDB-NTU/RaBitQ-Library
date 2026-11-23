@@ -2,7 +2,7 @@
 
 [SymphonyQG](https://dl.acm.org/doi/abs/10.1145/3709730) combines the graph search
 of [QG](https://medium.com/@masajiro.iwasaki/fusion-of-graph-based-indexing-and-product-quantization-for-ann-search-7d1f0336d0d0),
-from [NGT](https://github.com/yahoojapan/NGT), with batched RaBitQ distance estimation.
+from [NGT](https://github.com/NGT-labs/NGT), with batched RaBitQ distance estimation.
 FastScan estimates neighbor distances; visited vertices are scored using stored
 raw vectors or quantized codes.
 
@@ -36,183 +36,140 @@ indexes, but has nothing to train: `train(x)` only checks `x` as `add` would,
 and `is_trained` is always `True`. `add` builds the graph from every vector at once
 and can be called only once, as in Faiss's NSG index; a second call, or `add` on
 a loaded index, raises `RuntimeError`. To index more vectors, create a new index
-and add all of them. Point IDs are the row numbers of the added data. Files do
-not store the construction settings, so a loaded index reports
-`ef_construction`, `init` and `seed` as `None`.
+and add all of them. Point IDs are the row numbers of the added data. Files
+from releases up to 0.8 do not store the construction settings, so an index
+loaded from one reports `ef_construction`, `init` and `seed` as `None`.
 
 ### C++
 
-Link `rabitqlib::index`. Here `data` is a row-major `std::vector<float>` with
-`rows * cols` values, and `query` contains `cols` values; use at least 33 rows.
-See [C++ integration](../cpp_integration.md) for build setup.
+`rabitqlib::SymqgIndex` has the names, defaults and behaviour of the Python
+class. Here `data` and `queries` are row-major `std::vector<float>` buffers with
+dimension `dim`; use at least 33 data rows. See
+[C++ integration](../cpp_integration.md) for build setup.
 
 ```cpp
 #include <vector>
-#include <rabitqlib/index/symqg/qg.hpp>
-#include <rabitqlib/index/symqg/qg_builder.hpp>
+#include <rabitqlib/index/symqg_index.hpp>
 
-using namespace rabitqlib::symqg;
+rabitqlib::SymqgIndex index(dim);  // max_degree 32, ef_construction 200, PiPNN
+index.add(data.data(), data.size() / dim);  // builds the whole graph
+index.save("qg_example.index");
 
-// data contains rows * cols floats.
-QuantizedGraph<float> qg(rows, cols, 32);
-{
-    QGBuilder builder(qg, 200, data.data(), 1, QGInitialization::PiPNN);
-    builder.build();
-} // release builder scratch before saving
-qg.set_ef(100);
-std::vector<rabitqlib::PID> ids(10);
-std::vector<float> distances(10);
-qg.search(query.data(), 10, ids.data(), distances.data());
-qg.save("qg_example.index");
+auto loaded = rabitqlib::SymqgIndex::load("qg_example.index");
+const size_t num_queries = queries.size() / dim;
+std::vector<rabitqlib::Id> ids(num_queries * 10);
+std::vector<float> distances(num_queries * 10);
+rabitqlib::GraphSearchOptions options;
+options.ef_search = 100;
+loaded.search(queries.data(), num_queries, 10, ids.data(), distances.data(), options);
 ```
+
+`add` throws `std::logic_error` (Python `RuntimeError`) on a built or loaded
+index, and `train` only checks its input.
 
 ## Parameters and limits
 
 | Parameter | Contract |
 | --- | --- |
-| `dim` | Original input dimension; Python supports 64–65,536 and pads internally. |
-| `nbits` / C++ `quantization_bits` | Python keyword: 32 (default) for owned raw vectors, or 4/8 for quantized storage. C++ uses 0 for raw vectors, as Python's `quantization_bits` did before 0.8. |
-| `max_degree` | Python keyword, default 32: a positive multiple of 32, strictly smaller than the point count. It is a hard degree bound, unlike HNSW-RaBitQ's `M`. |
-| `ef_construction` | Python keyword, default 200: positive construction search window used by `add`. |
-| `init` | Python keyword: `"pipnn"` (default) or `"random"`. |
-| `metric` | Python keyword: `"l2"` (default) or `"ip"`. |
-| `seed` | Python keyword: rotation and graph-construction seed in `[0, 2**32 - 1]`. The default `None` draws one at random; `index.seed` reports it, and passing it back with `num_threads=1` rebuilds the same graph from the same data. |
-| `k`, `ef_search` | `k` is at least 1 and may exceed the point count; slots the graph cannot fill are padded with ID `2**32 - 1` and distance `+inf`. An omitted `ef_search` uses `max(k, 64)` in Python, and smaller values are raised to `k`, as for HNSW-RaBitQ. Python named it `ef` before 0.8.5. |
-| `num_threads` | Python `add` defaults to every available logical CPU, capped by `OMP_NUM_THREADS`, and `search` to 1; `None` selects these defaults. |
+| `dim` | Original input dimension, 64–65,536; the index pads internally. |
+| `nbits` | 32 (default) for owned raw vectors, or 4/8 for quantized storage. |
+| `max_degree` | Default 32: a positive multiple of 32, strictly smaller than the point count. It is a hard degree bound, unlike HNSW-RaBitQ's `M`. |
+| `ef_construction` | Default 200: positive construction search window used by `add`. |
+| `init` | `"pipnn"` (default) or `"random"`; C++ `symqg::QGInitialization::PiPNN` or `Random`. |
+| `metric` | L2 (default), inner product or [cosine](usage.md#the-cosine-metric): Python `"l2"`, `"ip"` or `"cosine"`. |
+| `seed` | Rotation and graph-construction seed in `[0, 2**32 - 1]`. The default (Python `None`, an empty C++ `std::optional`) draws one at random; `seed` reports it, and passing it back with one thread rebuilds the same graph from the same data. |
+| `k`, `ef_search` | `k` is from 1 to 2^31 and may exceed the point count; slots the graph cannot fill are padded with ID `-1` (C++ `kNoId`) and distance `+inf`. An omitted `ef_search` (Python `None`) uses `max(k, 64)`, an explicit 0 raises `ValueError` (C++ `std::invalid_argument`), and smaller values are raised to `k`, as for HNSW-RaBitQ. It replaces `ef`, which 0.9 removed. |
+| `num_threads` | `add` defaults to every available logical CPU, capped by `OMP_NUM_THREADS`, and `search` to 1; Python `None` and C++ 0 for `add` select the available CPUs. |
 
-Python search returns `(ids, distances)` arrays. Distances are squared
+In C++, the construction settings are fields of `SymqgOptions`, and `ef_search`
+and `num_threads` fields of `GraphSearchOptions`; `add` takes the thread count.
+Search returns IDs and distances (Python `(ids, distances)` arrays). Distances are squared
 L2 or `1 - dot`, ordered from smallest to largest; quantized storage returns
 estimates. SymphonyQG has no incremental add/remove API. See shared
 [input, count and concurrency contracts](usage.md).
 
 ## Index construction
 
-See the shared [index count contract](usage.md#index-counts). C++
-`num_vertices()` returns the configured graph size, even before building.
+See the shared [index count contract](usage.md#index-counts). `num_points()` is 0
+until `add` builds the graph.
 
 [PiPNN](https://dl.acm.org/doi/abs/10.1145/3770855.3817891) is the default initializer
 for fast indexing, followed by one SymphonyQG refinement iteration. Random
 initialization remains available and uses three iterations by default.
 
-Include `rabitqlib/index/symqg/qg.hpp` and `qg_builder.hpp` from the same directory,
-and link `rabitqlib::index`. The C++ API provides
-`rabitqlib::symqg::QuantizedGraph<float>` and `QGBuilder`.
-Only float vectors are supported; C++17 declarations may omit `<float>` through
-class template argument deduction:
+Include `rabitqlib/index/symqg_index.hpp` and link `rabitqlib::index`:
 
 ```cpp
-QuantizedGraph<float>(
-    size_t max_elements, size_t dim, size_t max_degree,
-    MetricType metric_type = METRIC_L2,
-    RotatorType rotator_type = RotatorType::FhtKacRotator,
-    size_t quantization_bits = 0, uint32_t seed = std::random_device{}()
-);
-QGBuilder(
-    QuantizedGraph<float>& index, uint32_t ef_construction, const float* data,
-    size_t num_threads = std::numeric_limits<size_t>::max(),
-    QGInitialization init = QGInitialization::PiPNN,
-    uint32_t seed = std::random_device{}(), bool cache_vectors = false
-);
+rabitqlib::SymqgOptions options;  // set the fields by name
+options.nbits = 4;
+options.init = rabitqlib::symqg::QGInitialization::Random;
+options.seed = 42;
+rabitqlib::SymqgIndex index(dim, options);
+index.add(data.data(), num_points, /*num_threads=*/1);
 ```
 
-`data` contains `max_elements * dim` floats. This is the configured point count;
-QG has no spare capacity for later appends. `max_degree` has the same constraints
-as Python's parameter. C++ defaults to all available threads. `build()` runs one refinement
-for PiPNN or three passes for `QGInitialization::Random`; `build(n)` requests
-`n >= 2` passes. The older overload with a numeric fifth argument uses that value
-as the random-initialization seed.
-
-### Input lifetime and rebuilds
-
-The caller can release input vectors after the `QGBuilder` constructor returns.
-Python retains the caller's array during `add`. Complete construction before
-querying or saving.
-
-`builder.reset(data)` reinitializes vectors of the same shape and reuses workspace.
-Input may be released after reset returns; rebuild before querying or saving.
-
-### Vector cache
-
-`cache_vectors=true` retains transformed vectors and query factors
-(`4 * max_elements * padded_dim` bytes plus factors). [QGKMeans](../clustering.md#qgkmeans) enables
-this for its centroid graph; the cache is not persisted.
+`add` builds a graph of exactly `num_points` vertices, so `data` contains
+`num_points * dim` floats; there is no spare capacity for later appends. It
+runs one refinement for PiPNN or three passes for random initialization. If
+`add` throws, the index stays without a graph and a later `add` can build one.
+The input may be released after `add` returns.
 
 ### Random seeds
 
-The graph seed controls the rotation. An FHT/Kac seed gives the same rotation on
-every platform; a MatrixRotator seed reproduces the matrix only with the same
-standard library and build, so rely on the saved index rather than the seed.
-The builder seed controls random initialization and fallback edges. PiPNN uses
-fixed internal seeds. Python's `seed` sets both the graph seed and the builder seed.
+The seed controls the FHT/Kac rotation, which is the same on every platform, and
+random initialization and fallback edges. PiPNN uses fixed internal seeds.
 
 ## Querying
 
-C++ search accepts one vector in the original input dimension and writes `k` IDs
-and distances:
+C++ search accepts contiguous row-major queries in the original input dimension
+and writes `num_queries * k` IDs and distances:
 
 ```cpp
-QuantizedGraph<float> qg;
-qg.load("qg_example.index");
-qg.set_ef(100);
-
-std::vector<rabitqlib::PID> ids(10);
-std::vector<float> distances(10);
-qg.search(query.data(), 10, ids.data(), distances.data());
+void SymqgIndex::search(
+    const float* queries,
+    size_t num_queries,
+    size_t k,
+    Id* ids,
+    float* distances,
+    const GraphSearchOptions& options = {}
+) const;
 ```
-
-C++ `search_batch()` accepts contiguous row-major batches
-and reuses scratch storage within each worker, preserving the results of
-independent `search()` calls:
 
 ```cpp
-// queries contains num_queries * qg.dimension() floats in the original dimension.
-std::vector<rabitqlib::PID> batch_ids(num_queries * 10);
-std::vector<float> batch_distances(num_queries * 10);
-qg.search_batch(
-    queries.data(), num_queries, 10, batch_ids.data(), batch_distances.data(), 4
-);
+auto qg = rabitqlib::SymqgIndex::load("qg_example.index");
+rabitqlib::GraphSearchOptions options;
+options.ef_search = 100;
+options.num_threads = 4;
+std::vector<rabitqlib::Id> ids(num_queries * 10);
+std::vector<float> distances(num_queries * 10);
+qg.search(queries.data(), num_queries, 10, ids.data(), distances.data(), options);
 ```
 
-The C++ signature is `search_batch(queries, num_queries, k, result_ids, distances,
-num_threads=1)`. Set `ef_search >= k` with `set_ef()` before searching. Both output
-buffers are required and contain `num_queries * k` elements. Empty C++ batches
-do no work and may use null buffers. Inputs and outputs must not overlap.
-Concurrent searches need separate outputs; do not modify the index or call
-`set_ef()` while searches are running.
+`distances` may be `nullptr`. Workers reuse scratch storage across their
+queries. Empty batches do no work. Inputs and outputs must not overlap.
+Concurrent searches may use different `ef_search` values but need separate
+outputs and an unchanged index.
 
 Python `search(queries, k, ef_search=None, *, num_threads=None)` accepts a two-dimensional
 query array and returns `(ids, distances)` arrays of shape `(num_queries, k)`,
 including empty batches. It defaults to one worker; `num_threads=0` selects the
-available logical CPU count, capped by the number of queries. The 0.7 name
-`search_batch` still works in 0.8 with a `DeprecationWarning`.
+available logical CPU count, capped by `OMP_NUM_THREADS` and by the number of queries.
 Queries use the original dimension, including when the internal rotation pads it.
 
-Python searches use per-call `ef_search` values. For access rules, see the
+Python searches also use per-call `ef_search` values. For access rules, see the
 [concurrency contract](usage.md#threading-and-file-paths).
-
-For C++, use
-`search_batch_with_ef(queries, num_queries, k, result_ids, distances, ef_search, num_threads=1)`
-to run concurrent calls with independent windows:
-
-```cpp
-qg.search_batch_with_ef(
-    queries.data(), num_queries, 10, batch_ids.data(), batch_distances.data(), 100, 4
-);
-```
-
-This method does not read or change the default set by `set_ef()`. The existing
-`search()`, `search_batch()`, and `search_with_scratch()` retain that default.
-All concurrent searches require separate outputs and an unchanged index.
 
 See `sample/cpp/symqg_indexing.cpp`, `sample/cpp/symqg_querying.cpp`, and their
 Python counterparts for complete examples.
 
 ## Persistence
 
+`save` writes [index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2), which also records the seed, `ef_construction`
+and `init`, so they survive a reload. Releases up to 0.8 cannot read these files; every
+earlier file still loads, without these settings, and saving it writes format 2.
+
 All three modes pad the rotated domain to a multiple of 32. Loading an older
 index preserves its saved padded dimension, including historical multiples of 64.
-Older library versions that enforce 64-dimension padding cannot load new files
-whose padded dimension is not a multiple of 64.
 
 ## Implementation details
 

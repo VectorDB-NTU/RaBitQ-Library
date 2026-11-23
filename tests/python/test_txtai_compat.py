@@ -1,9 +1,12 @@
-"""txtai's rabitqlib backend, call for call, must keep working in 0.8.
+"""The calls txtai's rabitq backend makes (issue #213).
 
-Mirrors txtai.ann.dense.rabitq.RabitQ at neuml/txtai 4d5e05f (index, append,
-delete, search, count, save, load). txtai trains centroids with scikit-learn;
-any centroids exercise the same calls, so these come from the data. The only
-warnings allowed are the compatibility layer's DeprecationWarnings.
+Follows txtai.ann.dense.rabitq.RabitQ (index, append, delete, search, count,
+save, load) as merged in neuml/txtai#1616 (commit 86f3bad): set_centroids() and
+add(cluster_ids=...) instead of build(), no max_elements or random_seed, an
+infinite distance to find missing results, and None instead of 0 for an unset
+ef. The same calls run without warnings on 0.8.5. txtai trains centroids with
+scikit-learn; any centroids exercise the same calls, so these come from the
+data. No call may warn.
 """
 
 import math
@@ -12,8 +15,6 @@ import warnings
 import numpy as np
 import pytest
 from rabitqlib import HnswIndex, IvfIndex
-
-SENTINEL = 0xFFFFFFFF
 
 
 @pytest.fixture
@@ -31,20 +32,19 @@ def index_like_txtai(mode, vectors):
     )
     dim = vectors.shape[1]
     if mode == "ivf":
-        backend = IvfIndex(
-            dim=dim, max_elements=rows, num_clusters=clusters, nbits=1, metric="ip"
-        )
+        backend = IvfIndex(dim, clusters, nbits=1, metric="ip")
     else:
         backend = HnswIndex(
-            dim=dim,
-            max_elements=rows,
+            dim,
+            nbits=1,
+            num_clusters=clusters,
             M=16,
             ef_construction=200,
-            nbits=1,
             metric="ip",
-            random_seed=100,
+            seed=100,
         )
-    backend.build(vectors, centroids, clusterids)
+    backend.set_centroids(centroids)
+    backend.add(vectors, cluster_ids=clusterids)
     return backend
 
 
@@ -68,12 +68,12 @@ def search_like_txtai(backend, mode, queries, limit):
         nprobe = max(1, round(backend.num_clusters / 16))
         ids, distances = backend.search(queries, k, nprobe)
     else:
-        ids, distances = backend.search(queries, k, None or 0)
+        ids, distances = backend.search(queries, k, None)
     return [
         [
             (int(uid), float(1.0 - dist))
             for uid, dist in zip(uids, dists)
-            if uid != SENTINEL
+            if math.isfinite(dist)
         ]
         for uids, dists in zip(ids.tolist(), distances.tolist())
     ]
@@ -88,6 +88,16 @@ def test_txtai_calls(mode, embeddings, tmp_path):
         assert [hits[0][0] for hits in results] == list(range(5))
 
         if mode == "ivf":
+            # The default nprobe probes few clusters, so long result lists have
+            # unfilled slots, which the filter must drop.
+            results = search_like_txtai(backend, mode, embeddings[:5], 300)
+            assert any(len(hits) < 300 for hits in results)
+            assert all(
+                uid >= 0 and math.isfinite(score)
+                for hits in results
+                for uid, score in hits
+            )
+
             # append and delete exist for ivf only.
             assert append_like_txtai(backend, embeddings[300:]) == 400
             delete_like_txtai(backend, [0, 1, 399, 1000])
@@ -101,5 +111,4 @@ def test_txtai_calls(mode, embeddings, tmp_path):
         assert search_like_txtai(loaded, mode, embeddings[:5], 3) == (
             search_like_txtai(backend, mode, embeddings[:5], 3)
         )
-    categories = {w.category for w in caught}
-    assert categories == {DeprecationWarning}, [str(w.message) for w in caught]
+    assert not caught, [str(w.message) for w in caught]

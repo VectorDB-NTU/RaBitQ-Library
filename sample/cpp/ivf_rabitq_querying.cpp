@@ -6,23 +6,25 @@
 #include <string>
 #include <vector>
 
+#include "querying_example.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
-using PID = rabitqlib::PID;
-using index_type = rabitqlib::ivf::IVF;
+using index_type = rabitqlib::IvfIndex;
 using data_type = rabitqlib::RowMajorArray<float>;
 using gt_type = rabitqlib::RowMajorArray<uint32_t>;
 
 static std::vector<size_t> get_nprobes(
     const index_type& ivf,
     const std::vector<size_t>& all_nprobes,
-    data_type& query,
-    gt_type& gt
+    const data_type& query,
+    const gt_type& gt
+);
+static size_t count_correct(
+    const std::vector<rabitqlib::Id>& results, const gt_type& gt, size_t nq
 );
 
 static size_t topk = 100;
@@ -60,8 +62,7 @@ int run(int argc, char** argv) {
     size_t nq = query.rows();
     size_t total_count = nq * topk;
 
-    index_type ivf;
-    ivf.load(index_file);
+    auto ivf = index_type::load(index_file);
 
     std::vector<size_t> all_nprobes;
     all_nprobes.push_back(5);
@@ -98,24 +99,14 @@ int run(int argc, char** argv) {
                 std::cout << "will use nprobe = num_cluster (" << ivf.num_clusters()
                           << ").\n";
             }
-            size_t total_correct = 0;
-            std::vector<PID> results(nq * topk);
+            std::vector<rabitqlib::Id> results(nq * topk);
+            rabitqlib::IvfSearchOptions options;
+            options.nprobe = nprobe;
+            options.high_accuracy = use_hacc;
             stopw.reset();
-            ivf.search_batch(
-                query.data(), nq, topk, nprobe, results.data(), nullptr, use_hacc
-            );
+            ivf.search(query.data(), nq, topk, results.data(), nullptr, options);
             const float total_time = stopw.get_elapsed_micro();
-            for (size_t i = 0; i < nq; i++) {
-                for (size_t j = 0; j < topk; j++) {
-                    for (size_t k = 0; k < topk; k++) {
-                        if (gt(static_cast<Eigen::Index>(i),
-                               static_cast<Eigen::Index>(k)) == results[i * topk + j]) {
-                            total_correct++;
-                            break;
-                        }
-                    }
-                }
-            }
+            const size_t total_correct = count_correct(results, gt, nq);
             float qps = static_cast<float>(nq) / (total_time / 1e6F);
             float recall =
                 static_cast<float>(total_correct) / static_cast<float>(total_count);
@@ -125,8 +116,8 @@ int run(int argc, char** argv) {
         }
     }
 
-    auto avg_qps = rabitqlib::horizontal_avg(all_qps);
-    auto avg_recall = rabitqlib::horizontal_avg(all_recall);
+    auto avg_qps = querying_example::column_averages(all_qps);
+    auto avg_recall = querying_example::column_averages(all_recall);
 
     std::cout << "nprobe\tQPS\trecall" << '\n';
 
@@ -150,11 +141,31 @@ int main(int argc, char** argv) {
     }
 }
 
+// Count the results of each query that appear in its top-k ground truth.
+static size_t count_correct(
+    const std::vector<rabitqlib::Id>& results, const gt_type& gt, size_t nq
+) {
+    size_t total_correct = 0;
+    for (size_t i = 0; i < nq; i++) {
+        for (size_t j = 0; j < topk; j++) {
+            for (size_t k = 0; k < topk; k++) {
+                if (static_cast<rabitqlib::Id>(
+                        gt(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(k))
+                    ) == results[i * topk + j]) {
+                    total_correct++;
+                    break;
+                }
+            }
+        }
+    }
+    return total_correct;
+}
+
 static std::vector<size_t> get_nprobes(
     const index_type& ivf,
     const std::vector<size_t>& all_nprobes,
-    data_type& query,
-    gt_type& gt
+    const data_type& query,
+    const gt_type& gt
 ) {
     size_t nq = query.rows();
     size_t total_count = topk * nq;
@@ -164,22 +175,11 @@ static std::vector<size_t> get_nprobes(
     for (auto nprobe : all_nprobes) {
         nprobes.push_back(nprobe);
 
-        size_t total_correct = 0;
-        std::vector<PID> results(topk);
-        for (size_t i = 0; i < nq; i++) {
-            ivf.search(
-                &query(static_cast<Eigen::Index>(i), 0), topk, nprobe, results.data()
-            );
-            for (size_t j = 0; j < topk; j++) {
-                for (size_t k = 0; k < topk; k++) {
-                    if (gt(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(k)) ==
-                        results[j]) {
-                        total_correct++;
-                        break;
-                    }
-                }
-            }
-        }
+        std::vector<rabitqlib::Id> results(nq * topk);
+        rabitqlib::IvfSearchOptions options;
+        options.nprobe = nprobe;
+        ivf.search(query.data(), nq, topk, results.data(), nullptr, options);
+        const size_t total_correct = count_correct(results, gt, nq);
         float recall = static_cast<float>(total_correct) / static_cast<float>(total_count);
         if (recall > 0.997 || recall - old_recall < 1e-5) {
             break;

@@ -20,7 +20,7 @@ def test_remove_integer_views_preserve_input_and_validate_atomically(
     )
     index.set_centroids(np.zeros((1, dim), np.float32))
     index.add(data, cluster_ids=np.zeros(count, np.uint32), num_threads=1)
-    search_args = {"nprobe": 1} if kind == "ivf" else {"ef": count}
+    search_args = {"nprobe": 1} if kind == "ivf" else {"ef_search": count}
     before = index.search(data, k=1, **search_args)
 
     def make_ids(values):

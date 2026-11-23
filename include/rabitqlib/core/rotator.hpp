@@ -101,6 +101,16 @@ class MatrixRotator : public Rotator<T> {
             qr.householderQ()
                 .transpose();  // The inverse of an orthogonal matrix is its transpose.
 
+        // Householder Q alone is not Haar distributed (its determinant is fixed). Giving
+        // column i of Q, row i of q_inv, the sign of R(i, i) makes it Haar (Mezzadri,
+        // Notices AMS 2007, Section 5); only the copied rows matter.
+        const auto r_diag = qr.matrixQR().diagonal();
+        for (Eigen::Index i = 0; i < static_cast<Eigen::Index>(dim); ++i) {
+            if (r_diag(i) < T(0)) {
+                q_inv.row(i) *= T(-1);
+            }
+        }
+
         // the random matrix only need the first dim rows, since we just pad zeros for
         // the vector to be rotated to padded dimension
         std::memcpy(&rand_mat_(0, 0), &q_inv(0, 0), sizeof(T) * dim * padded_dim);

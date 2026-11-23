@@ -1,3 +1,4 @@
 *.index -text
+*.hnsw -text
 *.expected text eol=lf
 manifest.json text eol=lf

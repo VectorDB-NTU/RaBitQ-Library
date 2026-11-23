@@ -1,6 +1,6 @@
 # Installation
 
-Platform requirements and source installation for RaBitQ Library **0.8.5**.
+Platform requirements and source installation for RaBitQ Library **0.9.0**.
 For the first Python example, see [Quick Start](quick_start.md).
 
 ## Requirements
@@ -40,10 +40,12 @@ build can use scalar kernels without the FastScan CPU baseline.
 ## Python wheels
 
 ```bash
-python -m pip install "rabitqlib>=0.8.5"
+python -m pip install "rabitqlib>=0.9.0"
 ```
 
-For changes from 0.6.0, see the [0.7.0 upgrade notes](releases/0.7.0.md).
+To upgrade from 0.8, see the [migration guide](python_migration.md#from-08-to-09) and the
+[0.9.0 release notes](releases/0.9.0.md). For changes from 0.6.0, see the
+[0.7.0 upgrade notes](releases/0.7.0.md).
 
 Wheels target the platforms above and require no compiler or CMake.
 Every wheel bundles its OpenMP runtime (GNU OpenMP on Linux, LLVM OpenMP on
@@ -61,11 +63,11 @@ importing those classes. Array shapes and parameter ranges are still checked at 
 
 ## Get the source
 
-For Python source builds or C++ use, obtain the 0.8.5 checkout once. With Git
+For Python source builds or C++ use, obtain the 0.9.0 checkout once. With Git
 installed, run:
 
 ```bash
-git clone --branch v0.8.5 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git
+git clone --branch v0.9.0 --depth 1 https://github.com/VectorDB-NTU/RaBitQ-Library.git
 cd RaBitQ-Library
 ```
 

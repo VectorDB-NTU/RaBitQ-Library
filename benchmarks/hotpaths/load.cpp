@@ -37,8 +37,11 @@ void run(int argc, char** argv) {
         if (!std::filesystem::exists(rabitqlib::io_impl::filesystem_path(path + ".hnsw"))) {
             rabitqlib::ivf::HNSWInitializer index(dim, count);
             index.add_vectors(data.data(), 1);
-            std::ofstream unused;
-            index.save(unused, path.c_str());
+            std::ofstream output(
+                rabitqlib::io_impl::filesystem_path(path + ".hnsw"), std::ios::binary
+            );
+            output.exceptions(std::ios::failbit | std::ios::badbit);
+            index.write(output);
             return;
         }
     }
@@ -46,9 +49,19 @@ void run(int argc, char** argv) {
     uint64_t expected = 0;
     for (size_t rep = 0; rep <= reps; ++rep) {
         rabitqlib::ivf::HNSWInitializer index(dim, count);
-        std::ifstream unused;
         const auto start = bench::Clock::now();
-        index.load(unused, path.c_str());
+        // Open the graph file inside the timing, as loading an index does.
+        std::ifstream input(
+            rabitqlib::io_impl::filesystem_path(path + ".hnsw"),
+            std::ios::binary | std::ios::ate
+        );
+        if (!input) {
+            throw std::runtime_error("Cannot open the HNSW centroid graph file");
+        }
+        const auto bytes =
+            static_cast<uint64_t>(static_cast<std::streamoff>(input.tellg()));
+        input.seekg(0);
+        index.read(input, bytes);
         const double seconds =
             std::chrono::duration<double>(bench::Clock::now() - start).count();
         uint64_t h = 14695981039346656037ULL;

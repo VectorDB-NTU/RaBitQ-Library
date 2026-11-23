@@ -9,11 +9,13 @@ copyright: Copyright &copy; VectorDB Group, Nanyang Technological University
 nav:
   - Home: index.md
   - Quick start: quick_start.md
-  - Migrating to 0.8: python_migration.md
+  - Migrating to 0.9: python_migration.md
   - Installation: installation.md
   - C++ Integration: cpp_integration.md
   # Group by minor version: nested groups stay collapsed except the current page's.
   - Release notes:
+      - "0.9":
+          - "0.9.0": releases/0.9.0.md
       - "0.8":
           - "0.8.5": releases/0.8.5.md
           - "0.8.4": releases/0.8.4.md

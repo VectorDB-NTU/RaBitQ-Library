@@ -2,10 +2,12 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <ios>
+#include <istream>
 #include <limits>
+#include <ostream>
 #include <stdexcept>
 #include <vector>
 
@@ -17,6 +19,7 @@
 #include "rabitqlib/fastscan/query.hpp"
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -163,7 +166,7 @@ void FlatRaBitQInitializer::centroids_distances(
     }
 }
 
-void FlatRaBitQInitializer::save(std::ofstream& output, const char* /*filename*/) const {
+void FlatRaBitQInitializer::write(std::ostream& output) const {
     output.write(
         reinterpret_cast<const char*>(centroids_.data()),
         static_cast<std::streamsize>(centroids_.size() * sizeof(float))
@@ -181,7 +184,11 @@ void FlatRaBitQInitializer::save(std::ofstream& output, const char* /*filename*/
     }
 }
 
-void FlatRaBitQInitializer::load(std::ifstream& input, const char* /*filename*/) {
+void FlatRaBitQInitializer::read(std::istream& input, uint64_t bytes) {
+    if (bytes != sizeof(float) * (centroids_.size() + global_centroid_.size()) +
+                     batch_data_.size()) {
+        throw FormatError("IVF Flat RaBitQ initializer data has the wrong size");
+    }
     input.read(
         reinterpret_cast<char*>(centroids_.data()),
         static_cast<std::streamsize>(centroids_.size() * sizeof(float))
@@ -195,7 +202,7 @@ void FlatRaBitQInitializer::load(std::ifstream& input, const char* /*filename*/)
         static_cast<std::streamsize>(batch_data_.size())
     );
     if (!input) {
-        throw std::runtime_error("IVF Flat RaBitQ initializer cannot be read");
+        throw FormatError("IVF Flat RaBitQ initializer cannot be read");
     }
 }
 }  // namespace rabitqlib::ivf

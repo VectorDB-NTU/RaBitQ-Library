@@ -28,7 +28,7 @@ def built_index(request):
     else:
         if request.param.startswith("ivf"):
             initializer = "hnsw" if request.param == "ivf_hnsw" else "flat"
-            index = IvfIndex(64, 1, nbits=4, initializer=initializer)
+            index = IvfIndex(64, 1, nbits=4, routing=initializer)
         else:
             index = HnswIndex(64, nbits=4, num_clusters=1)
         index.set_centroids(data.mean(axis=0, keepdims=True))
@@ -54,8 +54,8 @@ def test_path_roundtrip(built_index, tmp_path, kind):
     assert filename.is_file()
     if isinstance(value, FilesystemPath):
         assert value.calls == 1
-    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
-        assert Path(str(filename) + ".hnsw").is_file()
+    # Index format 2 keeps the HNSW routing graph inside the index file.
+    assert not Path(str(filename) + ".hnsw").exists()
     restored = type(index).load(value)
     if isinstance(value, FilesystemPath):
         assert value.calls == 2
@@ -70,7 +70,7 @@ def test_save_replaces_existing_files_without_leftovers(built_index, tmp_path):
     filename = tmp_path / "replaced.index"
     filename.write_bytes(b"stale")
     expected_files = {filename.name}
-    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
+    if isinstance(index, IvfIndex) and index.routing == "hnsw":
         Path(str(filename) + ".hnsw").write_bytes(b"stale")
         expected_files.add(filename.name + ".hnsw")
     for _ in range(2):
@@ -104,8 +104,7 @@ def test_path_preserves_undecodable_bytes(built_index, tmp_path):
     np.testing.assert_array_equal(
         restored.search(queries, 3, 32)[0], index.search(queries, 3, 32)[0]
     )
-    if isinstance(index, IvfIndex) and index.initializer == "hnsw":
-        assert os.path.isfile(raw + b".hnsw")
+    assert not os.path.exists(raw + b".hnsw")
 
 
 @pytest.mark.parametrize("built_index", ["ivf_hnsw"], indirect=True)
@@ -203,6 +202,32 @@ def test_query_rank_diagnostics(built_index, shape):
     assert str(error.value) == f"queries must be a 2D NumPy array; got shape {shape}"
 
 
+def test_query_dimension_is_reported_before_k_and_breadth(built_index):
+    index, queries = built_index
+    narrow = queries[:, :-1]
+    for call in (
+        lambda: index.search(narrow, 0),
+        lambda: index.search(narrow, 1, 0),
+    ):
+        with pytest.raises(
+            ValueError, match="^query dimension does not match index dim"
+        ):
+            call()
+
+
+def test_negative_search_options_raise_type_error(built_index):
+    index, queries = built_index
+    breadth = "nprobe" if isinstance(index, IvfIndex) else "ef_search"
+    for call in (
+        lambda: index.search(queries, -1),
+        lambda: index.search(queries, 1, -1),
+        lambda: index.search(queries, 1, **{breadth: -1}),
+        lambda: index.search(queries, 1, num_threads=-1),
+    ):
+        with pytest.raises(TypeError, match="incompatible function arguments"):
+            call()
+
+
 @pytest.mark.parametrize("built_index", ["ivf_hnsw", "hnsw", "symqg"], indirect=True)
 def test_path_callback_runs_before_access_guard(built_index, tmp_path):
     index, queries = built_index
@@ -210,9 +235,11 @@ def test_path_callback_runs_before_access_guard(built_index, tmp_path):
     class UpdatingPath:
         def __fspath__(self):
             if isinstance(index, IvfIndex):
-                index.reserve(0, index.num_stored_points)
+                index.reserve_cluster(0, index.num_stored_points)
             elif isinstance(index, HnswIndex):
-                index.resize(index.max_elements)
+                # An empty add still takes the write guard; a reserve within the
+                # capacity would only read.
+                index.add(np.empty((0, 64), dtype=np.float32))
             else:
                 # add is SymphonyQG's only write. It takes the write guard and then
                 # refuses a built graph; a guard still held would raise "busy".
@@ -317,3 +344,41 @@ def test_build_rejects_bad_coordinates_without_building(index_kind, value):
         with pytest.raises(ValueError):
             index.add(bad_data, cluster_ids=ids, num_threads=1)
     assert len(index) == 0
+
+
+@pytest.mark.parametrize("model", ["ivf", "hnsw", "qgkmeans", "rabitqkmeans"])
+def test_training_accepts_coordinates_at_the_index_bound(model):
+    # At dim 64 the float32 bound rounds above the exact real bound.
+    exact = np.sqrt(np.sqrt(np.float64(np.finfo(np.float32).max)) / (64.0 * 64))
+    bound = np.float32(exact)
+    assert np.float64(bound) > exact
+    data = np.random.default_rng(5).normal(size=(400, 64)).astype(np.float32)
+    data[5, 3] = bound
+    data[6, 4] = -bound
+
+    def fresh():
+        if model == "ivf":
+            return IvfIndex(64, 4, nbits=4)
+        if model == "hnsw":
+            return HnswIndex(64, nbits=4, num_clusters=4)
+        return (QGKMeans if model == "qgkmeans" else RaBitQKMeans)(64, 40, niter=2)
+
+    trained = fresh()
+    if model in ("ivf", "hnsw"):
+        trained.add(data, num_threads=1)  # the first add trains
+        assert len(trained) == 400
+    else:
+        trained.train(data)
+        trained.assign(data[5:7])
+
+    data[5, 3] = np.nextafter(bound, np.float32(np.inf))
+    message = "KMeans x exceeds the safe float32 coordinate range$"
+    # Index train reaches the k-means check first; HNSW add checks before training.
+    with pytest.raises(ValueError, match=message):
+        if model in ("ivf", "hnsw"):
+            fresh().train(data, num_threads=1)
+        else:
+            fresh().train(data)
+    if model not in ("ivf", "hnsw"):
+        with pytest.raises(ValueError, match=message):
+            trained.assign(data[5:7])

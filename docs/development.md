@@ -45,7 +45,10 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/core/` | Per-vector encoding, query/estimation, rotation and per-vector byte layouts |
 | `include/rabitqlib/fastscan/` | All 32-vector batch layouts, encoding adapters, packing, LUT/estimation and FastScan/HACC |
 | `include/rabitqlib/core/types.hpp`, `core/detail/eigen.hpp` | Numerical configuration/types and internal Eigen aliases, respectively |
-| `include/rabitqlib/index/types.hpp` | Point IDs and ANN candidate values; no Eigen dependency |
+| `include/rabitqlib/index/types.hpp` | Point IDs, add and graph search options, and ANN candidate values; no Eigen dependency |
+| `include/rabitqlib/index/ivf_index.hpp` | `IvfIndex`, the supported C++ IVF API: the Python workflow over `ivf::IVF` |
+| `include/rabitqlib/index/hnsw_index.hpp` | `HnswIndex`, the supported C++ HNSW API: the Python workflow over `hnsw::HierarchicalNSW` |
+| `include/rabitqlib/index/symqg_index.hpp` | `SymqgIndex`, the supported C++ SymphonyQG API: the Python workflow over `symqg::QuantizedGraph<float>` and `QGBuilder` |
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
@@ -462,7 +465,9 @@ parity against a saved pre-change build when changing those shared implementatio
 
 Keep `tests/fixtures/core_api_v1/consumer.cpp` unchanged when extending v1; add tests.
 Changes to v1 names, signatures, aggregate fields, enum values, buffer/code semantics
-or allocation guarantees require an explicit API-major decision. The stable header
+or allocation guarantees require an explicit API-major decision. Adding a `MetricType`
+value that v1 rejects, as `METRIC_COSINE` does, is not such a change; keep v1's rejection
+covered by `core_api_test.cpp`. The stable header
 must not expose Eigen, record maps, ANN or ISA-specific types. Workspace APIs must
 never silently allocate on the heap or spawn worker threads.
 
@@ -505,12 +510,13 @@ in place of extra-bit codes.
 
 #### IVF formats and initialization
 
-New IVF files have a magic/version header, an explicit padded dimension, and a resolved initializer type (v2); v1 files infer the historical
-Flat/HNSW choice at 20,000 clusters, independently of current auto selection.
-New IVF auto routing uses Flat below 5,000 clusters, Flat RaBitQ below 60,000,
-and HNSW otherwise. Flat RaBitQ persists its mean and codes in the main file;
-HNSW retains its sidecar. Legacy quantized files and raw v1 files infer
-64-dimension padding.
+New IVF files use index format 2 (`docs/formats.md`): the resolved initializer type
+is in `ivf_params`, and the routing data, including the HNSW graph, is a section of
+the one file. Earlier `RABQIDX1` v2 files store the initializer type; v1 files infer
+the historical Flat/HNSW choice at 20,000 clusters, independently of current auto
+selection. Those layouts keep HNSW routing in the `<file>.hnsw` sidecar. New IVF auto
+routing uses Flat below 5,000 clusters, Flat RaBitQ below 60,000, and HNSW otherwise.
+Legacy quantized files and raw v1 files infer 64-dimension padding.
 
 #### Search defaults
 
@@ -518,9 +524,17 @@ IVF search defaults to HACC for 4–9 bits and standard FastScan for 1–3 bits 
 
 #### SymphonyQG storage
 
-SymphonyQG supports raw storage (`quantization_bits == 0`) and quantized storage at 4 or 8 bits.
+SymphonyQG supports raw storage (`quantization_bits == 0` in `QuantizedGraph`, `nbits == 32` in
+`SymqgIndex` and Python) and quantized storage at 4 or 8 bits.
 
 ### Change an index API
+
+The supported C++ index API is `IvfIndex`, `HnswIndex` and `SymqgIndex` in
+`include/rabitqlib/index/*_index.hpp`, with the names, defaults and behaviour of the Python
+classes, and their messages where those do not name Python values; the bindings wrap them.
+`ivf::IVF`, `hnsw::HierarchicalNSW`, `symqg::QuantizedGraph` and `QGBuilder` stay installed for
+these classes and for `QGAssigner`, without documentation or a compatibility promise. Samples and
+docs use the supported classes.
 
 Update the C++ declaration/implementation, the corresponding file in `python_bindings/`, Python
 type stubs, tests, samples, and the relevant page under `docs/docs/index/`. Preserve public signatures where
@@ -532,7 +546,7 @@ and buffer changes must also preserve the [ID marker](#search-buffer-id-marker) 
 
 Filesystem path strings are UTF-8 on Windows and native path bytes on POSIX. Use
 `io_impl::filesystem_path` from `utils/path.hpp` before opening files or querying
-filesystem metadata, including IVF's HNSW sidecar. It converts UTF-8 to native Unicode
+filesystem metadata, including the HNSW sidecar of earlier IVF files. It converts UTF-8 to native Unicode
 on Windows and preserves existing path bytes on Linux/macOS.
 
 For path-only changes, check path conversion and the affected I/O operations; the
@@ -550,28 +564,40 @@ keep their provenance and hashes, and do not regenerate them with the current wr
 Index files are trusted input (see the usage guide): validate structure and sizes so
 that corrupt or mismatched files are reported before allocation, without treating a
 crafted file as a supported input.
+Readers throw `rabitqlib::FormatError` (`include/rabitqlib/index/format_error.hpp`) for
+any truncated, corrupt, mismatched or unsupported content, including errors raised by
+shared validators while loading; only a file that cannot be opened throws a plain
+`std::runtime_error`. Python maps it to `rabitqlib.FormatError`; rejection tests assert it.
 
 Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
-serialized fields for new formats (the current IVF, HNSW and QG bodies still store several
-`size_t` fields; change those only with a format version bump), validate sizes before
-allocation, check every read, and retain a
-compatibility test fixture or an explicit rejection path. Review each affected format;
-changes to shared serialization helpers require auditing every format using them.
-IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG have separate formats. SymphonyQG includes a versioned quantized format plus a legacy
-raw-format fallback; preserve both unless a breaking change is explicitly requested.
+serialized fields for new formats (earlier layouts store several `size_t` fields; keep their readers unchanged), validate sizes before allocation, check every
+read, and retain a compatibility test fixture or an explicit rejection path. Review each affected
+format; changes to shared serialization helpers require auditing every format using them.
+Every index writes index format 2 ([`docs/formats.md`](formats.md#index-format-2), container in
+`src/index/format2.*`) and still reads its earlier layouts: IVF-RaBitQ's `RABQIDX1` versions and
+unversioned files, HNSW-RaBitQ's unversioned layout, and SymphonyQG's versioned quantized layout
+and raw fallback. Preserve those readers unless a breaking change is explicitly requested. When a writer moves to
+a new format, freeze the last files of the old writer as release-produced fixtures first.
 
 ### Change Python bindings
 
 Shared NumPy and string conversion helpers live in `python_bindings/bindings_common.hpp`. Register
 index-specific APIs in their own binding file and export public classes from
 `python_bindings/__init__.py`. Validate rank, dimensionality, state, and parameter ranges before
-entering the core. Be deliberate about `py::array::forcecast`: it permits dtype/layout copies and
+entering the core. A binding over a class that implements the Python workflow in C++, such as
+`IvfIndex`, `HnswIndex` or `SymqgIndex`, leaves the state checks and the removal-ID range to
+that class, and for IVF the `reserve_cluster` cluster-ID range. It keeps the conversions and
+shape checks, the `add` cluster-ID range and the `num_points` sign checked before narrowing, the
+`k` range checked before allocating outputs, and checks whose messages name Python values such as
+`None`.
+Be deliberate about `py::array::forcecast`: it permits dtype/layout copies and
 must not be used where callers expect in-place mutation or pointer identity.
 
 C-contiguous NumPy storage is not necessarily aligned even to `alignof(T)`.
 `ensure_2d_array` copies misaligned inputs into an aligned owner; one-dimensional
-ID conversion uses packed reads in `checked_cluster_ids` and `checked_removal_ids`
-before narrowing to owned PID storage. Reuse these helpers rather than directly
+ID conversion uses packed reads in `checked_cluster_ids`, which validates cluster IDs
+before narrowing them to owned PID storage, and in `copied_ids`, which makes an aligned
+`Id` copy whose range the index checks. Reuse these helpers rather than directly
 dereferencing a possibly misaligned typed pointer. Removal IDs are checked against
 stored count, including removed records, rather than live count.
 
@@ -582,6 +608,9 @@ conversion. Acquire and destroy guards with the GIL held, release the GIL only i
 their lifetime, and keep converted owners alive until reacquisition.
 
 Python wrappers use `IndexAccess` for concurrent reads and fail-fast exclusive updates.
+Settings that Python changes through a returned reference, such as `cp`, take no guard: keep
+them in the wrapper and copy them into the native index or the call's parameters with the GIL
+and the write guard held before releasing the GIL.
 Extract native pointers before releasing the GIL and keep search parameters local to
 each call. C++ callers synchronize index mutations themselves.
 
@@ -691,22 +720,24 @@ its upper and base layers use `upper_layer_max_degree_` and
 of 32. These settings are not interchangeable.
 
 Public names and Python keywords are compatibility contracts. For example,
-`Cluster::num()`, the protected `Initializer::num_cluster_`, QG's
-`degree_bound()`/`set_ef()` and `QGKMeansParameters::ef_build`
-retain their existing spellings, as do the Python vocabulary `random_seed`/`seed`,
-`train`/`build`, `obj`, `nsplit`, `final_obj` and `niter`. Python's search breadth is
-`ef_search` since 0.8.5; `ef` is deprecated and removed in 0.9 (#232). Python's `QGKMeans`
-and `QGKMeansParameters` take `nbits`, `max_degree` and `ef_construction` since 0.8.5;
-`quantization_bits`, `graph_degree` and `ef_build` are deprecated there and removed in
-0.9 (#233), while the C++ struct keeps them until 0.9. C++ parameter names may be clarified without
-changing types, order or defaults. Keep declarations, definitions and comments
-in agreement; do not rename methods or literals by textual substitution.
+`Cluster::num()`, the protected `Initializer::num_cluster_`, QG's `degree_bound()` and its
+`set_ef()`, which the installed `QGAssigner` calls, retain their existing spellings, as do the
+Python vocabulary `seed`, `train`, `obj`, `nsplit`, `final_obj` and `niter`. Since 0.9, Python
+spells each concept one way on the index and k-means classes: `ef_search`,
+`ef_construction`, `max_degree`, `nbits` (32 for raw storage), `routing` and `capacity`
+(#232, #233). The C++ index classes and `QGKMeansParameters` use the same names; the index
+classes also take `Id` (`int64_t`) IDs with `kNoId` for an empty result slot, and
+`num_threads == 0` for every available CPU, capped by `OMP_NUM_THREADS`.
+`QGKMeansParameters` and `SymqgIndex` convert `nbits == 32` to the 0 that `QGAssigner` and
+QG take as `quantization_bits`. C++ parameter names may be clarified without changing types,
+order or defaults. Keep declarations, definitions and comments in agreement; do not rename
+methods or literals by textual substitution.
 
 Storage-mode parameters also retain their contracts: IVF/HNSW use `nbits()`
 with separate internal `ex_bits_`; IVF additionally accepts 32 for raw-vector
 reranking. QG uses `quantization_bits()` with 0 for raw storage and 4/8 for packed
-vectors. Naming work does not change these values, allocation sizes, numeric
-operations, serialized field order, or ownership.
+vectors; `SymqgIndex::nbits()` reports 32 for raw storage. Naming work does not change
+these values, allocation sizes, numeric operations, serialized field order, or ownership.
 
 ### Numerical module variable names
 
@@ -722,8 +753,9 @@ public and protected names, Python keywords, field order and numerical operation
   integer accumulation outputs. Retain `lut` in compact local kernels where its
   role is clear.
 - Clustering's private state uses `dim_`, `num_points_`, `num_clusters_`,
-  `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and graph parameter
-  names compatible. The private graph iteration count is `graph_build_iterations_`.
+  `num_workers_` and `data_`. Keep public `d`, `k`, `num_threads` and the graph parameter
+  names (`ef_search`, `graph_build_iterations` and, since 0.9, `max_degree`,
+  `ef_construction` and `nbits`) compatible. The private graph iteration count is `graph_build_iterations_`.
   Per-point centroid IDs are `assignments` (arrays) and `cluster_id` (scalars);
   `label` stays reserved for HNSW's caller-visible labels.
 - FHT backend arguments use `rotated_data`, `padded_dim`, `trunc_dim` and
@@ -844,15 +876,18 @@ Centroids, data, and queries compared by the same estimator must be in the same 
 
 Rotator state is part of persisted index state. Loading an index must restore the exact rotation
 used at construction; generating a new random rotator produces silently incorrect distances.
-Honor stored padded dimensions instead of recomputing them from current defaults. IVF `RABQIDX1`
-v1 and v2 files explicitly store this field; preserve it for both versions. Only legacy unversioned
+Honor stored padded dimensions instead of recomputing them from current defaults. Index format 2
+and IVF `RABQIDX1` v1 and v2 files explicitly store this field; preserve it. Only legacy unversioned
 quantized IVF files and old raw v1 files omit it and infer historical 64-dimension padding.
 Unreleased pad16 files whose stored dimension is not divisible by 32 are rejected.
 
 ### Distance conventions
 
 The library supports `METRIC_L2` and `METRIC_IP`. Some internal helpers represent inner-product
-distance as `1 - dot_product`, and estimator correction terms differ between metrics. Do not reuse
+distance as `1 - dot_product`, and estimator correction terms differ between metrics.
+`METRIC_COSINE` exists only at the ANN index boundary: an index stores `METRIC_IP` internally,
+normalizes inputs where they enter (`src/index/cosine.hpp`), and records the metric in its file.
+Quantizers, FastScan, clustering and the IVF initializers keep rejecting it. Do not reuse
 an L2 norm/correction formula for IP merely because both paths compile. Test ordering and returned
 distance semantics separately.
 
@@ -865,9 +900,8 @@ checked-bit manipulation independently.
 ### Ownership during construction
 
 Some index builders retain non-owning access to input vectors only during synchronous construction.
-Do not extend such a pointer's lifetime without introducing explicit ownership. The HNSW Python
-wrapper copies cluster IDs before calling the mutable C++ construction API; preserve that boundary
-unless the C++ contract becomes const-correct.
+Do not extend such a pointer's lifetime without introducing explicit ownership. The Python
+wrappers pass `add` an owned, validated copy of the cluster IDs.
 
 ### Removal markers and search
 
@@ -879,9 +913,9 @@ updates or persistence. These markers affect live search as well as saved files.
 IVF-RaBitQ `remove` stores a removed point as `f_add = +inf` inside the existing batch data, so it needs no
 discriminator. No index written before `remove` existed has an infinite `f_add`, so nothing in an old
 file is reinterpreted. In the legacy file formats readable by release 0.5.0, that reader also
-excludes removed points. This compatibility of the removal marker does not extend to the current
-writer's `RABQIDX1` v2 format: older releases cannot read current saves, even when resaving a loaded
-legacy index. Keep this convention when touching IVF-RaBitQ code:
+excludes removed points. This compatibility of the removal marker does not extend to index
+format 2, which the current writer uses: releases up to 0.8 cannot read current saves, even when
+resaving a loaded legacy index. Keep this convention when touching IVF-RaBitQ code:
 
 - Every estimator and scan path must turn `f_add = +inf` into an infinite estimated distance and an
   infinite lower bound, and never into NaN. A NaN distance would enter the result buffer.

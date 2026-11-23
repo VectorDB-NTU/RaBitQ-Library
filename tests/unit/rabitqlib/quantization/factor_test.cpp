@@ -159,7 +159,7 @@ TEST(RabitqFactorTest, ForeignCodeIsRejectedDouble) {
 
 TEST(RabitqFactorTest, InvalidMetricMessagesArePreserved) {
     constexpr size_t kDim = 64;
-    const auto invalid_metric = static_cast<MetricType>(2);
+    const auto invalid_metric = METRIC_COSINE;  // only the ANN indexes accept it
     std::vector<float> data(kDim), centroid(kDim, 0), residual(kDim), centered(kDim);
     std::vector<int> codes(kDim);
     float add, rescale, error;

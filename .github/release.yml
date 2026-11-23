@@ -5,6 +5,10 @@ changelog:
       - invalid
 
   categories:
+    - title: Breaking changes
+      labels:
+        - release:breaking
+
     - title: Added
       labels:
         - release:added

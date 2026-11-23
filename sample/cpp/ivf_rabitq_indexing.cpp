@@ -3,17 +3,17 @@
 #include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/index/ivf/ivf.hpp"
+#include "rabitqlib/index/ivf_index.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
 
 using PID = rabitqlib::PID;
-using index_type = rabitqlib::ivf::IVF;
 using data_type = rabitqlib::RowMajorArray<float>;
 using cluster_ids_type = rabitqlib::RowMajorArray<uint32_t>;
 
@@ -25,24 +25,25 @@ int run(int argc, char** argv) {
                   << "arg3: path for cluster ids file, format .ivecs\n"
                   << "arg4: total number of bits for quantization\n"
                   << "arg5: path for saving index\n"
-                  << "arg6: metric type (\"l2\" or \"ip\"), l2 by default\n"
+                  << "arg6: metric type (\"l2\", \"ip\" or \"cosine\"), l2 by default\n"
                   << "arg7: if use faster quantization (\"true\" or \"false\"), false by "
                      "default\n";
         return 1;
     }
 
     rabitqlib::MetricType metric_type = rabitqlib::METRIC_L2;
-    if (argc > 6) {
-        std::string metric_str(argv[6]);
-        if (metric_str == "ip" || metric_str == "IP") {
-            metric_type = rabitqlib::METRIC_IP;
-        }
+    const char* metric_name = "L2";
+    const std::string metric_str = argc > 6 ? argv[6] : "l2";
+    if (metric_str == "ip" || metric_str == "IP") {
+        metric_type = rabitqlib::METRIC_IP;
+        metric_name = "IP";
+    } else if (metric_str == "cosine" || metric_str == "COSINE") {
+        metric_type = rabitqlib::METRIC_COSINE;
+        metric_name = "Cosine";
+    } else if (metric_str != "l2" && metric_str != "L2") {
+        throw std::invalid_argument("Metric type must be l2, ip or cosine");
     }
-    if (metric_type == rabitqlib::METRIC_IP) {
-        std::cout << "Metric Type: IP\n";
-    } else if (metric_type == rabitqlib::METRIC_L2) {
-        std::cout << "Metric Type: L2\n";
-    }
+    std::cout << "Metric Type: " << metric_name << '\n';
 
     bool faster_quant = false;
     if (argc > 7) {
@@ -69,15 +70,22 @@ int run(int argc, char** argv) {
 
     size_t num_points = data.rows();
     size_t dim = data.cols();
-    size_t k = centroids.rows();
+    size_t num_clusters = centroids.rows();
 
     std::cout << "data loaded\n";
     std::cout << "\tN: " << num_points << '\n';
     std::cout << "\tDIM: " << dim << '\n';
 
     rabitqlib::StopW stopw;
-    index_type ivf(num_points, dim, k, total_bits, metric_type);
-    ivf.construct(data.data(), centroids.data(), cluster_ids.data(), faster_quant);
+    rabitqlib::IvfOptions options;
+    options.metric = metric_type;
+    options.nbits = total_bits;
+    rabitqlib::IvfIndex ivf(dim, num_clusters, options);
+    ivf.set_centroids(centroids.data());
+    rabitqlib::AddOptions add_options;
+    add_options.cluster_ids = cluster_ids.data();
+    add_options.fast_quantization = faster_quant;
+    ivf.add(data.data(), num_points, add_options);
     float miniutes = stopw.get_elapsed_mili() / 1000 / 60;
     std::cout << "ivf constructed \n";
     ivf.save(index_file);

@@ -31,7 +31,7 @@ def make_index(kind, bits=4, metric="l2", fill=True):
     centroids = np.stack([data[labels == i].mean(axis=0) for i in range(5)])
     if kind.startswith("ivf"):
         initializer = kind.removeprefix("ivf_") if "_" in kind else "flat"
-        index = IvfIndex(65, 5, nbits=bits, metric=metric, initializer=initializer)
+        index = IvfIndex(65, 5, nbits=bits, metric=metric, routing=initializer)
     elif kind == "hnsw":
         index = HnswIndex(
             65,
@@ -58,7 +58,7 @@ def make_index(kind, bits=4, metric="l2", fill=True):
 def parameters(kind, wide):
     if kind.startswith("ivf"):
         return {"nprobe": 5 if wide else 1, "high_accuracy": wide}
-    return {"ef": 96 if wide else 5}
+    return {"ef_search": 96 if wide else 5}
 
 
 @pytest.mark.parametrize("kind,bits", CASES)
@@ -127,7 +127,13 @@ def test_active_search_allows_reads_and_rejects_mutations(kind, tmp_path):
                     lambda: index.set_centroids(data[:5]),
                 ]
             if kind == "hnsw":
-                mutations.append(lambda: index.resize(256))
+                # A reserve within the capacity changes nothing and is a read.
+                capacity = index.capacity
+                assert capacity < 256
+                for within in (0, capacity):
+                    index.reserve(within)
+                assert index.capacity == capacity
+                mutations.append(lambda: index.reserve(256))
             for mutate in mutations:
                 with pytest.raises(RuntimeError, match=f"^{BUSY}$"):
                     mutate()
@@ -136,7 +142,7 @@ def test_active_search_allows_reads_and_rejects_mutations(kind, tmp_path):
         running.result(timeout=10)
     # Failed conflicts must not leave the access state busy.
     if kind == "hnsw":
-        index.resize(256)
+        index.reserve(256)
     elif kind == "qg":
         # add takes write access before it rejects a second graph.
         with pytest.raises(RuntimeError, match="does not support incremental addition"):
@@ -171,7 +177,7 @@ def test_active_mutation_rejects_reads_and_other_mutations(kind, tmp_path):
                     lambda: index.set_centroids(data[:5]),
                 ]
             if kind == "hnsw":
-                calls.append(lambda: index.resize(256))
+                calls.append(lambda: index.reserve(256))
             for call in calls:
                 with pytest.raises(RuntimeError, match=f"^{BUSY}$"):
                     call()
@@ -229,9 +235,9 @@ def test_native_exception_reacquires_gil_and_releases_access():
     queries[1, 0] = np.nan
     # The native search checks coordinates after releasing the GIL.
     with pytest.raises(ValueError, match="must contain only finite values"):
-        index.search(queries, 5, ef=64)
+        index.search(queries, 5, ef_search=64)
     # add takes write access before it rejects a second graph.
     with pytest.raises(RuntimeError, match="does not support incremental addition"):
         index.add(data)
-    ids, distances = index.search(data[:2], 5, ef=64)
+    ids, distances = index.search(data[:2], 5, ef_search=64)
     assert ids.shape == distances.shape == (2, 5)

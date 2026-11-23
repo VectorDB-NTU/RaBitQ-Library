@@ -1,6 +1,7 @@
 #include "rabitqlib/index/symqg/qg.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +16,10 @@
 #include <utility>
 #include <vector>
 
+#include "../core/blob.hpp"
+#include "cosine.hpp"
 #include "file_replacement.hpp"
+#include "format2.hpp"
 #include "rabitqlib/core/data_layout.hpp"
 #include "rabitqlib/core/encoder.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -29,6 +33,7 @@
 #include "rabitqlib/index/detail/buffer.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/detail/visited_set.hpp"
+#include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/symqg/detail/search_scratch.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/bitops.hpp"
@@ -45,6 +50,15 @@ namespace {
 // Native-endian numeric tag; little-endian files contain the bytes "QTIBARGQ".
 constexpr uint64_t kFormatMagic = 0x5147524142495451ULL;
 constexpr uint32_t kFormatVersion = 1;
+
+// Index format 2 sections of SymphonyQG (docs/formats.md, "Section kinds").
+constexpr uint32_t kParamsSection = 768;
+constexpr uint32_t kCentroidSection = 769;
+constexpr uint32_t kRecordsSection = 770;
+constexpr size_t kParamsBytes = 32;
+// The stored initialization: 0 is unknown.
+constexpr uint32_t kInitPiPNN = 1;
+constexpr uint32_t kInitRandom = 2;
 }  // namespace
 
 QuantizedQuery::QuantizedQuery(
@@ -101,7 +115,9 @@ size_t QuantizedGraph<float>::degree_bound() const { return max_degree_; }
 
 PID QuantizedGraph<float>::entry_point() const { return entry_point_id_; }
 
-MetricType QuantizedGraph<float>::metric_type() const { return metric_type_; }
+MetricType QuantizedGraph<float>::metric_type() const {
+    return cosine_ ? METRIC_COSINE : metric_type_;
+}
 
 size_t QuantizedGraph<float>::quantization_bits() const { return quantization_bits_; }
 
@@ -136,10 +152,12 @@ QuantizedGraph<float>::QuantizedGraph(
     , max_degree_(max_degree)
     , dim_(dim)
     , padded_dim_(dim)
-    , metric_type_(metric_type)
+    , metric_type_(index_detail::stored_metric(metric_type))
+    , cosine_(metric_type == METRIC_COSINE)
     , rotator_type_(rotator_type)
     , quantization_bits_(quantization_bits)
-    , seed_(seed) {
+    , seed_(seed)
+    , seed_known_(true) {
     validate_configuration();
     padded_dim_ = padded_dimension(dim_);
     initialize();
@@ -262,54 +280,228 @@ void QuantizedGraph<float>::save(const char* filename) const {
     if (filename == nullptr || filename[0] == '\0') {
         throw std::invalid_argument("QuantizedGraph save filename must not be empty");
     }
+    if (read_only_) {
+        throw std::logic_error(
+            "QuantizedGraph was loaded from a file with features this release cannot "
+            "update, so it cannot save"
+        );
+    }
     index_detail::save_replacing(filename, {}, [this](const std::string& path) {
         write_file(path.c_str());
     });
 }
 
 void QuantizedGraph<float>::write_file(const char* filename) const {
+    namespace f2 = index_detail::format2;
     std::ofstream output(io_impl::filesystem_path(filename), std::ios::binary);
     if (!output.is_open()) {
         throw std::runtime_error("QuantizedGraph cannot open file for writing");
     }
     output.exceptions(std::ios::badbit | std::ios::failbit);
 
-    if (quantization_bits_ != 0) {
-        output.write(reinterpret_cast<const char*>(&kFormatMagic), sizeof(kFormatMagic));
-        output.write(
-            reinterpret_cast<const char*>(&kFormatVersion), sizeof(kFormatVersion)
-        );
+    f2::Header header;
+    header.index_kind = f2::IndexKind::SymphonyQg;
+    header.metric = f2::header_metric(metric_type());
+    header.dim = dim_;
+    header.padded_dim = padded_dim_;
+    header.code_bits = static_cast<uint32_t>(quantization_bits_);
+    header.raw_type = quantization_bits_ == 0 ? f2::RawType::Float32 : f2::RawType::None;
+    header.id_bits = 32;
+    if (seed_known_) {
+        header.seed = seed_;
     }
+    header.num_points = max_elements_;
 
-    // Basic variants
-    output.write(reinterpret_cast<const char*>(&max_elements_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&max_degree_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&dim_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&padded_dim_), sizeof(size_t));
-    output.write(reinterpret_cast<const char*>(&entry_point_id_), sizeof(PID));
-    output.write(reinterpret_cast<const char*>(&rotator_type_), sizeof(RotatorType));
-    output.write(reinterpret_cast<const char*>(&metric_type_), sizeof(MetricType));
-    if (quantization_bits_ != 0) {
-        output.write(
-            reinterpret_cast<const char*>(&quantization_bits_), sizeof(quantization_bits_)
-        );
-        output.write(
-            reinterpret_cast<const char*>(centroid_.data()),
-            static_cast<std::streamsize>(padded_dim_ * sizeof(float))
-        );
-    }
-
-    // Data
-    output.write(
-        get_row_data(0),
-        static_cast<std::streamsize>(checked_multiply(max_elements_, record_bytes_))
+    std::vector<uint8_t> rotator(
+        rabitqlib::detail::rotator_blob_bytes(rotator_type_, dim_, padded_dim_)
     );
+    rabitqlib::detail::encode_rotator_blob(
+        *rotator_, rotator_type_, dim_, seed(), rotator.data()
+    );
+    std::array<uint8_t, kParamsBytes> params{};
+    f2::put_u64(params.data(), max_degree_);
+    f2::put_u64(params.data() + 8, entry_point_id_);
+    f2::put_u64(params.data() + 16, ef_construction_);
+    uint32_t init = 0;
+    if (initialization_.has_value()) {
+        init = *initialization_ == QGInitialization::PiPNN ? kInitPiPNN : kInitRandom;
+    }
+    f2::put_u32(params.data() + 24, init);
 
-    // Rotator
-    rotator_->save(output);
-
-    output.flush();
+    const auto bytes = [](const auto& buffer) {
+        return
+            [&buffer](f2::SectionSink& sink) { sink.write(buffer.data(), buffer.size()); };
+    };
+    std::vector<f2::SectionWrite> sections = {
+        {f2::kRotatorSection, f2::kSectionRequired, rotator.size(), bytes(rotator)},
+        {kParamsSection,
+         f2::kSectionRequired | f2::kSectionChecksummed,
+         params.size(),
+         bytes(params)},
+    };
+    if (quantization_bits_ != 0) {
+        sections.push_back(
+            {kCentroidSection,
+             f2::kSectionRequired,
+             padded_dim_ * sizeof(float),
+             [this](f2::SectionSink& sink) {
+                 sink.write(centroid_.data(), padded_dim_ * sizeof(float));
+             }}
+        );
+    }
+    const size_t data_bytes = checked_multiply(max_elements_, record_bytes_);
+    sections.push_back(
+        {kRecordsSection,
+         f2::kSectionRequired,
+         data_bytes,
+         [this, data_bytes](f2::SectionSink& sink) {
+             sink.write(get_row_data(0), data_bytes);
+         }}
+    );
+    f2::write_file(output, header, sections, RABITQ_LIBRARY_VERSION);
     output.close();
+}
+
+void QuantizedGraph<float>::read_format2(std::istream& input) {
+    namespace f2 = index_detail::format2;
+    const std::vector<uint32_t> known_kinds = {
+        f2::kRotatorSection, kParamsSection, kCentroidSection, kRecordsSection};
+    f2::Reader reader(
+        input, f2::IndexKind::SymphonyQg, known_kinds, [](const f2::Header& header) {
+            const bool raw =
+                header.code_bits == 0 && header.raw_type == f2::RawType::Float32;
+            const bool quantized = (header.code_bits == 4 || header.code_bits == 8) &&
+                                   header.raw_type == f2::RawType::None;
+            if (header.id_bits != 32 || (!raw && !quantized)) {
+                throw f2::FormatError(
+                    "QuantizedGraph index file stores neither raw vectors nor 4- or 8-bit "
+                    "codes with 32-bit IDs"
+                );
+            }
+            if (header.seed.has_value() &&
+                *header.seed > std::numeric_limits<uint32_t>::max()) {
+                throw f2::FormatError("QuantizedGraph index file has a seed above 32 bits");
+            }
+        }
+    );
+    const f2::Header& header = reader.header();
+    metric_type_ = index_detail::stored_metric(f2::metric_type(header.metric));
+    cosine_ = header.metric == f2::Metric::Cosine;
+    dim_ = static_cast<size_t>(header.dim);
+    padded_dim_ = static_cast<size_t>(header.padded_dim);
+    quantization_bits_ = header.code_bits;
+    max_elements_ = static_cast<size_t>(header.num_points);
+    seed_known_ = header.seed.has_value();
+    seed_ = static_cast<uint32_t>(header.seed.value_or(0));
+
+    const auto require = [&reader](uint32_t kind, std::optional<uint64_t> size) {
+        const f2::Section* section = reader.find(kind);
+        if (section == nullptr) {
+            throw f2::FormatError(
+                "QuantizedGraph index file has no section kind " + std::to_string(kind)
+            );
+        }
+        if (size.has_value() && section->size != *size) {
+            throw f2::FormatError(
+                "QuantizedGraph index file section kind " + std::to_string(kind) + " has " +
+                std::to_string(section->size) + " bytes; expected " + std::to_string(*size)
+            );
+        }
+        return section;
+    };
+    const auto read_all = [&reader](const f2::Section& section) {
+        std::vector<uint8_t> bytes(static_cast<size_t>(section.size));
+        reader.read(section, 0, bytes.data(), bytes.size());
+        return bytes;
+    };
+
+    const std::vector<uint8_t> blob = read_all(*require(f2::kRotatorSection, std::nullopt));
+    rabitqlib::detail::DecodedRotator rotator;
+    try {
+        rotator = rabitqlib::detail::decode_rotator_blob(blob.data(), blob.size());
+    } catch (const std::invalid_argument& error) {
+        throw f2::FormatError(
+            std::string("QuantizedGraph index file has an invalid rotator (") +
+            error.what() + ")"
+        );
+    }
+    if (rotator.dim != dim_ || rotator.padded_dim != padded_dim_) {
+        throw f2::FormatError(
+            "QuantizedGraph index file rotator does not match its dimensions"
+        );
+    }
+    rotator_type_ = rotator.type;
+
+    const std::vector<uint8_t> params = read_all(*require(kParamsSection, kParamsBytes));
+    const uint64_t max_degree = f2::get_u64(params.data());
+    const uint64_t entry_point = f2::get_u64(params.data() + 8);
+    const uint32_t init = f2::get_u32(params.data() + 24);
+    if (max_degree > max_elements_ || entry_point >= max_elements_ || init > kInitRandom ||
+        f2::get_u32(params.data() + 28) != 0) {
+        throw f2::FormatError("QuantizedGraph index file has invalid graph parameters");
+    }
+    max_degree_ = static_cast<size_t>(max_degree);
+    entry_point_id_ = static_cast<PID>(entry_point);
+    ef_construction_ = static_cast<size_t>(f2::get_u64(params.data() + 16));
+    if (init != 0) {
+        initialization_ =
+            init == kInitPiPNN ? QGInitialization::PiPNN : QGInitialization::Random;
+    }
+    try {
+        validate_configuration();
+    } catch (const std::invalid_argument& error) {
+        throw f2::FormatError(
+            std::string("QuantizedGraph index file is invalid: ") + error.what()
+        );
+    }
+
+    size_t data_bytes = 0;
+    try {
+        initialize_layout();
+        data_bytes = checked_multiply(max_elements_, record_bytes_);
+    } catch (const std::length_error&) {
+        throw f2::FormatError(
+            "QuantizedGraph index file describes records too large to address"
+        );
+    }
+    const f2::Section* centroid = nullptr;
+    if (quantization_bits_ != 0) {
+        centroid = require(kCentroidSection, padded_dim_ * sizeof(float));
+    } else if (reader.find(kCentroidSection) != nullptr) {
+        throw f2::FormatError(
+            "QuantizedGraph index file has a centroid but stores raw vectors"
+        );
+    }
+    const f2::Section* records = require(kRecordsSection, data_bytes);
+
+    initialize(false);
+    rotator_ = std::move(rotator.rotator);
+    if (centroid != nullptr) {
+        centroid_.resize(padded_dim_);
+        reader.open(*centroid).read(centroid_.data(), padded_dim_ * sizeof(float));
+    }
+    reader.open(*records).read(get_row_data(0), data_bytes);
+    read_only_ = reader.read_only();
+    for (PID source = 0; source < max_elements_; ++source) {
+        const auto neighbors = get_neighbors(source);
+        for (size_t i = 0; i < max_degree_; ++i) {
+            if (neighbors[i] >= max_elements_) {
+                throw FormatError("QuantizedGraph neighbor ID is invalid");
+            }
+        }
+    }
+}
+
+std::optional<uint32_t> QuantizedGraph<float>::seed() const {
+    return seed_known_ ? std::optional<uint32_t>(seed_) : std::nullopt;
+}
+
+std::optional<size_t> QuantizedGraph<float>::ef_construction() const {
+    return ef_construction_ != 0 ? std::optional<size_t>(ef_construction_) : std::nullopt;
+}
+
+std::optional<QGInitialization> QuantizedGraph<float>::initialization() const {
+    return initialization_;
 }
 
 void QuantizedGraph<float>::load(const char* filename) {
@@ -324,16 +516,27 @@ void QuantizedGraph<float>::load(const char* filename) {
     if (!input.is_open()) {
         throw std::runtime_error("QuantizedGraph cannot open file");
     }
+    if (index_detail::format2::has_magic(
+            input, index_detail::format2::IndexKind::SymphonyQg
+        )) {
+        QuantizedGraph<float> loaded;
+        loaded.read_format2(input);
+        // ef_search is a runtime search setting rather than persisted index state.
+        loaded.default_ef_search_ = default_ef_search_;
+        loaded.ready_ = true;
+        *this = std::move(loaded);
+        return;
+    }
 
     auto read_exact = [&](void* destination, size_t bytes, const char* field) {
         if (bytes > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
-            throw std::runtime_error("QuantizedGraph field is too large to read");
+            throw FormatError("QuantizedGraph field is too large to read");
         }
         input.read(
             reinterpret_cast<char*>(destination), static_cast<std::streamsize>(bytes)
         );
         if (!input) {
-            throw std::runtime_error(
+            throw FormatError(
                 std::string("QuantizedGraph file is truncated while reading ") + field
             );
         }
@@ -348,7 +551,7 @@ void QuantizedGraph<float>::load(const char* filename) {
         uint32_t version = 0;
         read_value(version, "format version");
         if (version != kFormatVersion) {
-            throw std::runtime_error("QuantizedGraph file version is unsupported");
+            throw FormatError("QuantizedGraph file version is unsupported");
         }
     } else {
         // Files produced before qg-quant have no header and always contain raw vectors.
@@ -371,27 +574,37 @@ void QuantizedGraph<float>::load(const char* filename) {
         loaded.quantization_bits_ = 0;
     }
 
-    loaded.validate_configuration();
+    try {
+        loaded.validate_configuration();
+    } catch (const std::invalid_argument& error) {
+        throw FormatError(error.what());  // stored settings that do not fit
+    }
     if (stored_padded_dim < loaded.dim_ || stored_padded_dim % 32 != 0) {
-        throw std::runtime_error("QuantizedGraph file has an invalid padded dimension");
+        throw FormatError("QuantizedGraph file has an invalid padded dimension");
     }
     // Older files use 64-coordinate padding. Their saved rotation and codes must
     // retain that dimension, including when initialize() allocates the row storage.
     loaded.padded_dim_ = stored_padded_dim;
-    loaded.initialize_layout();
-
-    const size_t centroid_bytes = loaded.quantization_bits_ == 0
-                                      ? 0
-                                      : checked_multiply(loaded.padded_dim_, sizeof(float));
-    const size_t data_bytes = checked_multiply(loaded.max_elements_, loaded.record_bytes_);
-    const size_t rotator_bytes =
-        loaded.rotator_type_ == RotatorType::MatrixRotator
-            ? checked_multiply(
-                  checked_multiply(sizeof(float), loaded.dim_), loaded.padded_dim_
-              )
-            : checked_multiply(loaded.padded_dim_, size_t{4}) / 8;
-    const size_t expected_payload_bytes =
-        checked_add(checked_add(centroid_bytes, data_bytes), rotator_bytes);
+    size_t centroid_bytes = 0;
+    size_t data_bytes = 0;
+    size_t expected_payload_bytes = 0;
+    try {
+        loaded.initialize_layout();
+        centroid_bytes = loaded.quantization_bits_ == 0
+                             ? 0
+                             : checked_multiply(loaded.padded_dim_, sizeof(float));
+        data_bytes = checked_multiply(loaded.max_elements_, loaded.record_bytes_);
+        const size_t rotator_bytes =
+            loaded.rotator_type_ == RotatorType::MatrixRotator
+                ? checked_multiply(
+                      checked_multiply(sizeof(float), loaded.dim_), loaded.padded_dim_
+                  )
+                : checked_multiply(loaded.padded_dim_, size_t{4}) / 8;
+        expected_payload_bytes =
+            checked_add(checked_add(centroid_bytes, data_bytes), rotator_bytes);
+    } catch (const std::length_error&) {
+        throw FormatError("QuantizedGraph file describes records too large to address");
+    }
 
     const auto payload_position = input.tellg();
     if (payload_position < 0) {
@@ -401,10 +614,15 @@ void QuantizedGraph<float>::load(const char* filename) {
     const size_t payload_offset = static_cast<size_t>(payload_position);
     if (payload_offset > file_size ||
         file_size - payload_offset != expected_payload_bytes) {
-        throw std::runtime_error("QuantizedGraph payload size is invalid");
+        throw FormatError("QuantizedGraph payload size is invalid");
     }
 
-    loaded.initialize(false);
+    try {
+        loaded.initialize(false);
+    } catch (const std::invalid_argument& error) {
+        // Dimensions the stored rotation does not support, such as FHT/Kac below 64.
+        throw FormatError(std::string("QuantizedGraph file is invalid: ") + error.what());
+    }
 
     if (loaded.quantization_bits_ != 0) {
         loaded.centroid_.resize(loaded.padded_dim_);
@@ -417,14 +635,14 @@ void QuantizedGraph<float>::load(const char* filename) {
         const auto neighbors = loaded.get_neighbors(source);
         for (size_t i = 0; i < loaded.max_degree_; ++i) {
             if (neighbors[i] >= loaded.max_elements_) {
-                throw std::runtime_error("QuantizedGraph neighbor ID is invalid");
+                throw FormatError("QuantizedGraph neighbor ID is invalid");
             }
         }
     }
 
     loaded.rotator_->load(input);
     if (!input) {
-        throw std::runtime_error("QuantizedGraph file is truncated while reading rotator");
+        throw FormatError("QuantizedGraph file is truncated while reading rotator");
     }
 
     input.close();
@@ -854,6 +1072,13 @@ void QuantizedGraph<float>::search_with_scratch_impl(
         throw std::invalid_argument("QuantizedGraph visited set must be initialized");
     }
 
+    if (cosine_) {
+        // Every search path ends here; the buffer is reused across this thread's queries.
+        thread_local std::vector<float> normalized_query;
+        normalized_query.resize(dim_);
+        index_detail::normalize_vector(query, normalized_query.data(), dim_);
+        query = normalized_query.data();
+    }
     rotator_->rotate(query, scratch.rotated_query);
     std::optional<QuantizedQuery> quantized_query;
     if (quantization_bits_ != 0) {

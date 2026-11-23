@@ -6,7 +6,8 @@ SymphonyQG. Start with the [Python quick start](../quick_start.md) for a complet
 ## Input requirements
 
 `IvfIndex`, `HnswIndex`, and `SymqgIndex` accept data and query arrays with shape
-`(count, dim)`, converted to contiguous float32. Their FHT/Kac rotation requires
+`(count, dim)`, converted to contiguous float32; the C++ classes of the same names
+take row-major float32 buffers. Their FHT/Kac rotation requires
 `64 <= dim <= 65536`. Supply the original dimension; the indexes pad internally
 to a multiple of 32. Queries and centroids must have the same original dimension
 as the indexed data.
@@ -22,20 +23,48 @@ float32. `train`, `set_centroids`, `add` and `search` raise `ValueError` (C++:
 the index. The C++ `quantize_*` encoders in `core/encoder.hpp` assume their
 callers have validated the input.
 
-These limits apply to the Python indexes. The C++ [stable core API](../rabitq/core_api.md)
+These limits apply to the index classes in both languages. The C++ [stable core API](../rabitq/core_api.md)
 accepts working dimensions from 2, with multiples of 32 required for `SplitPacked`.
 C++ [MatrixRotator](../rabitq/rotator.md) has separate dimension and storage requirements;
-the Python indexes do not expose a rotator choice.
+the index classes do not expose a rotator choice.
+
+## The cosine metric
+
+With `metric="cosine"` (C++ `METRIC_COSINE`), every index scales data and queries to
+unit length, stores the inner-product codes of the scaled vectors, and returns
+`1 - cos` as the distance, the inner-product distance `1 - dot` of unit vectors.
+Centroids passed to `set_centroids` are scaled the same way, because the codes are
+residuals against them: centroids far from the unit sphere, such as the means of
+unscaled data, would ruin the estimates. `train`, and the first `add` that trains,
+compute centroids from the scaled vectors with spherical k-means and use them as
+computed. Results equal those of a `metric="ip"` index built from the same vectors,
+and given the same centroids, after this scaling. A zero vector stays zero, as in
+hnswlib and Faiss: its true distance to every vector is 1, which quantized storage
+estimates like any other distance.
+
+The index checks the original coordinates first, as above. Because it then trains on
+scaled copies, invalid training data is reported as `IVF training data ...` or
+`HNSW training data ...` rather than with the k-means message of the other metrics.
+`train`, `add` and construction scale a copy of their whole input, so they briefly
+need memory for one more float32 copy of it. To bound that for very large data, call
+`train` on a sample and `add` the data in several calls. Queries are scaled one at a
+time.
+
+The metric is stored in the [index file](#index-file-compatibility), so a loaded index
+keeps scaling its inputs. Releases up to 0.8 have no cosine metric: there, normalize
+vectors yourself and use `metric="ip"`. The core quantization APIs, FastScan queries
+and clustering reject `METRIC_COSINE`.
 
 ## Index counts
 
-The unified count properties below are introduced in **0.7.0**. In particular,
-HNSW-RaBitQ's `num_points` now excludes removed records; see the
-[count migration guide](../modular_migration.md#unified-index-counts) when upgrading.
+`num_points` and `num_stored_points` were unified in **0.7.0**, when HNSW-RaBitQ's
+`num_points` started to exclude removed records; see the
+[count migration guide](../modular_migration.md#unified-index-counts) when upgrading
+from an earlier release. `capacity` is the property 0.7.0 called `max_elements`:
+Python renamed it in 0.8.5, and the C++ `HnswIndex` provides `capacity()` from 0.9.
 
 IVF-RaBitQ, HNSW-RaBitQ, and SymphonyQG expose these read-only Python properties
-(C++ uses the same names with `()`, and `max_elements()` for the capacity of all
-three indexes):
+(the C++ classes use the same names with `()`):
 
 | Property | Meaning |
 | --- | --- |
@@ -44,11 +73,9 @@ three indexes):
 | `capacity` (HNSW-RaBitQ only) | Logical record capacity, excluding SIMD padding |
 
 `0 <= num_points <= num_stored_points`, and `num_stored_points <= capacity` for
-HNSW-RaBitQ. Before 0.8.5 Python named the capacity `max_elements` on all three
-classes; that property is deprecated and is removed in 0.9. On `IvfIndex` and
-`SymqgIndex` it equals `num_stored_points`, except on an `IvfIndex` created in the
-0.7 form before `build`, where it is the declared row count. Before vectors are
-added, both point counts are zero; configured capacity may be nonzero. For
+HNSW-RaBitQ. Python's `max_elements` property, which 0.9 removed, was this capacity
+on `HnswIndex` and equal to `num_stored_points` on the other two classes. Before
+vectors are added, both point counts are zero; configured capacity may be nonzero. For
 all three indexes, `len(index)` equals `num_points`. `is_trained` reports
 whether IVF-RaBitQ or HNSW-RaBitQ centroids are set (by `train`, `set_centroids`,
 the first `add`, or `load`), and is always `True` for SymphonyQG.
@@ -58,13 +85,13 @@ start at the previous `num_stored_points`. Use this stored count for ID bounds,
 and `num_points` for a live count. Counts survive save/load.
 
 IVF-RaBitQ grows automatically and has no spare logical capacity after an append.
-HNSW-RaBitQ's Python `add` grows its capacity geometrically, and `reserve` preallocates
-it (`resize` before 0.8.5). SymphonyQG has no incremental
+HNSW-RaBitQ's `add` grows its capacity geometrically, and `reserve` preallocates
+it. SymphonyQG has no incremental
 updates: `add` builds the graph once, and both counts are equal afterwards.
 
 `repr(index)` shows dimension, metric, quantization bits and live point count,
-plus the training state for IVF/HNSW. IVF/HNSW also show stored count, capacity and centroid count; IVF includes
-the resolved routing strategy, and SymphonyQG includes its degree bound. The summary
+plus the training state for IVF/HNSW. IVF/HNSW also show stored count and centroid count; HNSW includes
+its capacity, IVF the resolved routing strategy, and SymphonyQG its degree bound. The summary
 reads only metadata and follows the same concurrency rules as property reads.
 
 ## Estimate storage
@@ -93,7 +120,7 @@ IVF-RaBitQ allocates one-bit codes and their three factors in full batches of 32
 use the stored point count. Small clusters therefore increase padding overhead.
 Centroids, routing structures and cluster metadata are additional.
 
-HNSW-RaBitQ allocates base-layer records for `max_elements`, including unused capacity.
+HNSW-RaBitQ allocates base-layer records for its whole `capacity`, including unused capacity.
 Upper-layer edges, label maps, locks, visited lists and other bookkeeping are
 additional. Removing points does not reclaim their storage in either IVF-RaBitQ or HNSW-RaBitQ.
 
@@ -123,15 +150,15 @@ construction, updates, and file I/O. The following contract applies to
 
 | Operation on the same index | Concurrent access |
 | --- | --- |
-| `search`, `search_batch`, `save`, `repr`, and property reads | May run together |
-| `train`, `set_centroids`, `build`, `add`, `remove`, `reserve`, `reserve_cluster`, `resize`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input and may run with reads |
+| `search`, `save`, `repr`, and property reads | May run together |
+| `train`, `set_centroids`, `add`, `remove`, `reserve`, `reserve_cluster`, and setting `cp`, where available | Require exclusive access, except SymphonyQG's `train`, which only checks its input, and an HNSW-RaBitQ `reserve` within the current capacity, which changes nothing; both may run with reads |
 
 A conflicting call immediately raises
 `RuntimeError("Index is busy: conflicting operation in progress")`.
 It does not wait or queue an update. Access protection includes Python input
 conversion and is released when the operation returns or raises an exception.
 Different index objects can operate independently. Concurrent saves must use
-different output paths, including any sidecar files.
+different output paths.
 
 Search parameters such as `ef_search`, `nprobe`, precision, and `num_threads` belong to
 each call. When using a Python thread pool, consider `num_threads=1` to avoid
@@ -150,12 +177,11 @@ example Faiss or PyTorch wheels) can crash when more than one of them starts
 worker threads in the same process; set `OMP_NUM_THREADS=1` before the first
 native call, or pass `num_threads=1`, in such processes.
 `train` and `add` on every index, and IVF-RaBitQ `set_centroids`, default to all
-CPUs (`None` or `0`); the clustering classes default to `0`. `search` defaults to one thread (`None` or `1`),
-as do the deprecated `build`, which requires an integer, and `search_batch`.
+CPUs (`None` or `0`); the clustering classes default to `0`. `search` defaults to one thread (`None` or `1`).
 Multithreaded HNSW-RaBitQ `add` links points in a nondeterministic order, and so
 does a multithreaded build of IVF-RaBitQ's HNSW centroid routing by `train`,
-`set_centroids` or the first `add`; pass `num_threads=1` when a build must be
-reproducible.
+`set_centroids` or the first `add`; pass `num_threads=1`, and `seed=` to the
+constructor, when a build must be reproducible.
 On Linux, CPU detection accounts for affinity and OpenMP binding. Apply binding
 before starting the program.
 
@@ -163,24 +189,33 @@ C++ paths use UTF-8 on Windows and native path bytes on POSIX.
 Python `save`/`load` accept strings, `pathlib.Path` and `os.PathLike` objects;
 existing `bytes` and `bytearray` paths remain supported. POSIX paths preserve native
 bytes, but non-UTF-8 filenames require filesystem support. Windows byte paths use
-UTF-8. Embedded null characters are rejected before file access. IVF HNSW sidecars
-use the same path conversion.
+UTF-8. Embedded null characters are rejected before file access. The HNSW sidecars
+of IVF files from earlier releases use the same path conversion.
 
 `save` writes a temporary file beside the destination and renames it into place, so a
 failed save leaves an existing index unchanged. A replaced file keeps its permission
 bits, but not its owner or other hard links. Symbolic links and other non-regular
-destinations are written in place. IVF renames its HNSW sidecar before the index file;
-a failure between the two renames can leave a new sidecar beside the old index.
+destinations are written in place. IVF-RaBitQ writes one file that includes its HNSW
+routing graph.
 
 ## Index file compatibility
 
-The compatibility suite loads frozen files written by v0.5.2, compares search
-IDs and distances, and verifies save/load migration and rejection of truncated
-or unsupported versions. See the
+The compatibility suite loads frozen files written by v0.5.2, v0.8.3 and v0.9.0, compares
+search IDs and distances, and verifies save/load migration and rejection of truncated
+or unsupported versions. Every index saves in
+[index format 2](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/docs/formats.md#index-format-2),
+which releases up to 0.8 cannot read, and which records the construction seed. See the
 [fixture provenance and coverage](https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/fixtures/persistence).
 Compatibility is format-specific; preserving old readers' ability to open new
 files is not guaranteed. Consult each index's format documentation before
 downgrading the library.
+
+A truncated, corrupt, mismatched or unsupported file raises `rabitqlib.FormatError`,
+a subclass of both `ValueError` and `RuntimeError`, so `except RuntimeError`
+handlers still catch it. A file that cannot be opened raises a plain `RuntimeError`;
+a read that fails after opening looks like truncation and raises `FormatError`.
+C++ loaders throw `rabitqlib::FormatError` from `rabitqlib/index/format_error.hpp`,
+a subclass of `std::runtime_error`.
 
 Index files are trusted input. Loaders validate structure and reject truncated,
 inconsistent, or unsupported files so that mistakes are reported, but they are

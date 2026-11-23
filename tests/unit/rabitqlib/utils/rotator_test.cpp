@@ -712,6 +712,35 @@ TEST(MatrixRotatorFactoryTest, SeedReproducesTheMatrix) {
     EXPECT_EQ(rotator_state(direct), first);
 }
 
+// An unadjusted Householder Q has a fixed determinant and a negative first entry. A
+// Haar-distributed matrix takes either sign of both, so over 64 seeds each sign must
+// occur; a correct rotator fails this only with probability about 2^-62.
+TEST(MatrixRotatorFactoryTest, SeededMatricesTakeBothSignsAsHaarRequires) {
+    constexpr size_t kDim = 3;
+    constexpr uint32_t kSeeds = 64;
+    uint32_t negative_first = 0;
+    uint32_t negative_det = 0;
+    for (uint32_t seed = 0; seed < kSeeds; ++seed) {
+        const rotator_impl::MatrixRotator<float> rotator(kDim, kDim, seed);
+        std::array<float, kDim * kDim> m{};
+        ASSERT_EQ(rotator.dump_bytes(), sizeof(m));
+        rotator.save(reinterpret_cast<char*>(m.data()));
+        const double det = (static_cast<double>(m[0]) * m[4] * m[8]) +
+                           (static_cast<double>(m[1]) * m[5] * m[6]) +
+                           (static_cast<double>(m[2]) * m[3] * m[7]) -
+                           (static_cast<double>(m[2]) * m[4] * m[6]) -
+                           (static_cast<double>(m[1]) * m[3] * m[8]) -
+                           (static_cast<double>(m[0]) * m[5] * m[7]);
+        ASSERT_NEAR(std::abs(det), 1.0, 1e-5) << "seed " << seed;
+        negative_first += m[0] < 0 ? 1U : 0U;
+        negative_det += det < 0 ? 1U : 0U;
+    }
+    EXPECT_GT(negative_first, 0U);
+    EXPECT_LT(negative_first, kSeeds);
+    EXPECT_GT(negative_det, 0U);
+    EXPECT_LT(negative_det, kSeeds);
+}
+
 TEST(MatrixRotatorFactoryTest, DoublePreservesNormAndRejectsFloatOnlyRotation) {
     const size_t dim = 64;
     std::unique_ptr<Rotator<double>> rotator(

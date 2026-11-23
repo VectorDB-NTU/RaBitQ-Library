@@ -119,7 +119,10 @@ and do not persist or hardcode them. Compiler warnings from future compilers are
 part of the compatibility guarantee.
 
 The stable surface is the v1 namespace, its version macros, and the existing
-`MetricType` / `METRIC_L2` / `METRIC_IP` values used by it. Other core templates,
+`MetricType` / `METRIC_L2` / `METRIC_IP` values used by it. `MetricType` may gain
+values that only other modules accept, such as `METRIC_COSINE` for the ANN indexes
+from 0.9. v1 rejects them as invalid metrics, so adding one does not change v1 or its
+version; a `switch` over `MetricType` without a `default` may warn about the new value. Other core templates,
 `detail/`, SIMD entry points, rotator implementations, FastScan and ANN
 interfaces are not implicitly frozen by including this header. Existing interfaces
 remain available through canonical module headers; old forwarding paths are removed as
@@ -135,7 +138,7 @@ automatically apply to them.
 | --- | --- |
 | `dim` | Number of coordinates actually supplied, at least 2; no implicit padding |
 | `total_bits` | 1 through 9, including the sign bit |
-| `metric` | `METRIC_L2` or `METRIC_IP` |
+| `metric` | `METRIC_L2` or `METRIC_IP`; `METRIC_COSINE`, which only the ANN indexes accept, is rejected like any other value |
 | `t_const` | Finite, at most `INT_MAX / 2`; nonpositive selects the existing exact search, positive selects the existing fast scaling algorithm |
 
 Inputs and a non-null centroid contain at least `dim` aligned float32 values. Pass

@@ -59,8 +59,9 @@ python sample/python/hnsw_rabitq_indexing.py --total-bits 5 --degree 16 \
 
 It also accepts `--clusters` with a file from `kmeans_clustering.py`; use
 `--method rabitq` there for a small cluster count. With more than one thread
-(`--num-threads`), the graph links vectors in a nondeterministic order; pass
-`--num-threads 1` for a reproducible index.
+(`--num-threads`), the graph links vectors in a nondeterministic order. The script
+draws a new seed on every run, so two runs give different indexes even with
+`--num-threads 1`; pass `seed=` to `HnswIndex` in your own code for a reproducible index.
 
 Query with `hnsw_rabitq_querying.py`. SymphonyQG builds directly from vectors;
 use `symqg_indexing.py` and `symqg_querying.py` without a clustering stage.

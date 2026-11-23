@@ -44,7 +44,9 @@ for Linux ARM64, Windows, and Apple Silicon.
 ## C++ examples
 
 ANN example executables are written to `bin/`. Their source demonstrates complete
-indexing and querying workflows:
+indexing and querying workflows with the index classes `IvfIndex`, `HnswIndex` and
+`SymqgIndex` from `rabitqlib/index/ivf_index.hpp`, `hnsw_index.hpp` and
+`symqg_index.hpp`, which `rabitqlib::index` provides:
 
 - [IVF-RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/ivf_rabitq_indexing.cpp)
 - [HNSW-RaBitQ](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/hnsw_rabitq_indexing.cpp)
@@ -58,12 +60,12 @@ The core example is built as the `core_example` CMake target. For the GIST bench
 
 The [core quantization v1 API](rabitq/core_api.md) has a C++ source-compatibility contract.
 Other C++ APIs may evolve, and no cross-version C++ binary ABI is promised.
-Pin the `v0.8.5` release and include RaBitQ-Library as a Git submodule:
+Pin the `v0.9.0` release and include RaBitQ-Library as a Git submodule:
 
 ```bash
 git submodule add https://github.com/VectorDB-NTU/RaBitQ-Library.git third_party/rabitqlib
 git submodule update --init --recursive
-git -C third_party/rabitqlib checkout v0.8.5
+git -C third_party/rabitqlib checkout v0.9.0
 git add third_party/rabitqlib
 ```
 
@@ -104,6 +106,12 @@ Consume the installed package with:
 find_package(rabitqlib CONFIG REQUIRED)
 target_link_libraries(my_program PRIVATE rabitqlib::index)
 ```
+
+To require a release, pass its version, for example
+`find_package(rabitqlib 0.9 CONFIG REQUIRED)`. Before 1.0 a minor release may break the
+API, so only the same minor release, at or above a requested patch, satisfies the request:
+0.9.x does, 0.8 and 0.10 do not. A version range must stay within one minor release, for
+example `0.9...<0.10`.
 
 For a non-system prefix, point CMake to the installation:
 

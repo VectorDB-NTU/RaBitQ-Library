@@ -17,6 +17,7 @@
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 
 namespace rabitqlib {
 namespace {
@@ -57,7 +58,7 @@ qgkmeans::QGKMeansParameters test_parameters(const qgkmeans::QGKMeans*) {
     parameters.niter = 4;
     parameters.num_threads = 1;
     parameters.min_points_per_centroid = 1;
-    parameters.ef_build = 64;
+    parameters.ef_construction = 64;
     parameters.ef_search = 16;
     return parameters;
 }
@@ -234,6 +235,43 @@ void check_assign_requires_training_and_valid_input(const std::string& name) {
     );
 }
 
+// Training and assignment accept exactly the coordinates the indexes accept.
+// At kDim the float32 bound rounds above the exact real bound, so a value equal
+// to it is the one an exact double comparison would wrongly reject.
+template <typename Clustering>
+void check_coordinate_bound_matches_index_check(const std::string& name) {
+    constexpr size_t kClusterCount = kClusters<Clustering>;
+    const float bound = max_coordinate_magnitude(kDim);
+    ASSERT_GT(
+        static_cast<double>(bound),
+        std::sqrt(
+            std::sqrt(static_cast<double>(std::numeric_limits<float>::max())) /
+            (64.0 * static_cast<double>(kDim))
+        )
+    );
+    const size_t num_points = 2 * kClusterCount;
+    auto points = clustered_points(num_points, 67);
+    points[1] = bound;
+    points[kDim + 2] = -bound;
+    Clustering clustering(kDim, kClusterCount, test_parameters<Clustering>());
+    ASSERT_NO_THROW(clustering.train(num_points, points.data()));
+    PID assignment = kPidMax;
+    float distance = 0;
+    EXPECT_NO_THROW(clustering.assign(1, points.data(), &assignment, &distance));
+    EXPECT_LT(assignment, kClusterCount);
+
+    const std::string message = name + " x exceeds the safe float32 coordinate range";
+    points[1] = std::nextafter(bound, std::numeric_limits<float>::infinity());
+    try {
+        clustering.assign(1, points.data(), &assignment, &distance);
+        FAIL() << "Assigned a coordinate above the bound";
+    } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+    try {
+        clustering.train(num_points, points.data());
+        FAIL() << "Trained on a coordinate above the bound";
+    } catch (const std::invalid_argument& error) { EXPECT_EQ(error.what(), message); }
+}
+
 // With sampling, train's final pass is assign() itself, including QGKMeans'
 // cached graph. Without it, Exact assignment and RaBitQKMeans' scan around the
 // stored training center also reproduce train(); graph training uses hints.
@@ -244,7 +282,7 @@ void check_assign_matches_final_training_assignment() {
     constexpr size_t kMaxPoints = 2;
     for (const uint32_t threads : {1U, 4U}) {
         for (const uint32_t bits :
-             kGraph ? std::vector<uint32_t>{0, 4, 8} : std::vector<uint32_t>{0}) {
+             kGraph ? std::vector<uint32_t>{32, 4, 8} : std::vector<uint32_t>{32}) {
             for (const size_t num_points :
                  {kClusterCount * kMaxPoints, 3 * kClusterCount * kMaxPoints + 1}) {
                 const auto points = clustered_points(num_points, 67);
@@ -257,7 +295,7 @@ void check_assign_matches_final_training_assignment() {
                     auto parameters = test_parameters<Clustering>();
                     parameters.num_threads = threads;
                     if constexpr (kGraph) {
-                        parameters.quantization_bits = bits;
+                        parameters.nbits = bits;
                     }
                     parameters.final_assignment = mode;
                     parameters.max_points_per_centroid = kMaxPoints;
@@ -323,10 +361,10 @@ void check_graph_cache_follows_centroids_and_settings() {
     constexpr size_t kClusterCount = kClusters<QGKMeans>;
     const auto points = clustered_points(6 * kClusterCount, 83);
     const auto queries = clustered_points(60, 89);
-    for (const uint32_t bits : {0U, 4U}) {
+    for (const uint32_t bits : {32U, 4U}) {
         SCOPED_TRACE(bits);
         auto parameters = test_parameters<QGKMeans>();
-        parameters.quantization_bits = bits;
+        parameters.nbits = bits;
         QGKMeans clustering(kDim, kClusterCount, parameters);
         clustering.train(6 * kClusterCount, points.data());
         QGKMeans fresh = clustering;  // Copied before any graph is cached.
@@ -602,6 +640,14 @@ TEST(KMeansAssignTest, QGRequiresTrainingAndValidInput) {
     check_assign_requires_training_and_valid_input<qgkmeans::QGKMeans>("QGKMeans");
 }
 
+TEST(KMeansAssignTest, RaBitQCoordinateBoundMatchesIndexCheck) {
+    check_coordinate_bound_matches_index_check<rabitqkmeans::RaBitQKMeans>("RaBitQKMeans");
+}
+
+TEST(KMeansAssignTest, QGCoordinateBoundMatchesIndexCheck) {
+    check_coordinate_bound_matches_index_check<qgkmeans::QGKMeans>("QGKMeans");
+}
+
 TEST(KMeansAssignTest, RaBitQMatchesFinalTrainingAssignment) {
     check_assign_matches_final_training_assignment<rabitqkmeans::RaBitQKMeans>();
 }
@@ -693,11 +739,11 @@ TEST(KMeansParametersTest, CopySharedParametersCopiesOnlySharedFields) {
     from.spherical = true;
     from.verbose = true;
     qgkmeans::QGKMeansParameters to;
-    to.graph_degree = 64;
-    to.ef_build = 99;
+    to.max_degree = 64;
+    to.ef_construction = 99;
     to.ef_search = 33;
     to.graph_build_iterations = 2;
-    to.quantization_bits = 4;
+    to.nbits = 4;
 
     clustering::detail::copy_shared_parameters(from, to);
     EXPECT_EQ(to.early_stop_threshold, from.early_stop_threshold);
@@ -709,11 +755,11 @@ TEST(KMeansParametersTest, CopySharedParametersCopiesOnlySharedFields) {
     EXPECT_EQ(to.seed, from.seed);
     EXPECT_EQ(to.spherical, from.spherical);
     EXPECT_EQ(to.verbose, from.verbose);
-    EXPECT_EQ(to.graph_degree, 64U);
-    EXPECT_EQ(to.ef_build, 99U);
+    EXPECT_EQ(to.max_degree, 64U);
+    EXPECT_EQ(to.ef_construction, 99U);
     EXPECT_EQ(to.ef_search, 33U);
     EXPECT_EQ(to.graph_build_iterations, 2U);
-    EXPECT_EQ(to.quantization_bits, 4U);
+    EXPECT_EQ(to.nbits, 4U);
 }
 
 TEST(KMeansTrainCentroidsTest, RaBitQSkipsFinalAssignment) {

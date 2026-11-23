@@ -26,7 +26,7 @@ estimation into your own <span class="nowrap">C++</span> search engine.</p>
 </div>
 
 ```bash
-python -m pip install "rabitqlib>=0.8.5"
+python -m pip install "rabitqlib>=0.9.0"
 ```
 
 [Installation and supported platforms](installation.md) ·
@@ -36,7 +36,7 @@ python -m pip install "rabitqlib>=0.8.5"
 
 ## Choose your index
 
-All three indexes support L2 and inner-product search, with save/load support.
+All three indexes support L2, inner-product and cosine search, with save/load support.
 Start with IVF-RaBitQ for the complete introductory example, then compare on your own data.
 
 <div class="feature-grid" markdown>
@@ -112,5 +112,5 @@ on your own dataset when choosing an index.
 ## Explore further
 
 - [Algorithm overview](rabitq/rabitq.md) for the rotation, encoding, and scoring workflow.
-- [RaBitQ Library 0.8.5 release notes](releases/0.8.5.md) for the latest changes and upgrade guidance.
+- [RaBitQ Library 0.9.0 release notes](releases/0.9.0.md) for the latest changes and upgrade guidance.
 - [Papers and citations](papers.md) for the original RaBitQ method, its multi-bit extension, and SymphonyQG.

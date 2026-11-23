@@ -5,4 +5,6 @@
 
 static_assert(std::is_same_v<rabitqlib::PID, uint32_t>);
 static_assert(rabitqlib::kPidMax == UINT32_MAX);
+static_assert(std::is_same_v<rabitqlib::Id, int64_t>);
+static_assert(rabitqlib::kNoId == -1);
 static_assert(std::is_trivially_copyable_v<rabitqlib::AnnCandidate<float>>);

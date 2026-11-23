@@ -1,0 +1,11 @@
+{
+  "source_tag": "v0.7.2",
+  "source_commit": "655c9c6656318e9726e3a3908d0abe0563f7630c",
+  "writer": "tests/fixtures/persistence/v0.7.2/generate.cpp",
+  "producer": "Linux x86-64, g++ 14.3.0, Release, one thread, native optimization OFF",
+  "byte_order": "little",
+  "size_t_bytes": 8,
+  "sha256": {
+    "v0.7.2/hnsw4_empty_l2.index": "0177215c1b20f127be7b8bff1027b366f7faaf76022efeabe2336a96da093603"
+  }
+}

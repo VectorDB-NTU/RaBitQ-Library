@@ -5,7 +5,7 @@ import re
 import numpy as np
 import pytest
 from conftest import DIM
-from rabitqlib import FinalAssignmentMode, QGKMeans, QGKMeansParameters, RaBitQKMeans
+from rabitqlib import QGKMeans, QGKMeansParameters, RaBitQKMeans
 
 K = 33
 
@@ -26,7 +26,7 @@ def qgkmeans(**kwargs):
         "niter": 2,
         "num_threads": 1,
         "min_points_per_centroid": 1,
-        "ef_build": K,
+        "ef_construction": K,
         "ef_search": K,
         "graph_build_iterations": 2,
     }
@@ -40,7 +40,7 @@ def test_parameters_use_faiss_names_and_defaults():
     assert cp.graph_build_iterations == 1
     assert cp.min_points_per_centroid == 39
     assert cp.early_stop_threshold == 0.0
-    assert cp.quantization_bits == 0
+    assert cp.nbits == 32
 
 
 def test_constructor_accepts_faiss_style_keyword_parameters():
@@ -77,11 +77,9 @@ def test_parameters_can_be_changed_through_cp(base_data):
     assert len(clustering.iteration_stats) == 1
 
 
-@pytest.mark.parametrize("bits", [0, 8])
+@pytest.mark.parametrize("bits", [32, 8])
 def test_exact_final_assignment_has_no_nearest_centroid_violations(base_data, bits):
-    clustering = qgkmeans(
-        final_assignment=FinalAssignmentMode.Exact, quantization_bits=bits
-    )
+    clustering = qgkmeans(final_assignment="exact", nbits=bits)
     clustering.train(base_data)
 
     differences = (
@@ -109,11 +107,11 @@ def test_exact_final_assignment_handles_matrix_tile_tails(spherical, threads):
         niter=1,
         num_threads=threads,
         min_points_per_centroid=1,
-        ef_build=40,
+        ef_construction=40,
         ef_search=40,
         graph_build_iterations=1,
         spherical=spherical,
-        final_assignment=FinalAssignmentMode.Exact,
+        final_assignment="exact",
     )
     clustering.train(x)
 
@@ -142,7 +140,7 @@ def test_exact_final_assignment_preserves_shifted_l2_accuracy():
         niter=1,
         num_threads=4,
         min_points_per_centroid=1,
-        final_assignment=FinalAssignmentMode.Exact,
+        final_assignment="exact",
     )
     clustering.train(x)
 
@@ -169,7 +167,7 @@ def test_exact_final_assignment_uses_first_duplicate_centroid(spherical, model_t
         num_threads=4,
         min_points_per_centroid=1,
         spherical=spherical,
-        final_assignment=FinalAssignmentMode.Exact,
+        final_assignment="exact",
     )
     clustering.train(x)
 
@@ -183,7 +181,7 @@ def test_spherical_mode_returns_normalized_centroids(base_data):
     normalized = base_data / np.linalg.norm(base_data, axis=1, keepdims=True)
     clustering = qgkmeans(
         spherical=True,
-        final_assignment=FinalAssignmentMode.Exact,
+        final_assignment="exact",
     )
     clustering.train(normalized)
 
@@ -202,7 +200,7 @@ def test_spherical_mode_returns_normalized_centroids(base_data):
     np.testing.assert_allclose(clustering.distances, selected_distances, atol=1e-6)
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 @pytest.mark.parametrize("spherical", [False, True])
 def test_graph_returns_exact_selected_distances(bits, spherical):
     x = np.random.default_rng(42).standard_normal((100, 65)).astype(np.float32)
@@ -211,12 +209,12 @@ def test_graph_returns_exact_selected_distances(bits, spherical):
     clustering = QGKMeans(
         65,
         K,
-        quantization_bits=bits,
+        nbits=bits,
         spherical=spherical,
         niter=2,
         num_threads=2,
         min_points_per_centroid=1,
-        ef_build=K,
+        ef_construction=K,
         ef_search=K,
         graph_build_iterations=2,
     )
@@ -237,12 +235,10 @@ def test_graph_returns_exact_selected_distances(bits, spherical):
     np.testing.assert_allclose(clustering.distances, expected, rtol=1e-6, atol=1e-6)
 
 
-@pytest.mark.parametrize("bits", [1, 7, 9, 32])
-def test_train_rejects_unsupported_quantization_bits(base_data, bits):
-    clustering = qgkmeans(quantization_bits=bits)
-    with pytest.raises(
-        ValueError, match="^QGKMeans quantization_bits must be 0, 4, or 8$"
-    ):
+@pytest.mark.parametrize("bits", [0, 1, 7, 9])
+def test_train_rejects_unsupported_nbits(base_data, bits):
+    clustering = qgkmeans(nbits=bits)
+    with pytest.raises(ValueError, match="^QGKMeans nbits must be 4, 8, or 32$"):
         clustering.train(base_data)
 
 
@@ -305,9 +301,9 @@ def test_zero_input_converges_without_exhausting_iterations():
     np.testing.assert_array_equal(clustering.distances, 0)
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 def test_final_objective_measures_returned_assignments(base_data, bits):
-    clustering = qgkmeans(niter=1, quantization_bits=bits)
+    clustering = qgkmeans(niter=1, nbits=bits)
     assert clustering.final_obj is None
     returned = clustering.train(base_data)
     assert returned == clustering.obj[-1]
@@ -334,7 +330,7 @@ def test_empty_cluster_recovery_preserves_constant_data(spherical):
     np.testing.assert_array_equal(clustering.centroids, x[:K])
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 @pytest.mark.parametrize("threads", [1, 4])
 def test_single_empty_cluster_preserves_duplicate_centroids(bits, threads):
     # n == k includes every input row in initialization. Exactly one duplicate
@@ -344,8 +340,8 @@ def test_single_empty_cluster_preserves_duplicate_centroids(bits, threads):
     clustering = qgkmeans(
         niter=1,
         num_threads=threads,
-        quantization_bits=bits,
-        final_assignment=FinalAssignmentMode.Exact,
+        nbits=bits,
+        final_assignment="exact",
     )
     clustering.train(x)
 
@@ -368,7 +364,7 @@ def test_final_objective_does_not_regress_after_last_update(spherical):
         num_threads=2,
         min_points_per_centroid=1,
         # C++ checks every storage width with a genuinely approximate graph.
-        quantization_bits=4,
+        nbits=4,
         spherical=spherical,
     )
     clustering.train(x)
@@ -376,7 +372,7 @@ def test_final_objective_does_not_regress_after_last_update(spherical):
     assert clustering.final_obj == clustering.distances.sum(dtype=np.float64)
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 @pytest.mark.parametrize("spherical", [False, True])
 def test_pipnn_default_rebuilds_and_returns_exact_selected_distances(bits, spherical):
     x = np.random.default_rng(73).standard_normal((100, 65)).astype(np.float32)
@@ -388,7 +384,7 @@ def test_pipnn_default_rebuilds_and_returns_exact_selected_distances(bits, spher
         niter=3,
         num_threads=2,
         min_points_per_centroid=1,
-        quantization_bits=bits,
+        nbits=bits,
         spherical=spherical,
     )
     for shift in (0.0, 0.02):
@@ -407,9 +403,9 @@ def test_pipnn_default_rebuilds_and_returns_exact_selected_distances(bits, spher
         np.testing.assert_allclose(model.final_obj, expected.sum(), rtol=1e-6)
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 def test_finite_out_of_range_input_preserves_previous_fit(base_data, bits):
-    model = qgkmeans(quantization_bits=bits)
+    model = qgkmeans(nbits=bits)
     model.train(base_data)
     expected = model.centroids
     with pytest.raises(
@@ -428,7 +424,7 @@ def test_training_size_warning_is_opt_in(capfd, verbose):
 
 
 # C++ covers each dimension/storage layout; check binding outputs here.
-@pytest.mark.parametrize("dim,bits", [(4097, 0), (65535, 4), (65536, 8)])
+@pytest.mark.parametrize("dim,bits", [(4097, 32), (65535, 4), (65536, 8)])
 def test_large_dimensions(dim, bits):
     x = np.zeros((33, dim), dtype=np.float32)
     x[np.arange(33), np.arange(33)] = 1
@@ -438,7 +434,7 @@ def test_large_dimensions(dim, bits):
         33,
         niter=1,
         num_threads=2,
-        quantization_bits=bits,
+        nbits=bits,
     )
     model.train(x)
     assert model.centroids.shape == (33, dim)
@@ -446,7 +442,7 @@ def test_large_dimensions(dim, bits):
     np.testing.assert_array_equal(x, model.centroids[model.assignments])
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 @pytest.mark.parametrize("threads", [1, 4])
 def test_grouped_training_preserves_centroid_means_with_dimension_tail(bits, threads):
     x = np.repeat(np.eye(K, 65, dtype=np.float32) * 16, 3, axis=0)
@@ -457,8 +453,8 @@ def test_grouped_training_preserves_centroid_means_with_dimension_tail(bits, thr
         niter=8,
         num_threads=threads,
         min_points_per_centroid=1,
-        quantization_bits=bits,
-        ef_build=K,
+        nbits=bits,
+        ef_construction=K,
         ef_search=K,
     )
     model.train(x)
@@ -472,7 +468,7 @@ def test_grouped_training_preserves_centroid_means_with_dimension_tail(bits, thr
     np.testing.assert_array_equal(model.centroids, expected)
 
 
-@pytest.mark.parametrize("bits", [0, 4, 8])
+@pytest.mark.parametrize("bits", [32, 4, 8])
 @pytest.mark.parametrize("spherical", [False, True])
 @pytest.mark.parametrize("dim", [511, 960, 1024])
 def test_refit_recomputes_sums_for_mutated_storage_seed_and_count(bits, spherical, dim):
@@ -489,9 +485,9 @@ def test_refit_recomputes_sums_for_mutated_storage_seed_and_count(bits, spherica
             num_threads=1,
             seed=seed,
             min_points_per_centroid=1,
-            ef_build=128,
+            ef_construction=128,
             ef_search=1,
-            quantization_bits=bits,
+            nbits=bits,
             spherical=spherical,
         )
 
@@ -523,9 +519,31 @@ def test_refit_recomputes_sums_for_mutated_storage_seed_and_count(bits, spherica
         np.testing.assert_array_equal(data, before)
 
 
-def test_approximate_final_assignment_keeps_graph_mode_alias():
-    assert FinalAssignmentMode.Approximate == FinalAssignmentMode.SymphonyQG
-    assert QGKMeansParameters().final_assignment == FinalAssignmentMode.Approximate
+@pytest.mark.parametrize(
+    "parameters,message",
+    [
+        ({"max_degree": 48}, "QGKMeans max_degree must be a positive multiple of 32"),
+        ({"max_degree": 0}, "QGKMeans max_degree must be a positive multiple of 32"),
+        (
+            {"ef_construction": 0},
+            "QGKMeans ef_construction and ef_search must be positive",
+        ),
+        ({"ef_search": 0}, "QGKMeans ef_construction and ef_search must be positive"),
+        (
+            {"graph_build_iterations": 0},
+            "QGKMeans graph_build_iterations must be positive",
+        ),
+    ],
+)
+def test_train_rejects_invalid_graph_parameters(base_data, parameters, message):
+    model = QGKMeans(DIM, 80, niter=1, **parameters)
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        model.train(base_data)
+    assert model.centroids is None
+
+
+def test_final_assignment_is_approximate_by_default():
+    assert QGKMeansParameters().final_assignment == "approximate"
 
 
 @pytest.mark.parametrize(
@@ -534,14 +552,12 @@ def test_approximate_final_assignment_keeps_graph_mode_alias():
     # and propagation of a non-default graph degree through Python.
     [(1, 32), (32, 32), (64, 64)],
 )
-@pytest.mark.parametrize(
-    "mode", [FinalAssignmentMode.Approximate, FinalAssignmentMode.Exact]
-)
-def test_graph_rejects_clusters_at_or_below_graph_degree(clusters, degree, mode):
+@pytest.mark.parametrize("mode", ["approximate", "exact"])
+def test_graph_rejects_clusters_at_or_below_max_degree(clusters, degree, mode):
     model = QGKMeans(
-        64, clusters, niter=1, num_threads=1, graph_degree=degree, final_assignment=mode
+        64, clusters, niter=1, num_threads=1, max_degree=degree, final_assignment=mode
     )
     with pytest.raises(
-        ValueError, match="^QGKMeans requires more centroids than the graph degree$"
+        ValueError, match="^QGKMeans requires more centroids than max_degree$"
     ):
         model.train(np.zeros((65, 64), dtype=np.float32))

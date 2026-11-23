@@ -40,10 +40,20 @@ add_executable(rabitq_tests
     ${UNIT_TESTS}
 )
 target_include_directories(rabitq_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/common)
+target_include_directories(rabitq_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/core)
+target_compile_definitions(rabitq_tests PRIVATE
+    RABITQ_TEST_LIBRARY_VERSION="${PROJECT_VERSION}"
+)
 if(RABITQ_BUILD_INDEX)
     target_include_directories(rabitq_tests PRIVATE ${PROJECT_SOURCE_DIR}/src/index)
 endif()
+set_source_files_properties(unit/rabitqlib/utils/blob_test.cpp
+    PROPERTIES COMPILE_DEFINITIONS
+    "RABITQ_QUANT_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/python/fixtures/quant\"")
 set_source_files_properties(unit/rabitqlib/index/historical_persistence_test.cpp
+    unit/rabitqlib/index/ivf_index_test.cpp
+    unit/rabitqlib/index/hnsw_index_test.cpp
+    unit/rabitqlib/index/symqg_index_test.cpp
     PROPERTIES COMPILE_DEFINITIONS
     "RABITQ_TEST_FIXTURE_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/fixtures/persistence\"")
 rabitq_configure_target(rabitq_tests)
@@ -67,6 +77,11 @@ add_test(NAME CoreModuleBoundary COMMAND "${CMAKE_COMMAND}"
 add_test(NAME CoreOpenMPFlagCheck COMMAND "${CMAKE_COMMAND}"
     "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/openmp-flag-check"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/core_consumer/check_no_openmp_test.cmake")
+
+add_test(NAME PackageVersionCompatibility COMMAND "${CMAKE_COMMAND}"
+    "-DVERSION_FILE=${PROJECT_BINARY_DIR}/rabitqlibConfigVersion.cmake"
+    "-DPROJECT_VERSION=${PROJECT_VERSION}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/core_consumer/check_package_version.cmake")
 
 add_executable(core_api_v1_consumer fixtures/core_api_v1/consumer.cpp)
 target_link_libraries(core_api_v1_consumer PRIVATE rabitqlib::core)
@@ -133,6 +148,11 @@ if(RABITQ_BUILD_INDEX)
     target_link_libraries(hnsw_add_allocation_test PRIVATE GTest::gtest_main rabitqlib::index)
     rabitq_configure_target(hnsw_add_allocation_test)
     gtest_discover_tests(hnsw_add_allocation_test DISCOVERY_MODE PRE_TEST)
+
+    add_executable(ivf_index_allocation_test failures/ivf_index_allocation_test.cpp)
+    target_link_libraries(ivf_index_allocation_test PRIVATE GTest::gtest_main rabitqlib::index)
+    rabitq_configure_target(ivf_index_allocation_test)
+    gtest_discover_tests(ivf_index_allocation_test DISCOVERY_MODE PRE_TEST)
 
 endif()
 

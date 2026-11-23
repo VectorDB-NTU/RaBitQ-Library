@@ -63,6 +63,19 @@ def test_seeds_threads_and_out():
     assert first.rotate(np.empty((0, 64), np.float32)).shape == (0, 64)
 
 
+def test_matrix_rotation_takes_both_signs():
+    # An unadjusted Householder Q has a fixed determinant and a negative first entry;
+    # a Haar-distributed matrix takes either sign of both across seeds.
+    first_negative, det_negative = set(), set()
+    for seed in range(64):
+        rotator = quant.Rotator(32, method="matrix", seed=seed)
+        q_t = rotator.rotate(np.eye(32, dtype=np.float32)).astype(np.float64)
+        first_negative.add(bool(q_t[0, 0] < 0))
+        det_negative.add(bool(np.linalg.det(q_t) < 0))
+    assert first_negative == {False, True}
+    assert det_negative == {False, True}
+
+
 def test_golden_blobs():
     for name, rotator in (
         ("rotator_fht_kac_dim64_seed0.bin", quant.Rotator(64, seed=0)),
@@ -123,6 +136,7 @@ def test_corrupt_and_unsupported_blobs():
         with pytest.raises(quant.FormatError, match=message):
             quant.Rotator.from_bytes(data)
     assert issubclass(quant.FormatError, ValueError)
+    assert issubclass(quant.FormatError, RuntimeError)
     unknown_seed = quant.Rotator.from_bytes(patched(patched(blob, 20, 0), 56, 0))
     assert unknown_seed.seed is None
     with pytest.raises(TypeError, match="contiguous bytes-like"):

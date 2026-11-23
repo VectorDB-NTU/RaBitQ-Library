@@ -1,24 +1,16 @@
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
-#include <limits>
 #include <stdexcept>
 #include <string>
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/core/metric.hpp"
-#include "rabitqlib/core/rotator.hpp"
-#include "rabitqlib/index/symqg/qg.hpp"
-#include "rabitqlib/index/symqg/qg_builder.hpp"
-#include "rabitqlib/index/types.hpp"
+#include "rabitqlib/index/symqg_index.hpp"
 #include "rabitqlib/utils/io.hpp"
 #include "rabitqlib/utils/stopw.hpp"
-#include "rabitqlib/utils/tools.hpp"
 
-using PID = rabitqlib::PID;
-using index_type = rabitqlib::symqg::QuantizedGraph<float>;
 using data_type = rabitqlib::RowMajorArray<float>;
 
 int run(int argc, char** argv) {
@@ -28,10 +20,10 @@ int run(int argc, char** argv) {
                   << "arg2: degree bound for symqg, must be a multiple of 32\n"
                   << "arg3: ef for indexing \n"
                   << "arg4: path for saving index\n"
-                  << "arg5: metric type (\"l2\" or \"ip\"), l2 by default\n"
-                  << "arg6: vector quantization bits (0, 4, or 8), 0 by default\n"
+                  << "arg5: metric type (\"l2\", \"ip\" or \"cosine\"), l2 by default\n"
+                  << "arg6: nbits (32 or 0 for raw vectors, 4 or 8), 32 by default\n"
                   << "arg7: init (pipnn or random), pipnn by default\n"
-                  << "arg8: construction threads, all available by default\n";
+                  << "arg8: threads, 0 or omitted for all (OMP_NUM_THREADS caps it)\n";
         return 1;
     }
 
@@ -41,18 +33,22 @@ int run(int argc, char** argv) {
     char* index_file = argv[4];
 
     rabitqlib::MetricType metric_type = rabitqlib::METRIC_L2;
-    if (argc > 5) {
-        std::string metric_str(argv[5]);
-        if (metric_str == "ip" || metric_str == "IP") {
-            metric_type = rabitqlib::METRIC_IP;
-        }
+    const char* metric_name = "L2";
+    const std::string metric_str = argc > 5 ? argv[5] : "l2";
+    if (metric_str == "ip" || metric_str == "IP") {
+        metric_type = rabitqlib::METRIC_IP;
+        metric_name = "IP";
+    } else if (metric_str == "cosine" || metric_str == "COSINE") {
+        metric_type = rabitqlib::METRIC_COSINE;
+        metric_name = "Cosine";
+    } else if (metric_str != "l2" && metric_str != "L2") {
+        throw std::invalid_argument("Metric type must be l2, ip or cosine");
     }
-    if (metric_type == rabitqlib::METRIC_IP) {
-        std::cout << "Metric Type: IP\n";
-    } else if (metric_type == rabitqlib::METRIC_L2) {
-        std::cout << "Metric Type: L2\n";
+    std::cout << "Metric Type: " << metric_name << '\n';
+    size_t nbits = argc > 6 ? static_cast<size_t>(atoi(argv[6])) : 32;
+    if (nbits == 0) {  // the 0.8 spelling of raw vectors
+        nbits = 32;
     }
-    size_t quantization_bits = argc > 6 ? static_cast<size_t>(atoi(argv[6])) : 0;
 
     data_type data;
 
@@ -62,41 +58,19 @@ int run(int argc, char** argv) {
     if (init != "random" && init != "pipnn") {
         throw std::invalid_argument("Init must be random or pipnn");
     }
-    const bool pipnn = init == "pipnn";
-    const size_t threads = argc > 8 ? std::stoul(argv[8]) : rabitqlib::total_threads();
-    if (threads == 0 || ef == 0 || ef > std::numeric_limits<uint32_t>::max()) {
-        throw std::invalid_argument(
-            "Threads and construction ef must be positive; ef must fit uint32"
-        );
-    }
+    const size_t threads = argc > 8 ? std::stoul(argv[8]) : 0;
+
+    rabitqlib::SymqgOptions options;
+    options.metric = metric_type;
+    options.nbits = nbits;
+    options.max_degree = degree;
+    options.ef_construction = ef;
+    options.init = init == "pipnn" ? rabitqlib::symqg::QGInitialization::PiPNN
+                                   : rabitqlib::symqg::QGInitialization::Random;
+    rabitqlib::SymqgIndex qg(data.cols(), options);
+
     rabitqlib::StopW stopw;
-    rabitqlib::StopW stage;
-    index_type qg(
-        data.rows(),
-        data.cols(),
-        degree,
-        metric_type,
-        rabitqlib::RotatorType::FhtKacRotator,
-        quantization_bits
-    );
-
-    {
-        const auto initialization = pipnn ? rabitqlib::symqg::QGInitialization::PiPNN
-                                          : rabitqlib::symqg::QGInitialization::Random;
-        rabitqlib::symqg::QGBuilder builder(
-            qg, static_cast<uint32_t>(ef), data.data(), threads, initialization
-        );
-        std::cout << "Initialize and encode " << stage.get_elapsed_sec() << " secs\n";
-
-        // QG owns its vectors/codes now; release the input before refinement.
-        data = data_type();
-        stage.reset();
-        builder.build();
-        std::cout << (pipnn ? "One refinement " : "Three iterations ")
-                  << stage.get_elapsed_sec() << " secs\n";
-        std::cout << "Average degree " << builder.avg_degree() << '\n';
-    }  // Release builder scratch before saving.
-
+    qg.add(data.data(), data.rows(), threads);
     auto milisecs = stopw.get_elapsed_mili();
 
     std::cout << "Indexing time " << milisecs / 1000.F << " secs\n";

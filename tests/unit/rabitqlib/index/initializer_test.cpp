@@ -10,10 +10,10 @@
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
 #include <future>
 #include <ios>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -24,58 +24,33 @@
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/space.hpp"
 #include "rabitqlib/utils/tools.hpp"
-#include "temp_file.hpp"
 
 namespace rabitqlib::ivf {
 namespace {
 
-TEST(IvfHnswInitializerTest, PersistsUtf8SidecarPaths) {
-    const auto directory = std::filesystem::temp_directory_path() /
-                           std::filesystem::u8path(u8"rabitq_\u6d4b\u8bd5_\U0001f680");
-    std::filesystem::create_directories(directory);
-    const auto path = (directory / std::filesystem::u8path(u8"\u7d22\u5f15")).u8string();
+TEST(IvfHnswInitializerTest, RoundTripsThroughAStreamAndChecksItsSize) {
     const std::array<float, 4> centroids{0.0F, 0.0F, 3.0F, 4.0F};
     HNSWInitializer initializer(2, 2);
     initializer.add_vectors(centroids.data(), 1);
-    std::ofstream ignored_output;
-    initializer.save(ignored_output, path.c_str());
-    EXPECT_TRUE(std::filesystem::is_regular_file(std::filesystem::u8path(path + ".hnsw")));
+    std::stringstream graph;
+    initializer.write(graph);
+    const std::string bytes = graph.str();
+
     HNSWInitializer loaded(2, 2);
-    std::ifstream ignored_input;
-    loaded.load(ignored_input, path.c_str());
+    loaded.read(graph, bytes.size());
     std::vector<AnnCandidate<float>> candidates(1);
     loaded.centroids_distances(centroids.data() + 2, 1, candidates);
     EXPECT_EQ(candidates[0].id, 1U);
     EXPECT_FLOAT_EQ(candidates[0].distance, 0.0F);
-    std::filesystem::remove(std::filesystem::u8path(path + ".hnsw"));
-    std::filesystem::remove(directory);
-}
 
-TEST(IvfHnswInitializerTest, ReportsSidecarOpenFailureAndCanRetry) {
-    const std::string path = ::testing::TempDir() + "rabitq_hnsw_save_failure";
-    const std::filesystem::path sidecar(path + ".hnsw");
-    std::filesystem::create_directory(sidecar);
-    const std::array<float, 4> centroids{0.0F, 0.0F, 3.0F, 4.0F};
-    HNSWInitializer initializer(2, 2);
-    initializer.add_vectors(centroids.data(), 1);
-    std::ofstream ignored_output;
-    try {
-        initializer.save(ignored_output, path.c_str());
-        FAIL() << "Saving the HNSW sidecar to a directory must fail";
-    } catch (const std::runtime_error& error) {
-        EXPECT_STREQ(error.what(), "Cannot open HNSW index file for writing");
-    }
-    std::filesystem::remove(sidecar);
-
-    initializer.save(ignored_output, path.c_str());
-    HNSWInitializer loaded(2, 2);
-    std::ifstream ignored_input;
-    loaded.load(ignored_input, path.c_str());
-    std::vector<AnnCandidate<float>> candidates(1);
-    loaded.centroids_distances(centroids.data() + 2, 1, candidates);
-    EXPECT_EQ(candidates[0].id, 1U);
-    EXPECT_FLOAT_EQ(candidates[0].distance, 0.0F);
-    std::filesystem::remove(sidecar);
+    // The graph is read from the current position and only within its byte count.
+    std::stringstream shifted("xyz" + bytes);
+    shifted.seekg(3);
+    HNSWInitializer offset(2, 2);
+    EXPECT_NO_THROW(offset.read(shifted, bytes.size()));
+    std::stringstream short_input(bytes);
+    HNSWInitializer truncated(2, 2);
+    EXPECT_THROW(truncated.read(short_input, bytes.size() - 1), std::runtime_error);
 }
 
 TEST(IvfHnswInitializerTest, ReportsBufferedWriteFailure) {
@@ -222,16 +197,13 @@ TEST(IvfHnswInitializerTest, ParallelInsertionPreservesCentroidLabelsAfterReload
             centroids[label * kDim + dim] = static_cast<float>(label * kDim + dim);
         }
     }
-    const rabitq_test::TempFile path_file("rabitq_initializer_labels");
-    const std::string& path = path_file.path();
     HNSWInitializer initializer(kDim, kCount);
     initializer.add_vectors(centroids.data(), 4);
-    std::ofstream ignored_output;
-    initializer.save(ignored_output, path.c_str());
+    std::stringstream graph;
+    initializer.write(graph);
 
     HNSWInitializer loaded(kDim, kCount);
-    std::ifstream ignored_input;
-    loaded.load(ignored_input, path.c_str());
+    loaded.read(graph, graph.str().size());
     for (size_t label = 0; label < kCount; ++label) {
         for (size_t dim = 0; dim < kDim; ++dim) {
             EXPECT_FLOAT_EQ(
@@ -251,16 +223,13 @@ TEST(IvfHnswInitializerTest, ReloadsInnerProductGraphForRouting) {
     std::vector<float> centroids(kCount * kDim, 0.0F);
     centroids[0] = 0.9F;
     centroids[kDim] = 100.0F;
-    const rabitq_test::TempFile path_file("rabitq_initializer_ip");
-    const std::string& path = path_file.path();
     HNSWInitializer initializer(kDim, kCount, METRIC_IP);
     initializer.add_vectors(centroids.data(), 4);
-    std::ofstream ignored_output;
-    initializer.save(ignored_output, path.c_str());
+    std::stringstream graph;
+    initializer.write(graph);
 
     HNSWInitializer loaded(kDim, kCount, METRIC_IP);
-    std::ifstream ignored_input;
-    loaded.load(ignored_input, path.c_str());
+    loaded.read(graph, graph.str().size());
     std::array<float, kDim> query{};
     query[0] = 1.0F;
     std::vector<AnnCandidate<float>> candidates(1);
@@ -393,31 +362,28 @@ TEST(ParallelForTest, JoinsWorkersBeforeRethrowingFunctionException) {
 TEST(IvfInitializerTest, FlatInitializerReportsStreamFailures) {
     constexpr size_t kDim = 8;
     constexpr size_t kCount = 3;
+    constexpr size_t kBytes = sizeof(float) * kDim * kCount;
     std::vector<float> centroids(kCount * kDim, 1.5F);
     FlatInitializer flat(kDim, kCount);
     flat.add_vectors(centroids.data(), 1);
-    const rabitq_test::TempFile path_file("rabitq_flat_initializer.bin");
-    const std::string& path = path_file.path();
-    {
-        std::ofstream output(path, std::ios::binary);
-        ASSERT_NO_THROW(flat.save(output, path.c_str()));
-    }
-    {
-        // A stream that failed to open cannot be written.
-        std::ofstream unopened(path + ".missing/initializer.bin", std::ios::binary);
-        EXPECT_THROW(flat.save(unopened, path.c_str()), std::runtime_error);
-    }
-    {
-        std::ifstream input(path, std::ios::binary);
-        FlatInitializer restored(kDim, kCount);
-        ASSERT_NO_THROW(restored.load(input, path.c_str()));
-    }
-    std::filesystem::resize_file(
-        std::filesystem::u8path(path), sizeof(float) * kDim * kCount - 1
-    );
-    std::ifstream truncated(path, std::ios::binary);
+    std::stringstream stored;
+    ASSERT_NO_THROW(flat.write(stored));
+    ASSERT_EQ(stored.str().size(), kBytes);
+
+    std::ostringstream broken;
+    broken.setstate(std::ios::badbit);
+    EXPECT_THROW(flat.write(broken), std::runtime_error);
+
+    FlatInitializer restored(kDim, kCount);
+    ASSERT_NO_THROW(restored.read(stored, kBytes));
+    EXPECT_FLOAT_EQ(restored.centroid(2)[kDim - 1], 1.5F);
+
+    FlatInitializer wrong_size(kDim, kCount);
+    std::stringstream copy(stored.str());
+    EXPECT_THROW(wrong_size.read(copy, kBytes - 1), std::runtime_error);
+    std::stringstream truncated(stored.str().substr(0, kBytes - 1));
     FlatInitializer partial(kDim, kCount);
-    EXPECT_THROW(partial.load(truncated, path.c_str()), std::runtime_error);
+    EXPECT_THROW(partial.read(truncated, kBytes), std::runtime_error);
 }
 
 }  // namespace

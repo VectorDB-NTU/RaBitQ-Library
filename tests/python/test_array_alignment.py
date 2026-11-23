@@ -63,7 +63,7 @@ def test_indexes_accept_unaligned_build_and_query_arrays(kind, offset, tmp_path)
     if kind == "ivf":
         parameters = {"nprobe": 2}
     else:
-        parameters = {"ef": 65}
+        parameters = {"ef_search": 65}
 
     # Explicit seeds and one build thread make every index reproducible.
     reference = make_index()

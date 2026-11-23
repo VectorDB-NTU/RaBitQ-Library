@@ -6,7 +6,7 @@
   <a href="https://pypi.org/project/rabitqlib/"><img alt="PyPI" src="https://img.shields.io/pypi/v/rabitqlib.svg?cacheSeconds=300"></a>
   <a href="https://pypi.org/project/rabitqlib/"><img alt="Python versions" src="https://img.shields.io/badge/python-3.11--3.14-3776AB.svg?logo=python&amp;logoColor=white"></a>
   <a href="https://vectordb-ntu.github.io/RaBitQ-Library/"><img alt="Documentation" src="https://github.com/VectorDB-NTU/RaBitQ-Library/actions/workflows/docs.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+  <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
 </p>
 
 </div>
@@ -27,28 +27,28 @@ approximate nearest-neighbor search. See the [research papers](https://vectordb-
 
 ## News
 
+- **v0.9.0:** removes the Python forms 0.8 deprecated, saves index format 2, and adds
+  the cosine metric, `int64` IDs and C++ index classes that match the Python API
+  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.9.0/)).
 - **v0.8.5:** accepts the names 0.9 will use (`capacity`, `routing`, `ef_search`,
   k-means `nbits`) and deprecates the 0.8 spellings they replace
   ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.5/)).
 - **v0.8.4:** input validation reads each batch once instead of twice
   ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.4/)).
-- **v0.8.3:** provisional `rabitqlib.quant` module: rotate, quantize, pack and score
-  RaBitQ codes stored outside an index
-  ([notes](https://vectordb-ntu.github.io/RaBitQ-Library/releases/0.8.3/)).
 
 Earlier versions: [all releases](https://github.com/VectorDB-NTU/RaBitQ-Library/releases).
 
 ## Vector indexes
 
 Use the included indexes when you want construction, search, and save/load in one
-library. All three support L2 and inner product; normalize vectors for cosine
-search. Their structures, storage costs, and search parameters offer different
+library. All three support L2, inner product and cosine, which normalizes vectors
+for you. Their structures, storage costs, and search parameters offer different
 QPS–recall tradeoffs.
 
 | Index | Search approach | Storage and updates |
 | --- | --- | --- |
 | [IVF-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/ivf/) | Partitioned search with batch scoring. | 1–9-bit codes or raw-vector reranking; add/remove. |
-| [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and resize. |
+| [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/) | Graph traversal over quantized vectors. | 1–9-bit codes plus graph edges; add/remove and reserve. |
 | [SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/) | Graph search with batched distance estimation. | Raw or 4/8-bit storage; updates require rebuilding. |
 
 [Native clustering methods](https://vectordb-ntu.github.io/RaBitQ-Library/clustering/) prepare centroids and
@@ -62,7 +62,7 @@ settings, and limitations.
 ### Python
 
 ```bash
-python -m pip install --upgrade "rabitqlib>=0.8.5"
+python -m pip install --upgrade "rabitqlib>=0.9.0"
 ```
 
 Wheels support CPython 3.11–3.14 on Linux x86-64/ARM64, Windows x86-64,
@@ -93,8 +93,8 @@ distance, with smaller values first. Without `nprobe`, search probes
 Quantization remains approximate even when all clusters are probed.
 The [complete quick start](https://vectordb-ntu.github.io/RaBitQ-Library/quick_start/) explains result handling,
 measures recall while varying `nprobe`, and shows save/load. Code written for
-0.7 still runs in 0.8 with deprecation warnings; see the
-[migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/).
+0.8 may need changes for 0.9; see the
+[migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/#from-08-to-09).
 
 For other indexes, see the [HNSW-RaBitQ](https://vectordb-ntu.github.io/RaBitQ-Library/index/hnsw/#minimal-workflow) and
 [SymphonyQG](https://vectordb-ntu.github.io/RaBitQ-Library/index/qg/#minimal-workflow) examples.
@@ -159,7 +159,7 @@ listed above.
       <a href="https://github.com/antgroup/vsag"><img src="https://github.com/antgroup.png?size=96" width="40" height="40" alt="VSAG logo"><br>VSAG</a>
     </td>
     <td align="center" width="16%">
-      <a href="https://github.com/tensorchord/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="40" height="40" alt="VectorChord logo"><br>VectorChord</a>
+      <a href="https://github.com/supervc-stack/VectorChord"><img src="https://github.com/tensorchord.png?size=96" width="40" height="40" alt="VectorChord logo"><br>VectorChord</a>
     </td>
   </tr>
   <tr>
@@ -184,13 +184,13 @@ listed above.
   </tr>
   <tr>
     <td align="center" width="16%">
-      <a href="https://docs.lancedb.com/indexing/quantization#rabitq-quantization"><img src="https://github.com/lancedb.png?size=96" width="40" height="40" alt="LanceDB logo"><br>LanceDB</a>
+      <a href="https://docs.lancedb.com/oss/v0-41-0/indexing/vector-index#rabitq-quantization-rq"><img src="https://github.com/lancedb.png?size=96" width="40" height="40" alt="LanceDB logo"><br>LanceDB</a>
     </td>
     <td align="center" width="16%">
       <a href="https://docs.databricks.com/aws/en/oltp/projects/lakebase-vector"><img src="https://github.com/databricks.png?size=96" width="40" height="40" alt="Databricks logo"><br>Databricks</a>
     </td>
     <td align="center" width="16%">
-      <a href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/annindexes#quantized-codecs-methods"><img src="https://github.com/ClickHouse.png?size=96" width="40" height="40" alt="ClickHouse logo"><br>ClickHouse</a>
+      <a href="https://clickhouse.com/docs/reference/engines/table-engines/mergetree-family/annindexes#quantized-codecs-methods"><img src="https://github.com/ClickHouse.png?size=96" width="40" height="40" alt="ClickHouse logo"><br>ClickHouse</a>
     </td>
     <td align="center" width="16%">
       <a href="https://qdrant.tech/articles/turboquant-quantization/#1-bit-rabitq-bit-plane-scoring"><img src="https://github.com/qdrant.png?size=96" width="40" height="40" alt="Qdrant logo"><br>Qdrant</a>
@@ -208,7 +208,7 @@ listed above.
 
 - [Documentation](https://vectordb-ntu.github.io/RaBitQ-Library/) and [algorithm overview](https://vectordb-ntu.github.io/RaBitQ-Library/rabitq/rabitq/).
 - [Papers and citations](https://vectordb-ntu.github.io/RaBitQ-Library/papers/) for the research behind the library.
-- [Release notes](https://github.com/VectorDB-NTU/RaBitQ-Library/releases) and [0.7 migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/modular_migration/).
+- [Release notes](https://github.com/VectorDB-NTU/RaBitQ-Library/releases), the [Python migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/python_migration/) and the [0.7 migration guide](https://vectordb-ntu.github.io/RaBitQ-Library/modular_migration/).
 - [GPU implementation](https://github.com/Stardust-SJF/cuvs_rabitq/tree/cuvs_ivf_rabitq) in cuVS.
 
 ## Contributing

@@ -1,16 +1,13 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
-#include <queue>
 #include <random>
 #include <thread>
 #include <type_traits>
-#include <vector>
 
 namespace rabitqlib {
 template <typename T>
@@ -77,7 +74,7 @@ inline size_t floor_log2(size_t x) {
 
 inline size_t ceil_log2(size_t x) {
     size_t ret = floor_log2(x);
-    return (1UL << ret) < x ? ret + 1 : ret;
+    return (size_t{1} << ret) < x ? ret + 1 : ret;
 }
 
 inline bool is_powerof2(size_t n) { return n > 0 && (n & (n - 1)) == 0; }
@@ -114,60 +111,4 @@ inline int openmp_team_size(size_t requested, size_t work_items) {
 }
 }  // namespace detail
 
-template <typename T, typename TP>
-float distance_ratio(
-    const T* data,
-    const T* query,
-    const TP* gt,
-    const TP* ann_results,
-    size_t k,
-    size_t dim,
-    T (*dist_func)(const T*, const T*, size_t)
-) {
-    std::priority_queue<float> gt_distances;
-    std::priority_queue<float> ann_distances;
-
-    for (size_t i = 0; i < k; ++i) {
-        TP gt_id = gt[i];
-        TP ann_id = ann_results[i];
-        gt_distances.emplace(dist_func(query, data + (gt_id * dim), dim));
-        ann_distances.emplace(dist_func(query, data + (ann_id * dim), dim));
-    }
-
-    float ret = 0;
-    size_t valid_k = 0;
-
-    while (!gt_distances.empty()) {
-        if (gt_distances.top() > 1e-5) {
-            ret += std::sqrt(ann_distances.top() / gt_distances.top());
-            ++valid_k;
-        }
-        gt_distances.pop();
-        ann_distances.pop();
-    }
-
-    if (valid_k == 0) {
-        return static_cast<float>(k);
-    }
-    return ret * static_cast<float>(k) / static_cast<float>(valid_k);
-}
-
-template <typename T>
-std::vector<T> horizontal_avg(const std::vector<std::vector<T>>& data) {
-    size_t rows = data.size();
-    size_t cols = data[0].size();
-
-    std::vector<T> avg(cols, 0);
-    for (auto& row : data) {
-        for (size_t j = 0; j < cols; ++j) {
-            avg[j] += row[j];
-        }
-    }
-
-    for (size_t j = 0; j < cols; ++j) {
-        avg[j] /= rows;
-    }
-
-    return avg;
-}
 }  // namespace rabitqlib

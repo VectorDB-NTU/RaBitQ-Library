@@ -72,6 +72,20 @@ class IndexAccess {
     [[nodiscard]] Guard write() { return Guard(*this, true); }
 };
 
+// `__reduce_ex__` for every extension class and enum. Pickle protocols 0 and 1 reduce
+// through copyreg._reduce_ex, which calls pybind11_object(self); that constructor throws a
+// C++ exception through the C API and aborts the interpreter (pybind11 issue 3745).
+// Reducing with protocol 2 instead pickles a class that defines py::pickle with any
+// protocol and raises TypeError for the others, as protocol 2 already does.
+inline py::object reduce_ex_with_protocol_2(const py::object& self, int protocol) {
+    const auto object_type =
+        py::reinterpret_borrow<py::object>(reinterpret_cast<PyObject*>(&PyBaseObject_Type));
+    return object_type.attr("__reduce_ex__")(self, std::max(protocol, 2));
+}
+
+inline constexpr const char* kReduceExDoc =
+    "Reduce for pickle; protocols 0 and 1 use the protocol-2 reduction.";
+
 // Resolve Python callbacks before index guards and own bytes across GIL release.
 inline std::string path_string(py::handle value) {
     // The old std::string caster also accepted bytearray directly.
@@ -205,14 +219,32 @@ inline MetricType metric_from_string(const std::string& metric) {
     if (metric == "l2") {
         return METRIC_L2;
     }
-    if (metric == "ip" || metric == "innerproduct") {
+    if (metric == "ip") {
         return METRIC_IP;
     }
     throw std::invalid_argument("metric must be 'l2' or 'ip'");
 }
 
+// Indexes also accept the cosine metric, which rabitqlib.quant rejects.
+inline MetricType index_metric_from_string(const std::string& metric) {
+    if (metric == "cosine") {
+        return METRIC_COSINE;
+    }
+    if (metric == "l2" || metric == "ip") {
+        return metric_from_string(metric);
+    }
+    throw std::invalid_argument("metric must be 'l2', 'ip' or 'cosine'");
+}
+
 inline std::string metric_to_string(MetricType metric) {
-    return metric == METRIC_IP ? "ip" : "l2";
+    switch (metric) {
+        case METRIC_IP:
+            return "ip";
+        case METRIC_COSINE:
+            return "cosine";
+        default:
+            return "l2";
+    }
 }
 
 template <typename T>
@@ -353,32 +385,19 @@ RowView<T> checked_output_rows(
     return make_row_view<T>(std::move(array));
 }
 
-struct SearchResults {
-    py::array_t<PID> ids;
-    py::array_t<float> distances;
-};
-
-// (num_queries, k) outputs. Slots without a neighbor keep kPidMax and +inf.
-// Searches pad slots without a result, so k may exceed the number of points.
 inline void check_k(size_t k) {
     if (k == 0 || k > buffer::kSearchBufferMaxPointCount) {
         throw std::invalid_argument("k must be between 1 and 2**31");
     }
 }
 
-inline SearchResults unfilled_search_results(size_t num_queries, size_t k) {
-    const auto shape = std::vector<py::ssize_t>{
-        static_cast<py::ssize_t>(num_queries), static_cast<py::ssize_t>(k)};
-    SearchResults results{py::array_t<PID>(shape), py::array_t<float>(shape)};
-    std::fill(
-        results.ids.mutable_data(), results.ids.mutable_data() + results.ids.size(), kPidMax
-    );
-    std::fill(
-        results.distances.mutable_data(),
-        results.distances.mutable_data() + results.distances.size(),
-        std::numeric_limits<float>::infinity()
-    );
-    return results;
+// A graph search breadth given explicitly is at least 1; None selects the default.
+inline void check_ef_search(std::optional<size_t> ef_search) {
+    if (ef_search == size_t{0}) {
+        throw std::invalid_argument(
+            "ef_search must be at least 1; pass None for the default"
+        );
+    }
 }
 
 // Like ensure_1d_array<int64_t>, but refuses input whose dtype is not an integer. forcecast
@@ -404,32 +423,24 @@ ensure_1d_integer_array(py::handle value, const char* name) {
     return ensure_1d_array<int64_t>(value, name);
 }
 
-// The caller has already validated rank/dtype. Removed points still occupy IDs.
-inline std::vector<PID> checked_removal_ids(
-    const py::array_t<int64_t, py::array::c_style | py::array::forcecast>& ids,
-    size_t num_stored_points
+// An aligned copy of IDs whose rank and dtype the caller has validated; the index checks
+// their range.
+inline std::vector<Id> copied_ids(
+    const py::array_t<int64_t, py::array::c_style | py::array::forcecast>& ids
 ) {
-    std::vector<PID> result;
-    result.reserve(static_cast<size_t>(ids.shape(0)));
+    std::vector<Id> result(static_cast<size_t>(ids.shape(0)));
     const detail::ConstPackedArrayView<int64_t> values(
         reinterpret_cast<const char*>(ids.data())
     );
-    for (py::ssize_t i = 0; i < ids.shape(0); ++i) {
-        const int64_t id = values[static_cast<size_t>(i)];
-        if (id < 0 || static_cast<uint64_t>(id) >= num_stored_points) {
-            throw std::invalid_argument("ids must be in [0, num_stored_points)");
-        }
-        result.push_back(static_cast<PID>(id));
+    for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = values[i];
     }
     return result;
 }
 
 // Validate before narrowing, and own the result for APIs that mutate assignments.
 inline std::vector<PID> checked_cluster_ids(
-    py::handle value,
-    size_t rows,
-    size_t clusters,
-    const char* range_error = "cluster_ids must be in [0, num_clusters)"
+    py::handle value, size_t rows, size_t clusters
 ) {
     const auto checked_copy = [&](const auto& ids) {
         if (static_cast<size_t>(ids.shape(0)) != rows) {
@@ -449,7 +460,7 @@ inline std::vector<PID> checked_cluster_ids(
             if (id < 0 || static_cast<uint64_t>(id) >= clusters ||
                 static_cast<uint64_t>(id) > std::numeric_limits<PID>::max()) {
                 throw std::invalid_argument(
-                    std::string(range_error) + "; expected [0, " +
+                    "cluster_ids must be in [0, num_clusters); expected [0, " +
                     std::to_string(clusters) + "), invalid entry at index " +
                     std::to_string(i)
                 );
