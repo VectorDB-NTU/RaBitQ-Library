@@ -10,8 +10,9 @@ only the affected job groups:
 
 | Changes | Checks |
 | --- | --- |
-| Documentation and Markdown only | Documentation build for `docs/`; no C++ or Python builds; the documentation summary is always emitted |
-| `docs/docs/quick_start.md` | Documentation build plus the Linux source-install job, which runs the page's Python blocks |
+| Files under `docs/` only | Documentation build; no C++ or Python builds; the documentation summary is always emitted |
+| Markdown outside `docs/` (`README.md`, `AGENTS.md`, `tests/README.md`, `.github/*.md`) | No checks |
+| `docs/docs/quick_start.md` | Documentation build plus the Python source-install jobs; the Linux job runs the page's Python blocks |
 | Issue forms/configuration and CODEOWNERS | No C++/Python builds |
 | `benchmarks/core/`, `benchmarks/hotpaths/` code/build files | Ubuntu benchmark build and bounded smoke tests; C++ formatting or Python lint as applicable, without the wheel/platform matrix for benchmark-only edits |
 | `.github/workflows/test.yaml` | C++ checks, ShellCheck, Python quality (including summary-job tests), and benchmark smoke |
@@ -20,6 +21,10 @@ only the affected job groups:
 | `.github/workflows/docs.yml` | Documentation build and Python quality checks for workflow regression tests |
 | `.github/workflows/pr-labels.yml` | Python quality, including metadata-classification regression tests |
 | `.github/release.yml` | Python quality, including release-category compatibility tests |
+| `.github/workflows/release.yml` | Python quality and wheels |
+| `.github/workflows/python.yml` | Python quality and Python source-install jobs |
+| `.clang-format` | C++ formatting only |
+| `.clang-tidy` | clang-tidy only |
 | `sample/run_cpp.sh`, `sample/run_python.sh` | ShellCheck, including these runners |
 | `tests/core_consumer/`, `tests/fixtures/core_api_v1/` | C++ checks; the frozen v1 fixture is excluded from formatting |
 | `tests/core_consumer/run.cmake`, `scripts/check-format.sh`, `scripts/check-tidy.sh` | Their usual checks, plus Python quality to run their failure-path regression tests |
@@ -28,6 +33,7 @@ only the affected job groups:
 | `tests/allocation/`, `tests/failures/` | C++ formatting and platform tests, including sanitizer and allocation-failure coverage; no Python builds or wheels |
 | Compiled Python bindings | C++ formatting and clang-tidy, plus Python builds and wheel tests |
 | Python tests | Python lint, source-install smoke tests, and wheel tests |
+| `tests/test_pyright.py` | Python lint and source-install jobs; no wheels |
 | `tests/python/test_cpp_clustering_examples.py` | Python lint and C++ checks; examples run in the Ubuntu job |
 | `tests/python/conftest.py` | Python lint, C++ checks, and Python builds/wheels |
 | `sample/python/` | Python lint, source-install smoke tests, comparison tests, and wheels |
@@ -128,12 +134,9 @@ and did not select docs.
 Selected build failures, cancellations, and unexpected skips fail this summary.
 Only successful push builds can deploy the documentation.
 
-After the updated workflow is merged and the selected-build and intentional-skip
-paths have been verified on GitHub, add `Documentation validation` to main's
-required status checks, preserving existing contexts and their app IDs. Until
-that remote update is applied, the documentation failure is not a required merge
-gate. Do not require the conditional `Build documentation` job or a workflow
-filtered out by paths: missing check names can leave unrelated PRs pending.
+`Documentation validation` is one of main's required status checks. Do not require
+the conditional `Build documentation` job or a workflow filtered out by paths:
+missing check names can leave unrelated PRs pending.
 
 Test and Python workflow concurrency groups use the PR number, so unrelated
 forks using the same branch name do not cancel each other. Push runs keep their
@@ -153,17 +156,15 @@ or an unexpected skip fails the summary. If detection fails, the existing
 fallback runs the matrix and its success is required.
 
 `Python validation` also covers the FAISS comparison run in the Linux 3.11 job.
-When migrating from the older workflow, remove the obsolete `FAISS comparison script`
-required context before dropping its duplicate summary job. Keep `Python validation`
-and every other required context with their existing app IDs.
 
-After these checks have appeared and been validated on GitHub, add their exact
-names to main's required status checks. Workflow definitions do not update branch
-protection automatically. Keep existing protections until that transition is
-complete; these summaries do not cover unrelated jobs. Once `Python validation`
-is verified, replace the individual required `Python 3.11` and `Python 3.14`
-contexts with it: a skipped matrix does not emit those expanded names, which
-otherwise leaves documentation-only PRs waiting indefinitely.
+Main's required status checks name these summaries, not the expanded matrix jobs:
+a skipped matrix does not emit the expanded names, which would leave
+documentation-only PRs waiting indefinitely. The summaries do not cover unrelated
+jobs, which stay required by their own names. Workflow definitions do not update
+branch protection: when a required job is added or renamed, update the required
+checks to match, keeping the other contexts and their app IDs.
+`gh api repos/VectorDB-NTU/RaBitQ-Library/branches/main/protection/required_status_checks`
+lists them.
 
 ## Publishing a release
 
@@ -172,22 +173,31 @@ Before merging a version bump, run the
 and record results and any unresolved failures or missing coverage in the release PR
 or issue. These manual checks are not enforced by the automatic publishing workflow.
 
-Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt`,
-add a one-line README news entry (keep the three most recent) and, for releases
+Update the stable `X.Y.Z` version in both `pyproject.toml` and `CMakeLists.txt` and
+the install pins and clone commands in the user documentation (`docs/docs/installation.md`,
+`quick_start.md`, `cpp_integration.md` and `index.md`; search `docs/docs` and `README.md`
+for the previous version), add a one-line README news entry (keep the three most recent) and, for releases
 with user-facing notes, a `docs/docs/releases/X.Y.Z.md` page listed under its
 `X.Y` group in the `docs/mkdocs.yml` release-notes navigation,
-and merge into `main`. Once the `Test` and
+and merge into `main`. Merge a release pull request from a release branch with a merge
+commit, so that the tag contains the branch's own commits; frozen fixtures name their
+source commit. Once the `Test` and
 `Python Wheel` workflows succeed for the same commit, `Release wheels` checks
 whether that version is newer than the existing release tags. It then builds
 and tests the release wheels, pushes `vX.Y.Z` at that tested commit, publishes
 to PyPI, and creates a GitHub Release with generated notes and wheel assets.
-A later successful commit can release an untagged version if the version-bump
-commit failed CI. Ordinary commits with an already released version do not
+Runs triggered while either workflow is still running or has failed end without
+building; that is expected. If a job fails on the version-bump commit for a reason
+unrelated to the change, such as a runner that never started, rerun the failed jobs:
+their success triggers `Release wheels` again. A later successful commit can also
+release an untagged version. Ordinary commits with an already released version do not
 publish again. Keep published tags unchanged; each release gets a new tag.
 
 The workflow uses the repository token to create tags and the existing `pypi`
-environment with Trusted Publishing for PyPI. Repository tag rules and any
-required environment approvals still apply. Publishing runs in the same
+environment with Trusted Publishing for PyPI. Repository tag rules apply, and the
+`pypi` environment requires a reviewer's approval: after the tag is pushed,
+`Publish wheels to PyPI` waits until a reviewer approves the deployment under
+**Review deployments** in the run. Publishing runs in the same
 workflow as tag creation; it does not depend on a bot-created tag triggering
 another workflow.
 
@@ -240,10 +250,11 @@ other labels are preserved. Unrecognized titles produce a workflow warning and
 clear any previous automatic category. They do not block a contribution.
 Before merging, check the title and resulting label, especially for mixed changes.
 
-Manual labels remain supported: `enhancement`, `bug`, `performance`,
+Manual labels are also recognized: `enhancement`, `bug`, `performance`,
 `documentation`, `build`/`ci`, `python`, and `dependencies`. They map to Added,
 Fixed, Performance, Documentation, Build and CI, Python, and Dependencies,
-respectively. If labels match several categories, the first matching category
+respectively. `performance`, `build` and `ci` do not exist in the repository yet;
+create them before using them. If labels match several categories, the first matching category
 in the release configuration wins; keep manual and automatic labels consistent.
 PRs without a matching label appear under `Other changes`. Labels `duplicate`
 or `invalid` exclude a PR from release notes.

@@ -34,14 +34,15 @@ Tool versions and installation instructions are maintained in [docs/development.
 | --- | --- |
 | Repository Markdown, including this file | Review accuracy, local links, and `git diff --check`; no code build required |
 | MkDocs content, configuration, or dependencies | Above, plus `python -m mkdocs build --strict --config-file docs/mkdocs.yml` |
-| First-party C++ | `./scripts/check-format.sh` and affected build/tests; core/binding changes require full `./scripts/check-tidy.sh build-tidy` before merging (focused checks suffice during iteration). Tests/examples are excluded from CI clang-tidy; use focused local analysis for substantial logic changes. |
+| First-party C++ | `./scripts/check-format.sh` and affected build/tests; core/binding changes require the full [clang-tidy run](docs/development.md#static-analysis) (`CXX=clang++-23 ./scripts/check-tidy.sh build-tidy` on a configured `build-tidy`) before merging (focused checks suffice during iteration). Tests/examples are excluded from CI clang-tidy; use focused local analysis for substantial logic changes. |
 | Python sources | `./scripts/check-python.sh` and affected Python tests via `python -m pytest` |
+| CI workflows or `.github/scripts` | The automation checks in [Publishing a release](docs/maintaining.md#publishing-a-release) (Ruff and unit tests of `.github/scripts`, which `check-python.sh` does not cover); the [routing table](docs/maintaining.md#checks-selected-by-changed-files) shows which CI checks a path selects |
 | Bindings or Python-visible C++ behavior | C++ and Python checks above; rebuild/install the package in the existing environment before testing, then verify the imported package/extension paths and that the extension includes the current changes |
 | Python API signatures, type declarations or accepted-input contracts | Keep `python_bindings/__init__.pyi` and runtime docstrings synchronized; run the [editor/type checks](tests/README.md#python-editor-support), including the explicitly selected mypy and Pyright tests outside `tests/python` |
 | SIMD, metrics, packing, layouts, or index formats | Before building, audit every backend and consumer sharing the contract; build and run relevant reference/compatibility tests with `RABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF`; run `./scripts/check-isa-symbols.sh` on that build when ISA-flagged sources or headers they include change |
 | Hot-path algorithm/allocation changes or performance claims | Correctness tests first, then a representative benchmark reporting dataset, CPU, compiler, ISA, threads, latency/throughput, and quality; a correctness fix may omit benchmarks with a documented justification, without making an unmeasured performance claim |
 | Examples | Build or run the affected example |
-| Shell scripts | ShellCheck on affected scripts; see contributor instructions |
+| Shell scripts | ShellCheck on affected scripts; see [Shell scripts](docs/development.md#shell-scripts) |
 | Build or packaging configuration | Exercise the affected build/package workflow and its tests |
 
 Use the C++ configure/build/CTest commands in [tests/README.md](tests/README.md#quick-start).
@@ -105,4 +106,5 @@ carry the detailed requirements, not optional background.
 | Filesystem paths | [Path conversion](docs/development.md#filesystem-paths); for Python also [binding conversions](docs/development.md#change-python-bindings) |
 | Python bindings/API | [Bindings, conversions, GIL and typing](docs/development.md#change-python-bindings) |
 | Hot-path changes or performance claims | [Performance and compatibility](docs/development.md#performance-and-compatibility) |
-| Release preparation | [Downstream validation](docs/development.md#downstream-compatibility-validation) |
+| CI workflows, routing, required checks, labels | [Maintainer reference](docs/maintaining.md) |
+| Release preparation | [Downstream validation](docs/development.md#downstream-compatibility-validation), [publishing a release](docs/maintaining.md#publishing-a-release) |

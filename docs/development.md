@@ -50,19 +50,21 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/index/hnsw_index.hpp` | `HnswIndex`, the supported C++ HNSW API: the Python workflow over `hnsw::HierarchicalNSW` |
 | `include/rabitqlib/index/symqg_index.hpp` | `SymqgIndex`, the supported C++ SymphonyQG API: the Python workflow over `symqg::QuantizedGraph<float>` and `QGBuilder` |
 | `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
-| `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Index construction, persistence, and search |
+| `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Unsupported inner index classes behind the supported ones: construction, in-memory record layouts, search, save and load; no compatibility promise |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
-| `src/core/` | Compiled stable core v1 API and provisional API implementations, and the frozen `faster_config` scale table |
-| `docs/formats.md` | Versioned byte formats of `rabitqlib.quant`: raw arrays and self-describing blobs |
+| `src/core/` | Compiled stable core v1 API and provisional API implementations (blob container, checksums and validation in `blob.*`, `crc32.hpp`, `validation.hpp`), and the frozen `faster_config` scale table |
+| `docs/formats.md` | Versioned byte formats: `rabitqlib.quant` raw arrays and blobs, and index format 2, the file format every index writes |
 | `src/simd/` | Core kernels, dispatch, and the private shared resolver |
 | `src/fastscan/` | FastScan kernels, batch estimators, and paired backend selection |
-| `src/index/` | Compiled IVF/HNSW/SymphonyQG operations and private search kernels |
-| `src/utils/cpu_features.cpp` | Generic CPU feature detection |
+| `src/index/` | Compiled IVF/HNSW/SymphonyQG operations and private search kernels; the supported classes (`*_index.cpp`, shared helpers in `index_facade.hpp`), the index format 2 container (`format2.*`), cosine normalization (`cosine.hpp`) and writing to a temporary file renamed into place on save (`file_replacement.hpp`) |
+| `src/utils/` | Generic CPU feature detection and thread-count resolution |
 | `include/rabitqlib/utils/` | Shared allocation, I/O and numerical helpers; index buffers live in `index/detail/` |
-| `python_bindings/` | pybind11 extension, index wrappers and the provisional `rabitqlib.quant` module (`quant_bindings.cpp`, `quant.py`) |
+| `python_bindings/` | pybind11 extension binding the supported index classes (`*_bindings.cpp`), the clustering wrappers in `__init__.py`, type stubs (`__init__.pyi`, `quant.pyi`) and the provisional `rabitqlib.quant` module (`quant_bindings.cpp`, `quant.py`) |
 | `sample/cpp/`, `sample/python/` | Usage examples |
-| `tests/unit/`, `tests/python/` | C++ reference/unit tests and Python boundary/integration tests |
+| `tests/` | C++ reference/unit tests (`unit/`), Python tests (`python/`), frozen fixtures (`fixtures/`), and consumer, dispatch, failure and allocation tests; see [Test structure](../tests/README.md#test-structure) |
 | `docs/docs/` | MkDocs site sources |
+| `docs/maintaining.md` | CI routing, required checks, pull request labels and releases |
+| `scripts/`, `.github/` | Format and analysis scripts; CI workflows, actions and automation scripts (see `docs/maintaining.md`) |
 
 ## Development checks
 
@@ -110,10 +112,7 @@ Verify formatting without changing files:
 The scripts intentionally exclude vendored code in `include/rabitqlib/third/`
 and the frozen compatibility fixture `tests/fixtures/core_api_v1/consumer.cpp`.
 To use a nonstandard executable name, set `CLANG_FORMAT`; it must still identify
-itself as clang-format 23. On macOS, use Bash 4+ on PATH for the shell wrappers.
-Apple SDKs newer than clang-tidy 23 may require a matching newer analyzer; set
-`RUN_CLANG_TIDY` to its runner and report that version separately from the Linux
-clang-tidy 23 baseline.
+itself as clang-format 23. On macOS, use Bash 4.4+ on PATH for the shell wrappers.
 
 clangd embeds its own formatter, so use clangd 23 in editors such as VS Code
 if format-on-save must exactly match CI. If another clangd version is required,
@@ -145,9 +144,9 @@ ruff check --fix python_bindings sample/python tests/python tests/test_mypy.py t
 ruff format python_bindings sample/python tests/python tests/test_mypy.py tests/test_pyright.py benchmarks
 ```
 
-`check-python.sh` does not cover the CI automation in `.github/scripts`; CI also
-runs `ruff format --check .github/scripts` and `ruff check .github/scripts`, so
-run both after changing those scripts.
+`check-python.sh` does not cover the CI automation in `.github/scripts`. CI also
+formats, lints and unit-tests those scripts; after changing them, run the commands in
+[the maintainer reference](maintaining.md#publishing-a-release).
 
 ### Shell scripts
 
@@ -190,12 +189,17 @@ only sees `src/`, needs GNU binutils, and does not cover MSVC or ARM-only builds
 clang-tidy performs semantic checks and is kept separate from clang-format.
 The required baseline contains focused correctness, portability, and
 performance checks. Install the pinned analyzer and the dependencies needed to
-configure the core library and Python bindings:
+configure the core library and Python bindings. After enabling the LLVM 23 package
+repository (see [C++ formatting](#c-formatting)), run:
 
 ```bash
 sudo apt-get install clang-23 clang-tidy-23 libomp-23-dev cmake ninja-build
 python -m pip install "numpy>=1.23" "pybind11>=2.12"
 ```
+
+Apple SDKs newer than clang-tidy 23 may require a matching newer analyzer; set
+`RUN_CLANG_TIDY` to its runner and report that version separately from the Linux
+clang-tidy 23 baseline.
 
 Then configure the same core library and Python binding targets analyzed by CI
 and run the check with the same compiler used by CMake:
@@ -405,12 +409,16 @@ When several owned containers must change together, prepare a complete replaceme
 and commit it with a non-throwing move or swap. Do not replace these assignments
 with memberwise defaults without checking failure ordering and borrowed pointers.
 
-Index construction can have a different failure contract: an early validation
-failure may retain the old index, while a later allocation failure may invalidate
-it. Python wrapper state must reflect the native state after either outcome;
-IVF uses stored count, not live count, because all points may have been removed.
-Do not promise rollback for every index mutation. Test the affected object's
-documented post-failure state and subsequent reuse when changing these paths.
+The supported index classes (`IvfIndex`, `HnswIndex`, `SymqgIndex`) document a failure
+contract per operation in their headers. For example, a failed IVF `add` leaves the index
+unchanged, while a failed HNSW `add` may leave part of the batch in the index, which stays
+safe to search, save and destroy. The Python classes are bindings over these classes and
+keep no index data of their own, only a copy of the training parameters and an access lock. Inside, the unsupported `construct` of `ivf::IVF` and
+`hnsw::HierarchicalNSW` can fail early, keeping the old index, or later, invalidating it.
+IVF checks IDs against the stored count, not the live count, because all points may have
+been removed. Do not promise rollback for every index mutation. When changing these paths,
+keep the header comments true and test the documented post-failure state and subsequent
+reuse (`tests/failures/` covers allocation failures).
 
 ### Reuse numerical helpers without changing contracts
 
@@ -497,6 +505,10 @@ even when no file format changes.
 - `BatchDataMap`, `ExDataMap`, `BinDataMap`, and their const variants define raw-buffer sizes and
   offsets. Do not duplicate those calculations. Audit all producers and consumers when changing
   offsets, alignment, factor order, or code packing.
+- Index format 2 writes these in-memory record layouts to the file as they are
+  ([record layouts](formats.md#record-layouts)), so a change to a stored layout, offset, factor
+  order or code packing is also a file-format change: follow [Change persistence](#change-persistence),
+  and keep the frozen fixtures in `tests/fixtures/persistence/` loading.
 - FastScan batches contain 32 vectors, including physical storage for tail batches. Distinguish
   logical point count from batch capacity.
 - Retain explicit zero-residual sign-convention tests and factor-finiteness, reconstruction,
@@ -505,7 +517,7 @@ even when no file format changes.
 #### IVF and HNSW bit widths
 
 IVF/HNSW quantized total bits are one sign bit plus `ex_bits`, with totals 1 through 9.
-IVF also accepts `bits == 32`: one-bit filtering plus owned original float32 vectors
+IVF also accepts `nbits == 32`: one-bit filtering plus owned original float32 vectors
 in place of extra-bit codes.
 
 #### IVF formats and initialization
@@ -569,14 +581,19 @@ any truncated, corrupt, mismatched or unsupported content, including errors rais
 shared validators while loading; only a file that cannot be opened throws a plain
 `std::runtime_error`. Python maps it to `rabitqlib.FormatError`; rejection tests assert it.
 
-Do not silently reinterpret an old file. Add a magic/version discriminator, use fixed-width
-serialized fields for new formats (earlier layouts store several `size_t` fields; keep their readers unchanged), validate sizes before allocation, check every
-read, and retain a compatibility test fixture or an explicit rejection path. Review each affected
-format; changes to shared serialization helpers require auditing every format using them.
-Every index writes index format 2 ([`docs/formats.md`](formats.md#index-format-2), container in
-`src/index/format2.*`) and still reads its earlier layouts: IVF-RaBitQ's `RABQIDX1` versions and
-unversioned files, HNSW-RaBitQ's unversioned layout, and SymphonyQG's versioned quantized layout
-and raw fallback. Preserve those readers unless a breaking change is explicitly requested. When a writer moves to
+Do not silently reinterpret an old file. Every index writes index format 2
+([`docs/formats.md`](formats.md#index-format-2), container in `src/index/format2.*`). Change it
+only by its [compatibility rules](formats.md#compatibility-rules): an additive change appends
+header fields, adds sections or adds feature bits, and keeps `version = 2`, because every 0.9
+reader rejects any other `version`; a change an older reader cannot detect needs
+`version = 3`. Each released format change adds a frozen fixture, plus synthetic "future"
+fixtures for the rules (`tests/unit/rabitqlib/index/format2_test.cpp`). Use fixed-width fields
+(earlier layouts store several `size_t` fields; keep their readers unchanged), validate sizes
+before allocation, check every read, and keep a compatibility fixture or an explicit rejection
+path. Changes to shared serialization helpers require auditing every format using them.
+Every index still reads its earlier layouts: IVF-RaBitQ's `RABQIDX1` versions, its raw-vector
+layout `RBFQRAW1` and unversioned files, HNSW-RaBitQ's unversioned layout, and SymphonyQG's
+versioned quantized layout and raw fallback. Preserve those readers unless a breaking change is explicitly requested. When a writer moves to
 a new format, freeze the last files of the old writer as release-produced fixtures first.
 
 ### Change Python bindings
@@ -614,14 +631,15 @@ and the write guard held before releasing the GIL.
 Extract native pointers before releasing the GIL and keep search parameters local to
 each call. C++ callers synchronize index mutations themselves.
 
-Keep `python_bindings/__init__.pyi` and runtime docstrings synchronized with public
+Keep `python_bindings/__init__.pyi` (and `python_bindings/quant.pyi` for `rabitqlib.quant`)
+and runtime docstrings synchronized with public
 signatures, defaults and accepted inputs. For changes to Python API signatures,
 type declarations or accepted-input contracts,
 rebuild/install in the existing environment and run the
 [editor and type checks](../tests/README.md#python-editor-support):
 
 ```bash
-python -m pytest tests/python/test_editor_support.py tests/test_mypy.py tests/test_pyright.py -q
+python -m pytest tests/python/test_editor_support.py tests/python/test_quant_editor_support.py tests/test_mypy.py tests/test_pyright.py -q
 ```
 
 These checks require the `test,typing` extras and Node 24 as described there.
@@ -783,9 +801,10 @@ These rules apply to new and changed code; the listed exceptions predate them.
   Existing public `*_impl` namespaces are compatibility names, not a pattern.
 - **Errors.** New messages read `"<Component> <text>"` with the component `HNSW`,
   `IVF`, `QuantizedGraph`, `PiPNN`, `FastScan` or `FastScan high-accuracy`, no colon
-  after it and no trailing period. Core keeps identifier-first messages. Python binding
-  argument errors start with the lowercase parameter name and state errors with the
-  wrapper class name. Some older index-file messages (for example `Invalid padded
+  after it and no trailing period. Core keeps identifier-first messages. The supported
+  `IvfIndex`, `HnswIndex` and `SymqgIndex` classes raise the messages Python shows:
+  most argument errors start with the lowercase parameter name and state errors with
+  the class name. Some older index-file messages (for example `Invalid padded
   dimension in IVF index file`) are asserted by tests and keep their wording; changing
   a Python-visible message is a behavior change. Allocation failure throws
   `std::bad_alloc`.
@@ -811,7 +830,8 @@ Python is a MODULE extension with build-tree alias `rabitqlib::python` and impor
 
 The 0.7.0 refactor removed `rabitqlib::rabitqlib`, `defines.hpp`, `quantization/`,
 `utils/rotator.hpp` and generic `index/{query,lut,estimator}.hpp` forwarders. Migrate
-consumers to canonical `core/`, `fastscan/` and `index/{ivf,hnsw,symqg}/` headers;
+consumers to canonical `core/` and `fastscan/` headers and, for indexes, to the supported
+`index/{ivf,hnsw,symqg}_index.hpp` classes ([Change an index API](#change-an-index-api));
 do not restore umbrellas/forwarders to bypass migration failures. See the
 [migration guide](docs/modular_migration.md).
 
@@ -887,6 +907,9 @@ The library supports `METRIC_L2` and `METRIC_IP`. Some internal helpers represen
 distance as `1 - dot_product`, and estimator correction terms differ between metrics.
 `METRIC_COSINE` exists only at the ANN index boundary: an index stores `METRIC_IP` internally,
 normalizes inputs where they enter (`src/index/cosine.hpp`), and records the metric in its file.
+The normalization arithmetic and which centroids are normalized are part of the file format
+([Metrics](formats.md#metrics)); keep `cosine.hpp` and the `given` path of `set_centroids`
+consistent with it.
 Quantizers, FastScan, clustering and the IVF initializers keep rejecting it. Do not reuse
 an L2 norm/correction formula for IP merely because both paths compile. Test ordering and returned
 distance semantics separately.
@@ -894,7 +917,8 @@ distance semantics separately.
 ### Search-buffer ID marker
 
 `SearchBuffer` uses the top bit of `PID` as an internal checked marker. Real point IDs therefore
-must remain below `buffer::kSearchBufferMaxPointCount`. Do not change `PID`, sentinel values, or
+must remain below `buffer::kSearchBufferMaxPointCount`. An empty result slot holds `kPidMax`
+inside; the supported index classes return it as `kNoId` (-1). Do not change `PID`, sentinel values, or
 checked-bit manipulation independently.
 
 ### Ownership during construction
@@ -1161,7 +1185,7 @@ These checks are currently manual and are not enforced by release CI.
 
 | Downstream | Minimum checks |
 | --- | --- |
-| [txtai](docs/integrations/txtai.md) | Through its `rabitq` adapter: IVF/HNSW build, query and save/load; IVF append/delete. |
+| [txtai](docs/integrations/txtai.md) | Through its `rabitq` adapter (0.9 needs txtai 9.15.0 or later): IVF/HNSW build, query and save/load; IVF append/delete. |
 | [zvec](docs/integrations/zvec.md) | Build its RaBitQ components with candidate core/FastScan; exercise IVF/HNSW build, query and save/load. |
 
 Use small, fixed inputs to check IDs, score conventions, recall against exact

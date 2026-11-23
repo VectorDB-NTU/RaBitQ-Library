@@ -102,7 +102,7 @@ as the native-optimization setting below. Release CI uses native `macos-15` runn
 builds CPython 3.11–3.14 ARM64 wheels (3.11 and 3.14 on pull requests), bundles
 OpenMP with delocate, then installs and
 runs the core Python suite for each wheel (excluding the separately tested FAISS
-comparison and C++ clustering examples). The minimum wheel OS target is macOS 14.
+comparison, C++ clustering examples and benchmark-protocol tests). The minimum wheel OS target is macOS 14.
 The wheel build compiles Homebrew's OpenMP source with that deployment target via
 `scripts/build-macos-openmp.sh`; the runner's prebuilt OpenMP bottle may require a
 newer macOS. The installed-wheel check verifies both the extension and bundled
@@ -285,13 +285,14 @@ See [the fixture policy](fixtures/core_api_v1/README.md).
 
 ## Test structure
 
-- `unit/`: C++ index, quantization, FastScan, and utility tests
+- `unit/`: C++ index, quantization, FastScan, clustering and utility tests
 - `common/`: shared C++ test utilities; use `rabitq_test::TempFile` for files a test
   writes so they are removed even after a failed assertion
 - `allocation/`, `dispatch/`, `failures/`, `integration/`: separate C++ executables for
   no-allocation, dispatch/static-initialization, allocation-failure and CLI-index checks
 - `fixtures/`: frozen core API and persistence compatibility fixtures
-- `python/`: Python binding tests and persistence fixtures
+- `python/`: Python binding tests and persistence fixtures; `python/typing/` holds the
+  public-API file the mypy and Pyright tests check
 - `test_mypy.py`, `test_pyright.py`: static type checks of the installed package
 - `consumer/`: installed CMake package test
 - `core_consumer/`: external core/FastScan consumer runner and the core static-initialization test
@@ -312,8 +313,9 @@ both metrics, but do not cross every width with every original dimension and ini
 `test_portable_indexes.py` separates supported storage from representative padded-domain
 boundaries. IVF-RaBitQ mutation/batching/routing matrices use sign-only, extra-bit and raw-vector
 storage; full width coverage remains in the corresponding C++ reference tests. The
-SymphonyQG batch test checks both Python names on one built index per storage/metric pair,
-including strided/empty queries and bitwise distance equality.
+SymphonyQG batch test compares single-query and batched `search` across a save/load round
+trip on one build per storage/metric pair, including strided/empty queries and bitwise
+distance equality.
 
 Do not trim frozen compatibility fixtures, independent numerical oracles, failure
 injection or concurrency tests just because their inputs resemble another test's inputs.
@@ -339,14 +341,15 @@ serial and OpenMP encoding, including the public FastScan batch entry points.
 ## Python editor support
 
 Wheels include type stubs and `py.typed`; select the installed environment in your editor.
-Keep [public declarations](../python_bindings/__init__.pyi) and runtime docstrings in sync,
+Keep [public declarations](../python_bindings/__init__.pyi) (and
+[`quant.pyi`](../python_bindings/quant.pyi) for `rabitqlib.quant`) and runtime docstrings in sync,
 following the [numpydoc style](https://numpydoc.readthedocs.io/en/latest/format.html).
 Array shapes and value ranges remain runtime checks.
 
 After rebuilding and installing with the `test` extra, run:
 
 ```bash
-python -m pytest tests/python/test_editor_support.py tests/test_mypy.py -q
+python -m pytest tests/python/test_editor_support.py tests/python/test_quant_editor_support.py tests/test_mypy.py -q
 ```
 
 The suite checks installed declarations, signatures, documentation, examples, and

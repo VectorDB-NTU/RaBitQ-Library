@@ -70,6 +70,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
+In Windows PowerShell, run `python -m venv .venv` and `.venv\Scripts\Activate.ps1`.
+
 Use that same environment for installs, linting, and tests.
 
 ### Python changes
