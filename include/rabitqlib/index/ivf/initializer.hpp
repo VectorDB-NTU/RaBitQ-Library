@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/candidate.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/ivf/detail/hnsw_sidecar.hpp"
@@ -112,7 +113,8 @@ class FlatInitializer : public Initializer {
         std::partial_sort(
             centroid_candidates.begin(),
             centroid_candidates.begin() + static_cast<std::ptrdiff_t>(num_probes),
-            centroid_candidates.end()
+            centroid_candidates.end(),
+            index_detail::CandidateDistanceIdLess{}
         );
 
         candidates.resize(num_probes);

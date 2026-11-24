@@ -109,6 +109,39 @@ def test_batch_search_matches_individual_queries(bits, metric):
     assert np.all(np.isinf(distances))
 
 
+@pytest.mark.parametrize("bits", [1, 5, 32])
+@pytest.mark.parametrize("metric", ["l2", "ip", "cosine"])
+def test_flat_batch_routing_across_tiles(bits, metric, tmp_path):
+    rng = np.random.default_rng(218)
+    data = rng.standard_normal((577, 65)).astype(np.float32)
+    centroids = data[:513].copy()
+    centroids[1::2] = centroids[0]
+    labels = np.arange(len(data), dtype=np.uint32) % 512
+    queries = rng.standard_normal((513, 65)).astype(np.float32)
+    queries[0] = 0
+    index = _built(data, centroids, labels, nbits=bits, metric=metric)
+    index.remove(np.array([0, 17, 255, 511], dtype=np.uint32))
+    path = tmp_path / "flat-batch.index"
+    index.save(path)
+    index = IvfIndex.load(path)
+    for nprobe in [17, 512, 999]:
+        k = len(data) + 3 if nprobe == 17 else 10
+        expected = [index.search(q[None, :], k=k, nprobe=nprobe) for q in queries]
+        expected_ids = np.concatenate([result[0] for result in expected])
+        expected_distances = np.concatenate([result[1] for result in expected])
+        for rows in [8, 64, 129, 513]:
+            for threads in [1, 4]:
+                ids, distances = index.search(
+                    queries[:rows], k=k, nprobe=nprobe, num_threads=threads
+                )
+                np.testing.assert_array_equal(ids, expected_ids[:rows])
+                np.testing.assert_array_equal(distances, expected_distances[:rows])
+    index.remove(np.arange(len(data), dtype=np.uint32))
+    ids, distances = index.search(queries, k=10, nprobe=17, num_threads=4)
+    assert np.all(ids == -1)
+    assert np.all(np.isinf(distances))
+
+
 def test_unfilled_results_use_sentinels():
     data = np.zeros((4, DIM), dtype=np.float32)
     data[1:] = 100.0

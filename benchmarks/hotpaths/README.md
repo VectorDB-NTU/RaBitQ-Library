@@ -63,6 +63,25 @@ the deterministic input. Original production indexes are not benchmark fixtures.
 
 ## Timing and correctness contract
 
+`rabitq_ivf_search_hotpaths` measures batched search against a previously built
+L2 IVF index and reports Recall@10 using external `.fvecs` queries and `.ivecs`
+ground truth (the first ten ground-truth IDs per query). Build the index once and
+use the same file in both revisions. For example, with a 4096-cluster GIST1M index:
+
+```bash
+build/benchmarks/hotpaths/rabitq_ivf_search_hotpaths \
+  gist.index gist_query.fvecs gist_groundtruth.ivecs 64 64 1 5 1000
+```
+
+The last five arguments are batch size, `nprobe`, threads, repetitions, and maximum
+query count. Sweep batch sizes 1, 8, 64 and 1000, and include `nprobe` near the
+cluster count. Loading, warmup, output hashing and recall calculation are outside
+timing; rotation, centroid routing and scanning are included. Use `compare.py`
+below to alternate revisions and check matching result fingerprints. Record the
+index's training settings, storage bits and routing initializer alongside the
+dataset, CPU, compiler, ISA and thread settings. This benchmark uses external
+data and is not registered as a unit test.
+
 - IVF add verifies the expected point counts and samples new points' self-neighbors
   outside the timed call, in addition to comparing output hashes across repetitions.
 - Inputs use an LCG with seed 42 (query/centroid seed 91 where applicable; IVF add uses

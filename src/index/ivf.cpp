@@ -46,6 +46,7 @@
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/training.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -1537,11 +1538,33 @@ void IVF::search(
     std::vector<AnnCandidate<float>> centroid_candidates(nprobe);
     initializer_->centroids_distances(rotated_query.data(), nprobe, centroid_candidates);
 
+    search_preassigned(
+        query,
+        rotated_query.data(),
+        centroid_candidates.data(),
+        k,
+        nprobe,
+        result_ids,
+        distances,
+        use_hacc
+    );
+}
+
+inline void IVF::search_preassigned(
+    const float* query,
+    const float* rotated_query,
+    const AnnCandidate<float>* centroid_candidates,
+    size_t k,
+    size_t nprobe,
+    PID* result_ids,
+    float* distances,
+    bool use_hacc
+) const {
     // The pool never needs more slots than points; the rest of k is padded.
     buffer::SearchBuffer result_pool(std::min(k, max_elements_));
 
     SplitBatchQuery<float> query_wrapper(
-        rotated_query.data(), padded_dim_, ex_bits_, metric_type_, use_hacc
+        rotated_query, padded_dim_, ex_bits_, metric_type_, use_hacc
     );
 
     for (size_t i = 0; i < nprobe; ++i) {
@@ -1553,10 +1576,10 @@ void IVF::search(
             query_wrapper.set_g_add(dist);
         } else {
             const float residual_norm = std::sqrt(euclidean_sqr(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             ));
             auto query_centroid_ip = dot_product<float>(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             );
             query_wrapper.set_g_add(residual_norm, query_centroid_ip);
         }
@@ -1598,6 +1621,103 @@ void IVF::search_batch(
         num_queries == 1 || num_threads == 1
             ? 1
             : std::min(resolve_num_threads(num_threads), num_queries);
+    // GEMM needs enough rows to amortize packing and the per-call norms. Near
+    // all-cluster scans cannot prune enough candidates to recover that cost.
+    if (initializer_type_ == InitializerType::Flat && num_clusters_ >= 256 &&
+        num_queries / num_workers >= 32 && nprobe <= num_clusters_ / 4) {
+        size_t max_query_block = 64;
+        if (num_workers == 1 && cpu::has_neon()) {
+            // Larger serial tiles amortize Eigen packing on NEON. Bound each
+            // rotated/candidate buffer, retaining the existing 64-row minimum
+            // for wide inputs. Parallel workers keep small scheduling blocks.
+            constexpr size_t kBufferBudget = size_t{2} << 20;
+            max_query_block = std::max(
+                max_query_block,
+                std::min(
+                    {size_t{512},
+                     kBufferBudget / sizeof(float) / padded_dim_,
+                     kBufferBudget / sizeof(AnnCandidate<float>) / nprobe}
+                )
+            );
+        }
+        const size_t query_block =
+            std::min(max_query_block, 1 + (num_queries - 1) / num_workers);
+        const size_t blocks = 1 + (num_queries - 1) / query_block;
+        const size_t workers = std::min(num_workers, blocks);
+        struct QueryScratch {
+            std::vector<float> normalized;
+            std::vector<float> rotated;
+            std::vector<AnnCandidate<float>> candidates;
+            clustering::detail::TopNAssignmentScratch assignment;
+        };
+        std::vector<QueryScratch> scratch(workers);
+        for (auto& worker : scratch) {
+            if (cosine_) {
+                worker.normalized.resize(query_block * dim_);
+            }
+            worker.rotated.resize(query_block * padded_dim_);
+            worker.candidates.resize(query_block * nprobe);
+        }
+        const float* centroids = initializer_->centroid(0);
+        std::vector<double> centroid_norms(num_clusters_);
+        index_detail::omp_for_dynamic(
+            num_clusters_, workers, [&](size_t cluster, size_t /*thread*/) {
+                centroid_norms[cluster] = clustering::detail::l2norm_sqr_f64(
+                    centroids + cluster * padded_dim_, padded_dim_
+                );
+            }
+        );
+        index_detail::omp_for_dynamic(blocks, workers, [&](size_t block, size_t thread) {
+            // omp_for_dynamic creates a task even with one worker, so this ICV
+            // remains local and cannot change the caller's subsequent team size.
+            omp_set_num_threads(1);
+            auto& worker = scratch[thread];
+            const size_t first = block * query_block;
+            const size_t rows = std::min(query_block, num_queries - first);
+            const float* block_queries = queries + first * dim_;
+            if (cosine_) {
+                for (size_t row = 0; row < rows; ++row) {
+                    index_detail::normalize_vector(
+                        block_queries + row * dim_,
+                        worker.normalized.data() + row * dim_,
+                        dim_
+                    );
+                }
+                block_queries = worker.normalized.data();
+            }
+            for (size_t row = 0; row < rows; ++row) {
+                rotator_->rotate(
+                    block_queries + row * dim_, worker.rotated.data() + row * padded_dim_
+                );
+            }
+            clustering::detail::exact_assign_topn(
+                worker.rotated.data(),
+                centroids,
+                rows,
+                padded_dim_,
+                num_clusters_,
+                nprobe,
+                metric_type_ == METRIC_IP,
+                centroid_norms.data(),
+                worker.candidates.data(),
+                worker.assignment
+            );
+            for (size_t row = 0; row < rows; ++row) {
+                const size_t i = first + row;
+                search_preassigned(
+                    block_queries + row * dim_,
+                    worker.rotated.data() + row * padded_dim_,
+                    worker.candidates.data() + row * nprobe,
+                    k,
+                    nprobe,
+                    result_ids + i * k,
+                    distances == nullptr ? nullptr : distances + i * k,
+                    hacc
+                );
+            }
+        });
+        return;
+    }
     if (num_workers == 1) {
         for (size_t i = 0; i < num_queries; ++i) {
             search(
