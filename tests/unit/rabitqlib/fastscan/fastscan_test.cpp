@@ -249,10 +249,10 @@ TEST(FastScanPackingTest, UnpackInvertsPackIncludingTailsAndDoesNotOverrun) {
     }
 }
 
-constexpr size_t kMaxDim = 768;
+constexpr size_t kMaxDim = 1040;
 
 TEST(FastScanPackingTest, AccumulatesReferenceLutValuesOnEverySupportedBackend) {
-    for (size_t dim : {16U, 64U, 128U, 768U}) {
+    for (size_t dim : {16U, 64U, 128U, 768U, 960U, 1024U, 1040U}) {
         for (size_t num : {1U, 17U, 31U, 32U}) {
             SCOPED_TRACE(::testing::Message() << "dim=" << dim << " num=" << num);
             std::vector<uint8_t> input(num * dim / 8);
