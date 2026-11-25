@@ -24,6 +24,13 @@ if(RABITQ_BUILD_INDEX)
 
     rabitq_hotpath_target(ivf_add index)
     rabitq_hotpath_target(ivf_search index)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME IvfSearchHotpathReport COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/test_ivf_search.py"
+            "$<TARGET_FILE:rabitq_ivf_search_hotpaths>"
+            "${PROJECT_SOURCE_DIR}/tests/fixtures/persistence")
+    endif()
     add_test(NAME IvfAddHotpathSingle COMMAND rabitq_ivf_add_hotpaths
         "${CMAKE_CURRENT_BINARY_DIR}/ivf-add-smoke-single" 64 8 256 16 1 single)
     add_test(NAME IvfAddHotpathRouted COMMAND rabitq_ivf_add_hotpaths

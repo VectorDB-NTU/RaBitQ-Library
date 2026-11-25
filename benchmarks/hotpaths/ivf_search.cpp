@@ -10,11 +10,24 @@
 
 #include "common.hpp"
 #include "rabitqlib/core/detail/eigen.hpp"
+#include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/ivf/ivf.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/io.hpp"
 
 namespace {
+const char* metric_name(rabitqlib::MetricType metric) {
+    switch (metric) {
+        case rabitqlib::METRIC_L2:
+            return "L2";
+        case rabitqlib::METRIC_IP:
+            return "IP";
+        case rabitqlib::METRIC_COSINE:
+            return "cosine";
+    }
+    throw std::invalid_argument("Unknown index metric");
+}
+
 void run(int argc, char** argv) {
     if (argc != 9) {
         throw std::invalid_argument(
@@ -46,7 +59,9 @@ void run(int argc, char** argv) {
     std::cout << "# index=" << argv[1] << " queries=" << argv[2]
               << " clusters=" << index.num_clusters() << " batch=" << batch
               << " nprobe=" << nprobe << '\n';
-    bench::metadata(index.dimension(), rows, threads);
+    bench::metadata(
+        index.dimension(), rows, threads, index.seed(), metric_name(index.metric_type())
+    );
     const auto work = [&] {
         for (size_t first = 0; first < rows; first += batch) {
             index.search_batch(
@@ -68,15 +83,25 @@ void run(int argc, char** argv) {
             bench::hash(ids.data(), ids.size() * sizeof(rabitqlib::PID))
         );
     });
-    size_t hits = 0;
+    double recall_sum = 0.0;
     for (size_t row = 0; row < rows; ++row) {
         const auto* expected = truth.data() + row * static_cast<size_t>(truth.cols());
+        const auto* found = ids.data() + row * k;
+        size_t hits = 0, valid = 0;
         for (size_t i = 0; i < k; ++i) {
-            hits += std::find(expected, expected + k, ids[row * k + i]) != expected + k;
+            if (expected[i] != rabitqlib::kPidMax) {
+                ++valid;
+                hits += std::find(found, found + k, expected[i]) != found + k;
+            }
         }
+        if (valid == 0) {
+            throw std::invalid_argument(
+                "Recall requires a valid ground-truth ID for every query"
+            );
+        }
+        recall_sum += static_cast<double>(hits) / static_cast<double>(valid);
     }
-    std::cout << "# recall_at_10="
-              << static_cast<double>(hits) / static_cast<double>(rows * k) << '\n';
+    std::cout << "# recall_at_10=" << recall_sum / static_cast<double>(rows) << '\n';
 }
 }  // namespace
 

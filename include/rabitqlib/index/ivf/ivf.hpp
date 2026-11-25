@@ -177,6 +177,15 @@ class IVF {
 
     void swap(IVF& other) noexcept;
 
+    void search_validated(
+        const float* query,
+        size_t k,
+        size_t nprobe,
+        PID* result_ids,
+        float* distances,
+        bool use_hacc
+    ) const;
+
     inline void search_preassigned(
         const float* query,
         const float* rotated_query,

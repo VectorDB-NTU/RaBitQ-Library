@@ -8,7 +8,9 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <vector>
 
@@ -54,9 +56,17 @@ inline uint64_t hash(
     return seed;
 }
 
-inline void metadata(size_t dim, size_t rows, size_t threads) {
+inline void metadata(
+    size_t dim,
+    size_t rows,
+    size_t threads,
+    std::optional<uint32_t> seed = 42,
+    const char* metric = "L2"
+) {
     std::cout << std::setprecision(12) << "# dim=" << dim << " rows=" << rows
-              << " threads=" << threads << " seed=42 metric=L2 openmp=" << RABITQ_USE_OPENMP
+              << " threads=" << threads
+              << " seed=" << (seed ? std::to_string(*seed) : "unknown")
+              << " metric=" << metric << " openmp=" << RABITQ_USE_OPENMP
               << " avx2=" << rabitqlib::cpu::has_avx2()
               << " avx512=" << rabitqlib::cpu::has_avx512_core()
               << " neon=" << rabitqlib::cpu::has_neon() << '\n';

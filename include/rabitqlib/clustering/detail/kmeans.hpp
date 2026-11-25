@@ -126,14 +126,14 @@ inline void exact_assign_topn(
     }
 
     // For validated d <= 65536, this conservatively covers the GEMM dot product,
-    // float distance accumulation, and rounding of sqrt / (1 - dot). The floor
-    // includes float epsilon because IP's subtraction can round near one even
-    // when both vectors have tiny norms. Widened arithmetic is screening only.
+    // float distance accumulation, and sqrt rounding when the cutoff is squared.
+    // Both metrics need an underflow allowance. Only IP subtracts the dot from
+    // one and can incur absolute rounding error near one even for tiny norms.
     const double error_scale = 8.0 * static_cast<double>(d) *
                                static_cast<double>(std::numeric_limits<float>::epsilon());
     const double error_floor =
         8.0 * static_cast<double>(d) * std::numeric_limits<float>::min() +
-        8.0 * std::numeric_limits<float>::epsilon();
+        (spherical ? 8.0 * std::numeric_limits<float>::epsilon() : 0.0);
     for (size_t first = nprobe; first < k; first += kCentroidBlock) {
         const size_t cols = std::min(kCentroidBlock, k - first);
         if (screen) {

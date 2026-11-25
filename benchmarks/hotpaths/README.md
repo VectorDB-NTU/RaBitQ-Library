@@ -64,8 +64,12 @@ the deterministic input. Original production indexes are not benchmark fixtures.
 ## Timing and correctness contract
 
 `rabitq_ivf_search_hotpaths` measures batched search against a previously built
-L2 IVF index and reports Recall@10 using external `.fvecs` queries and `.ivecs`
-ground truth (the first ten ground-truth IDs per query). Build the index once and
+IVF index and reports Recall@10 using external `.fvecs` queries and `.ivecs`
+ground truth for the index metric. For each query, it counts matches among the
+first ten ground-truth IDs, ignoring `-1` padding, divides by the number of valid
+IDs, and averages across queries. Each row must have at least one valid ID.
+The report includes the stored metric and rotation seed (`unknown` for older
+indexes without a saved seed). Build the index once and
 use the same file in both revisions. For example, with a 4096-cluster GIST1M index:
 
 ```bash
@@ -79,8 +83,8 @@ cluster count. Loading, warmup, output hashing and recall calculation are outsid
 timing; rotation, centroid routing and scanning are included. Use `compare.py`
 below to alternate revisions and check matching result fingerprints. Record the
 index's training settings, storage bits and routing initializer alongside the
-dataset, CPU, compiler, ISA and thread settings. This benchmark uses external
-data and is not registered as a unit test.
+dataset, CPU, compiler, ISA and thread settings. The timing sweep uses external
+data. When Python is available, CTest checks the report with small saved indexes.
 
 - IVF add verifies the expected point counts and samples new points' self-neighbors
   outside the timed call, in addition to comparing output hashes across repetitions.
