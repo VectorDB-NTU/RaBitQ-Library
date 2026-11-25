@@ -46,6 +46,7 @@
 #include "rabitqlib/index/ivf/initializer.hpp"
 #include "rabitqlib/index/training.hpp"
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/cpu_features.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
 #include "rabitqlib/utils/path.hpp"
 #include "rabitqlib/utils/space.hpp"
@@ -1522,6 +1523,19 @@ void IVF::search(
 ) const {
     validate_search(query, k, nprobe, result_ids);
     check_coordinates(query, dim_, dim_, "IVF search query");
+    search_validated(
+        query, k, std::min(nprobe, num_clusters_), result_ids, distances, use_hacc
+    );
+}
+
+void IVF::search_validated(
+    const float* query,
+    size_t k,
+    size_t nprobe,
+    PID* result_ids,
+    float* distances,
+    bool use_hacc
+) const {
     std::vector<float> normalized_query;
     if (cosine_) {
         normalized_query.resize(dim_);
@@ -1529,7 +1543,6 @@ void IVF::search(
         query = normalized_query.data();
     }
 
-    nprobe = std::min(nprobe, num_clusters_);  // Probe at most every cluster
     std::vector<float> rotated_query(padded_dim_);
     rotator_->rotate(query, rotated_query.data());
 
@@ -1537,11 +1550,33 @@ void IVF::search(
     std::vector<AnnCandidate<float>> centroid_candidates(nprobe);
     initializer_->centroids_distances(rotated_query.data(), nprobe, centroid_candidates);
 
+    search_preassigned(
+        query,
+        rotated_query.data(),
+        centroid_candidates.data(),
+        k,
+        nprobe,
+        result_ids,
+        distances,
+        use_hacc
+    );
+}
+
+inline void IVF::search_preassigned(
+    const float* query,
+    const float* rotated_query,
+    const AnnCandidate<float>* centroid_candidates,
+    size_t k,
+    size_t nprobe,
+    PID* result_ids,
+    float* distances,
+    bool use_hacc
+) const {
     // The pool never needs more slots than points; the rest of k is padded.
     buffer::SearchBuffer result_pool(std::min(k, max_elements_));
 
     SplitBatchQuery<float> query_wrapper(
-        rotated_query.data(), padded_dim_, ex_bits_, metric_type_, use_hacc
+        rotated_query, padded_dim_, ex_bits_, metric_type_, use_hacc
     );
 
     for (size_t i = 0; i < nprobe; ++i) {
@@ -1553,10 +1588,10 @@ void IVF::search(
             query_wrapper.set_g_add(dist);
         } else {
             const float residual_norm = std::sqrt(euclidean_sqr(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             ));
             auto query_centroid_ip = dot_product<float>(
-                rotated_query.data(), initializer_->centroid(cluster_id), padded_dim_
+                rotated_query, initializer_->centroid(cluster_id), padded_dim_
             );
             query_wrapper.set_g_add(residual_norm, query_centroid_ip);
         }
@@ -1594,13 +1629,128 @@ void IVF::search_batch(
     check_coordinates(queries, num_queries * dim_, dim_, "IVF search queries");
     nprobe = std::min(nprobe, num_clusters_);
     const bool hacc = use_hacc.value_or(!raw_reranking_ && ex_bits_ > 2);
-    const size_t num_workers =
-        num_queries == 1 || num_threads == 1
-            ? 1
-            : std::min(resolve_num_threads(num_threads), num_queries);
+    if (num_queries == 1) {
+        search_validated(queries, k, nprobe, result_ids, distances, hacc);
+        return;
+    }
+    const size_t num_workers = std::min(resolve_num_threads(num_threads), num_queries);
+    // GEMM needs enough rows to amortize packing and the per-call norms. Near
+    // all-cluster scans cannot prune enough candidates to recover that cost.
+    if (initializer_type_ == InitializerType::Flat && num_clusters_ >= 256 &&
+        num_queries / num_workers >= 32 && nprobe <= num_clusters_ / 4) {
+        size_t max_query_block = 64;
+        if (num_workers == 1 && cpu::has_neon()) {
+            // Larger serial tiles amortize Eigen packing on NEON. Bound each
+            // rotated/candidate buffer, retaining the existing 64-row minimum
+            // for wide inputs. Parallel workers keep small scheduling blocks.
+            constexpr size_t kBufferBudget = size_t{2} << 20;
+            max_query_block = std::max(
+                max_query_block,
+                std::min(
+                    {size_t{512},
+                     kBufferBudget / sizeof(float) / padded_dim_,
+                     kBufferBudget / sizeof(AnnCandidate<float>) / nprobe}
+                )
+            );
+        }
+        const size_t query_block =
+            std::min(max_query_block, 1 + (num_queries - 1) / num_workers);
+        const size_t blocks = 1 + (num_queries - 1) / query_block;
+        const size_t workers = std::min(num_workers, blocks);
+        struct QueryScratch {
+            std::vector<float> normalized;
+            std::vector<float> rotated;
+            std::vector<AnnCandidate<float>> candidates;
+            detail::TopNAssignmentScratch assignment;
+        };
+        std::vector<QueryScratch> scratch(workers);
+        for (auto& worker : scratch) {
+            if (cosine_) {
+                worker.normalized.resize(query_block * dim_);
+            }
+            worker.rotated.resize(query_block * padded_dim_);
+            worker.candidates.resize(query_block * nprobe);
+        }
+        const float* centroids = initializer_->centroid(0);
+        std::vector<double> centroid_norms(num_clusters_);
+#pragma omp parallel for num_threads(workers) schedule(static)
+        for (std::ptrdiff_t cluster = 0;
+             cluster < static_cast<std::ptrdiff_t>(num_clusters_);
+             ++cluster) {
+            const auto id = static_cast<size_t>(cluster);
+            centroid_norms[id] = clustering::detail::l2norm_sqr_f64(
+                centroids + id * padded_dim_, padded_dim_
+            );
+        }
+        // Route at most one tile per worker before sharing all of its rows for
+        // scanning. Queries in the same tile can hit very different cluster sizes.
+        for (size_t first_block = 0; first_block < blocks; first_block += workers) {
+            const size_t tiles = std::min(workers, blocks - first_block);
+            const size_t first_query = first_block * query_block;
+            const size_t wave_rows =
+                std::min(tiles * query_block, num_queries - first_query);
+            index_detail::omp_for_dynamic(
+                tiles, workers, [&](size_t slot, size_t /*thread*/) {
+                    // The implicit OpenMP task keeps this setting local, even with one
+                    // worker.
+                    omp_set_num_threads(1);
+                    auto& tile = scratch[slot];
+                    const size_t first = first_query + slot * query_block;
+                    const size_t rows = std::min(query_block, num_queries - first);
+                    const float* block_queries = queries + first * dim_;
+                    if (cosine_) {
+                        for (size_t row = 0; row < rows; ++row) {
+                            index_detail::normalize_vector(
+                                block_queries + row * dim_,
+                                tile.normalized.data() + row * dim_,
+                                dim_
+                            );
+                        }
+                        block_queries = tile.normalized.data();
+                    }
+                    for (size_t row = 0; row < rows; ++row) {
+                        rotator_->rotate(
+                            block_queries + row * dim_,
+                            tile.rotated.data() + row * padded_dim_
+                        );
+                    }
+                    detail::exact_assign_topn(
+                        tile.rotated.data(),
+                        centroids,
+                        rows,
+                        padded_dim_,
+                        num_clusters_,
+                        nprobe,
+                        metric_type_ == METRIC_IP,
+                        centroid_norms.data(),
+                        tile.candidates.data(),
+                        tile.assignment
+                    );
+                }
+            );
+            index_detail::omp_for_dynamic(
+                wave_rows, workers, [&](size_t offset, size_t /*thread*/) {
+                    const auto& tile = scratch[offset / query_block];
+                    const size_t row = offset % query_block;
+                    const size_t i = first_query + offset;
+                    search_preassigned(
+                        cosine_ ? tile.normalized.data() + row * dim_ : queries + i * dim_,
+                        tile.rotated.data() + row * padded_dim_,
+                        tile.candidates.data() + row * nprobe,
+                        k,
+                        nprobe,
+                        result_ids + i * k,
+                        distances == nullptr ? nullptr : distances + i * k,
+                        hacc
+                    );
+                }
+            );
+        }
+        return;
+    }
     if (num_workers == 1) {
         for (size_t i = 0; i < num_queries; ++i) {
-            search(
+            search_validated(
                 queries + i * dim_,
                 k,
                 nprobe,
@@ -1613,7 +1763,7 @@ void IVF::search_batch(
     }
     index_detail::omp_for_dynamic(
         num_queries, num_workers, [&](size_t i, size_t /*thread*/) {
-            search(
+            search_validated(
                 queries + i * dim_,
                 k,
                 nprobe,
@@ -1731,25 +1881,26 @@ inline void IVF::scan_one_batch(
 
     // Refine candidates passing the probabilistic one-bit filter. Quantized storage
     // reuses ip_x0_qr with the extra bits; raw storage scores the original vector.
+    const size_t stride = rerank_vector_bytes();
     for (size_t i = 0; i < batch_size; ++i) {
         float lower_bound = lower_bounds[i];
         if (lower_bound < dist_k) {
             PID id = ids[i];
+            const char* record = rerank_data + i * stride;
             float refined_distance;
             if (raw_reranking_) {
-                const auto* vector = reinterpret_cast<const float*>(rerank_data);
+                const auto* vector = reinterpret_cast<const float*>(record);
                 refined_distance = metric_type_ == METRIC_L2
                                        ? euclidean_sqr(query, vector, dim_)
                                        : dot_product_dis(query, vector, dim_);
             } else {
                 refined_distance = split_distance_boosting(
-                    rerank_data, ip_func_, query_wrapper, padded_dim_, ex_bits_, ip_x0_qr[i]
+                    record, ip_func_, query_wrapper, padded_dim_, ex_bits_, ip_x0_qr[i]
                 );
             }
             result_pool.insert(id, refined_distance);
             dist_k = result_pool.top_dist();
         }
-        rerank_data += rerank_vector_bytes();
     }
 }
 

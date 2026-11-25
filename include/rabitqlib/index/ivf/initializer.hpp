@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "rabitqlib/core/metric.hpp"
+#include "rabitqlib/index/detail/candidate.hpp"
 #include "rabitqlib/index/detail/parallel_for.hpp"
 #include "rabitqlib/index/format_error.hpp"
 #include "rabitqlib/index/ivf/detail/hnsw_sidecar.hpp"
@@ -100,23 +101,44 @@ class FlatInitializer : public Initializer {
     void centroids_distances(
         const float* query, size_t nprobe, std::vector<AnnCandidate<float>>& candidates
     ) const override {
-        std::vector<AnnCandidate<float>> centroid_candidates(num_cluster_);
-        for (PID i = 0; i < num_cluster_; ++i) {
-            centroid_candidates[i].id = i;
-            centroid_candidates[i].distance =
-                metric_type_ == METRIC_IP
-                    ? dot_product_dis(query, centroid(i), dim_)
-                    : std::sqrt(euclidean_sqr(query, centroid(i), dim_));
-        }
         const size_t num_probes = std::min(nprobe, num_cluster_);
-        std::partial_sort(
-            centroid_candidates.begin(),
-            centroid_candidates.begin() + static_cast<std::ptrdiff_t>(num_probes),
-            centroid_candidates.end()
-        );
-
         candidates.resize(num_probes);
-        std::copy_n(centroid_candidates.begin(), num_probes, candidates.begin());
+        if (num_probes == 0) {
+            return;
+        }
+        const bool l2 = metric_type_ == METRIC_L2;
+        const auto score = [&](PID id) {
+            return l2 ? euclidean_sqr(query, centroid(id), dim_)
+                      : dot_product_dis(query, centroid(id), dim_);
+        };
+        for (PID id = 0; id < num_probes; ++id) {
+            const float value = score(id);
+            candidates[id] = AnnCandidate<float>(id, l2 ? std::sqrt(value) : value);
+        }
+        const index_detail::CandidateDistanceIdLess less;
+        std::make_heap(candidates.begin(), candidates.end(), less);
+        // The square of a float cutoff is exact in double. Beyond it an L2
+        // candidate cannot improve the returned float distance, even after sqrt.
+        const auto cutoff = [&] {
+            const double worst = candidates.front().distance;
+            return l2 ? worst * worst : worst;
+        };
+        double worst_score = cutoff();
+        for (PID id = static_cast<PID>(num_probes); id < num_cluster_; ++id) {
+            const float value = score(id);
+            if (value >= worst_score) {
+                continue;
+            }
+            const float dist = l2 ? std::sqrt(value) : value;
+            // IDs increase, so ties after sqrt cannot displace the heap root.
+            if (dist < candidates.front().distance) {
+                std::pop_heap(candidates.begin(), candidates.end(), less);
+                candidates.back() = AnnCandidate<float>(id, dist);
+                std::push_heap(candidates.begin(), candidates.end(), less);
+                worst_score = cutoff();
+            }
+        }
+        std::sort_heap(candidates.begin(), candidates.end(), less);
     }
 
     // The flat initializer stores only its centroids.
