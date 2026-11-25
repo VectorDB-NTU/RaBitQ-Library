@@ -22,7 +22,6 @@
 
 #include "rabitqlib/core/detail/simd/matrix_dispatch.hpp"
 #include "rabitqlib/core/rotator.hpp"
-#include "rabitqlib/index/detail/candidate.hpp"
 #include "rabitqlib/index/detail/parallel_exception.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/cpu_features.hpp"
@@ -74,104 +73,6 @@ namespace detail {
         result += difference * difference;
     }
     return result;
-}
-
-struct TopNAssignmentScratch {
-    std::vector<float> products;
-    std::vector<double> point_norms;
-};
-
-// Inputs are validated, contiguous rows in the same padded/rotated domain.
-// centroid_norms contains k double-precision squared norms, computed once per
-// batch. The caller bounds n and reuses scratch across blocks on each worker.
-// Run inside an OpenMP task with omp_set_num_threads(1), even for one worker,
-// so Eigen cannot start a nested team or change the caller's thread settings.
-// Unlike exact_assign's clustering objective, return the existing float metric
-// (sqrt for L2) and break ties by ID, exactly as FlatInitializer does.
-inline void exact_assign_topn(
-    const float* x,
-    const float* centroids,
-    size_t n,
-    size_t d,
-    size_t k,
-    size_t nprobe,
-    bool spherical,
-    const double* centroid_norms,
-    AnnCandidate<float>* candidates,
-    TopNAssignmentScratch& scratch
-) {
-    assert(nprobe > 0 && nprobe <= k);
-    constexpr size_t kCentroidBlock = 256;
-    const bool screen = nprobe <= k / 4;
-    const index_detail::CandidateDistanceIdLess less;
-    if (screen) {
-        scratch.products.resize(n * std::min(k, kCentroidBlock));
-        scratch.point_norms.resize(n);
-    }
-    const auto distance = [d, spherical](const float* vector, const float* centroid) {
-        return spherical ? dot_product_dis(vector, centroid, d)
-                         : std::sqrt(euclidean_sqr(vector, centroid, d));
-    };
-    for (size_t row = 0; row < n; ++row) {
-        const float* vector = x + row * d;
-        auto* heap = candidates + row * nprobe;
-        if (screen) {
-            scratch.point_norms[row] = l2norm_sqr_f64(vector, d);
-        }
-        for (size_t cluster = 0; cluster < nprobe; ++cluster) {
-            heap[cluster].id = static_cast<PID>(cluster);
-            heap[cluster].distance = distance(vector, centroids + cluster * d);
-        }
-        std::make_heap(heap, heap + nprobe, less);
-    }
-
-    // For validated d <= 65536, this conservatively covers the GEMM dot product,
-    // float distance accumulation, and sqrt rounding when the cutoff is squared.
-    // Both metrics need an underflow allowance. Only IP subtracts the dot from
-    // one and can incur absolute rounding error near one even for tiny norms.
-    const double error_scale = 8.0 * static_cast<double>(d) *
-                               static_cast<double>(std::numeric_limits<float>::epsilon());
-    const double error_floor =
-        8.0 * static_cast<double>(d) * std::numeric_limits<float>::min() +
-        (spherical ? 8.0 * std::numeric_limits<float>::epsilon() : 0.0);
-    for (size_t first = nprobe; first < k; first += kCentroidBlock) {
-        const size_t cols = std::min(kCentroidBlock, k - first);
-        if (screen) {
-            simd::matrix_product_transposed(
-                x, centroids + first * d, scratch.products.data(), n, d, cols
-            );
-        }
-        for (size_t row = 0; row < n; ++row) {
-            const float* vector = x + row * d;
-            auto* heap = candidates + row * nprobe;
-            for (size_t col = 0; col < cols; ++col) {
-                const size_t cluster = first + col;
-                if (screen) {
-                    const double norm_sum =
-                        scratch.point_norms[row] + centroid_norms[cluster];
-                    const double dot = scratch.products[row * cols + col];
-                    const double estimate = spherical ? 1.0 - dot : norm_sum - 2.0 * dot;
-                    const double worst = heap[0].distance;
-                    const double cutoff = spherical ? worst : worst * worst;
-                    if (estimate > cutoff + error_scale * norm_sum + error_floor) {
-                        continue;
-                    }
-                }
-                AnnCandidate<float> candidate;
-                candidate.id = static_cast<PID>(cluster);
-                candidate.distance = distance(vector, centroids + cluster * d);
-                if (less(candidate, heap[0])) {
-                    std::pop_heap(heap, heap + nprobe, less);
-                    heap[nprobe - 1] = candidate;
-                    std::push_heap(heap, heap + nprobe, less);
-                }
-            }
-        }
-    }
-    for (size_t row = 0; row < n; ++row) {
-        auto* heap = candidates + row * nprobe;
-        std::sort_heap(heap, heap + nprobe, less);
-    }
 }
 
 // Inputs have already passed clustering validation. GEMM only screens candidates;

@@ -2,6 +2,7 @@
 #include <omp.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -9,6 +10,7 @@
 #include <random>
 #include <vector>
 
+#include "ivf_search.hpp"
 #include "rabitqlib/clustering/detail/kmeans.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/ivf/initializer.hpp"
@@ -23,7 +25,7 @@ TEST(IvfFlatRoutingTest, TopNMatchesScalarAcrossTilesAndTies) {
     constexpr size_t kClusters = 513, kQueries = 129;
     std::mt19937 rng(218);
     std::uniform_real_distribution<float> random(-1, 1);
-    clustering::detail::TopNAssignmentScratch scratch;
+    detail::TopNAssignmentScratch scratch;
     for (size_t dim : {65U, 960U}) {
         for (float scale : {1.0F, 1.0e-8F, 1000.0F}) {
             std::vector<float> centroids(kClusters * dim), queries(kQueries * dim);
@@ -57,7 +59,7 @@ TEST(IvfFlatRoutingTest, TopNMatchesScalarAcrossTilesAndTies) {
 #pragma omp parallel num_threads(1)
                     {
                         omp_set_num_threads(1);
-                        clustering::detail::exact_assign_topn(
+                        detail::exact_assign_topn(
                             queries.data(),
                             centroids.data(),
                             kQueries,
@@ -107,11 +109,11 @@ TEST(IvfFlatRoutingTest, L2TiesUseReturnedFloatDistance) {
     scalar.centroids_distances(query.data(), 1, expected);
     EXPECT_EQ(expected[0].id, 0U);
     AnnCandidate<float> actual;
-    clustering::detail::TopNAssignmentScratch scratch;
+    detail::TopNAssignmentScratch scratch;
 #pragma omp parallel num_threads(1)
     {
         omp_set_num_threads(1);
-        clustering::detail::exact_assign_topn(
+        detail::exact_assign_topn(
             query.data(),
             centroids.data(),
             1,
@@ -126,6 +128,45 @@ TEST(IvfFlatRoutingTest, L2TiesUseReturnedFloatDistance) {
     }
     EXPECT_EQ(actual.id, 0U);
     EXPECT_EQ(actual.distance, expected[0].distance);
+}
+
+TEST(IvfFlatRoutingTest, CommonL2OffsetRetainsTiesAndFindsLateCentroids) {
+    constexpr size_t kDim = 64, kClusters = 515, kProbes = 2;
+    std::vector<float> query(kDim, 1024.0F), centroids(kDim * kClusters, 1024.0F);
+    std::vector<double> norms(kClusters);
+    for (size_t id = 0; id < kClusters; ++id) {
+        float* centroid = centroids.data() + id * kDim;
+        centroid[0] += 1.0F;
+    }
+    // IDs 257 and 258 tie across the end of the first 256-centroid screening
+    // block. The closest centroid is the very last one in the direct scan.
+    centroids[257 * kDim] = centroids[258 * kDim] = 1024.5F;
+    centroids[(kClusters - 1) * kDim] = 1024.25F;
+    for (size_t id = 0; id < kClusters; ++id) {
+        norms[id] = clustering::detail::l2norm_sqr_f64(centroids.data() + id * kDim, kDim);
+    }
+    std::array<AnnCandidate<float>, kProbes> actual{};
+    detail::TopNAssignmentScratch scratch;
+#pragma omp parallel num_threads(1)
+    {
+        omp_set_num_threads(1);
+        detail::exact_assign_topn(
+            query.data(),
+            centroids.data(),
+            1,
+            kDim,
+            kClusters,
+            kProbes,
+            false,
+            norms.data(),
+            actual.data(),
+            scratch
+        );
+    }
+    EXPECT_EQ(actual[0].id, kClusters - 1);
+    EXPECT_EQ(actual[0].distance, 0.25F);
+    EXPECT_EQ(actual[1].id, 257U);
+    EXPECT_EQ(actual[1].distance, 0.5F);
 }
 
 TEST(IvfFlatRoutingTest, BatchSearchStreamsBlocksAndPreservesRemovedPadding) {

@@ -1661,7 +1661,7 @@ void IVF::search_batch(
             std::vector<float> normalized;
             std::vector<float> rotated;
             std::vector<AnnCandidate<float>> candidates;
-            clustering::detail::TopNAssignmentScratch assignment;
+            detail::TopNAssignmentScratch assignment;
         };
         std::vector<QueryScratch> scratch(workers);
         for (auto& worker : scratch) {
@@ -1714,7 +1714,7 @@ void IVF::search_batch(
                             tile.rotated.data() + row * padded_dim_
                         );
                     }
-                    clustering::detail::exact_assign_topn(
+                    detail::exact_assign_topn(
                         tile.rotated.data(),
                         centroids,
                         rows,
