@@ -41,8 +41,12 @@ detect replaced or reordered vectors. See [QGKMeans](../../docs/docs/clustering.
 and [RaBitQKMeans](../../docs/docs/clustering.md#rabitqkmeans) for input limits and assignment
 behavior.
 
-For inner product, pass `--metric ip` to every stage and provide normalized
-vectors. Use queries and ground truth prepared for the same metric.
+For inner-product search, pass `--metric ip` to the IVF or HNSW indexing script.
+If you run `kmeans_clustering.py` separately, pass `--metric ip` there too.
+The IVF and HNSW query scripts read the metric from the saved index. Run them
+with the index, queries and matching inner-product ground truth. For cosine
+similarity via inner product, normalize both the base vectors and the queries.
+
 `--num-threads 0` uses the library's available logical CPU count, capped by
 `OMP_NUM_THREADS`; each stage accepts its own limit. See
 [threading](../../docs/docs/index/usage.md#threading-and-file-paths) for affinity
