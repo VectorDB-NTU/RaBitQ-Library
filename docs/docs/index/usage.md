@@ -33,22 +33,28 @@ the index classes do not expose a rotator choice.
 With `metric="cosine"` (C++ `METRIC_COSINE`), every index scales data and queries to
 unit length, stores the inner-product codes of the scaled vectors, and returns
 `1 - cos` as the distance, the inner-product distance `1 - dot` of unit vectors.
-Centroids passed to `set_centroids` are scaled the same way, because the codes are
-residuals against them: centroids far from the unit sphere, such as the means of
-unscaled data, would ruin the estimates. `train`, and the first `add` that trains,
+IVF-RaBitQ and HNSW-RaBitQ also scale centroids passed to `set_centroids`.
+Their codes represent residuals against these centroids, so centroids far from
+the unit sphere, such as the means of unscaled data, would distort the estimates.
+`train`, and the first `add` that trains,
 compute centroids from the scaled vectors with spherical k-means and use them as
 computed. Results equal those of a `metric="ip"` index built from the same vectors,
 and given the same centroids, after this scaling. A zero vector stays zero, as in
 hnswlib and Faiss: its true distance to every vector is 1, which quantized storage
 estimates like any other distance.
 
-The index checks the original coordinates first, as above. Because it then trains on
-scaled copies, invalid training data is reported as `IVF training data ...` or
-`HNSW training data ...` rather than with the k-means message of the other metrics.
-`train`, `add` and construction scale a copy of their whole input, so they briefly
-need memory for one more float32 copy of it. To bound that for very large data, call
-`train` on a sample and `add` the data in several calls. Queries are scaled one at a
-time.
+Every index checks the original coordinates before scaling them. Because IVF-RaBitQ
+and HNSW-RaBitQ then train on scaled copies, invalid training data is reported as
+`IVF training data ...` or `HNSW training data ...` rather than with the k-means
+message of the other metrics.
+Each `train` or `add` call temporarily needs a float32 copy of its input for
+normalization. To limit that memory, call `train` on a representative sample,
+then `add` the vectors in batches. IDs continue across `add` calls, so adding the
+batches in order gives each vector its row number as ID.
+
+[SymphonyQG](qg.md) builds its graph in a single `add` call. Pass the entire
+dataset at once and allow for a temporary float32 copy of all vectors during
+normalization.
 
 The metric is stored in the [index file](#index-file-compatibility), so a loaded index
 keeps scaling its inputs. Releases up to 0.8 have no cosine metric: there, normalize

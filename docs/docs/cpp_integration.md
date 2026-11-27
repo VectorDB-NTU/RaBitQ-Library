@@ -88,14 +88,36 @@ git add third_party/rabitqlib
 ## Install the C++ library
 
 Installation is useful for package managers, container images, and shared server
-environments. Disable native optimization for use on other CPUs:
+environments. Configure from the library source directory with native optimization
+disabled for use on other CPUs.
+
+=== "Default"
+
+    ```bash
+    cmake -S . -B build \
+      -DRABITQ_BUILD_SAMPLES=OFF \
+      -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+    ```
+
+=== "Apple Silicon (Homebrew)"
+
+    With AppleClang, point CMake to Homebrew's OpenMP runtime.
+
+    ```bash
+    brew install libomp
+    cmake -S . -B build \
+      -DOpenMP_ROOT="$(brew --prefix libomp)" \
+      -DRABITQ_BUILD_SAMPLES=OFF \
+      -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+    ```
+
+Build and install the configured library.
 
 ```bash
-cmake -S . -B build \
-  -DRABITQ_BUILD_SAMPLES=OFF \
-  -DRABITQ_ENABLE_NATIVE_OPTIMIZATION=OFF \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build build --parallel
 cmake --install build
 ```
@@ -113,10 +135,25 @@ API, so only the same minor release, at or above a requested patch, satisfies th
 0.9.x does, 0.8 and 0.10 do not. A version range must stay within one minor release, for
 example `0.9...<0.10`.
 
-For a non-system prefix, point CMake to the installation:
+From your application's source directory, point CMake to the library installation.
+
+=== "Default"
+
+    ```bash
+    cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/.local"
+    ```
+
+=== "Apple Silicon (Homebrew)"
+
+    The application discovers OpenMP in its own CMake build directory, so pass
+    the Homebrew prefix here too.
+
+    ```bash
+    cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/.local" \
+      -DOpenMP_ROOT="$(brew --prefix libomp)"
+    ```
 
 ```bash
-cmake -S . -B build -DCMAKE_PREFIX_PATH="$HOME/.local"
 cmake --build build --parallel
 ```
 
