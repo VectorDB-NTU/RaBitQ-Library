@@ -41,10 +41,11 @@ detect replaced or reordered vectors. See [QGKMeans](../../docs/docs/clustering.
 and [RaBitQKMeans](../../docs/docs/clustering.md#rabitqkmeans) for input limits and assignment
 behavior.
 
-For inner-product search, pass `--metric ip` to the IVF or HNSW indexing script.
-If you run `kmeans_clustering.py` separately, pass `--metric ip` there too.
-The IVF and HNSW query scripts read the metric from the saved index. Run them
-with the index, queries and matching inner-product ground truth. For cosine
+For inner-product search, pass `--metric ip` to the IVF, HNSW or SymphonyQG indexing
+script. If you run `kmeans_clustering.py` separately, pass `--metric ip` there too.
+The query scripts search with the metric stored in the index (the `--metric` option
+of `symqg_querying.py` only labels its output). Run them with the index, queries and
+matching inner-product ground truth. For cosine
 similarity via inner product, normalize both the base vectors and the queries.
 
 `--num-threads 0` uses the library's available logical CPU count, capped by

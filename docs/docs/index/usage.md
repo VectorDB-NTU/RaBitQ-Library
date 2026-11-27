@@ -43,11 +43,14 @@ and given the same centroids, after this scaling. A zero vector stays zero, as i
 hnswlib and Faiss: its true distance to every vector is 1, which quantized storage
 estimates like any other distance.
 
-IVF-RaBitQ and HNSW-RaBitQ check the original coordinates before scaling them.
-Invalid training data is reported as `IVF training data ...` or `HNSW training data ...`.
+Every index checks the original coordinates before scaling them. Because IVF-RaBitQ
+and HNSW-RaBitQ then train on scaled copies, invalid training data is reported as
+`IVF training data ...` or `HNSW training data ...` rather than with the k-means
+message of the other metrics.
 Each `train` or `add` call temporarily needs a float32 copy of its input for
 normalization. To limit that memory, call `train` on a representative sample,
-then call `add` in batches on the vectors you want to index, in their original order.
+then `add` the vectors in batches. IDs continue across `add` calls, so adding the
+batches in order gives each vector its row number as ID.
 
 [SymphonyQG](qg.md) builds its graph in a single `add` call. Pass the entire
 dataset at once and allow for a temporary float32 copy of all vectors during
