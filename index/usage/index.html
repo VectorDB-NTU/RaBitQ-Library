@@ -2237,21 +2237,26 @@ the index classes do not expose a rotator choice.</p>
 <p>With <code>metric="cosine"</code> (C++ <code>METRIC_COSINE</code>), every index scales data and queries to
 unit length, stores the inner-product codes of the scaled vectors, and returns
 <code>1 - cos</code> as the distance, the inner-product distance <code>1 - dot</code> of unit vectors.
-Centroids passed to <code>set_centroids</code> are scaled the same way, because the codes are
-residuals against them: centroids far from the unit sphere, such as the means of
-unscaled data, would ruin the estimates. <code>train</code>, and the first <code>add</code> that trains,
+IVF-RaBitQ and HNSW-RaBitQ also scale centroids passed to <code>set_centroids</code>.
+Their codes represent residuals against these centroids, so centroids far from
+the unit sphere, such as the means of unscaled data, would distort the estimates.
+<code>train</code>, and the first <code>add</code> that trains,
 compute centroids from the scaled vectors with spherical k-means and use them as
 computed. Results equal those of a <code>metric="ip"</code> index built from the same vectors,
 and given the same centroids, after this scaling. A zero vector stays zero, as in
 hnswlib and Faiss: its true distance to every vector is 1, which quantized storage
 estimates like any other distance.</p>
-<p>The index checks the original coordinates first, as above. Because it then trains on
-scaled copies, invalid training data is reported as <code>IVF training data ...</code> or
-<code>HNSW training data ...</code> rather than with the k-means message of the other metrics.
-<code>train</code>, <code>add</code> and construction scale a copy of their whole input, so they briefly
-need memory for one more float32 copy of it. To bound that for very large data, call
-<code>train</code> on a sample and <code>add</code> the data in several calls. Queries are scaled one at a
-time.</p>
+<p>Every index checks the original coordinates before scaling them. Because IVF-RaBitQ
+and HNSW-RaBitQ then train on scaled copies, invalid training data is reported as
+<code>IVF training data ...</code> or <code>HNSW training data ...</code> rather than with the k-means
+message of the other metrics.
+Each <code>train</code> or <code>add</code> call temporarily needs a float32 copy of its input for
+normalization. To limit that memory, call <code>train</code> on a representative sample,
+then <code>add</code> the vectors in batches. IDs continue across <code>add</code> calls, so adding the
+batches in order gives each vector its row number as ID.</p>
+<p><a href="../qg/">SymphonyQG</a> builds its graph in a single <code>add</code> call. Pass the entire
+dataset at once and allow for a temporary float32 copy of all vectors during
+normalization.</p>
 <p>The metric is stored in the <a href="#index-file-compatibility">index file</a>, so a loaded index
 keeps scaling its inputs. Releases up to 0.8 have no cosine metric: there, normalize
 vectors yourself and use <code>metric="ip"</code>. The core quantization APIs, FastScan queries

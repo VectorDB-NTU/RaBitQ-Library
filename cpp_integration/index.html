@@ -2434,41 +2434,75 @@ Pin the <code>v0.9.0</code> release and include RaBitQ-Library as a Git submodul
 </code></pre></div>
 <h2 id="install-the-c-library">Install the C++ library<a class="headerlink" href="#install-the-c-library" title="Permanent link">&para;</a></h2>
 <p>Installation is useful for package managers, container images, and shared server
-environments. Disable native optimization for use on other CPUs:</p>
+environments. Configure from the library source directory with native optimization
+disabled for use on other CPUs.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Default</label><label for="__tabbed_1_2">Apple Silicon (Homebrew)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>-DRABITQ_BUILD_SAMPLES<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>-DCMAKE_INSTALL_PREFIX<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>cmake<span class="w"> </span>--install<span class="w"> </span>build
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<p>With AppleClang, point CMake to Homebrew's OpenMP runtime.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>brew<span class="w"> </span>install<span class="w"> </span>libomp
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>-DOpenMP_ROOT<span class="o">=</span><span class="s2">"</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>libomp<span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>-DRABITQ_BUILD_SAMPLES<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>-DCMAKE_INSTALL_PREFIX<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Build and install the configured library.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>cmake<span class="w"> </span>--install<span class="w"> </span>build
 </code></pre></div>
 <p>Consume the installed package with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="p">)</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::index</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="p">)</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::index</span><span class="p">)</span>
 </code></pre></div>
 <p>To require a release, pass its version, for example
 <code>find_package(rabitqlib 0.9 CONFIG REQUIRED)</code>. Before 1.0 a minor release may break the
 API, so only the same minor release, at or above a requested patch, satisfies the request:
 0.9.x does, 0.8 and 0.10 do not. A version range must stay within one minor release, for
 example <code>0.9...&lt;0.10</code>.</p>
-<p>For a non-system prefix, point CMake to the installation:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+<p>From your application's source directory, point CMake to the library installation.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Default</label><label for="__tabbed_2_2">Apple Silicon (Homebrew)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<p>The application discovers OpenMP in its own CMake build directory, so pass
+the Homebrew prefix here too.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>-DOpenMP_ROOT<span class="o">=</span><span class="s2">"</span><span class="k">$(</span>brew<span class="w"> </span>--prefix<span class="w"> </span>libomp<span class="k">)</span><span class="s2">"</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
 </code></pre></div>
 <p>Full-library submodule and installed-package integration require OpenMP on the consuming
 system. The <a href="https://github.com/VectorDB-NTU/RaBitQ-Library/tree/main/tests/consumer">downstream consumer test</a>
 provides a complete installed-package example.</p>
 <h2 id="core-only-c-integration">Core-only C++ integration<a class="headerlink" href="#core-only-c-integration" title="Permanent link">&para;</a></h2>
 <p>To build and install only core:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build-core<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>-DRABITQ_BUILD_INDEX<span class="o">=</span>OFF<span class="w"> </span>-DRABITQ_BUILD_FASTSCAN<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>-DRABITQ_USE_OPENMP<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>-DRABITQ_BUILD_SAMPLES<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>-DCMAKE_INSTALL_PREFIX<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local/rabitqlib-core"</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-core<span class="w"> </span>--parallel
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>cmake<span class="w"> </span>--install<span class="w"> </span>build-core
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build-core<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-DRABITQ_BUILD_INDEX<span class="o">=</span>OFF<span class="w"> </span>-DRABITQ_BUILD_FASTSCAN<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-DRABITQ_USE_OPENMP<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>-DRABITQ_BUILD_SAMPLES<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span>-DCMAKE_INSTALL_PREFIX<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local/rabitqlib-core"</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-core<span class="w"> </span>--parallel
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>cmake<span class="w"> </span>--install<span class="w"> </span>build-core
 </code></pre></div>
 <p>This configuration does not discover or link OpenMP. Legacy parallel batch helpers run
 serially, including when a caller requests more workers; v1 numerical calls remain serial.
@@ -2512,30 +2546,30 @@ Installations contain only enabled module headers and their dependencies. In par
 core-only installations do not carry FastScan, ANN, clustering or vendored hnswlib headers.</p>
 <h3 id="link-core">Link core<a class="headerlink" href="#link-core" title="Permanent link">&para;</a></h3>
 <p>Installed package:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="w"> </span><span class="s">COMPONENTS</span><span class="w"> </span><span class="s">core</span><span class="p">)</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::core</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="w"> </span><span class="s">COMPONENTS</span><span class="w"> </span><span class="s">core</span><span class="p">)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::core</span><span class="p">)</span>
 </code></pre></div>
 <p>This also works against a full installation without linking the index archive. For ANN
 use, request <code>COMPONENTS index</code> and link <code>rabitqlib::index</code>.
 For changes to older targets and headers, see the <a href="../modular_migration/">migration guide</a>.</p>
 <p>Source-tree integration:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_INDEX</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_FASTSCAN</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_SAMPLES</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_ENABLE_NATIVE_OPTIMIZATION</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="nb">add_subdirectory</span><span class="p">(</span><span class="s">third_party/rabitqlib</span><span class="p">)</span>
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::core</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_INDEX</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_FASTSCAN</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_SAMPLES</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_ENABLE_NATIVE_OPTIMIZATION</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nb">add_subdirectory</span><span class="p">(</span><span class="s">third_party/rabitqlib</span><span class="p">)</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::core</span><span class="p">)</span>
 </code></pre></div>
 <p>For FetchContent, the same options apply. This example consumes a local checkout,
 which is also the configuration exercised by the integration tests:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nb">include</span><span class="p">(</span><span class="s">FetchContent</span><span class="p">)</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_INDEX</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_FASTSCAN</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_SAMPLES</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_ENABLE_NATIVE_OPTIMIZATION</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nb">FetchContent_Declare</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">SOURCE_DIR</span><span class="w"> </span><span class="s2">"${CMAKE_CURRENT_SOURCE_DIR}/third_party/rabitqlib"</span><span class="p">)</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="nb">FetchContent_MakeAvailable</span><span class="p">(</span><span class="s">rabitqlib</span><span class="p">)</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::core</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nb">include</span><span class="p">(</span><span class="s">FetchContent</span><span class="p">)</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_INDEX</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_FASTSCAN</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_BUILD_SAMPLES</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="nb">set</span><span class="p">(</span><span class="s">RABITQ_ENABLE_NATIVE_OPTIMIZATION</span><span class="w"> </span><span class="s">OFF</span><span class="w"> </span><span class="s">CACHE</span><span class="w"> </span><span class="s">BOOL</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="s">FORCE</span><span class="p">)</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="nb">FetchContent_Declare</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">SOURCE_DIR</span><span class="w"> </span><span class="s2">"${CMAKE_CURRENT_SOURCE_DIR}/third_party/rabitqlib"</span><span class="p">)</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="nb">FetchContent_MakeAvailable</span><span class="p">(</span><span class="s">rabitqlib</span><span class="p">)</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::core</span><span class="p">)</span>
 </code></pre></div>
 <p>To fetch remotely, replace <code>SOURCE_DIR</code> with <code>GIT_REPOSITORY</code> and a pinned <code>GIT_TAG</code>.
 The local test does not validate network access or any package-manager integration.</p>
@@ -2546,18 +2580,18 @@ buffers using the existing data maps, encodes four-bit RaBitQ and estimates squa
 distance relative to a zero centroid. Query state borrows its rotated input; keep that
 input alive through estimation. All internal buffers use the rotator's padded dimension.
 No ANN index is constructed.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>sample/cpp/core<span class="w"> </span>-B<span class="w"> </span>build-core-example<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local/rabitqlib-core"</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-core-example
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build-core-example<span class="w"> </span>--output-on-failure
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>sample/cpp/core<span class="w"> </span>-B<span class="w"> </span>build-core-example<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>-DCMAKE_PREFIX_PATH<span class="o">=</span><span class="s2">"</span><span class="nv">$HOME</span><span class="s2">/.local/rabitqlib-core"</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build-core-example
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build-core-example<span class="w"> </span>--output-on-failure
 </code></pre></div>
 <p>With project samples enabled, the same program is built as <code>core_example</code> under
 <code>build-core/sample/cpp/</code> (under <code>Release/</code> there for multi-configuration generators).</p>
 <h2 id="fastscan-integration">FastScan integration<a class="headerlink" href="#fastscan-integration" title="Permanent link">&para;</a></h2>
 <p>For batch scoring without ANN, configure <code>RABITQ_BUILD_INDEX=OFF</code> and
 <code>RABITQ_BUILD_FASTSCAN=ON</code>, then consume the installed package with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="w"> </span><span class="s">COMPONENTS</span><span class="w"> </span><span class="s">fastscan</span><span class="p">)</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::fastscan</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="nb">find_package</span><span class="p">(</span><span class="s">rabitqlib</span><span class="w"> </span><span class="s">CONFIG</span><span class="w"> </span><span class="s">REQUIRED</span><span class="w"> </span><span class="s">COMPONENTS</span><span class="w"> </span><span class="s">fastscan</span><span class="p">)</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="nb">target_link_libraries</span><span class="p">(</span><span class="s">my_program</span><span class="w"> </span><span class="s">PRIVATE</span><span class="w"> </span><span class="s">rabitqlib::fastscan</span><span class="p">)</span>
 </code></pre></div>
 <p>The standalone FastScan example in <code>sample/cpp/fastscan</code> of the same source checkout
 encodes 49 vectors in two batches and scores them with HACC and extra-bit refinement,
@@ -2573,9 +2607,9 @@ existing <code>_rabitqlib</code> extension has a <code>rabitqlib::python</code> 
 <code>_rabitqlib</code> target or install the wheel and use <code>import rabitqlib</code>. It is a Python
 MODULE, not a C++ link library, and is not exported as a C++ <code>find_package</code> component.</p>
 <h2 id="run-the-c-tests-on-linux">Run the C++ tests on Linux<a class="headerlink" href="#run-the-c-tests-on-linux" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DRABITQ_BUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>cmake<span class="w"> </span>-S<span class="w"> </span>.<span class="w"> </span>-B<span class="w"> </span>build<span class="w"> </span>-DRABITQ_BUILD_TESTS<span class="o">=</span>ON<span class="w"> </span>-DCMAKE_BUILD_TYPE<span class="o">=</span>Release<span class="w"> </span>-DRABITQ_ENABLE_NATIVE_OPTIMIZATION<span class="o">=</span>OFF
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>cmake<span class="w"> </span>--build<span class="w"> </span>build<span class="w"> </span>--parallel
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>ctest<span class="w"> </span>--no-tests<span class="o">=</span>error<span class="w"> </span>--test-dir<span class="w"> </span>build<span class="w"> </span>--output-on-failure
 </code></pre></div>
 <p>GoogleTest is downloaded during test configuration.</p>
 
