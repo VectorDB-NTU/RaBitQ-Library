@@ -144,6 +144,12 @@ TEST(QGEMeansRecipeTest, FollowsBatchSizeAndStepLaws) {
     }
 }
 
+TEST(QGEMeansRecipeTest, CapsAnExtremeBatchLawAtHalfTheVectors) {
+    // A law beyond 2^64 vectors must not overflow the power-of-two rounding.
+    const auto recipe = detail::resolve_recipe(1000, 40, size_t{1} << 62, 0);
+    EXPECT_EQ(recipe.batch_size, 512U);
+}
+
 TEST(QGEMeansRecipeTest, RoundsToTheNearestPowerOfTwo) {
     EXPECT_EQ(detail::round_power_of_two(0.5), 1U);
     EXPECT_EQ(detail::round_power_of_two(1.0), 1U);
@@ -612,6 +618,47 @@ TEST(QGEMeansRevivalTest, SplitsStayWithinTheCoordinateBound) {
     }
     EXPECT_EQ(state.centroids[3 * kDim], bound);
     EXPECT_EQ(state.centroids[3 * kDim + 1], -bound);
+}
+
+TEST(QGEMeansRevivalTest, CollapsedSplitsAtTheBoundStayWithinIt) {
+    const auto data = clustered_data();
+    auto state = revival_state(data);
+    const float bound = max_coordinate_magnitude(kDim);
+    // No donor has an axis, so centroid 3 (cost 0) splits the first donor, 0,
+    // with zero spread: the copies coincide at the bound and must separate inward.
+    std::fill_n(state.removal.data() + 7 * (kDim + 1), kDim, 0.0F);
+    std::fill_n(state.removal.data() + 9 * (kDim + 1), kDim, 0.0F);
+    state.centroids[0] = bound;
+    ASSERT_EQ(detail::revive(state, false), 1U);
+    EXPECT_EQ(state.centroids[0], bound);
+    EXPECT_LT(state.centroids[3 * kDim], bound);
+    EXPECT_EQ(state.centroids[3 * kDim], std::nextafter(bound, 0.0F));
+}
+
+TEST(QGEMeansRevivalTest, UpdatedAndClosedMeansStayWithinTheBound) {
+    // At d = 960 the float32 sum of ten coordinates on the bound, accumulated as
+    // in accumulate(), divides back to a value just above the bound.
+    constexpr size_t kWide = 960;
+    constexpr size_t kMembers = 10;
+    const float bound = max_coordinate_magnitude(kWide);
+    float sum = 0.0F;
+    for (size_t member = 0; member < kMembers; ++member) {
+        sum += bound;
+    }
+    ASSERT_GT(sum / static_cast<float>(kMembers), bound);
+
+    const std::vector<float> rows(2 * kWide, 0.0F);
+    detail::EMeansState state;
+    detail::initialize(state, kWide, 2, 2, rows.data(), 2, 42);
+    state.batch_counts = {static_cast<float>(kMembers), 0.0F};
+    state.batch_sums.assign(2 * kWide, 0.0F);
+    state.batch_sums[0] = sum;
+    state.pass_sums.assign(2 * kWide, 0.0F);
+    detail::start_iteration(state, true);
+    detail::apply_statistics(state, 1.0, true, 1);
+    EXPECT_EQ(state.centroids[0], bound);
+    detail::close_means(state, 1);
+    EXPECT_EQ(state.centroids[0], bound);
 }
 
 TEST(QGEMeansTest, RevivesCentroidsWhileTraining) {

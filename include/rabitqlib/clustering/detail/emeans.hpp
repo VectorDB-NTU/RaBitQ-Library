@@ -218,7 +218,9 @@ struct Recipe {
     if (batch_size == 0) {
         const double law =
             kBatchC * std::pow(kd, kBatchK) * std::pow(nd, kBatchN) * std::pow(td, kBatchT);
-        batch_size = std::min(round_power_of_two(law), round_power_of_two(nd / 2));
+        // Rounding is monotone, so capping first gives the same power of two and
+        // keeps an extreme law within the shift range of round_power_of_two.
+        batch_size = round_power_of_two(std::min(law, nd / 2));
     }
     batch_size = std::max<size_t>(1, std::min(batch_size, n));
     double alpha0 = kAlphaC * std::pow(kd, kAlphaK) *
@@ -454,6 +456,7 @@ inline void apply_statistics(
     }
     state.axis_scale = scale;
     const auto axis_weight = static_cast<float>(alpha_value / scale);
+    const float bound = max_coordinate_magnitude(d);
     static_cast<void>(num_workers);
 #pragma omp parallel for num_threads(num_workers) schedule(static)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k); ++index) {
@@ -494,8 +497,10 @@ inline void apply_statistics(
         float* centroid = state.centroids.data() + cluster * d;
         for (size_t dim = 0; dim < d; ++dim) {
             const float mean = sums[dim] / count;
-            centroid[dim] =
+            const float moved =
                 weight == 1.0F ? mean : centroid[dim] + (weight * (mean - centroid[dim]));
+            // float32 means of points on the bound can round past it.
+            centroid[dim] = std::clamp(moved, -bound, bound);
         }
         state.mass[cluster] = mass;
     }
@@ -597,13 +602,13 @@ inline void apply_statistics(
             collapsed = collapsed && donor[dim] == child[dim];
         }
         if (collapsed) {
-            // Coincident copies; separate the child along one coordinate.
-            const float next =
-                std::nextafter(child[0], std::numeric_limits<float>::infinity());
-            child[0] =
-                std::isfinite(next)
-                    ? next
-                    : std::nextafter(child[0], -std::numeric_limits<float>::infinity());
+            // Coincident copies; separate the child along one coordinate, toward
+            // zero so it stays within the bound.
+            child[0] = std::nextafter(
+                child[0],
+                child[0] > 0 ? -std::numeric_limits<float>::infinity()
+                             : std::numeric_limits<float>::infinity()
+            );
         }
         const float half = state.mass[source] / 2.0F;
         state.mass[source] = half;
@@ -630,6 +635,7 @@ inline void apply_statistics(
 inline void close_means(EMeansState& state, uint32_t num_workers) {
     const size_t d = state.d;
     const size_t k = state.k;
+    const float bound = max_coordinate_magnitude(d);
     static_cast<void>(num_workers);
 #pragma omp parallel for num_threads(num_workers) schedule(static)
     for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k); ++index) {
@@ -637,8 +643,9 @@ inline void close_means(EMeansState& state, uint32_t num_workers) {
         if (state.pass_counts[cluster] > 0) {
             const auto count = static_cast<float>(state.pass_counts[cluster]);
             for (size_t dim = 0; dim < d; ++dim) {
+                // As in apply_statistics, keep rounded means within the bound.
                 state.centroids[cluster * d + dim] =
-                    state.pass_sums[cluster * d + dim] / count;
+                    std::clamp(state.pass_sums[cluster * d + dim] / count, -bound, bound);
             }
         }
     }
