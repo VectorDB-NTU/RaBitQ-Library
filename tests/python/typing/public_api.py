@@ -72,7 +72,7 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     assert_type(flat.cp.final_assignment, Literal["approximate", "exact"])
     assert_type(qg.cp, QGKMeansParameters)
     assert_type(flat.cp, RaBitQKMeansParameters)
-    emeans = QGEMeans(64, 40, epochs=2, batch_size=32, final_assignment="exact")
+    emeans = QGEMeans(64, 40, niter=2, batch_size=32, final_assignment="exact")
     assert_type(emeans.cp, QGEMeansParameters)
     for model in (qg, flat, emeans):
         assert_type(model.train(x), float)
@@ -97,8 +97,8 @@ def check(x: npt.NDArray[np.float32], labels: npt.NDArray[np.uint32]) -> None:
     hnsw.train(x, 1)  # type: ignore[call-arg]
     qg.cp.final_assignment = "Exact"  # type: ignore[assignment]
     QGKMeans(64, 40, ef_build=1, bogus=1)  # type: ignore[call-arg]
-    QGEMeans(64, 40, niter=2)  # type: ignore[call-arg]
-    emeans.cp.epochs = "two"  # type: ignore[assignment]
+    QGEMeans(64, 40, epochs=2)  # type: ignore[call-arg]
+    emeans.cp.niter = "two"  # type: ignore[assignment]
     emeans.cp.final_assignment = "Exact"  # type: ignore[assignment]
 
 
@@ -234,7 +234,7 @@ def check_numpy_scalars() -> None:
     emeans = QGEMeans(
         np.int64(64),
         np.int64(40),
-        epochs=np.int64(1),
+        niter=np.int64(1),
         batch_size=np.int64(16),
         seed=np.uint32(42),
         verbose=np.bool_(False),
@@ -244,12 +244,12 @@ def check_numpy_scalars() -> None:
         ef_search=np.int64(16),
         graph_build_iterations=np.int64(1),
     )
-    emeans.cp.epochs = np.int64(1)
+    emeans.cp.niter = np.int64(1)
     emeans.cp.batch_size = np.int64(16)
     emeans.cp.final_assignment = "exact"
     assert_type(emeans.train(x), float)
-    assert_type(emeans.cp.epochs, int)
-    assert type(emeans.cp.epochs) is int
+    assert_type(emeans.cp.niter, int)
+    assert type(emeans.cp.niter) is int
     assignments, distances = emeans.assign(x[:3])
     assert assignments.shape == distances.shape == (3,)
     for mode in ("approximate", "exact"):

@@ -10,7 +10,7 @@ K = 33
 
 def qgemeans(**kwargs):
     parameters = {
-        "epochs": 3,
+        "niter": 3,
         "num_threads": 1,
         "ef_construction": K,
         "ef_search": K,
@@ -26,7 +26,7 @@ def nearest(x, centroids):
 
 def test_parameters_use_index_names_and_defaults():
     cp = QGEMeansParameters()
-    assert cp.epochs == 8
+    assert cp.niter == 8
     assert cp.batch_size == 0
     assert not cp.verbose
     assert cp.seed == 42
@@ -36,7 +36,7 @@ def test_parameters_use_index_names_and_defaults():
     assert cp.ef_construction == 240
     assert cp.ef_search == 16
     assert cp.graph_build_iterations == 1
-    for old in ("graph_degree", "ef_build", "niter", "quantization_bits", "nbits"):
+    for old in ("graph_degree", "ef_build", "epochs", "quantization_bits", "nbits"):
         assert not hasattr(cp, old)
 
 
@@ -52,7 +52,7 @@ def test_constructor_sets_keyword_parameters():
     assert model.iteration_stats is None
 
 
-@pytest.mark.parametrize("name", ["niter", "graph_degree", "ef_build", "nbits"])
+@pytest.mark.parametrize("name", ["epochs", "graph_degree", "ef_build", "nbits"])
 def test_constructor_rejects_parameters_of_other_methods(name):
     with pytest.raises(
         AttributeError,
@@ -68,7 +68,7 @@ def test_final_assignment_rejects_unknown_strings():
         qgemeans(final_assignment="symphonyqg")
 
 
-def test_train_populates_outputs_per_epoch(base_data):
+def test_train_populates_outputs_per_iteration(base_data):
     model = qgemeans()
     objective = model.train(base_data)
 
@@ -77,7 +77,7 @@ def test_train_populates_outputs_per_epoch(base_data):
     assert model.assignments.shape == (base_data.shape[0],)
     assert model.assignments.dtype == np.uint32
     assert model.distances.shape == (base_data.shape[0],)
-    assert model.obj.shape == (model.cp.epochs,)
+    assert model.obj.shape == (model.cp.niter,)
     stats = model.iteration_stats
     assert [s.iteration for s in stats] == [1, 2, 3]
     assert objective == model.obj[-1] == stats[-1].obj
@@ -142,7 +142,7 @@ def test_training_is_deterministic_across_thread_counts(base_data):
 
 def test_parameters_can_be_changed_through_cp(base_data):
     model = qgemeans()
-    model.cp.epochs = 1
+    model.cp.niter = 1
     model.cp.batch_size = 50
     model.train(base_data)
     assert model.obj.shape == (1,)
@@ -151,7 +151,7 @@ def test_parameters_can_be_changed_through_cp(base_data):
 @pytest.mark.parametrize(
     ("parameters", "message"),
     [
-        ({"epochs": 0}, "QGEMeans d, k, and epochs must be positive"),
+        ({"niter": 0}, "QGEMeans d, k, and niter must be positive"),
         ({"max_degree": 48}, "QGEMeans max_degree must be a positive multiple of 32"),
         (
             {"ef_construction": 0},

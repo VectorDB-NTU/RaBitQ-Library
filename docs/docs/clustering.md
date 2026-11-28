@@ -35,7 +35,7 @@ from rabitqlib import QGEMeans, QGKMeans, RaBitQKMeans
 kmeans = RaBitQKMeans(d, 16, niter=25, num_threads=8)
 # For larger cluster counts, use instead:
 # kmeans = QGKMeans(d, 4096, niter=25, num_threads=8)
-# kmeans = QGEMeans(d, 4096, epochs=8, num_threads=8)
+# kmeans = QGEMeans(d, 4096, niter=8, num_threads=8)
 last_iteration_obj = kmeans.train(x)
 
 centroids = kmeans.centroids      # shape (k, d)
@@ -202,7 +202,7 @@ QGEMeans runs mini-batch e-means (Algorithm 1 of
 [arXiv:2611.09501](https://arxiv.org/abs/2611.09501), with the constants of the
 Faiss reference implementation in `faiss/contrib/e_means`) and assigns each
 mini-batch through a SymphonyQG graph over the current centroids. It starts
-from `k` distinct random training vectors chosen by `seed`. Each epoch visits
+from `k` distinct random training vectors chosen by `seed`. Each iteration visits
 the vectors in a seeded random order, in mini-batches. Before every mini-batch
 the raw-vector centroid graph is rebuilt and searched for each vector's nearest
 and second-nearest centroids, without search hints. Each centroid then moves
@@ -214,14 +214,14 @@ centroid, is at most zero or below 0.3 times the median. The cheapest move
 first, each splitting the remaining centroid with the longest principal axis,
 tracked by Oja's rule, as long as the split's expected gain exceeds the removal
 cost. The step size follows the e-means step law and a cosine schedule that
-decays to a tenth of its initial value. After the last epoch, each centroid
-assigned in that epoch becomes the mean of its last-epoch vectors; a centroid
-split in the last epoch uses only the vectors it received after the split.
+decays to a tenth of its initial value. After the last iteration, each centroid
+assigned in that iteration becomes the mean of its last-iteration vectors; a centroid
+split in the last iteration uses only the vectors it received after the split.
 Faiss's optional closing handover is not implemented.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `epochs` | `8` | Positive number of passes over the training vectors. |
+| `niter` | `8` | Positive number of iterations, each one pass (an e-means epoch) over the training vectors. |
 | `batch_size` | `0` | Vectors per mini-batch, capped at `n`; `0` selects the e-means batch-size law, rounded to a power of two and capped at the power of two nearest `n / 2`. |
 | `max_degree` | `32` | A positive multiple of 32, strictly smaller than `k`. |
 | `ef_construction`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes. |
@@ -232,10 +232,10 @@ float32 centroids, and QGEMeans has no `spherical`, sampling or early-stop
 setting. Mini-batch sums accumulate in
 float32, as in the Faiss reference.
 
-`obj` and `iteration_stats` have one entry per epoch: `obj` sums the mini-batch
-assignment distances of that epoch, each measured before that mini-batch's
-update; `shift` is the squared centroid displacement over the epoch; and
-`nsplit` counts revived centroids. Python `train()` returns the last epoch's
+`obj` and `iteration_stats` have one entry per iteration: `obj` sums the mini-batch
+assignment distances of that iteration, each measured before that mini-batch's
+update; `shift` is the squared centroid displacement over the iteration; and
+`nsplit` counts revived centroids. Python `train()` returns the last iteration's
 `obj`. `train()` then assigns all vectors to the final centroids with
 `final_assignment`: `'approximate'` searches a graph rebuilt over them, and
 `'exact'` uses the exhaustive assignment described below.
@@ -252,7 +252,7 @@ their sum (WCSS); spherical mode sums `1 - inner_product`. `obj` and
 `train()` returns the last such objective.
 
 `final_assignment='approximate'` (default) uses the selected class's assignment
-algorithm. QGEMeans `obj` and `iteration_stats` are per epoch, as described
+algorithm. QGEMeans `obj` and `iteration_stats` are per iteration, as described
 [with the method](#qgemeans). Labels need not identify the exact nearest centroids, but reported
 distances and WCSS remain exact for those labels. Without sampling, quantized
 QGKMeans final assignment retains a point's last-iteration label when it is

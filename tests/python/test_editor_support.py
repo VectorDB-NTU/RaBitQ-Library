@@ -196,7 +196,7 @@ def test_documented_search_result_types(kind):
 
 @pytest.mark.parametrize(
     ("name", "iterations"),
-    [("QGEMeans", "epochs"), ("QGKMeans", "niter"), ("RaBitQKMeans", "niter")],
+    [("QGEMeans", "niter"), ("QGKMeans", "niter"), ("RaBitQKMeans", "niter")],
 )
 def test_documented_training_result_types(name, iterations):
     import numpy as np

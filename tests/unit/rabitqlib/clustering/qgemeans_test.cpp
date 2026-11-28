@@ -16,24 +16,6 @@
 
 namespace rabitqlib::qgemeans {
 
-struct QGEMeansTestAccess {
-    using State = QGEMeans::State;
-
-    static State initialized_state(const QGEMeans& model, size_t n, const float* x) {
-        State state;
-        model.initialize(state, n, x, 16);
-        return state;
-    }
-
-    static size_t revive(const QGEMeans& model, State& state, bool last) {
-        return model.revive_unused(state, last);
-    }
-
-    static void close_means(const QGEMeans& model, State& state) {
-        model.close_means(state, 1);
-    }
-};
-
 namespace {
 
 constexpr size_t kDim = 64;
@@ -69,10 +51,9 @@ std::vector<float> clustered_data(
 // 10 and no axis, except: centroid 3 costs 0, centroid 5 costs 1 (both below 0.3
 // times the median of 10), donor 7 has |U| = 100 along coordinate 0 and mass 4,
 // and donor 9 has |U| = 1, whose gain (2 / pi) does not pay for centroid 5.
-QGEMeansTestAccess::State revival_state(
-    const QGEMeans& model, const std::vector<float>& data
-) {
-    auto state = QGEMeansTestAccess::initialized_state(model, kCount, data.data());
+detail::EMeansState revival_state(const std::vector<float>& data) {
+    detail::EMeansState state;
+    detail::initialize(state, kDim, kClusters, kCount, data.data(), 16, 42);
     const size_t row = kDim + 1;
     for (size_t cluster = 0; cluster < kClusters; ++cluster) {
         std::fill_n(state.removal.data() + cluster * row, kDim, 0.0F);
@@ -90,7 +71,7 @@ QGEMeansTestAccess::State revival_state(
 
 QGEMeansParameters small_parameters(uint32_t threads = 2) {
     QGEMeansParameters parameters;
-    parameters.epochs = 4;
+    parameters.niter = 4;
     parameters.ef_construction = 40;
     parameters.ef_search = 16;
     parameters.num_threads = threads;
@@ -118,7 +99,7 @@ void expect_invalid_argument(Function&& function, const std::string& message) {
 
 TEST(QGEMeansTest, UsesDocumentedDefaults) {
     const QGEMeansParameters parameters;
-    EXPECT_EQ(parameters.epochs, 8U);
+    EXPECT_EQ(parameters.niter, 8U);
     EXPECT_EQ(parameters.batch_size, 0U);
     EXPECT_FALSE(parameters.verbose);
     EXPECT_EQ(parameters.seed, 42U);
@@ -131,10 +112,10 @@ TEST(QGEMeansTest, UsesDocumentedDefaults) {
 }
 
 TEST(QGEMeansRecipeTest, FollowsBatchSizeAndStepLaws) {
-    // GIST1M with k = 4096 over 8 epochs: the law's batch of 2^17 vectors.
+    // GIST1M with k = 4096 over 8 iterations: the law's batch of 2^17 vectors.
     const auto gist = detail::resolve_recipe(1000000, 4096, 8, 0);
     EXPECT_EQ(gist.batch_size, 131072U);
-    EXPECT_EQ(gist.steps_per_epoch, 8U);
+    EXPECT_EQ(gist.steps_per_iteration, 8U);
     EXPECT_EQ(gist.total_steps, 64U);
     const double expected_alpha = 0.8244 * std::pow(4096.0, -0.4617) *
                                   std::pow(131072.0, 0.9003) * std::pow(1e6, -0.4498) *
@@ -145,7 +126,7 @@ TEST(QGEMeansRecipeTest, FollowsBatchSizeAndStepLaws) {
     EXPECT_EQ(detail::resolve_recipe(1000, 40, 2, 64).batch_size, 64U);
     const auto capped = detail::resolve_recipe(1000, 40, 2, 5000);
     EXPECT_EQ(capped.batch_size, 1000U);
-    EXPECT_EQ(capped.steps_per_epoch, 1U);
+    EXPECT_EQ(capped.steps_per_iteration, 1U);
     EXPECT_EQ(capped.total_steps, 2U);
 
     // The law never exceeds half the vectors, rounded to a power of two, and the
@@ -157,7 +138,9 @@ TEST(QGEMeansRecipeTest, FollowsBatchSizeAndStepLaws) {
         EXPECT_EQ(recipe.batch_size & (recipe.batch_size - 1), 0U);
         EXPECT_GE(recipe.alpha0, 1e-4);
         EXPECT_LE(recipe.alpha0, 1.0);
-        EXPECT_EQ(recipe.steps_per_epoch, (n + recipe.batch_size - 1) / recipe.batch_size);
+        EXPECT_EQ(
+            recipe.steps_per_iteration, (n + recipe.batch_size - 1) / recipe.batch_size
+        );
     }
 }
 
@@ -185,12 +168,12 @@ TEST(QGEMeansTest, RejectsInvalidParametersWithDescriptiveMessages) {
         return parameters;
     };
     expect_invalid_argument(
-        [&] { QGEMeans(kDim, kClusters, with([](auto& p) { p.epochs = 0; })); },
-        "QGEMeans d, k, and epochs must be positive"
+        [&] { QGEMeans(kDim, kClusters, with([](auto& p) { p.niter = 0; })); },
+        "QGEMeans d, k, and niter must be positive"
     );
     expect_invalid_argument(
         [&] { QGEMeans(kDim, 0, small_parameters()); },
-        "QGEMeans d, k, and epochs must be positive"
+        "QGEMeans d, k, and niter must be positive"
     );
     expect_invalid_argument(
         [&] { QGEMeans(63, kClusters, small_parameters()); },
@@ -248,11 +231,11 @@ TEST(QGEMeansTest, RejectsInvalidParametersWithDescriptiveMessages) {
 
     // Parameters changed after construction are checked again by train.
     QGEMeans model(kDim, kClusters, small_parameters());
-    model.epochs = 0;
+    model.niter = 0;
     const auto data = clustered_data();
     expect_invalid_argument(
         [&] { model.train(kCount, data.data()); },
-        "QGEMeans d, k, and epochs must be positive"
+        "QGEMeans d, k, and niter must be positive"
     );
 }
 
@@ -313,14 +296,14 @@ TEST(QGEMeansTest, AssignRequiresTrainingAndValidPointers) {
     );
 }
 
-TEST(QGEMeansTest, RecordsOneStatisticPerEpoch) {
+TEST(QGEMeansTest, RecordsOneStatisticPerIteration) {
     const auto data = clustered_data();
     QGEMeans model(kDim, kClusters, small_parameters());
     model.train(kCount, data.data());
-    ASSERT_EQ(model.iteration_stats.size(), model.epochs);
-    for (size_t epoch = 0; epoch < model.epochs; ++epoch) {
-        const auto& stats = model.iteration_stats[epoch];
-        EXPECT_EQ(stats.iteration, epoch + 1);
+    ASSERT_EQ(model.iteration_stats.size(), model.niter);
+    for (size_t iteration = 0; iteration < model.niter; ++iteration) {
+        const auto& stats = model.iteration_stats[iteration];
+        EXPECT_EQ(stats.iteration, iteration + 1);
         EXPECT_GT(stats.obj, 0.0);
         EXPECT_GE(stats.shift, 0.0);
     }
@@ -398,13 +381,17 @@ TEST(QGEMeansTest, IsDeterministicAcrossRunsAndThreadCounts) {
         EXPECT_EQ(model.assignments, single.assignments) << threads << " threads";
         EXPECT_EQ(model.distances, single.distances) << threads << " threads";
         ASSERT_EQ(model.iteration_stats.size(), single.iteration_stats.size());
-        for (size_t epoch = 0; epoch < model.iteration_stats.size(); ++epoch) {
-            EXPECT_EQ(model.iteration_stats[epoch].obj, single.iteration_stats[epoch].obj);
+        for (size_t iteration = 0; iteration < model.iteration_stats.size(); ++iteration) {
             EXPECT_EQ(
-                model.iteration_stats[epoch].shift, single.iteration_stats[epoch].shift
+                model.iteration_stats[iteration].obj, single.iteration_stats[iteration].obj
             );
             EXPECT_EQ(
-                model.iteration_stats[epoch].nsplit, single.iteration_stats[epoch].nsplit
+                model.iteration_stats[iteration].shift,
+                single.iteration_stats[iteration].shift
+            );
+            EXPECT_EQ(
+                model.iteration_stats[iteration].nsplit,
+                single.iteration_stats[iteration].nsplit
             );
         }
     }
@@ -463,7 +450,7 @@ TEST(QGEMeansTest, ExplicitBatchSizesIncludingOneVectorPerBatch) {
     const size_t count = kClusters * 3;
     for (size_t batch : {1U, 7U, 1000000U}) {
         QGEMeansParameters parameters = small_parameters();
-        parameters.epochs = 2;
+        parameters.niter = 2;
         parameters.batch_size = batch;
         QGEMeans model(kDim, kClusters, parameters);
         model.train(count, data.data());
@@ -513,7 +500,7 @@ TEST(QGEMeansTest, RetrainsOnItsOwnCentroidsLikeAnIndependentCopy) {
 TEST(QGEMeansTest, ReducesTheObjectiveOnSeparatedClusters) {
     const auto data = clustered_data();
     QGEMeansParameters parameters = small_parameters();
-    parameters.epochs = 8;
+    parameters.niter = 8;
     QGEMeans model(kDim, kClusters, parameters);
     model.train(kCount, data.data());
     EXPECT_LT(model.iteration_stats.back().obj, model.iteration_stats.front().obj);
@@ -527,13 +514,12 @@ TEST(QGEMeansTest, ReducesTheObjectiveOnSeparatedClusters) {
 
 TEST(QGEMeansRevivalTest, MovesTheCheapestCentroidsToSplitTheLongestAxes) {
     const auto data = clustered_data();
-    const QGEMeans model(kDim, kClusters, small_parameters(1));
-    auto state = revival_state(model, data);
+    auto state = revival_state(data);
     const auto before = state.centroids;
     const auto mass_five = state.mass[5];
 
     // Centroid 3 always moves; the pair (5, 9) does not pay and stops the list.
-    EXPECT_EQ(QGEMeansTestAccess::revive(model, state, false), 1U);
+    EXPECT_EQ(detail::revive(state, false), 1U);
     const double spread = std::sqrt(2.0 * (100.0 / 4.0) / 3.14159265358979323846);
     EXPECT_FLOAT_EQ(
         state.centroids[7 * kDim], static_cast<float>(before[7 * kDim] - spread)
@@ -569,31 +555,29 @@ TEST(QGEMeansRevivalTest, MovesTheCheapestCentroidsToSplitTheLongestAxes) {
 
 TEST(QGEMeansRevivalTest, MovesNothingWithoutCheapCentroids) {
     const auto data = clustered_data();
-    const QGEMeans model(kDim, kClusters, small_parameters(1));
-    auto state = revival_state(model, data);
+    auto state = revival_state(data);
     state.removal[3 * (kDim + 1) + kDim] = 10.0F;
     state.removal[5 * (kDim + 1) + kDim] = 10.0F;
     const auto before = state.centroids;
-    EXPECT_EQ(QGEMeansTestAccess::revive(model, state, false), 0U);
+    EXPECT_EQ(detail::revive(state, false), 0U);
     EXPECT_EQ(state.centroids, before);
 }
 
-TEST(QGEMeansRevivalTest, LastEpochSplitsCloseFromLaterVectorsOnly) {
+TEST(QGEMeansRevivalTest, LastIterationSplitsCloseFromLaterVectorsOnly) {
     const auto data = clustered_data();
-    const QGEMeans model(kDim, kClusters, small_parameters(1));
     for (const bool last : {false, true}) {
-        auto state = revival_state(model, data);
+        auto state = revival_state(data);
         // Every centroid received two vectors summing to one per coordinate.
         state.pass_counts.assign(kClusters, 2.0);
         state.pass_sums.assign(kClusters * kDim, 1.0F);
-        ASSERT_EQ(QGEMeansTestAccess::revive(model, state, last), 1U);
+        ASSERT_EQ(detail::revive(state, last), 1U);
         const auto split = state.centroids;
         for (size_t cluster = 0; cluster < kClusters; ++cluster) {
             const bool cleared = last && (cluster == 3 || cluster == 7);
             EXPECT_EQ(state.pass_counts[cluster], cleared ? 0.0 : 2.0) << cluster;
             EXPECT_EQ(state.pass_sums[cluster * kDim], cleared ? 0.0F : 1.0F) << cluster;
         }
-        QGEMeansTestAccess::close_means(model, state);
+        detail::close_means(state, 1);
         // Without later vectors the split pair keeps its split positions instead
         // of returning to the donor's earlier mean; the others close at 0.5.
         for (const size_t cluster : {size_t{3}, size_t{7}}) {
@@ -606,8 +590,7 @@ TEST(QGEMeansRevivalTest, LastEpochSplitsCloseFromLaterVectorsOnly) {
 
 TEST(QGEMeansRevivalTest, SplitsStayWithinTheCoordinateBound) {
     const auto data = clustered_data();
-    const QGEMeans model(kDim, kClusters, small_parameters(1));
-    auto state = revival_state(model, data);
+    auto state = revival_state(data);
     const float bound = max_coordinate_magnitude(kDim);
     state.centroids[7 * kDim] = bound;
     state.centroids[7 * kDim + 1] = -bound;
@@ -615,7 +598,7 @@ TEST(QGEMeansRevivalTest, SplitsStayWithinTheCoordinateBound) {
     state.axes[7 * kDim] = std::sqrt(0.5F);
     state.axes[7 * kDim + 1] = -std::sqrt(0.5F);
     state.removal[7 * (kDim + 1)] = 1e30F;
-    ASSERT_EQ(QGEMeansTestAccess::revive(model, state, false), 1U);
+    ASSERT_EQ(detail::revive(state, false), 1U);
     for (const size_t cluster : {size_t{3}, size_t{7}}) {
         for (size_t dim = 0; dim < kDim; ++dim) {
             EXPECT_LE(std::abs(state.centroids[cluster * kDim + dim]), bound)
@@ -629,7 +612,7 @@ TEST(QGEMeansRevivalTest, SplitsStayWithinTheCoordinateBound) {
 TEST(QGEMeansTest, RevivesCentroidsWhileTraining) {
     const auto data = clustered_data();
     QGEMeansParameters parameters = small_parameters();
-    parameters.epochs = 8;
+    parameters.niter = 8;
     QGEMeans model(kDim, kClusters, parameters);
     model.train(kCount, data.data());
     size_t revived = 0;

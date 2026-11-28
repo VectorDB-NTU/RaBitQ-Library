@@ -27,7 +27,7 @@ int run_demo() {
     }
 
     rabitqlib::qgemeans::QGEMeansParameters parameters;
-    parameters.epochs = 8;
+    parameters.niter = 8;
     parameters.ef_construction = 64;
     parameters.ef_search = 32;
     parameters.verbose = true;
@@ -36,7 +36,7 @@ int run_demo() {
     clustering.train(kNumPoints, data.data());
 
     std::cout << "Completed " << clustering.iteration_stats.size()
-              << " epochs; final objective=" << clustering.final_obj << '\n';
+              << " iterations; final objective=" << clustering.final_obj << '\n';
     return 0;
 }
 

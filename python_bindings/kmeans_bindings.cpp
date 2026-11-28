@@ -267,8 +267,8 @@ on QGEMeans.)doc"
             rabitqlib::python_bindings::kReduceExDoc
         )
         .def_readwrite(
-            "epochs",
-            &QGEMeansParameters::epochs,
+            "niter",
+            &QGEMeansParameters::niter,
             R"doc(Positive number of passes over the training vectors. Default is 8.)doc"
         )
         .def_readwrite(

@@ -93,7 +93,7 @@ int main() {
     }
 
     rabitqlib::qgemeans::QGEMeansParameters emeans_parameters;
-    emeans_parameters.epochs = 2;
+    emeans_parameters.niter = 2;
     emeans_parameters.num_threads = 2;
     emeans_parameters.ef_construction = 33;
     emeans_parameters.ef_search = 33;

@@ -215,8 +215,9 @@ class QGEMeans(_KMeans):
     k : int
         Number of centroids; greater than max_degree and no more than the
         number of training vectors.
-    epochs : int, optional
-        Positive number of passes over the training vectors. Default is 8.
+    niter : int, optional
+        Number of clustering iterations, each one pass over the training
+        vectors. Default is 8.
     batch_size : int, optional
         Vectors per mini-batch, capped at the number of training vectors; 0
         selects the e-means batch-size law. Default is 0.
@@ -243,12 +244,12 @@ class QGEMeans(_KMeans):
 
     Notes
     -----
-    Each epoch visits the vectors in a seeded random order, in mini-batches.
+    Each iteration visits the vectors in a seeded random order, in mini-batches.
     Before every mini-batch a SymphonyQG graph is rebuilt over the current
     centroids and searched for each vector's nearest centroid; centroids then
     take the e-means mass-weighted step, and centroids that cost little to remove
     periodically split the centroids with the longest axes. The step size follows the
-    e-means law and a cosine schedule, and the last epoch's means become the
+    e-means law and a cosine schedule, and the last iteration's means become the
     final centroids. train then assigns all vectors to them.
 
     Training results are None until the first successful train call. Set cp
@@ -260,7 +261,7 @@ class QGEMeans(_KMeans):
     >>> import numpy as np
     >>> from rabitqlib import QGEMeans
     >>> x = np.random.default_rng(42).normal(size=(256, 64)).astype(np.float32)
-    >>> model = QGEMeans(64, 40, epochs=2, ef_construction=40, num_threads=1)
+    >>> model = QGEMeans(64, 40, niter=2, ef_construction=40, num_threads=1)
     >>> objective = model.train(x)
     >>> model.centroids.shape
     (40, 64)
@@ -281,7 +282,7 @@ class QGEMeans(_KMeans):
         Returns
         -------
         objective : float
-            Sum of the mini-batch assignment distances in the last epoch, each
+            Sum of the mini-batch assignment distances in the last iteration, each
             measured before that batch's update. This can differ from
             final_obj, which uses the returned assignments and final centroids.
 
@@ -326,12 +327,12 @@ class QGEMeans(_KMeans):
 
     @property
     def obj(self):
-        """Per-epoch sums of mini-batch assignment distances, float64 array of shape (epochs,), or None before training."""
+        """Per-iteration sums of mini-batch assignment distances, float64 array of shape (niter,), or None before training."""
         return super().obj
 
     @property
     def iteration_stats(self):
-        """Per-epoch statistics, or None before training: obj sums the mini-batch assignment distances, shift is the squared centroid displacement over the epoch and nsplit counts revived centroids."""
+        """Per-iteration statistics, or None before training: obj sums the mini-batch assignment distances, shift is the squared centroid displacement over the iteration and nsplit counts revived centroids."""
         return super().iteration_stats
 
 
