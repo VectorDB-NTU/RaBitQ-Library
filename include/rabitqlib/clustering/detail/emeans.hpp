@@ -4,7 +4,8 @@
 // mini-batch is assigned: Algorithm 1 of arXiv 2611.09501, with the constants of
 // the FAISS reference implementation (faiss/contrib/e_means at b14b3d693, MIT
 // license): the throughput batch-size law (d > 16), the step law, a cosine
-// schedule and cost-based revival. Also QGEMeans' copy of the LloydKMeans
+// schedule and cost-based revival. EMeans runs it over a pluggable assignment, as
+// LloydKMeans does for Lloyd's algorithm. Also QGEMeans' copy of the LloydKMeans
 // validation and assignment checks, kept separate so LloydKMeans is unchanged.
 
 #include <omp.h>
@@ -13,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <numeric>
 #include <random>
@@ -25,6 +27,7 @@
 #include "rabitqlib/core/rotator.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/input_checks.hpp"
+#include "rabitqlib/utils/tools.hpp"
 
 namespace rabitqlib::qgemeans::detail {
 
@@ -640,5 +643,274 @@ inline void close_means(EMeansState& state, uint32_t num_workers) {
         }
     }
 }
+
+/**
+ * Mini-batch e-means over a pluggable assignment, the counterpart of LloydKMeans.
+ * Parameters provides niter, batch_size, verbose, seed, final_assignment and
+ * num_threads. Assignment provides:
+ *
+ *   static constexpr const char* kName;  // prefixes messages and output
+ *   static void validate_parameters(size_t d, size_t k, const Parameters&);
+ *   Assignment(size_t d, size_t k, const float* x, size_t n, uint32_t num_workers,
+ *              const Parameters&);  // one training call; may borrow x
+ *   void prepare(const float* centroids);  // before each mini-batch and the final
+ *                                          // pass; may borrow centroids until the
+ *                                          // next prepare
+ *   void assign_batch(const size_t* rows, size_t count, PID* assignments,
+ *                     float* distances, float* second_distances);
+ *   void end_pass();  // after each pass over all n training rows
+ *   struct ModelState;  // kept by the model for assign()
+ *   void store_model_state(ModelState&) const;
+ *   static bool has_model_state(const ModelState&, size_t d);
+ *   static void assign_with_state(size_t d, size_t k, const float* centroids,
+ *                                 const float* x, size_t n, uint32_t num_workers,
+ *                                 const Parameters&, const ModelState&,
+ *                                 PID* assignments, float* distances);
+ *
+ * assign_batch labels rows[i] (row i when rows is null) of the training x with its
+ * nearest prepared centroid, ties to the lower ID, and returns exact squared L2
+ * distances to that centroid and, when second_distances is non-null, to the second
+ * nearest; infinity when the assignment finds only one centroid. Revival reads
+ * second - first as each vector's removal cost.
+ */
+template <typename Parameters, typename Assignment>
+class EMeans : public Parameters {
+   public:
+    using Parameters::batch_size;
+    using Parameters::final_assignment;
+    using Parameters::niter;
+    using Parameters::num_threads;
+    using Parameters::seed;
+    using Parameters::verbose;
+
+    EMeans(size_t d, size_t k, const Parameters& cp) : Parameters(cp), d(d), k(k) {
+        validate_parameters();
+    }
+
+    void train(size_t n, const float* x) { fit(n, x, true); }
+
+    /**
+     * Trains the same centroids as train() but skips its final assignment of all n
+     * vectors. Leaves assignments and distances empty and final_obj zero;
+     * centroids, iteration_stats and assign() match a train() call.
+     */
+    void train_centroids(size_t n, const float* x) { fit(n, x, false); }
+
+    /**
+     * Assigns n row-major vectors to the current centroids with final_assignment.
+     * Each vector's result is independent of the others in the call. Requires a
+     * successful train() or train_centroids(); the outputs hold n elements each
+     * and must not overlap x or centroids.
+     */
+    void assign(
+        size_t n, const float* x, PID* point_assignments, float* point_distances
+    ) const {
+        validate_parameters();
+        const uint32_t num_workers = resolved_num_workers();
+        assign_trained(
+            Assignment::kName,
+            Assignment::has_model_state(model_state_, d),
+            d,
+            k,
+            centroids,
+            n,
+            x,
+            point_assignments,
+            point_distances,
+            num_workers,
+            [&] { assign_points(n, x, num_workers, point_assignments, point_distances); }
+        );
+    }
+
+    size_t d;
+    size_t k;
+    std::vector<float> centroids;
+    std::vector<PID> assignments;
+    std::vector<float> distances;
+    // One entry per iteration: obj sums the mini-batch assignment distances of that
+    // iteration, shift is the squared centroid displacement over it, and nsplit counts
+    // revived centroids.
+    std::vector<clustering::KMeansIterationStats> iteration_stats;
+    // Objective of the final returned assignments against the final centroids.
+    double final_obj = 0.0;
+
+   private:
+    void fit(size_t n, const float* x, bool assign_all) {
+        validate_parameters();
+        if (x == nullptr) {
+            throw std::invalid_argument(
+                std::string(Assignment::kName) + " x must not be null"
+            );
+        }
+        if (n < k) {
+            throw std::invalid_argument(
+                std::string(Assignment::kName) + " requires n >= k"
+            );
+        }
+        const uint32_t num_workers = resolved_num_workers();
+        validate_points(Assignment::kName, n, d, x, num_workers, "x");
+
+        const Recipe recipe = resolve_recipe(n, k, niter, batch_size);
+        if (verbose) {
+            std::cout << Assignment::kName << " mini-batches of " << recipe.batch_size
+                      << " training points\n";
+        }
+        Assignment graph(d, k, x, n, num_workers, *this);
+        EMeansState state;
+        initialize(state, d, k, n, x, recipe.batch_size, seed);
+
+        std::vector<clustering::KMeansIterationStats> stats;
+        stats.reserve(niter);
+        std::vector<size_t> order(n);
+        std::vector<float> iteration_start(state.centroids.size());
+        size_t step = 0;
+        for (size_t iteration = 0; iteration < niter; ++iteration) {
+            const bool last = iteration + 1 == niter;
+            std::copy(
+                state.centroids.begin(), state.centroids.end(), iteration_start.begin()
+            );
+            start_iteration(state, last);
+            std::iota(order.begin(), order.end(), size_t{0});
+            std::mt19937_64 rng(iteration_seed(seed, iteration));
+            std::shuffle(order.begin(), order.end(), rng);
+            double objective = 0.0;
+            size_t nsplit = 0;
+            for (size_t begin = 0; begin < n; begin += recipe.batch_size) {
+                const size_t rows = std::min(recipe.batch_size, n - begin);
+                const size_t* batch = order.data() + begin;
+                graph.prepare(state.centroids.data());
+                graph.assign_batch(
+                    batch,
+                    rows,
+                    state.batch_assignments.data(),
+                    state.batch_distances.data(),
+                    state.batch_second_distances.data()
+                );
+                objective += accumulate(state, x, batch, rows, num_workers);
+                apply_statistics(
+                    state,
+                    scheduled_alpha(recipe.alpha0, step, recipe.total_steps),
+                    last,
+                    num_workers
+                );
+                if ((step + 1) % kReviveEvery == 0) {
+                    nsplit += revive(state, last);
+                }
+                ++step;
+            }
+            graph.end_pass();
+            if (last) {
+                close_means(state, num_workers);
+            }
+            double shift = 0.0;
+            for (size_t cluster = 0; cluster < k; ++cluster) {
+                shift += clustering::detail::euclidean_sqr_f64(
+                    state.centroids.data() + cluster * d,
+                    iteration_start.data() + cluster * d,
+                    d
+                );
+            }
+            stats.push_back({iteration + 1, objective, shift, nsplit});
+            if (verbose) {
+                std::cout << Assignment::kName << " iteration " << iteration + 1 << "/"
+                          << niter << " | objective=" << objective << " | shift=" << shift
+                          << " | splits=" << nsplit << '\n';
+            }
+        }
+
+        std::vector<PID> final_assignments;
+        std::vector<float> final_distances;
+        double objective = 0.0;
+        if (assign_all) {
+            final_assignments.resize(n);
+            final_distances.resize(n);
+            // The approximate pass reuses the training assignment and its state.
+            assign_with_mode(
+                final_assignment,
+                x,
+                state.centroids.data(),
+                n,
+                d,
+                k,
+                false,
+                num_workers,
+                final_assignments.data(),
+                final_distances.data(),
+                [&] {
+                    graph.prepare(state.centroids.data());
+                    graph.assign_batch(
+                        nullptr,
+                        n,
+                        final_assignments.data(),
+                        final_distances.data(),
+                        nullptr
+                    );
+                }
+            );
+            objective =
+                std::accumulate(final_distances.begin(), final_distances.end(), 0.0);
+        }
+
+        // Commit: the previous results stay intact if anything above throws.
+        centroids.swap(state.centroids);
+        assignments.swap(final_assignments);
+        distances.swap(final_distances);
+        iteration_stats.swap(stats);
+        final_obj = objective;
+        graph.store_model_state(model_state_);
+    }
+
+    // Assigns validated points to the current centroids without training state, so
+    // each point's result is independent of the batch. Requires n > 0 and outputs
+    // that do not overlap x or centroids.
+    void assign_points(
+        size_t n,
+        const float* x,
+        uint32_t num_workers,
+        PID* point_assignments,
+        float* point_distances
+    ) const {
+        assign_with_mode(
+            final_assignment,
+            x,
+            centroids.data(),
+            n,
+            d,
+            k,
+            false,
+            num_workers,
+            point_assignments,
+            point_distances,
+            [&] {
+                Assignment::assign_with_state(
+                    d,
+                    k,
+                    centroids.data(),
+                    x,
+                    n,
+                    num_workers,
+                    *this,
+                    model_state_,
+                    point_assignments,
+                    point_distances
+                );
+            }
+        );
+    }
+
+    void validate_parameters() const {
+        validate_common_parameters(
+            Assignment::kName, d, k, niter, "niter", num_threads, final_assignment
+        );
+        Assignment::validate_parameters(d, k, *this);
+    }
+
+    [[nodiscard]] uint32_t resolved_num_workers() const {
+        return static_cast<uint32_t>(resolve_num_threads(num_threads));
+    }
+
+    // Kept for assign(); empty until the first successful fit.
+    typename Assignment::ModelState model_state_;
+};
 
 }  // namespace rabitqlib::qgemeans::detail

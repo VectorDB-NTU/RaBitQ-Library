@@ -165,7 +165,7 @@ struct GraphSettings {
  * quantized storage or inner product, so QGKMeans is unchanged.
  */
 class QGAssigner {
-    friend class BatchAssignment;
+    friend class QGEAssignment;
     friend class GraphCache;
 
    public:
@@ -426,30 +426,44 @@ class GraphCache {
         cp.seed};
 }
 
-// Raw-vector centroid graph for one training call: rebuilt from the current
-// centroids, then searched for the nearest centroid of each listed row, without
-// hints. The query-sum cache is filled during the first iteration, which visits
-// every row once, and reused afterwards.
-class BatchAssignment {
+// SymphonyQG assignment for EMeans: a raw-vector graph over the current centroids,
+// rebuilt by every prepare() and searched for each row's two nearest centroids,
+// without hints. The query-sum cache is filled during the first pass, which visits
+// every row once, and reused afterwards. assign() searches a cached graph over
+// the final centroids.
+class QGEAssignment {
+    const float* data_;
     QGAssigner assigner_;
     std::vector<float> query_sums_;
     bool sums_ready_ = false;
 
    public:
-    BatchAssignment(size_t d, size_t k, size_t n, const QGEMeansParameters& cp)
-        : assigner_(d, k, graph_settings(cp)) {
+    static constexpr const char* kName = detail::kName;
+
+    static void validate_parameters(size_t d, size_t k, const QGEMeansParameters& cp) {
+        validate_graph_parameters(
+            kName,
+            d,
+            k,
+            cp.max_degree,
+            cp.ef_construction,
+            cp.ef_search,
+            cp.graph_build_iterations
+        );
+    }
+
+    QGEAssignment(
+        size_t d, size_t k, const float* x, size_t n, uint32_t, const QGEMeansParameters& cp
+    )
+        : data_(x), assigner_(d, k, graph_settings(cp)) {
         if (assigner_.graph_->padded_dim() >= detail::kMinQuerySumDim) {
             query_sums_.resize(n);
         }
     }
 
-    void rebuild(const float* centroids) { assigner_.rebuild_centroid_graph(centroids); }
+    void prepare(const float* centroids) { assigner_.rebuild_centroid_graph(centroids); }
 
-    // Requires a graph rebuilt from the current centroids. Null rows assign rows 0
-    // to count - 1; a non-null second_distances receives each row's squared
-    // distance to its second-nearest centroid.
-    void search(
-        const float* x,
+    void assign_batch(
         const size_t* rows,
         size_t count,
         PID* assignments,
@@ -460,7 +474,7 @@ class BatchAssignment {
             query_sums_.empty() ? nullptr : query_sums_.data(), sums_ready_
         );
         assigner_.search_points(
-            x,
+            data_,
             count,
             rows,
             assignments,
@@ -471,8 +485,40 @@ class BatchAssignment {
         );
     }
 
-    // Called after a pass that searched every row.
-    void complete_query_sums() { sums_ready_ = true; }
+    // Every row has been searched once, so its query sum is cached.
+    void end_pass() { sums_ready_ = true; }
+
+    struct ModelState {
+        bool trained = false;
+        GraphCache graph;
+    };
+
+    void store_model_state(ModelState& state) const {
+        state.graph.clear();
+        state.trained = true;
+    }
+
+    [[nodiscard]] static bool has_model_state(const ModelState& state, size_t) {
+        return state.trained;
+    }
+
+    // Requires validated inputs and centroids. Reuses the cached centroid graph.
+    static void assign_with_state(
+        size_t d,
+        size_t k,
+        const float* centroids,
+        const float* x,
+        size_t n,
+        uint32_t,
+        const QGEMeansParameters& cp,
+        const ModelState& state,
+        PID* assignments,
+        float* distances
+    ) {
+        state.graph.assign(
+            d, k, centroids, graph_settings(cp), x, n, assignments, distances
+        );
+    }
 };
 
 }  // namespace detail
@@ -483,247 +529,13 @@ class BatchAssignment {
  * batch; centroids follow the e-means mass-weighted update and cost-based revival
  * of cheap centroids. train() then assigns every vector to the final centroids.
  */
-class QGEMeans : public QGEMeansParameters {
+class QGEMeans : public detail::EMeans<QGEMeansParameters, detail::QGEAssignment> {
+    using Base = detail::EMeans<QGEMeansParameters, detail::QGEAssignment>;
+
    public:
     QGEMeans(size_t d, size_t k) : QGEMeans(d, k, QGEMeansParameters{}) {}
 
-    QGEMeans(size_t d, size_t k, const QGEMeansParameters& cp)
-        : QGEMeansParameters(cp), d(d), k(k) {
-        validate_parameters();
-    }
-
-    void train(size_t n, const float* x) { fit(n, x, true); }
-
-    /**
-     * Trains the same centroids as train() but skips its final assignment of all n
-     * vectors. Leaves assignments and distances empty and final_obj zero;
-     * centroids, iteration_stats and assign() match a train() call.
-     */
-    void train_centroids(size_t n, const float* x) { fit(n, x, false); }
-
-    /**
-     * Assigns n row-major vectors to the current centroids with final_assignment.
-     * Each vector's result is independent of the others in the call. Requires a
-     * successful train() or train_centroids(); the outputs hold n elements each
-     * and must not overlap x or centroids.
-     */
-    void assign(
-        size_t n, const float* x, PID* point_assignments, float* point_distances
-    ) const {
-        validate_parameters();
-        const uint32_t num_workers = resolved_num_workers();
-        detail::assign_trained(
-            detail::kName,
-            trained_,
-            d,
-            k,
-            centroids,
-            n,
-            x,
-            point_assignments,
-            point_distances,
-            num_workers,
-            [&] { assign_points(n, x, num_workers, point_assignments, point_distances); }
-        );
-    }
-
-    size_t d;
-    size_t k;
-    std::vector<float> centroids;
-    std::vector<PID> assignments;
-    std::vector<float> distances;
-    // One entry per iteration: obj sums the mini-batch assignment distances of that
-    // iteration, shift is the squared centroid displacement over it, and nsplit counts
-    // revived centroids.
-    std::vector<clustering::KMeansIterationStats> iteration_stats;
-    // Objective of the final returned assignments against the final centroids.
-    double final_obj = 0.0;
-
-   private:
-    void fit(size_t n, const float* x, bool assign_all) {
-        validate_parameters();
-        if (x == nullptr) {
-            throw std::invalid_argument(std::string(detail::kName) + " x must not be null");
-        }
-        if (n < k) {
-            throw std::invalid_argument(std::string(detail::kName) + " requires n >= k");
-        }
-        const uint32_t num_workers = resolved_num_workers();
-        detail::validate_points(detail::kName, n, d, x, num_workers, "x");
-
-        const detail::Recipe recipe = detail::resolve_recipe(n, k, niter, batch_size);
-        if (verbose) {
-            std::cout << detail::kName << " mini-batches of " << recipe.batch_size
-                      << " training points\n";
-        }
-        detail::BatchAssignment graph(d, k, n, *this);
-        detail::EMeansState state;
-        detail::initialize(state, d, k, n, x, recipe.batch_size, seed);
-
-        std::vector<clustering::KMeansIterationStats> stats;
-        stats.reserve(niter);
-        std::vector<size_t> order(n);
-        std::vector<float> iteration_start(state.centroids.size());
-        size_t step = 0;
-        for (size_t iteration = 0; iteration < niter; ++iteration) {
-            const bool last = iteration + 1 == niter;
-            std::copy(
-                state.centroids.begin(), state.centroids.end(), iteration_start.begin()
-            );
-            detail::start_iteration(state, last);
-            std::iota(order.begin(), order.end(), size_t{0});
-            std::mt19937_64 rng(detail::iteration_seed(seed, iteration));
-            std::shuffle(order.begin(), order.end(), rng);
-            double objective = 0.0;
-            size_t nsplit = 0;
-            for (size_t begin = 0; begin < n; begin += recipe.batch_size) {
-                const size_t rows = std::min(recipe.batch_size, n - begin);
-                const size_t* batch = order.data() + begin;
-                graph.rebuild(state.centroids.data());
-                graph.search(
-                    x,
-                    batch,
-                    rows,
-                    state.batch_assignments.data(),
-                    state.batch_distances.data(),
-                    state.batch_second_distances.data()
-                );
-                objective += detail::accumulate(state, x, batch, rows, num_workers);
-                detail::apply_statistics(
-                    state,
-                    detail::scheduled_alpha(recipe.alpha0, step, recipe.total_steps),
-                    last,
-                    num_workers
-                );
-                if ((step + 1) % detail::kReviveEvery == 0) {
-                    nsplit += detail::revive(state, last);
-                }
-                ++step;
-            }
-            if (iteration == 0) {
-                graph.complete_query_sums();
-            }
-            if (last) {
-                detail::close_means(state, num_workers);
-            }
-            double shift = 0.0;
-            for (size_t cluster = 0; cluster < k; ++cluster) {
-                shift += clustering::detail::euclidean_sqr_f64(
-                    state.centroids.data() + cluster * d,
-                    iteration_start.data() + cluster * d,
-                    d
-                );
-            }
-            stats.push_back({iteration + 1, objective, shift, nsplit});
-            if (verbose) {
-                std::cout << detail::kName << " iteration " << iteration + 1 << "/" << niter
-                          << " | objective=" << objective << " | shift=" << shift
-                          << " | splits=" << nsplit << '\n';
-            }
-        }
-
-        std::vector<PID> final_assignments;
-        std::vector<float> final_distances;
-        double objective = 0.0;
-        if (assign_all) {
-            final_assignments.resize(n);
-            final_distances.resize(n);
-            // The approximate pass reuses the training graph and its query sums.
-            detail::assign_with_mode(
-                final_assignment,
-                x,
-                state.centroids.data(),
-                n,
-                d,
-                k,
-                false,
-                num_workers,
-                final_assignments.data(),
-                final_distances.data(),
-                [&] {
-                    graph.rebuild(state.centroids.data());
-                    graph.search(
-                        x,
-                        nullptr,
-                        n,
-                        final_assignments.data(),
-                        final_distances.data(),
-                        nullptr
-                    );
-                }
-            );
-            objective =
-                std::accumulate(final_distances.begin(), final_distances.end(), 0.0);
-        }
-
-        // Commit: the previous results stay intact if anything above throws.
-        centroids.swap(state.centroids);
-        assignments.swap(final_assignments);
-        distances.swap(final_distances);
-        iteration_stats.swap(stats);
-        final_obj = objective;
-        graph_cache_.clear();
-        trained_ = true;
-    }
-
-    // Assigns validated points to the current centroids without training state, so
-    // each point's result is independent of the batch. Requires n > 0 and outputs
-    // that do not overlap x or centroids.
-    void assign_points(
-        size_t n,
-        const float* x,
-        uint32_t num_workers,
-        PID* point_assignments,
-        float* point_distances
-    ) const {
-        detail::assign_with_mode(
-            final_assignment,
-            x,
-            centroids.data(),
-            n,
-            d,
-            k,
-            false,
-            num_workers,
-            point_assignments,
-            point_distances,
-            [&] {
-                graph_cache_.assign(
-                    d,
-                    k,
-                    centroids.data(),
-                    detail::graph_settings(*this),
-                    x,
-                    n,
-                    point_assignments,
-                    point_distances
-                );
-            }
-        );
-    }
-
-    void validate_parameters() const {
-        detail::validate_common_parameters(
-            detail::kName, d, k, niter, "niter", num_threads, final_assignment
-        );
-        detail::validate_graph_parameters(
-            detail::kName,
-            d,
-            k,
-            max_degree,
-            ef_construction,
-            ef_search,
-            graph_build_iterations
-        );
-    }
-
-    [[nodiscard]] uint32_t resolved_num_workers() const {
-        return static_cast<uint32_t>(resolve_num_threads(num_threads));
-    }
-
-    bool trained_ = false;
-    // Centroid graph for assign(), built on first use after training.
-    detail::GraphCache graph_cache_;
+    QGEMeans(size_t d, size_t k, const QGEMeansParameters& cp) : Base(d, k, cp) {}
 };
 
 }  // namespace rabitqlib::qgemeans
