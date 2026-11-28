@@ -1,16 +1,19 @@
 #pragma once
 
-// QGEMeans' copy of the QGKMeans centroid-graph assigner and of the LloydKMeans
-// validation and assignment checks, kept separate so those classes are unchanged.
+// QGEMeans' copy of the QGKMeans centroid-graph assigner and graph cache, and of
+// the LloydKMeans validation and assignment checks, kept separate so those classes
+// are unchanged. Training and assign() both search through this copy.
 
 #include <omp.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -242,62 +245,77 @@ class QuerySumCache {
     }
 };
 
+// Graph settings that determine a centroid graph and its search results.
+struct GraphSettings {
+    uint32_t max_degree;
+    uint32_t ef_construction;
+    uint32_t ef_search;
+    uint32_t graph_build_iterations;
+    uint32_t num_threads;
+    uint32_t seed;
+
+    [[nodiscard]] bool operator==(const GraphSettings& other) const {
+        return max_degree == other.max_degree && ef_construction == other.ef_construction &&
+               ef_search == other.ef_search &&
+               graph_build_iterations == other.graph_build_iterations &&
+               num_threads == other.num_threads && seed == other.seed;
+    }
+};
+
 /**
- * Builds a raw SymphonyQG graph over a fixed number of centroids and assigns
- * vectors to them, reusing the graph allocation and per-thread search scratch.
+ * Builds a raw-vector L2 SymphonyQG graph over a fixed number of centroids and
+ * finds each vector's two nearest centroids, reusing the graph allocation and
+ * per-thread search scratch. Copied from qgkmeans::QGAssigner, without hints,
+ * quantized storage or inner product, so QGKMeans is unchanged.
  */
 class QGAssigner {
     friend class BatchAssignment;
+    friend class GraphCache;
 
    public:
-    QGAssigner(
-        size_t d,
-        size_t k,
-        uint32_t max_degree,
-        uint32_t ef_construction,
-        uint32_t ef_search,
-        uint32_t graph_build_iterations,
-        uint32_t num_threads = 0,
-        uint32_t seed = 42,
-        MetricType metric_type = METRIC_L2,
-        uint32_t quantization_bits = 0,
-        const char* component = "QGEMeans"
-    )
+    // Two results: the nearest centroid labels the vector, and the second gives
+    // the removal cost of cost-based revival.
+    static constexpr uint32_t kResults = 2;
+
+    QGAssigner(size_t d, size_t k, const GraphSettings& settings)
         : dim_(d)
         , num_clusters_(k)
-        , max_degree_(max_degree)
-        , ef_construction_(ef_construction)
-        , ef_search_(ef_search)
-        , graph_build_iterations_(graph_build_iterations)
-        , seed_(seed) {
-        validate_configuration(num_threads, component);
-        // Cosine belongs to the indexes, which normalize vectors; the assigner's exact
-        // distances are raw L2 or inner product.
-        validate_metric_type(metric_type);
-        num_workers_ = static_cast<uint32_t>(resolve_num_threads(num_threads));
+        , max_degree_(settings.max_degree)
+        , ef_construction_(settings.ef_construction)
+        , ef_search_(settings.ef_search)
+        , graph_build_iterations_(settings.graph_build_iterations)
+        , seed_(settings.seed) {
+        validate_configuration(settings.num_threads);
+        num_workers_ = static_cast<uint32_t>(resolve_num_threads(settings.num_threads));
 
         graph_ = std::make_unique<symqg::QuantizedGraph<float>>(
             num_clusters_,
             dim_,
             max_degree_,
-            metric_type,
+            METRIC_L2,
             RotatorType::FhtKacRotator,
-            quantization_bits,
+            0,
             seed_
         );
         graph_->set_ef(ef_search_);
-
-        scratch_.reserve(num_workers_);
-        for (uint32_t thread = 0; thread < num_workers_; ++thread) {
-            scratch_.emplace_back(
-                std::make_unique<symqg::detail::SearchScratch>(
-                    graph_->padded_dim(), max_degree_, ef_search_, 1
-                )
-            );
-        }
+        scratch_ = make_scratch();
     }
 
    private:
+    [[nodiscard]] std::vector<std::unique_ptr<symqg::detail::SearchScratch>>
+    make_scratch() const {
+        std::vector<std::unique_ptr<symqg::detail::SearchScratch>> scratch;
+        scratch.reserve(num_workers_);
+        for (uint32_t thread = 0; thread < num_workers_; ++thread) {
+            scratch.emplace_back(
+                std::make_unique<symqg::detail::SearchScratch>(
+                    graph_->padded_dim(), max_degree_, ef_search_, kResults
+                )
+            );
+        }
+        return scratch;
+    }
+
     void rebuild_centroid_graph(const float* centroids) {
         if (builder_) {
             builder_->reset(centroids);
@@ -326,29 +344,25 @@ class QGAssigner {
         }
     }
 
-    // Searches each point independently. A non-empty query_order only changes
-    // scheduling; hints, if given, hold one centroid ID per point. Non-null rows
-    // map output i to input row rows[i], which also indexes the query-sum cache.
+    // Searches each point independently for its nearest centroid and squared
+    // distance, and the squared distance to the second nearest when
+    // second_distances is non-null (infinity if the search reaches one centroid).
+    // Non-null rows map output i to input row rows[i], which also indexes the
+    // query-sum cache.
     void search_points(
-        const float* centroids,
         const float* x,
         size_t n,
+        const size_t* rows,
         PID* assignments,
         float* distances,
-        const std::vector<uint32_t>& query_order,
-        const PID* hints,
+        float* second_distances,
         const QuerySumCache& query_sums,
-        const std::vector<std::unique_ptr<symqg::detail::SearchScratch>>& scratch,
-        const size_t* rows = nullptr
+        const std::vector<std::unique_ptr<symqg::detail::SearchScratch>>& scratch
     ) const {
-        const auto distance_func = graph_->metric_type() == METRIC_IP
-                                       ? dot_product_dis<float>
-                                       : euclidean_sqr<float>;
         index_detail::ParallelException failure;
 #pragma omp parallel for num_threads(num_workers_) schedule(dynamic, 64)
         for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(n); ++index) {
-            const size_t i = query_order.empty() ? static_cast<size_t>(index)
-                                                 : query_order[static_cast<size_t>(index)];
+            const auto i = static_cast<size_t>(index);
             const int thread_id = omp_get_thread_num();
             if (failure.failed()) {
                 continue;
@@ -367,25 +381,24 @@ class QGAssigner {
                     visited_size = num_clusters_;
                     visited_capacity = capacity;
                 }
-                const PID hint = hints == nullptr ? kPidMax : hints[i];
                 const size_t row = rows == nullptr ? i : rows[i];
+                std::array<PID, kResults> ids{};
+                std::array<float, kResults> found{};
                 symqg::detail::search_with_workspace(
                     *graph_,
                     x + row * dim_,
-                    1,
-                    assignments + i,
-                    distances + i,
+                    kResults,
+                    ids.data(),
+                    found.data(),
                     worker_scratch.view(visited),
-                    hint,
+                    kPidMax,
                     query_sums.cached(row)
                 );
                 query_sums.store(row, worker_scratch.batch_query.g_k1xsumq());
-                if (graph_->is_quantized()) {
-                    // Keep objectives and returned distances relative to the original
-                    // centroids; graph search scores are quantized estimates.
-                    distances[i] = distance_func(
-                        x + row * dim_, centroids + assignments[i] * dim_, dim_
-                    );
+                assignments[i] = ids[0];
+                distances[i] = found[0];
+                if (second_distances != nullptr) {
+                    second_distances[i] = found[1];
                 }
             } catch (...) { failure.capture(); }
         }
@@ -393,12 +406,22 @@ class QGAssigner {
         failure.rethrow();
     }
 
-    void validate_configuration(uint32_t num_threads, const char* component) const {
+    // Requires a graph built from the centroids. Uses no query-sum cache and
+    // allocates its own scratch, so concurrent calls only read the graph.
+    void search_built_graph(
+        const float* x, size_t n, PID* assignments, float* distances
+    ) const {
+        const auto scratch = make_scratch();
+        const QuerySumCache query_sums(nullptr, false);
+        search_points(x, n, nullptr, assignments, distances, nullptr, query_sums, scratch);
+    }
+
+    void validate_configuration(uint32_t num_threads) const {
         if (num_threads > static_cast<uint32_t>(std::numeric_limits<int>::max())) {
-            throw std::invalid_argument("QGAssigner num_threads must fit in an OpenMP int");
+            throw std::invalid_argument("QGEMeans num_threads must fit in an OpenMP int");
         }
         validate_graph_parameters(
-            component,
+            "QGEMeans",
             dim_,
             num_clusters_,
             max_degree_,
@@ -419,6 +442,84 @@ class QGAssigner {
     std::unique_ptr<symqg::QuantizedGraph<float>> graph_;
     std::unique_ptr<symqg::QGBuilder> builder_;
     std::vector<std::unique_ptr<symqg::detail::SearchScratch>> scratch_;
+};
+
+// Graph over a model's final centroids for assign(), rebuilt when the centroids
+// or graph settings differ from those it was built from. Copies share the
+// immutable graph; each object has its own lock. Copied from
+// qgkmeans::detail::CentroidGraphCache, so assign() searches with the same
+// QGAssigner as training.
+class GraphCache {
+    struct Entry {
+        std::vector<float> centroids;
+        GraphSettings settings;
+        QGAssigner assigner;
+
+        Entry(size_t d, size_t k, const float* source, const GraphSettings& graph)
+            : centroids(source, source + k * d), settings(graph), assigner(d, k, graph) {
+            // The builder borrows this copy, which lives as long as the graph.
+            assigner.rebuild_centroid_graph(centroids.data());
+        }
+
+        [[nodiscard]] bool matches(
+            size_t d, size_t k, const float* source, const GraphSettings& graph
+        ) const {
+            return centroids.size() == k * d &&
+                   std::equal(centroids.begin(), centroids.end(), source) &&
+                   settings == graph;
+        }
+    };
+
+    mutable std::mutex mutex_;
+    mutable std::shared_ptr<const Entry> entry_;
+
+    [[nodiscard]] std::shared_ptr<const Entry> snapshot() const {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return entry_;
+    }
+
+   public:
+    GraphCache() = default;
+
+    GraphCache(const GraphCache& other) : entry_(other.snapshot()) {}
+
+    GraphCache& operator=(const GraphCache& other) {
+        if (this != &other) {
+            auto entry = other.snapshot();
+            const std::lock_guard<std::mutex> lock(mutex_);
+            entry_ = std::move(entry);
+        }
+        return *this;
+    }
+
+    ~GraphCache() = default;
+
+    void clear() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        entry_.reset();
+    }
+
+    // Requires k * d validated centroid coordinates.
+    void assign(
+        size_t d,
+        size_t k,
+        const float* centroids,
+        const GraphSettings& settings,
+        const float* x,
+        size_t n,
+        PID* assignments,
+        float* distances
+    ) const {
+        std::shared_ptr<const Entry> entry;
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            if (!entry_ || !entry_->matches(d, k, centroids, settings)) {
+                entry_ = std::make_shared<const Entry>(d, k, centroids, settings);
+            }
+            entry = entry_;
+        }
+        entry->assigner.search_built_graph(x, n, assignments, distances);
+    }
 };
 
 }  // namespace rabitqlib::qgemeans::detail

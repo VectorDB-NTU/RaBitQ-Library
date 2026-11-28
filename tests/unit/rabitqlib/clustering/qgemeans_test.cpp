@@ -12,8 +12,28 @@
 #include <vector>
 
 #include "rabitqlib/index/types.hpp"
+#include "rabitqlib/utils/input_checks.hpp"
 
 namespace rabitqlib::qgemeans {
+
+struct QGEMeansTestAccess {
+    using State = QGEMeans::State;
+
+    static State initialized_state(const QGEMeans& model, size_t n, const float* x) {
+        State state;
+        model.initialize(state, n, x, 16);
+        return state;
+    }
+
+    static size_t revive(const QGEMeans& model, State& state, bool last) {
+        return model.revive_unused(state, last);
+    }
+
+    static void close_means(const QGEMeans& model, State& state) {
+        model.close_means(state, 1);
+    }
+};
+
 namespace {
 
 constexpr size_t kDim = 64;
@@ -23,23 +43,49 @@ constexpr size_t kCount = kClusters * kPointsPerCluster;
 
 // Well-separated Gaussian clusters around random centers.
 std::vector<float> clustered_data(
-    size_t clusters = kClusters, size_t per_cluster = kPointsPerCluster, uint32_t seed = 7
+    size_t clusters = kClusters,
+    size_t per_cluster = kPointsPerCluster,
+    uint32_t seed = 7,
+    size_t dimension = kDim
 ) {
     std::mt19937 rng(seed);
     std::normal_distribution<float> center(0.0F, 4.0F);
     std::normal_distribution<float> noise(0.0F, 0.1F);
-    std::vector<float> centers(clusters * kDim);
+    std::vector<float> centers(clusters * dimension);
     for (auto& value : centers) {
         value = center(rng);
     }
-    std::vector<float> data(clusters * per_cluster * kDim);
+    std::vector<float> data(clusters * per_cluster * dimension);
     for (size_t point = 0; point < clusters * per_cluster; ++point) {
         const size_t cluster = point % clusters;
-        for (size_t dim = 0; dim < kDim; ++dim) {
-            data[point * kDim + dim] = centers[cluster * kDim + dim] + noise(rng);
+        for (size_t dim = 0; dim < dimension; ++dim) {
+            data[point * dimension + dim] = centers[cluster * dimension + dim] + noise(rng);
         }
     }
     return data;
+}
+
+// Revival state of a 40-centroid model in which every centroid has removal cost
+// 10 and no axis, except: centroid 3 costs 0, centroid 5 costs 1 (both below 0.3
+// times the median of 10), donor 7 has |U| = 100 along coordinate 0 and mass 4,
+// and donor 9 has |U| = 1, whose gain (2 / pi) does not pay for centroid 5.
+QGEMeansTestAccess::State revival_state(
+    const QGEMeans& model, const std::vector<float>& data
+) {
+    auto state = QGEMeansTestAccess::initialized_state(model, kCount, data.data());
+    const size_t row = kDim + 1;
+    for (size_t cluster = 0; cluster < kClusters; ++cluster) {
+        std::fill_n(state.removal.data() + cluster * row, kDim, 0.0F);
+        state.removal[cluster * row + kDim] = 10.0F;
+    }
+    state.removal[3 * row + kDim] = 0.0F;
+    state.removal[5 * row + kDim] = 1.0F;
+    state.removal[7 * row] = 100.0F;
+    state.removal[9 * row + 1] = 1.0F;
+    std::fill_n(state.axes.data() + 7 * kDim, kDim, 0.0F);
+    state.axes[7 * kDim] = 1.0F;
+    state.mass[7] = 4.0F;
+    return state;
 }
 
 QGEMeansParameters small_parameters(uint32_t threads = 2) {
@@ -477,6 +523,151 @@ TEST(QGEMeansTest, ReducesTheObjectiveOnSeparatedClusters) {
         initial += squared_distance(data.data() + point * kDim, data.data());
     }
     EXPECT_LT(model.final_obj, initial / 10.0);
+}
+
+TEST(QGEMeansRevivalTest, MovesTheCheapestCentroidsToSplitTheLongestAxes) {
+    const auto data = clustered_data();
+    const QGEMeans model(kDim, kClusters, small_parameters(1));
+    auto state = revival_state(model, data);
+    const auto before = state.centroids;
+    const auto mass_five = state.mass[5];
+
+    // Centroid 3 always moves; the pair (5, 9) does not pay and stops the list.
+    EXPECT_EQ(QGEMeansTestAccess::revive(model, state, false), 1U);
+    const double spread = std::sqrt(2.0 * (100.0 / 4.0) / 3.14159265358979323846);
+    EXPECT_FLOAT_EQ(
+        state.centroids[7 * kDim], static_cast<float>(before[7 * kDim] - spread)
+    );
+    EXPECT_FLOAT_EQ(
+        state.centroids[3 * kDim], static_cast<float>(before[7 * kDim] + spread)
+    );
+    for (size_t dim = 1; dim < kDim; ++dim) {
+        EXPECT_EQ(state.centroids[7 * kDim + dim], before[7 * kDim + dim]);
+        EXPECT_EQ(state.centroids[3 * kDim + dim], before[7 * kDim + dim]);
+    }
+    EXPECT_EQ(state.mass[7], 2.0F);
+    EXPECT_EQ(state.mass[3], 2.0F);
+    EXPECT_EQ(state.mass[5], mass_five);
+    // The child takes half of the donor's statistics and its axis.
+    const size_t row = kDim + 1;
+    EXPECT_EQ(state.removal[7 * row], 50.0F);
+    EXPECT_EQ(state.removal[3 * row], 50.0F);
+    EXPECT_EQ(state.removal[3 * row + kDim], 5.0F);
+    EXPECT_EQ(state.axes[3 * kDim], 1.0F);
+    for (size_t cluster = 0; cluster < kClusters; ++cluster) {
+        if (cluster != 3 && cluster != 7) {
+            EXPECT_TRUE(
+                std::equal(
+                    before.begin() + static_cast<std::ptrdiff_t>(cluster * kDim),
+                    before.begin() + static_cast<std::ptrdiff_t>((cluster + 1) * kDim),
+                    state.centroids.begin() + static_cast<std::ptrdiff_t>(cluster * kDim)
+                )
+            ) << cluster;
+        }
+    }
+}
+
+TEST(QGEMeansRevivalTest, MovesNothingWithoutCheapCentroids) {
+    const auto data = clustered_data();
+    const QGEMeans model(kDim, kClusters, small_parameters(1));
+    auto state = revival_state(model, data);
+    state.removal[3 * (kDim + 1) + kDim] = 10.0F;
+    state.removal[5 * (kDim + 1) + kDim] = 10.0F;
+    const auto before = state.centroids;
+    EXPECT_EQ(QGEMeansTestAccess::revive(model, state, false), 0U);
+    EXPECT_EQ(state.centroids, before);
+}
+
+TEST(QGEMeansRevivalTest, LastEpochSplitsCloseFromLaterVectorsOnly) {
+    const auto data = clustered_data();
+    const QGEMeans model(kDim, kClusters, small_parameters(1));
+    for (const bool last : {false, true}) {
+        auto state = revival_state(model, data);
+        // Every centroid received two vectors summing to one per coordinate.
+        state.pass_counts.assign(kClusters, 2.0);
+        state.pass_sums.assign(kClusters * kDim, 1.0F);
+        ASSERT_EQ(QGEMeansTestAccess::revive(model, state, last), 1U);
+        const auto split = state.centroids;
+        for (size_t cluster = 0; cluster < kClusters; ++cluster) {
+            const bool cleared = last && (cluster == 3 || cluster == 7);
+            EXPECT_EQ(state.pass_counts[cluster], cleared ? 0.0 : 2.0) << cluster;
+            EXPECT_EQ(state.pass_sums[cluster * kDim], cleared ? 0.0F : 1.0F) << cluster;
+        }
+        QGEMeansTestAccess::close_means(model, state);
+        // Without later vectors the split pair keeps its split positions instead
+        // of returning to the donor's earlier mean; the others close at 0.5.
+        for (const size_t cluster : {size_t{3}, size_t{7}}) {
+            EXPECT_EQ(state.centroids[cluster * kDim], last ? split[cluster * kDim] : 0.5F)
+                << cluster;
+        }
+        EXPECT_EQ(state.centroids[0], 0.5F);
+    }
+}
+
+TEST(QGEMeansRevivalTest, SplitsStayWithinTheCoordinateBound) {
+    const auto data = clustered_data();
+    const QGEMeans model(kDim, kClusters, small_parameters(1));
+    auto state = revival_state(model, data);
+    const float bound = max_coordinate_magnitude(kDim);
+    state.centroids[7 * kDim] = bound;
+    state.centroids[7 * kDim + 1] = -bound;
+    // A long axis across both coordinates, spread far beyond the bound.
+    state.axes[7 * kDim] = std::sqrt(0.5F);
+    state.axes[7 * kDim + 1] = -std::sqrt(0.5F);
+    state.removal[7 * (kDim + 1)] = 1e30F;
+    ASSERT_EQ(QGEMeansTestAccess::revive(model, state, false), 1U);
+    for (const size_t cluster : {size_t{3}, size_t{7}}) {
+        for (size_t dim = 0; dim < kDim; ++dim) {
+            EXPECT_LE(std::abs(state.centroids[cluster * kDim + dim]), bound)
+                << cluster << " " << dim;
+        }
+    }
+    EXPECT_EQ(state.centroids[3 * kDim], bound);
+    EXPECT_EQ(state.centroids[3 * kDim + 1], -bound);
+}
+
+TEST(QGEMeansTest, RevivesCentroidsWhileTraining) {
+    const auto data = clustered_data();
+    QGEMeansParameters parameters = small_parameters();
+    parameters.epochs = 8;
+    QGEMeans model(kDim, kClusters, parameters);
+    model.train(kCount, data.data());
+    size_t revived = 0;
+    for (const auto& stats : model.iteration_stats) {
+        revived += stats.nsplit;
+    }
+    EXPECT_GT(revived, 0U);
+}
+
+TEST(QGEMeansTest, IsDeterministicAcrossGraphBuildThreadCounts) {
+    // From k = 256 the centroid graph builds with up to k / 128 threads.
+    constexpr size_t kManyClusters = 256;
+    constexpr size_t kPerCluster = 8;
+    const auto data = clustered_data(kManyClusters, kPerCluster);
+    QGEMeans single(kDim, kManyClusters, small_parameters(1));
+    single.train(kManyClusters * kPerCluster, data.data());
+    QGEMeans parallel(kDim, kManyClusters, small_parameters(4));
+    parallel.train(kManyClusters * kPerCluster, data.data());
+    EXPECT_EQ(parallel.centroids, single.centroids);
+    EXPECT_EQ(parallel.assignments, single.assignments);
+    EXPECT_EQ(parallel.distances, single.distances);
+}
+
+TEST(QGEMeansTest, AssignReproducesTrainingAssignmentsWithCachedQuerySums) {
+    // From 512 padded dimensions training reuses cached query sums; assign() does not.
+    constexpr size_t kWide = 512;
+    const auto data = clustered_data(kClusters, kPointsPerCluster, 7, kWide);
+    for (auto mode : {FinalAssignmentMode::Approximate, FinalAssignmentMode::Exact}) {
+        QGEMeansParameters parameters = small_parameters();
+        parameters.final_assignment = mode;
+        QGEMeans model(kWide, kClusters, parameters);
+        model.train(kCount, data.data());
+        std::vector<PID> ids(kCount);
+        std::vector<float> distances(kCount);
+        model.assign(kCount, data.data(), ids.data(), distances.data());
+        EXPECT_EQ(ids, model.assignments);
+        EXPECT_EQ(distances, model.distances);
+    }
 }
 
 }  // namespace

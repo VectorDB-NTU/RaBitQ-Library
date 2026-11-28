@@ -82,6 +82,8 @@ def test_train_populates_outputs_per_epoch(base_data):
     assert [s.iteration for s in stats] == [1, 2, 3]
     assert objective == model.obj[-1] == stats[-1].obj
     assert all(s.shift >= 0 for s in stats)
+    # Cost-based revival moves centroids that cost little to remove.
+    assert sum(s.nsplit for s in stats) > 0
     assert model.final_obj == pytest.approx(
         float(model.distances.sum(dtype=np.float64))
     )

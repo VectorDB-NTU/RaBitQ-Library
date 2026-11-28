@@ -205,18 +205,24 @@ mini-batch through a SymphonyQG graph over the current centroids. It starts
 from `k` distinct random training vectors chosen by `seed`. Each epoch visits
 the vectors in a seeded random order, in mini-batches. Before every mini-batch
 the raw-vector centroid graph is rebuilt and searched for each vector's nearest
-centroid, without search hints. Each centroid then moves toward its mini-batch
-mean, weighted by its batch count against an exponentially decaying mass.
-Every fifth mini-batch, centroids whose mass falls below a tenth of the mean
-are replaced by splitting heavier centroids, drawn in proportion to their mass.
-The step size follows the e-means step law and a cosine schedule that decays to
-a tenth of its initial value. After the last epoch, each centroid assigned in
-that epoch becomes the mean of its last-epoch vectors.
+and second-nearest centroids, without search hints. Each centroid then moves
+toward its mini-batch mean, weighted by its batch count against an
+exponentially decaying mass. Every fifth mini-batch, cost-based revival (the
+Faiss default) moves centroids that cost little to remove: those whose removal
+cost, a decaying average of each vector's extra squared distance to its second
+centroid, is at most zero or below 0.3 times the median. The cheapest move
+first, each splitting the remaining centroid with the longest principal axis,
+tracked by Oja's rule, as long as the split's expected gain exceeds the removal
+cost. The step size follows the e-means step law and a cosine schedule that
+decays to a tenth of its initial value. After the last epoch, each centroid
+assigned in that epoch becomes the mean of its last-epoch vectors; a centroid
+split in the last epoch uses only the vectors it received after the split.
+Faiss's optional closing handover is not implemented.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `epochs` | `8` | Positive number of passes over the training vectors. |
-| `batch_size` | `0` | Vectors per mini-batch, capped at `n`; `0` selects the e-means batch-size law, a power of two of at most `n / 2`. |
+| `batch_size` | `0` | Vectors per mini-batch, capped at `n`; `0` selects the e-means batch-size law, rounded to a power of two and capped at the power of two nearest `n / 2`. |
 | `max_degree` | `32` | A positive multiple of 32, strictly smaller than `k`. |
 | `ef_construction`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes. |
 | `graph_build_iterations` | `1` | As for QGKMeans. |

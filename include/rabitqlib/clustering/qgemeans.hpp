@@ -17,7 +17,6 @@
 
 #include "rabitqlib/clustering/detail/kmeans.hpp"  // IWYU pragma: export
 #include "rabitqlib/clustering/detail/qgemeans_assigner.hpp"
-#include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/core/metric.hpp"
 #include "rabitqlib/index/types.hpp"
 #include "rabitqlib/utils/tools.hpp"
@@ -47,15 +46,18 @@ struct QGEMeansParameters {
 namespace detail {
 
 // Mini-batch e-means recipe of Algorithm 1 in arXiv 2611.09501, with the constants of
-// the FAISS reference implementation (faiss/contrib/e_means, MIT license): the
-// throughput batch-size law (d > 16), the step law, and a cosine schedule.
+// the FAISS reference implementation (faiss/contrib/e_means at b14b3d693, MIT
+// license): the throughput batch-size law (d > 16), the step law, a cosine schedule
+// and cost-based revival.
 // Prefixes error messages and progress output.
 constexpr const char* kName = "QGEMeans";
 constexpr double kAlphaMinFactor = 0.1;
 constexpr size_t kReviveEvery = 5;
 constexpr float kInitialMass = 1.0F / 65536.0F;
-constexpr float kSplitEpsilon = 1e-4F;
-constexpr float kUnusedThreshold = 0.1F;
+// Cost-based revival: a centroid may move when its removal cost R, the EMA of
+// d2 - d1 over its vectors, is at most zero or below kRemovalThreshold times the
+// median, and only if its donor's split gain kSplitGain * |U| exceeds R.
+constexpr double kRemovalThreshold = 0.3;
 constexpr double kBatchC = 0.035134;
 constexpr double kBatchK = 0.134749;
 constexpr double kBatchN = 0.876473;
@@ -66,6 +68,7 @@ constexpr double kAlphaB = 0.9003;
 constexpr double kAlphaN = -0.4498;
 constexpr double kAlphaT = -0.1057;
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kSplitGain = 2.0 / kPi;
 
 // Nearest power of two to value, 1 below 1.
 [[nodiscard]] inline size_t round_power_of_two(double value) {
@@ -114,22 +117,31 @@ struct Recipe {
     return alpha0 * (kAlphaMinFactor + ((1.0 - kAlphaMinFactor) * cosine));
 }
 
+// A pass seed equal to the initialization seed moves by the golden-ratio
+// constant, so a pass never replays the initialization draw.
 [[nodiscard]] inline uint32_t epoch_seed(uint64_t seed, uint64_t epoch) {
-    return static_cast<uint32_t>((seed * 1000003ULL + epoch) % (1ULL << 32));
+    auto value = static_cast<uint32_t>((seed * 1000003ULL + epoch) % (1ULL << 32));
+    if (value == static_cast<uint32_t>(seed)) {
+        value += 0x9E3779B9U;
+    }
+    return value;
 }
 
-// The QGKMeans settings that build and search the same centroid graph.
-[[nodiscard]] inline qgkmeans::QGKMeansParameters graph_parameters(
-    const QGEMeansParameters& cp
-) {
-    qgkmeans::QGKMeansParameters graph;
-    graph.seed = cp.seed;
-    graph.max_degree = cp.max_degree;
-    graph.ef_construction = cp.ef_construction;
-    graph.ef_search = cp.ef_search;
-    graph.graph_build_iterations = cp.graph_build_iterations;
-    graph.num_threads = cp.num_threads;
-    return graph;
+// Uniform double in (0, 1) from 53 random bits, so the draws do not depend on the
+// standard library.
+[[nodiscard]] inline double open_uniform(std::mt19937_64& rng) {
+    constexpr double kScale = 1.0 / 9007199254740992.0;  // 2^-53
+    return (static_cast<double>(rng() >> 11) + 0.5) * kScale;
+}
+
+[[nodiscard]] inline GraphSettings graph_settings(const QGEMeansParameters& cp) {
+    return {
+        cp.max_degree,
+        cp.ef_construction,
+        cp.ef_search,
+        cp.graph_build_iterations,
+        cp.num_threads,
+        cp.seed};
 }
 
 // Raw-vector centroid graph for one training call: rebuilt from the current
@@ -143,19 +155,7 @@ class BatchAssignment {
 
    public:
     BatchAssignment(size_t d, size_t k, size_t n, const QGEMeansParameters& cp)
-        : assigner_(
-              d,
-              k,
-              cp.max_degree,
-              cp.ef_construction,
-              cp.ef_search,
-              cp.graph_build_iterations,
-              cp.num_threads,
-              cp.seed,
-              METRIC_L2,
-              0,
-              kName
-          ) {
+        : assigner_(d, k, graph_settings(cp)) {
         if (assigner_.graph_->padded_dim() >= detail::kMinQuerySumDim) {
             query_sums_.resize(n);
         }
@@ -163,29 +163,29 @@ class BatchAssignment {
 
     void rebuild(const float* centroids) { assigner_.rebuild_centroid_graph(centroids); }
 
-    // Requires a graph rebuilt from centroids. Null rows assign rows 0 to count - 1.
+    // Requires a graph rebuilt from the current centroids. Null rows assign rows 0
+    // to count - 1; a non-null second_distances receives each row's squared
+    // distance to its second-nearest centroid.
     void search(
-        const float* centroids,
         const float* x,
         const size_t* rows,
         size_t count,
         PID* assignments,
-        float* distances
+        float* distances,
+        float* second_distances
     ) {
         const detail::QuerySumCache cache(
             query_sums_.empty() ? nullptr : query_sums_.data(), sums_ready_
         );
         assigner_.search_points(
-            centroids,
             x,
             count,
+            rows,
             assignments,
             distances,
-            {},
-            nullptr,
+            second_distances,
             cache,
-            assigner_.scratch_,
-            rows
+            assigner_.scratch_
         );
     }
 
@@ -198,10 +198,12 @@ class BatchAssignment {
 /**
  * Mini-batch e-means with SymphonyQG graph assignment. Each mini-batch is assigned
  * through a raw-vector graph over the current centroids, rebuilt before every
- * batch; centroids follow the e-means mass-weighted update and revival of unused
- * centroids. train() then assigns every vector to the final centroids.
+ * batch; centroids follow the e-means mass-weighted update and cost-based revival
+ * of cheap centroids. train() then assigns every vector to the final centroids.
  */
 class QGEMeans : public QGEMeansParameters {
+    friend struct QGEMeansTestAccess;
+
    public:
     QGEMeans(size_t d, size_t k) : QGEMeans(d, k, QGEMeansParameters{}) {}
 
@@ -258,25 +260,33 @@ class QGEMeans : public QGEMeansParameters {
     double final_obj = 0.0;
 
    private:
-    // Training state of one fit; committed to the public members at the end. The
-    // vectors after split_rng are scratch reused across mini-batches.
+    // Training state of one fit; committed to the public members at the end.
+    // removal holds k rows [U / axis_scale | R]: the Oja long-axis sums U and the
+    // removal cost R, the EMA of d2 - d1 over each centroid's vectors. The vectors
+    // after split_rng are scratch reused across mini-batches.
     struct State {
         std::vector<float> centroids;
         std::vector<float> mass;
         std::vector<double> pass_counts;
         std::vector<float> pass_sums;
+        std::vector<float> removal;
+        std::vector<float> axes;
+        double axis_scale = 1.0;
         std::vector<float> batch_sums;
         std::vector<float> batch_counts;
+        std::vector<float> batch_removal;
         std::vector<PID> batch_assignments;
         std::vector<float> batch_distances;
+        std::vector<float> batch_second_distances;
         std::vector<size_t> offsets;
         std::vector<size_t> members;
         std::vector<double> cluster_objectives;
         std::mt19937_64 split_rng;
         std::vector<size_t> cursor;
-        std::vector<size_t> unused;
-        std::vector<double> draws;
-        std::vector<std::pair<double, size_t>> keys;
+        std::vector<double> costs;
+        std::vector<double> axis_norms;
+        std::vector<size_t> candidates;
+        std::vector<size_t> donors;
     };
 
     void fit(size_t n, const float* x, bool assign_all) {
@@ -317,12 +327,12 @@ class QGEMeans : public QGEMeansParameters {
                 const size_t* batch = order.data() + begin;
                 graph.rebuild(state.centroids.data());
                 graph.search(
-                    state.centroids.data(),
                     x,
                     batch,
                     rows,
                     state.batch_assignments.data(),
-                    state.batch_distances.data()
+                    state.batch_distances.data(),
+                    state.batch_second_distances.data()
                 );
                 objective += accumulate(state, x, batch, rows, num_workers);
                 apply_statistics(
@@ -332,7 +342,7 @@ class QGEMeans : public QGEMeansParameters {
                     num_workers
                 );
                 if ((step + 1) % detail::kReviveEvery == 0) {
-                    nsplit += revive_unused(state);
+                    nsplit += revive_unused(state, last);
                 }
                 ++step;
             }
@@ -380,12 +390,12 @@ class QGEMeans : public QGEMeansParameters {
                 [&] {
                     graph.rebuild(state.centroids.data());
                     graph.search(
-                        state.centroids.data(),
                         x,
                         nullptr,
                         n,
                         final_assignments.data(),
-                        final_distances.data()
+                        final_distances.data(),
+                        nullptr
                     );
                 }
             );
@@ -420,21 +430,48 @@ class QGEMeans : public QGEMeansParameters {
         state.mass.assign(k, detail::kInitialMass);
         state.split_rng.seed(seed);
         state.pass_counts.assign(k, 0.0);
+        state.removal.assign(k * (d + 1), 0.0F);
+        state.axis_scale = 1.0;
+        // Random unit initial axes, in the reference's draw order: k rows of d
+        // standard normals (Box-Muller), each normalized in double.
+        state.axes.resize(k * d);
+        std::vector<double> axis(d);
+        for (size_t cluster = 0; cluster < k; ++cluster) {
+            double norm2 = 0.0;
+            for (size_t dim = 0; dim < d; ++dim) {
+                const double radius =
+                    std::sqrt(-2.0 * std::log(detail::open_uniform(state.split_rng)));
+                const double angle =
+                    2.0 * detail::kPi * detail::open_uniform(state.split_rng);
+                axis[dim] = radius * std::cos(angle);
+                norm2 += axis[dim] * axis[dim];
+            }
+            const double norm = std::sqrt(norm2);
+            for (size_t dim = 0; dim < d; ++dim) {
+                state.axes[cluster * d + dim] = static_cast<float>(axis[dim] / norm);
+            }
+        }
         state.batch_sums.resize(k * d);
         state.batch_counts.resize(k);
+        state.batch_removal.assign(k * (d + 1), 0.0F);
         state.batch_assignments.resize(batch);
         state.batch_distances.resize(batch);
+        state.batch_second_distances.resize(batch);
         state.offsets.resize(k + 1);
         state.members.resize(batch);
         state.cluster_objectives.resize(k);
         state.cursor.resize(k);
-        state.unused.reserve(k);
-        state.draws.resize(k);
-        state.keys.reserve(k);
+        state.costs.resize(k);
+        state.axis_norms.resize(k);
+        state.candidates.reserve(k);
+        state.donors.reserve(k);
     }
 
     // Per-centroid sums and counts of one batch, in float32 as the reference, over
-    // members in batch order. Returns the batch's assignment objective.
+    // members in batch order, and the removal statistics of cost-based revival: for
+    // a vector with residual y to its centroid and p = <y, axis>, p * y is added to
+    // U and d2 - d1 to R (zero when not finite). Returns the batch's assignment
+    // objective.
     double accumulate(
         State& state, const float* x, const size_t* rows, size_t count, uint32_t num_workers
     ) const {
@@ -450,23 +487,41 @@ class QGEMeans : public QGEMeansParameters {
             state.members[cursor[state.batch_assignments[i]]++] = i;
         }
         static_cast<void>(num_workers);
-#pragma omp parallel for num_threads(num_workers) schedule(dynamic, 16)
-        for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k); ++index) {
-            const auto cluster = static_cast<size_t>(index);
-            float* sums = state.batch_sums.data() + cluster * d;
-            std::fill_n(sums, d, 0.0F);
-            double cluster_objective = 0.0;
-            for (size_t m = offsets[cluster]; m < offsets[cluster + 1]; ++m) {
-                const size_t i = state.members[m];
-                const float* row = x + rows[i] * d;
-                for (size_t dim = 0; dim < d; ++dim) {
-                    sums[dim] += row[dim];
+#pragma omp parallel num_threads(num_workers)
+        {
+            std::vector<float> residual(d);
+#pragma omp for schedule(dynamic, 16)
+            for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k);
+                 ++index) {
+                const auto cluster = static_cast<size_t>(index);
+                float* sums = state.batch_sums.data() + cluster * d;
+                float* removal = state.batch_removal.data() + cluster * (d + 1);
+                const float* centroid = state.centroids.data() + cluster * d;
+                const float* axis = state.axes.data() + cluster * d;
+                std::fill_n(sums, d, 0.0F);
+                std::fill_n(removal, d + 1, 0.0F);
+                double cluster_objective = 0.0;
+                for (size_t m = offsets[cluster]; m < offsets[cluster + 1]; ++m) {
+                    const size_t i = state.members[m];
+                    const float* row = x + rows[i] * d;
+                    float projection = 0.0F;
+                    for (size_t dim = 0; dim < d; ++dim) {
+                        sums[dim] += row[dim];
+                        residual[dim] = row[dim] - centroid[dim];
+                        projection += residual[dim] * axis[dim];
+                    }
+                    for (size_t dim = 0; dim < d; ++dim) {
+                        removal[dim] += projection * residual[dim];
+                    }
+                    const float margin =
+                        state.batch_second_distances[i] - state.batch_distances[i];
+                    removal[d] += std::isfinite(margin) ? margin : 0.0F;
+                    cluster_objective += state.batch_distances[i];
                 }
-                cluster_objective += state.batch_distances[i];
+                state.cluster_objectives[cluster] = cluster_objective;
+                state.batch_counts[cluster] =
+                    static_cast<float>(offsets[cluster + 1] - offsets[cluster]);
             }
-            state.cluster_objectives[cluster] = cluster_objective;
-            state.batch_counts[cluster] =
-                static_cast<float>(offsets[cluster + 1] - offsets[cluster]);
         }
         // Summed in cluster order, so the objective does not depend on scheduling.
         return std::accumulate(
@@ -475,13 +530,29 @@ class QGEMeans : public QGEMeansParameters {
     }
 
     // Algorithm 1, line 8: mass' = (1 - alpha) mass + alpha count, and each
-    // centroid moves toward its batch mean by alpha count / mass'.
+    // centroid moves toward its batch mean by alpha count / mass'. The removal
+    // statistics take the same step: R' = (1 - alpha) R + alpha R_batch, and U
+    // decays through the shared axis_scale while each assigned centroid adds its
+    // batch term and renews its unit axis U / |U| (Oja's rule).
     void apply_statistics(
         State& state, double alpha_value, bool last, uint32_t num_workers
     ) const {
         const auto alpha = static_cast<float>(alpha_value);
         const auto decay = static_cast<float>(1.0 - alpha_value);
         const bool replace_mass = alpha_value == 1.0;
+        double scale = state.axis_scale * (1.0 - alpha_value);
+        if (!(scale > 0x1p-32)) {
+            const auto factor = static_cast<float>(scale);
+            for (size_t cluster = 0; cluster < k; ++cluster) {
+                float* u = state.removal.data() + cluster * (d + 1);
+                for (size_t dim = 0; dim < d; ++dim) {
+                    u[dim] *= factor;
+                }
+            }
+            scale = 1.0;
+        }
+        state.axis_scale = scale;
+        const auto axis_weight = static_cast<float>(alpha_value / scale);
         static_cast<void>(num_workers);
 #pragma omp parallel for num_threads(num_workers) schedule(static)
         for (std::ptrdiff_t index = 0; index < static_cast<std::ptrdiff_t>(k); ++index) {
@@ -498,8 +569,23 @@ class QGEMeans : public QGEMeansParameters {
             if (!replace_mass) {
                 state.mass[cluster] *= decay;
             }
+            float* removal = state.removal.data() + cluster * (d + 1);
+            const float* batch_removal = state.batch_removal.data() + cluster * (d + 1);
+            removal[d] = (decay * removal[d]) + (alpha * batch_removal[d]);
             if (count <= 0) {
                 continue;
+            }
+            double norm2 = 0.0;
+            for (size_t dim = 0; dim < d; ++dim) {
+                removal[dim] += axis_weight * batch_removal[dim];
+                norm2 += static_cast<double>(removal[dim]) * removal[dim];
+            }
+            const double norm = std::sqrt(norm2);
+            if (norm > 0) {
+                float* axis = state.axes.data() + cluster * d;
+                for (size_t dim = 0; dim < d; ++dim) {
+                    axis[dim] = static_cast<float>(removal[dim] / norm);
+                }
             }
             const float retained = replace_mass ? 0.0F : state.mass[cluster];
             const float mass = retained + (alpha * count);
@@ -515,66 +601,104 @@ class QGEMeans : public QGEMeansParameters {
         }
     }
 
-    // Algorithm 1, line 9: centroids whose mass falls below a tenth of the mean are
-    // replaced by splitting donors drawn in proportion to their mass (Gumbel top-k).
-    [[nodiscard]] size_t revive_unused(State& state) const {
-        auto& mass = state.mass;
-        double total = 0.0;
-        for (const float value : mass) {
-            total += value;
-        }
-        const float threshold =
-            static_cast<float>(total) * detail::kUnusedThreshold / static_cast<float>(k);
-        auto& unused = state.unused;
-        unused.clear();
-        size_t donors = 0;
+    // Cost-based revival (Faiss's default): centroids whose removal cost R is at
+    // most zero or below kRemovalThreshold times the median move, cheapest first,
+    // to split the donors with the longest axes |U|, longest first. Pairs move in
+    // that order until the first whose donor's split gain kSplitGain * |U| does not
+    // exceed the candidate's R; a candidate with R <= 0 always moves. A split puts
+    // the donor and the candidate at c -/+ s u along the donor's unit axis u, with
+    // s = sqrt(2 |U| / (pi N)): the half-means of a Gaussian along u. They share the
+    // donor's halved mass and removal statistics. In the last epoch, both lose their
+    // pass sums and counts, so each closes from the vectors it receives after the
+    // split (Faiss's rule without closing handover).
+    [[nodiscard]] size_t revive_unused(State& state, bool last) const {
+        auto& costs = state.costs;
+        auto& axis_norms = state.axis_norms;
         for (size_t cluster = 0; cluster < k; ++cluster) {
-            if (mass[cluster] < threshold) {
-                unused.push_back(cluster);
-            } else if (mass[cluster] > 0) {
-                ++donors;
+            const float* removal = state.removal.data() + cluster * (d + 1);
+            costs[cluster] = removal[d];
+            double norm2 = 0.0;
+            for (size_t dim = 0; dim < d; ++dim) {
+                norm2 += static_cast<double>(removal[dim]) * removal[dim];
+            }
+            axis_norms[cluster] = state.axis_scale * std::sqrt(norm2);
+        }
+        std::vector<double> sorted(costs);
+        const size_t middle = k / 2;
+        std::nth_element(
+            sorted.begin(),
+            sorted.begin() + static_cast<std::ptrdiff_t>(middle),
+            sorted.end()
+        );
+        double median = sorted[middle];
+        if (k % 2 == 0) {
+            median = (median + *std::max_element(
+                                   sorted.begin(),
+                                   sorted.begin() + static_cast<std::ptrdiff_t>(middle)
+                               )) /
+                     2.0;
+        }
+        const double threshold = detail::kRemovalThreshold * median;
+
+        auto& candidates = state.candidates;
+        auto& donors = state.donors;
+        candidates.clear();
+        donors.clear();
+        for (size_t cluster = 0; cluster < k; ++cluster) {
+            if (costs[cluster] <= 0 || costs[cluster] < threshold) {
+                candidates.push_back(cluster);
+            } else if (state.mass[cluster] > 0) {
+                donors.push_back(cluster);
             }
         }
-        const size_t nsplit = std::min(unused.size(), donors);
-        if (nsplit == 0) {
+        if (candidates.empty()) {
             return 0;
         }
-        // Drawn only when something splits, as the reference does.
-        std::uniform_real_distribution<double> uniform(0.0, 1.0);
-        auto& draws = state.draws;
-        for (auto& value : draws) {
-            value = std::max(uniform(state.split_rng), std::numeric_limits<double>::min());
-        }
-        auto& keys = state.keys;
-        keys.clear();
-        for (size_t cluster = 0; cluster < k; ++cluster) {
-            if (mass[cluster] >= threshold && mass[cluster] > 0) {
-                keys.emplace_back(
-                    std::log(mass[cluster]) - std::log(-std::log(draws[cluster])), cluster
-                );
+        std::stable_sort(candidates.begin(), candidates.end(), [&](size_t a, size_t b) {
+            return costs[a] < costs[b];
+        });
+        // Donors rank by their float32 axis length, as in the reference.
+        std::stable_sort(donors.begin(), donors.end(), [&](size_t a, size_t b) {
+            return static_cast<float>(axis_norms[a]) > static_cast<float>(axis_norms[b]);
+        });
+        size_t nsplit = 0;
+        const size_t pairs = std::min(candidates.size(), donors.size());
+        while (nsplit < pairs) {
+            const double cost = costs[candidates[nsplit]];
+            const double gain =
+                detail::kSplitGain * static_cast<float>(axis_norms[donors[nsplit]]);
+            if (!(cost <= 0 || gain > cost)) {
+                break;
             }
+            ++nsplit;
         }
-        std::partial_sort(
-            keys.begin(),
-            keys.begin() + static_cast<std::ptrdiff_t>(nsplit),
-            keys.end(),
-            [](const auto& a, const auto& b) { return a.first > b.first; }
-        );
+
+        // Donors and candidates are disjoint, so each split reads its donor's
+        // state from before this check. Split coordinates stay within the bound
+        // train() and assign() accept, so a trained model always assigns.
+        const auto bound = static_cast<double>(max_coordinate_magnitude(d));
         for (size_t split = 0; split < nsplit; ++split) {
-            const size_t source = keys[split].second;
-            const size_t target = unused[split];
+            const size_t source = donors[split];
+            const size_t target = candidates[split];
+            const double norm = axis_norms[source];
+            const auto mass = static_cast<double>(state.mass[source]);
+            const bool valid =
+                norm > 0 && mass > 0 && std::isfinite(norm) && std::isfinite(mass);
+            const double spread =
+                valid ? std::sqrt(2.0 * (norm / mass) / detail::kPi) : 0.0;
             float* donor = state.centroids.data() + source * d;
             float* child = state.centroids.data() + target * d;
+            const float* axis = state.axes.data() + source * d;
             bool collapsed = true;
             for (size_t dim = 0; dim < d; ++dim) {
-                const float offset = detail::kSplitEpsilon * (dim % 2 == 0 ? 1.0F : -1.0F);
-                const float value = donor[dim];
-                donor[dim] = value * (1.0F - offset);
-                child[dim] = value * (1.0F + offset);
+                const auto value = static_cast<double>(donor[dim]);
+                const double offset = spread * static_cast<double>(axis[dim]);
+                donor[dim] = static_cast<float>(std::clamp(value - offset, -bound, bound));
+                child[dim] = static_cast<float>(std::clamp(value + offset, -bound, bound));
                 collapsed = collapsed && donor[dim] == child[dim];
             }
             if (collapsed) {
-                // A zero donor splits into equal halves; separate the child.
+                // Coincident copies; separate the child along one coordinate.
                 const float next =
                     std::nextafter(child[0], std::numeric_limits<float>::infinity());
                 child[0] =
@@ -582,9 +706,22 @@ class QGEMeans : public QGEMeansParameters {
                         ? next
                         : std::nextafter(child[0], -std::numeric_limits<float>::infinity());
             }
-            const float half = mass[source] / 2.0F;
-            mass[source] = half;
-            mass[target] = half;
+            const float half = state.mass[source] / 2.0F;
+            state.mass[source] = half;
+            state.mass[target] = half;
+            float* source_removal = state.removal.data() + source * (d + 1);
+            float* target_removal = state.removal.data() + target * (d + 1);
+            for (size_t dim = 0; dim <= d; ++dim) {
+                source_removal[dim] /= 2.0F;
+                target_removal[dim] = source_removal[dim];
+            }
+            std::copy_n(axis, d, state.axes.data() + target * d);
+            if (last) {
+                for (const size_t cluster : {source, target}) {
+                    state.pass_counts[cluster] = 0.0;
+                    std::fill_n(state.pass_sums.data() + cluster * d, d, 0.0F);
+                }
+            }
         }
         return nsplit;
     }
@@ -632,7 +769,7 @@ class QGEMeans : public QGEMeansParameters {
                     d,
                     k,
                     centroids.data(),
-                    detail::graph_parameters(*this),
+                    detail::graph_settings(*this),
                     x,
                     n,
                     point_assignments,
@@ -663,7 +800,7 @@ class QGEMeans : public QGEMeansParameters {
 
     bool trained_ = false;
     // Centroid graph for assign(), built on first use after training.
-    qgkmeans::detail::CentroidGraphCache graph_cache_;
+    detail::GraphCache graph_cache_;
 };
 
 }  // namespace rabitqlib::qgemeans

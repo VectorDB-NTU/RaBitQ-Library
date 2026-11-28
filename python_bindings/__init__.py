@@ -246,8 +246,8 @@ class QGEMeans(_KMeans):
     Each epoch visits the vectors in a seeded random order, in mini-batches.
     Before every mini-batch a SymphonyQG graph is rebuilt over the current
     centroids and searched for each vector's nearest centroid; centroids then
-    take the e-means mass-weighted step, and centroids with little mass are
-    periodically replaced by splitting heavy ones. The step size follows the
+    take the e-means mass-weighted step, and centroids that cost little to remove
+    periodically split the centroids with the longest axes. The step size follows the
     e-means law and a cosine schedule, and the last epoch's means become the
     final centroids. train then assigns all vectors to them.
 
