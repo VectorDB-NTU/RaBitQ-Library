@@ -245,8 +245,9 @@ struct Recipe {
     return value;
 }
 
-// Uniform double in (0, 1) from 53 random bits, so the draws do not depend on the
-// standard library.
+// Uniform double in (0, 1) from 53 random bits, so the axis draws do not depend on
+// the standard library. The initial rows and pass orders use std distributions,
+// so results are reproducible for one toolchain only.
 [[nodiscard]] inline double open_uniform(std::mt19937_64& rng) {
     constexpr double kScale = 1.0 / 9007199254740992.0;  // 2^-53
     return (static_cast<double>(rng() >> 11) + 0.5) * kScale;
@@ -282,6 +283,7 @@ struct EMeansState {
     std::vector<double> axis_norms;
     std::vector<size_t> candidates;
     std::vector<size_t> donors;
+    std::vector<double> sorted_costs;
 };
 
 // Initial centroids are k distinct random rows; every centroid starts with the
@@ -344,6 +346,7 @@ inline void initialize(
     state.axis_norms.resize(k);
     state.candidates.reserve(k);
     state.donors.reserve(k);
+    state.sorted_costs.resize(k);
 }
 
 // Starts a pass: resets the pass counts, and in the last pass the pass sums that
@@ -519,7 +522,8 @@ inline void apply_statistics(
         }
         axis_norms[cluster] = state.axis_scale * std::sqrt(norm2);
     }
-    std::vector<double> sorted(costs);
+    auto& sorted = state.sorted_costs;
+    std::copy(costs.begin(), costs.end(), sorted.begin());
     const size_t middle = k / 2;
     std::nth_element(
         sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(middle), sorted.end()

@@ -224,7 +224,7 @@ Faiss's optional closing handover is not implemented.
 | `niter` | `8` | Positive number of iterations, each one pass (an e-means epoch) over the training vectors. |
 | `batch_size` | `0` | Vectors per mini-batch, capped at `n`; `0` selects the e-means batch-size law, rounded to a power of two and capped at the power of two nearest `n / 2`. |
 | `max_degree` | `32` | A positive multiple of 32, strictly smaller than `k`. |
-| `ef_construction`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes. |
+| `ef_construction`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes; `ef_search` is at least 2, since each search returns the two nearest centroids. |
 | `graph_build_iterations` | `1` | As for QGKMeans. |
 
 C++ and Python use the same names. The centroid graph always stores raw

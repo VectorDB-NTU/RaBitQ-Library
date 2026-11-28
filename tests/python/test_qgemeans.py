@@ -157,6 +157,7 @@ def test_parameters_can_be_changed_through_cp(base_data):
             {"ef_construction": 0},
             "QGEMeans ef_construction and ef_search must be positive",
         ),
+        ({"ef_search": 1}, "QGEMeans ef_search must be at least 2"),
         (
             {"graph_build_iterations": 0},
             "QGEMeans graph_build_iterations must be positive",

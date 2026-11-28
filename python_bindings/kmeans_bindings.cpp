@@ -327,7 +327,7 @@ on QGEMeans.)doc"
         .def_readwrite(
             "ef_search",
             &QGEMeansParameters::ef_search,
-            R"doc(Positive centroid-graph assignment search breadth. Default is 16.)doc"
+            R"doc(Centroid-graph assignment search breadth, at least 2. Default is 16.)doc"
         )
         .def_readwrite(
             "graph_build_iterations",

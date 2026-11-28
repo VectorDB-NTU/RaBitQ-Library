@@ -65,6 +65,10 @@ constexpr const char* kName = "QGEMeans";
 // Padded dimensions from which assignment caches each query's sum of coordinates.
 constexpr size_t kMinQuerySumDim = 512;
 
+// Centroids each search returns: the nearest centroid labels the vector, and the
+// second gives the removal cost of cost-based revival.
+constexpr uint32_t kSearchResults = 2;
+
 // Checks the centroid-graph settings; component prefixes the error messages.
 inline void validate_graph_parameters(
     const char* component,
@@ -94,6 +98,12 @@ inline void validate_graph_parameters(
     if (ef_construction == 0 || ef_search == 0) {
         throw std::invalid_argument(
             std::string(component) + " ef_construction and ef_search must be positive"
+        );
+    }
+    // A search pool smaller than its result count is rejected by the graph.
+    if (ef_search < kSearchResults) {
+        throw std::invalid_argument(
+            std::string(component) + " ef_search must be at least 2"
         );
     }
     if (graph_build_iterations == 0) {
@@ -159,9 +169,7 @@ class QGAssigner {
     friend class GraphCache;
 
    public:
-    // Two results: the nearest centroid labels the vector, and the second gives
-    // the removal cost of cost-based revival.
-    static constexpr uint32_t kResults = 2;
+    static constexpr uint32_t kResults = kSearchResults;
 
     QGAssigner(size_t d, size_t k, const GraphSettings& settings)
         : dim_(d)

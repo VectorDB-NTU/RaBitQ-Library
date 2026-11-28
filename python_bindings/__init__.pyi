@@ -1022,7 +1022,7 @@ class QGEMeans:
     ef_construction : int, optional
         Positive centroid-graph construction search breadth. Default is 240.
     ef_search : int, optional
-        Positive centroid-graph assignment search breadth. Default is 16.
+        Centroid-graph assignment search breadth, at least 2. Default is 16.
     graph_build_iterations : int, optional
         Positive number of graph-building passes after initialization. Default
         is 1.
@@ -1103,7 +1103,7 @@ class QGEMeans:
         ef_construction : int, optional
             Positive centroid-graph construction search breadth. Default is 240.
         ef_search : int, optional
-            Positive centroid-graph assignment search breadth. Default is 16.
+            Centroid-graph assignment search breadth, at least 2. Default is 16.
         graph_build_iterations : int, optional
             Positive number of graph-building passes after initialization. Default
             is 1.
@@ -1263,7 +1263,7 @@ class QGEMeansParameters:
     def ef_construction(self, value: SupportsIndex) -> None: ...
     @property
     def ef_search(self) -> int:
-        """Positive centroid-graph assignment search breadth. Default is 16."""
+        """Centroid-graph assignment search breadth, at least 2. Default is 16."""
     @ef_search.setter
     def ef_search(self, value: SupportsIndex) -> None: ...
     @property

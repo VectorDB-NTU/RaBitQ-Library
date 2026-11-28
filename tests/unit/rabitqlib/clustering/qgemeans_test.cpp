@@ -222,6 +222,11 @@ TEST(QGEMeansTest, RejectsInvalidParametersWithDescriptiveMessages) {
         [&] { QGEMeans(kDim, kClusters, with([](auto& p) { p.ef_search = 0; })); },
         "QGEMeans ef_construction and ef_search must be positive"
     );
+    // Each search returns two centroids, so its pool needs at least two.
+    expect_invalid_argument(
+        [&] { QGEMeans(kDim, kClusters, with([](auto& p) { p.ef_search = 1; })); },
+        "QGEMeans ef_search must be at least 2"
+    );
     expect_invalid_argument(
         [&] {
             QGEMeans(kDim, kClusters, with([](auto& p) { p.graph_build_iterations = 0; }));
