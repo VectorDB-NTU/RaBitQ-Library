@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "rabitqlib/clustering/detail/kmeans.hpp"
+#include "rabitqlib/clustering/qgemeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/core/metric.hpp"
@@ -88,6 +89,18 @@ int main() {
     rabitqlib::qgkmeans::QGKMeans graph(kDimension, 33, graph_parameters);
     if (!check_clustering(graph, data)) {
         std::cerr << "Installed QGKMeans returned invalid clustering results\n";
+        return 1;
+    }
+
+    rabitqlib::qgemeans::QGEMeansParameters emeans_parameters;
+    emeans_parameters.epochs = 2;
+    emeans_parameters.num_threads = 2;
+    emeans_parameters.ef_construction = 33;
+    emeans_parameters.ef_search = 33;
+    emeans_parameters.final_assignment = rabitqlib::clustering::FinalAssignmentMode::Exact;
+    rabitqlib::qgemeans::QGEMeans emeans(kDimension, 33, emeans_parameters);
+    if (!check_clustering(emeans, data)) {
+        std::cerr << "Installed QGEMeans returned invalid clustering results\n";
         return 1;
     }
 

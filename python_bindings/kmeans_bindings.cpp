@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "bindings_common.hpp"
+#include "rabitqlib/clustering/qgemeans.hpp"
 #include "rabitqlib/clustering/qgkmeans.hpp"
 #include "rabitqlib/clustering/rabitqkmeans.hpp"
 #include "rabitqlib/index/types.hpp"
@@ -197,6 +198,8 @@ void bind_clustering(py::module_& m, const char* native_name, const char* public
 void register_kmeans(py::module_& m) {
     using namespace rabitqlib::python_bindings;
     using rabitqlib::clustering::KMeansIterationStats;
+    using rabitqlib::qgemeans::QGEMeans;
+    using rabitqlib::qgemeans::QGEMeansParameters;
     using rabitqlib::qgkmeans::QGKMeans;
     using rabitqlib::qgkmeans::QGKMeansParameters;
     using rabitqlib::rabitqkmeans::RaBitQKMeans;
@@ -248,6 +251,90 @@ on RaBitQKMeans.)doc"
     );
     bind_training_parameters(flat_parameters);
 
+    py::class_<QGEMeansParameters>(
+        m, "QGEMeansParameters", R"doc(Mutable training settings for QGEMeans.
+
+Notes
+-----
+Create with no arguments; set attributes directly or use keyword arguments
+on QGEMeans.)doc"
+    )
+        .def(py::init<>(), "Create parameters with their documented defaults.")
+        .def(
+            "__reduce_ex__",
+            &rabitqlib::python_bindings::reduce_ex_with_protocol_2,
+            py::arg("protocol"),
+            rabitqlib::python_bindings::kReduceExDoc
+        )
+        .def_readwrite(
+            "epochs",
+            &QGEMeansParameters::epochs,
+            R"doc(Positive number of passes over the training vectors. Default is 8.)doc"
+        )
+        .def_readwrite(
+            "batch_size",
+            &QGEMeansParameters::batch_size,
+            R"doc(Vectors per mini-batch, capped at the number of training vectors; 0 selects the e-means batch-size law. Default is 0.)doc"
+        )
+        .def_readwrite(
+            "verbose",
+            &QGEMeansParameters::verbose,
+            R"doc(Print training progress when True. Default is False.)doc"
+        )
+        .def_readwrite(
+            "seed", &QGEMeansParameters::seed, R"doc(Random seed. Default is 42.)doc"
+        )
+        .def_readwrite(
+            "num_threads",
+            &QGEMeansParameters::num_threads,
+            R"doc(Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0.)doc"
+        )
+        .def_property(
+            "final_assignment",
+            [](const QGEMeansParameters& parameters) {
+                return std::string(
+                    parameters.final_assignment ==
+                            rabitqlib::clustering::FinalAssignmentMode::Exact
+                        ? "exact"
+                        : "approximate"
+                );
+            },
+            [](QGEMeansParameters& parameters, const std::string& value) {
+                if (value == "approximate") {
+                    parameters.final_assignment =
+                        rabitqlib::clustering::FinalAssignmentMode::Approximate;
+                } else if (value == "exact") {
+                    parameters.final_assignment =
+                        rabitqlib::clustering::FinalAssignmentMode::Exact;
+                } else {
+                    throw std::invalid_argument(
+                        "final_assignment must be 'approximate' or 'exact'"
+                    );
+                }
+            },
+            R"doc('approximate' assigns through a centroid graph over the final centroids; 'exact' uses exhaustive assignment against them. Default is 'approximate'.)doc"
+        )
+        .def_readwrite(
+            "max_degree",
+            &QGEMeansParameters::max_degree,
+            R"doc(Centroid graph degree; a positive multiple of 32. Default is 32.)doc"
+        )
+        .def_readwrite(
+            "ef_construction",
+            &QGEMeansParameters::ef_construction,
+            R"doc(Positive centroid-graph construction search breadth. Default is 240.)doc"
+        )
+        .def_readwrite(
+            "ef_search",
+            &QGEMeansParameters::ef_search,
+            R"doc(Positive centroid-graph assignment search breadth. Default is 16.)doc"
+        )
+        .def_readwrite(
+            "graph_build_iterations",
+            &QGEMeansParameters::graph_build_iterations,
+            R"doc(Positive number of graph-building passes after initialization. Default is 1.)doc"
+        );
+
     py::class_<KMeansIterationStats>(
         m,
         "KMeansIterationStats",
@@ -281,6 +368,7 @@ on RaBitQKMeans.)doc"
         );
 
     bind_clustering<QGKMeans, QGKMeansParameters>(m, "_QGKMeans", "QGKMeans");
+    bind_clustering<QGEMeans, QGEMeansParameters>(m, "_QGEMeans", "QGEMeans");
     bind_clustering<RaBitQKMeans, RaBitQKMeansParameters>(
         m, "_RaBitQKMeans", "RaBitQKMeans"
     );

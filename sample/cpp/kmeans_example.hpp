@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <type_traits>
+#include <utility>
 
 #include "rabitqlib/core/detail/eigen.hpp"
 #include "rabitqlib/utils/io.hpp"
@@ -31,13 +33,22 @@ void write_vecs(const char* path, const T* data, size_t rows, size_t cols) {
     output.close();
 }
 
+// True for parameter types with a spherical field, which take an l2|ip argument.
+template <typename Parameters, typename = void>
+struct HasSpherical : std::false_type {};
+template <typename Parameters>
+struct HasSpherical<
+    Parameters,
+    std::void_t<decltype(std::declval<Parameters&>().spherical)>> : std::true_type {};
+
 template <typename KMeans, typename Parameters>
 int cluster_file(int argc, char** argv) {
-    if (argc != 5 && argc != 6) {
-        std::cerr
-            << "Usage: " << argv[0]
-            << " <data.fvecs> <num_clusters> <centroids.fvecs> <labels.ivecs> [l2|ip]\n"
-            << "Without arguments, run a synthetic clustering demo.\n";
+    constexpr bool kMetric = HasSpherical<Parameters>::value;
+    if (argc != 5 && !(kMetric && argc == 6)) {
+        std::cerr << "Usage: " << argv[0]
+                  << " <data.fvecs> <num_clusters> <centroids.fvecs> <labels.ivecs>"
+                  << (kMetric ? " [l2|ip]" : "") << '\n'
+                  << "Without arguments, run a synthetic clustering demo.\n";
         return 1;
     }
     const std::string count(argv[2]);
@@ -58,7 +69,9 @@ int cluster_file(int argc, char** argv) {
     rabitqlib::RowMajorArray<float> data;
     rabitqlib::load_vecs<float>(argv[1], data);
     Parameters parameters;
-    parameters.spherical = metric == "ip";
+    if constexpr (kMetric) {
+        parameters.spherical = metric == "ip";
+    }
     parameters.final_assignment = decltype(parameters.final_assignment)::Exact;
     parameters.verbose = true;
     KMeans clustering(data.cols(), num_clusters, parameters);
