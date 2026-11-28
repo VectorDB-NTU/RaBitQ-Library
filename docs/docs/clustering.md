@@ -1,9 +1,10 @@
 # Clustering
 
-RaBitQ Library provides two implementations of Lloyd's k-means. Both compute
-centroid means from the original float32 data, accumulate in float64, and require
-no external clustering package. Choose the class explicitly; neither switches
-algorithms based on the cluster count.
+RaBitQ Library provides two implementations of Lloyd's k-means and one of
+mini-batch [e-means](#qgemeans). The Lloyd classes compute centroid means from
+the original float32 data and accumulate in float64. None requires an external
+clustering package. Choose the class explicitly; none switches algorithms based
+on the cluster count.
 
 For installation, see [Quick start](quick_start.md#install).
 
@@ -21,18 +22,20 @@ per centroid; the classes below default to training on every vector.
 | --- | --- | --- | --- |
 | [RaBitQKMeans](#rabitqkmeans) | Flat RaBitQ scan | Small cluster counts | `n >= k >= 1` |
 | [QGKMeans](#qgkmeans) | SymphonyQG centroid graph | Larger cluster counts | `n >= k > max_degree` (default 32) |
+| [QGEMeans](#qgemeans) | SymphonyQG centroid graph, per mini-batch | Larger cluster counts, fewer passes over the data | `n >= k > max_degree` (default 32) |
 
 ## Python
 
-Both classes have the same training and result interface. Here `x` is a float32
+All three classes have the same training and result interface. Here `x` is a float32
 array of shape `(n, d)` and `queries` one of shape `(m, d)`:
 
 ```python
-from rabitqlib import QGKMeans, RaBitQKMeans
+from rabitqlib import QGEMeans, QGKMeans, RaBitQKMeans
 
 kmeans = RaBitQKMeans(d, 16, niter=25, num_threads=8)
 # For larger cluster counts, use instead:
 # kmeans = QGKMeans(d, 4096, niter=25, num_threads=8)
+# kmeans = QGEMeans(d, 4096, niter=8, num_threads=8)
 last_iteration_obj = kmeans.train(x)
 
 centroids = kmeans.centroids      # shape (k, d)
@@ -53,6 +56,7 @@ Link that target; a core-only installation does not include clustering headers.
 
 ```cpp
 #include <rabitqlib/clustering/rabitqkmeans.hpp>
+#include <rabitqlib/clustering/qgemeans.hpp>
 #include <rabitqlib/clustering/qgkmeans.hpp>
 
 rabitqlib::rabitqkmeans::RaBitQKMeansParameters parameters;
@@ -60,7 +64,8 @@ parameters.niter = 25;
 parameters.num_threads = 8;
 rabitqlib::rabitqkmeans::RaBitQKMeans kmeans(dimension, 16, parameters);
 
-// For graph assignment, use qgkmeans::QGKMeansParameters and qgkmeans::QGKMeans.
+// For graph assignment, use qgkmeans::QGKMeansParameters and qgkmeans::QGKMeans,
+// or qgemeans::QGEMeansParameters and qgemeans::QGEMeans.
 kmeans.train(num_points, data);  // row-major float32 input
 
 const auto& centroids = kmeans.centroids;
@@ -75,22 +80,27 @@ kmeans.assign(num_queries, queries, query_assignments.data(), query_distances.da
 ```
 
 Complete examples: [RaBitQKMeans](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/rabitqkmeans.cpp)
-(`bin/rabitqkmeans`) and [QGKMeans](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/qgkmeans.cpp)
-(`bin/qgkmeans`). Run either without arguments for a synthetic demo, or save
+(`bin/rabitqkmeans`), [QGKMeans](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/qgkmeans.cpp)
+(`bin/qgkmeans`) and [QGEMeans](https://github.com/VectorDB-NTU/RaBitQ-Library/blob/main/sample/cpp/qgemeans.cpp)
+(`bin/qgemeans`). Run any of them without arguments for a synthetic demo, or save
 clusters for the C++ indexing examples:
 
 ```bash
 ./bin/qgkmeans data.fvecs 4096 centroids.fvecs labels.ivecs
+./bin/qgemeans data.fvecs 4096 centroids.fvecs labels.ivecs
 ./bin/rabitqkmeans data.fvecs 16 centroids.fvecs labels.ivecs
 ```
 
 File mode uses exact final assignment and the default training parameters.
-Append `ip` for spherical clustering of normalized input; the default is `l2`.
+For the Lloyd examples, append `ip` for spherical clustering of normalized
+input; the default is `l2`.
 `sample/run_cpp.sh` runs the C++ clustering and indexing workflow without Python.
 
 ## Parameters and input
 
-Set Python keyword arguments or fields of the corresponding C++ parameter type:
+Set Python keyword arguments or fields of the corresponding C++ parameter type.
+QGEMeans takes `num_threads`, `seed`, `verbose` and `final_assignment` from this
+table; its other parameters are listed [with the method](#qgemeans).
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
@@ -186,6 +196,50 @@ The seed also controls fallback neighbors; PiPNN uses fixed internal seeds.
 without the clustering loop. To assign vectors with trained QGKMeans centroids,
 use [`assign`](#assign-new-vectors).
 
+### QGEMeans
+
+QGEMeans runs mini-batch e-means (Algorithm 1 of
+[arXiv:2611.09501](https://arxiv.org/abs/2611.09501), with the constants of the
+Faiss reference implementation in `faiss/contrib/e_means`) and assigns each
+mini-batch through a SymphonyQG graph over the current centroids. It starts
+from `k` distinct random training vectors chosen by `seed`. Each iteration visits
+the vectors in a seeded random order, in mini-batches. Before every mini-batch
+the raw-vector centroid graph is rebuilt and searched for each vector's nearest
+and second-nearest centroids, without search hints. Each centroid then moves
+toward its mini-batch mean, weighted by its batch count against an
+exponentially decaying mass. Every fifth mini-batch, cost-based revival (the
+Faiss default) moves centroids that cost little to remove: those whose removal
+cost, a decaying average of each vector's extra squared distance to its second
+centroid, is at most zero or below 0.3 times the median. The cheapest move
+first, each splitting the remaining centroid with the longest principal axis,
+tracked by Oja's rule, as long as the split's expected gain exceeds the removal
+cost. The step size follows the e-means step law and a cosine schedule that
+decays to a tenth of its initial value. After the last iteration, each centroid
+assigned in that iteration becomes the mean of its last-iteration vectors; a centroid
+split in the last iteration uses only the vectors it received after the split.
+Faiss's optional closing handover is not implemented.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `niter` | `8` | Positive number of iterations, each one pass (an e-means epoch) over the training vectors. |
+| `batch_size` | `0` | Vectors per mini-batch, capped at `n`; `0` selects the e-means batch-size law, rounded to a power of two and capped at the power of two nearest `n / 2`. |
+| `max_degree` | `32` | A positive multiple of 32, strictly smaller than `k`. |
+| `ef_construction`, `ef_search` | `240`, `16` | Positive graph construction and search window sizes; `ef_search` is at least 2, since each search returns the two nearest centroids. |
+| `graph_build_iterations` | `1` | As for QGKMeans. |
+
+C++ and Python use the same names. The centroid graph always stores raw
+float32 centroids, and QGEMeans has no `spherical`, sampling or early-stop
+setting. Mini-batch sums accumulate in
+float32, as in the Faiss reference.
+
+`obj` and `iteration_stats` have one entry per iteration: `obj` sums the mini-batch
+assignment distances of that iteration, each measured before that mini-batch's
+update; `shift` is the squared centroid displacement over the iteration; and
+`nsplit` counts revived centroids. Python `train()` returns the last iteration's
+`obj`. `train()` then assigns all vectors to the final centroids with
+`final_assignment`: `'approximate'` searches a graph rebuilt over them, and
+`'exact'` uses the exhaustive assignment described below.
+
 ## Results and final assignment
 
 Python result properties are `None` until a successful fit; a failed fit
@@ -198,13 +252,14 @@ their sum (WCSS); spherical mode sums `1 - inner_product`. `obj` and
 `train()` returns the last such objective.
 
 `final_assignment='approximate'` (default) uses the selected class's assignment
-algorithm. Labels need not identify the exact nearest centroids, but reported
+algorithm. QGEMeans `obj` and `iteration_stats` are per iteration, as described
+[with the method](#qgemeans). Labels need not identify the exact nearest centroids, but reported
 distances and WCSS remain exact for those labels. Without sampling, quantized
 QGKMeans final assignment retains a point's last-iteration label when it is
 closer. After sampling, most points have no such label, so every point uses the
 same graph search. Approximate training objectives need not decrease monotonically.
 
-To require exact nearest-centroid **final** assignments with either class:
+To require exact nearest-centroid **final** assignments with any class:
 
 ```python
 from rabitqlib import RaBitQKMeans
@@ -218,8 +273,9 @@ reads back as one of them. 0.9 removed the `FinalAssignmentMode` enum from the P
 package.
 
 In C++, set `parameters.final_assignment` to
-`rabitqlib::rabitqkmeans::FinalAssignmentMode::Exact` or
-`rabitqlib::qgkmeans::FinalAssignmentMode::Exact`; both names refer to the same
+`rabitqlib::rabitqkmeans::FinalAssignmentMode::Exact`,
+`rabitqlib::qgkmeans::FinalAssignmentMode::Exact` or
+`rabitqlib::qgemeans::FinalAssignmentMode::Exact`; all three name the same
 enum, whose values are `Approximate` and `Exact` (0.9 removed the alias
 `SymphonyQG`). Training still uses the selected approximate assignment algorithm.
 
@@ -247,7 +303,7 @@ C++ callers that change `centroids` or graph parameters cause one rebuild on
 the next call. Each call still validates the `k * d` centroid coordinates.
 
 For the training vectors, `assign` reproduces `assignments` and `distances`
-with exact final assignment, for RaBitQKMeans, and whenever training
+with exact final assignment, for RaBitQKMeans and QGEMeans, and whenever training
 sampled the input, because the sampled final pass is the same assignment.
 Unsampled approximate QGKMeans training also uses previous labels as graph
 search hints, so its final labels can differ.

@@ -49,7 +49,7 @@ factors estimate L2 distance or inner product.
 | `include/rabitqlib/index/ivf_index.hpp` | `IvfIndex`, the supported C++ IVF API: the Python workflow over `ivf::IVF` |
 | `include/rabitqlib/index/hnsw_index.hpp` | `HnswIndex`, the supported C++ HNSW API: the Python workflow over `hnsw::HierarchicalNSW` |
 | `include/rabitqlib/index/symqg_index.hpp` | `SymqgIndex`, the supported C++ SymphonyQG API: the Python workflow over `symqg::QuantizedGraph<float>` and `QGBuilder` |
-| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, and shared Lloyd training |
+| `include/rabitqlib/clustering/` | RaBitQKMeans flat assignment, QGKMeans graph assignment, shared Lloyd training, and mini-batch e-means (`detail/emeans.hpp`: `EMeans` over a pluggable assignment, as `LloydKMeans` in `detail/kmeans.hpp`; QGEMeans plugs in its own copy of the QGKMeans graph assigner in `qgemeans.hpp`) |
 | `include/rabitqlib/index/{ivf,hnsw,symqg}/` | Unsupported inner index classes behind the supported ones: construction, in-memory record layouts, search, save and load; no compatibility promise |
 | `include/rabitqlib/{core,fastscan,index}/detail/` | Module-owned implementation headers; no public stability promise |
 | `src/core/` | Compiled stable core v1 API and provisional API implementations (blob container, checksums and validation in `blob.*`, `crc32.hpp`, `validation.hpp`), and the frozen `faster_config` scale table |
@@ -1125,6 +1125,11 @@ backends.
 Indexed float32 rows accumulate into float64 sums through the matrix backends, preserving
 per-cluster point order without additional workspace.
 
+**QGEMeans mini-batch updates**
+
+Scalar float32 per-cluster sums in mini-batch member order, as the Faiss e-means reference;
+objectives are summed per cluster, then in cluster order, so they do not depend on scheduling.
+
 **HNSW-RaBitQ search and IVF-RaBitQ centroid routing**
 
 Cached HNSW search selection; centroid routing uses the common raw-distance dispatcher.
@@ -1141,7 +1146,7 @@ caller-owned.
 
 **Example KMeans training**
 
-Explicit RaBitQKMeans flat or QGKMeans graph assignment; FAISS is an optional comparison
+Explicit RaBitQKMeans flat, QGKMeans graph or QGEMeans mini-batch assignment; FAISS is an optional comparison
 dependency only.
 
 #### Portable builds and test coverage

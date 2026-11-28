@@ -75,7 +75,10 @@ def test_editor_docs_match_runtime_help():
                 continue
             # Python wrappers inherit __init__(d, k, **kwargs); class help documents
             # the supported keyword parameters and the stub expands them for IDEs.
-            if name in ("QGKMeans", "RaBitQKMeans") and node.name == "__init__":
+            if (
+                name in ("QGEMeans", "QGKMeans", "RaBitQKMeans")
+                and node.name == "__init__"
+            ):
                 continue
             actual = getattr(runtime, node.name).__doc__
             assert normalized(documentation) in normalized(actual), (name, node.name)
@@ -131,7 +134,7 @@ def test_native_signature_names_and_defaults(name):
         assert actual == expected, (name, node.name)
 
 
-@pytest.mark.parametrize("name", ["QGKMeans", "RaBitQKMeans"])
+@pytest.mark.parametrize("name", ["QGEMeans", "QGKMeans", "RaBitQKMeans"])
 def test_clustering_keyword_defaults(name):
     cls = declarations()[name]
     init = next(
@@ -191,12 +194,15 @@ def test_documented_search_result_types(kind):
     assert distances.dtype == np.float32
 
 
-@pytest.mark.parametrize("name", ["QGKMeans", "RaBitQKMeans"])
-def test_documented_training_result_types(name):
+@pytest.mark.parametrize(
+    ("name", "iterations"),
+    [("QGEMeans", "niter"), ("QGKMeans", "niter"), ("RaBitQKMeans", "niter")],
+)
+def test_documented_training_result_types(name, iterations):
     import numpy as np
 
     data = np.random.default_rng(42).normal(size=(80, 64)).astype(np.float32)
-    model = getattr(rabitqlib, name)(64, 40, niter=2, num_threads=1)
+    model = getattr(rabitqlib, name)(64, 40, num_threads=1, **{iterations: 2})
     assert isinstance(model.train(data), float)
     assert model.centroids.shape == (40, 64)
     assert model.centroids.dtype == np.float32

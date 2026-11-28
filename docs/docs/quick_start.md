@@ -133,6 +133,6 @@ See [file compatibility](index/usage.md#index-file-compatibility) before downgra
 - [IVF-RaBitQ](index/ivf.md): raw-vector reranking, precision, centroid routing and updates.
 - [HNSW-RaBitQ](index/hnsw.md) and [SymphonyQG](index/qg.md): graph-index workflows and parameters.
 - [Index usage contracts](index/usage.md): counts, threading, input lifetimes and file paths.
-- [Clustering](clustering.md): choose flat RaBitQKMeans or graph-based QGKMeans.
+- [Clustering](clustering.md): choose flat RaBitQKMeans, graph-based QGKMeans or mini-batch QGEMeans.
 - [C++ integration](cpp_integration.md): builds, installation and component selection.
 - [Stable core API](rabitq/core_api.md): integrate quantization into your own storage.

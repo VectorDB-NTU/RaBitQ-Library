@@ -17,6 +17,8 @@ __all__ = [
     "HnswIndex",
     "IvfIndex",
     "KMeansIterationStats",
+    "QGEMeans",
+    "QGEMeansParameters",
     "QGKMeans",
     "QGKMeansParameters",
     "RaBitQKMeans",
@@ -987,6 +989,290 @@ class SymqgIndex:
         index : SymqgIndex
             An index ready for search; add raises because it already has a graph.
         """
+
+class QGEMeans:
+    """Cluster vectors with mini-batch e-means and SymphonyQG graph assignment.
+
+    Parameters
+    ----------
+    d : int
+        Original vector dimension, from 64 through 65536.
+    k : int
+        Number of centroids; greater than max_degree and no more than the
+        number of training vectors.
+    niter : int, optional
+        Number of clustering iterations, each one pass over the training
+        vectors. Default is 8.
+    batch_size : int, optional
+        Vectors per mini-batch, capped at the number of training vectors; 0
+        selects the e-means batch-size law. Default is 0.
+    verbose : bool, optional
+        Print training progress when True. Default is False.
+    seed : int, optional
+        Random seed. Default is 42.
+    num_threads : int, optional
+        Worker count; 0 selects the available CPU count,
+        capped by OMP_NUM_THREADS. Default is 0.
+    final_assignment : {'approximate', 'exact'}, optional
+        'approximate' assigns through a centroid graph over the final
+        centroids; 'exact' uses exhaustive assignment against them. Default is
+        'approximate'.
+    max_degree : int, optional
+        Centroid graph degree; a positive multiple of 32. Default is 32.
+    ef_construction : int, optional
+        Positive centroid-graph construction search breadth. Default is 240.
+    ef_search : int, optional
+        Centroid-graph assignment search breadth, at least 2. Default is 16.
+    graph_build_iterations : int, optional
+        Positive number of graph-building passes after initialization. Default
+        is 1.
+
+    Notes
+    -----
+    Each iteration visits the vectors in a seeded random order, in mini-batches.
+    Before every mini-batch a SymphonyQG graph is rebuilt over the current
+    centroids and searched for each vector's nearest centroid; centroids then
+    take the e-means mass-weighted step, and centroids that cost little to remove
+    periodically split the centroids with the longest axes. The step size follows the
+    e-means law and a cosine schedule, and the last iteration's means become the
+    final centroids. train then assigns all vectors to them.
+
+    Training results are None until the first successful train call. Set cp
+    fields before training to customize subsequent runs. A failed train
+    preserves previous results.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from rabitqlib import QGEMeans
+    >>> x = np.random.default_rng(42).normal(size=(256, 64)).astype(np.float32)
+    >>> model = QGEMeans(64, 40, niter=2, ef_construction=40, num_threads=1)
+    >>> objective = model.train(x)
+    >>> model.centroids.shape
+    (40, 64)
+    """
+
+    d: int
+    k: int
+    cp: QGEMeansParameters
+
+    def __init__(
+        self,
+        d: SupportsIndex,
+        k: SupportsIndex,
+        *,
+        niter: SupportsIndex = 8,
+        batch_size: SupportsIndex = 0,
+        verbose: bool | np.bool_ = False,
+        seed: SupportsIndex = 42,
+        num_threads: SupportsIndex = 0,
+        final_assignment: _FinalAssignment = "approximate",
+        max_degree: SupportsIndex = 32,
+        ef_construction: SupportsIndex = 240,
+        ef_search: SupportsIndex = 16,
+        graph_build_iterations: SupportsIndex = 1,
+    ) -> None:
+        """Cluster vectors with mini-batch e-means and SymphonyQG graph assignment.
+
+        Parameters
+        ----------
+        d : int
+            Original vector dimension, from 64 through 65536.
+        k : int
+            Number of centroids; greater than max_degree and no more than the
+            number of training vectors.
+        niter : int, optional
+            Number of clustering iterations, each one pass over the training
+            vectors. Default is 8.
+        batch_size : int, optional
+            Vectors per mini-batch, capped at the number of training vectors; 0
+            selects the e-means batch-size law. Default is 0.
+        verbose : bool, optional
+            Print training progress when True. Default is False.
+        seed : int, optional
+            Random seed. Default is 42.
+        num_threads : int, optional
+            Worker count; 0 selects the available CPU count,
+            capped by OMP_NUM_THREADS. Default is 0.
+        final_assignment : {'approximate', 'exact'}, optional
+            'approximate' assigns through a centroid graph over the final
+            centroids; 'exact' uses exhaustive assignment against them. Default is
+            'approximate'.
+        max_degree : int, optional
+            Centroid graph degree; a positive multiple of 32. Default is 32.
+        ef_construction : int, optional
+            Positive centroid-graph construction search breadth. Default is 240.
+        ef_search : int, optional
+            Centroid-graph assignment search breadth, at least 2. Default is 16.
+        graph_build_iterations : int, optional
+            Positive number of graph-building passes after initialization. Default
+            is 1.
+
+        Notes
+        -----
+        Each iteration visits the vectors in a seeded random order, in mini-batches.
+        Before every mini-batch a SymphonyQG graph is rebuilt over the current
+        centroids and searched for each vector's nearest centroid; centroids then
+        take the e-means mass-weighted step, and centroids that cost little to remove
+        periodically split the centroids with the longest axes. The step size follows the
+        e-means law and a cosine schedule, and the last iteration's means become the
+        final centroids. train then assigns all vectors to them.
+
+        Training results are None until the first successful train call. Set cp
+        fields before training to customize subsequent runs. A failed train
+        preserves previous results.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from rabitqlib import QGEMeans
+        >>> x = np.random.default_rng(42).normal(size=(256, 64)).astype(np.float32)
+        >>> model = QGEMeans(64, 40, niter=2, ef_construction=40, num_threads=1)
+        >>> objective = model.train(x)
+        >>> model.centroids.shape
+        (40, 64)
+        """
+
+    def train(self, x: npt.ArrayLike) -> float:
+        """Train centroids and retain the final assignments.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (n, d)
+            Vectors in the original, unpadded coordinates, with n >= k.
+            Converted to contiguous float32; a copy may be made.
+
+        Returns
+        -------
+        objective : float
+            Sum of the mini-batch assignment distances in the last iteration, each
+            measured before that batch's update. This can differ from
+            final_obj, which uses the returned assignments and final centroids.
+
+        Notes
+        -----
+        A failed fit preserves the last successful results. Returned arrays are
+        copies.
+        """
+
+    def assign(
+        self, x: npt.ArrayLike
+    ) -> tuple[npt.NDArray[np.uint32], npt.NDArray[np.float32]]:
+        """Assign vectors to the trained centroids.
+
+        Parameters
+        ----------
+        x : array_like of float, shape (m, d)
+            Vectors in the original, unpadded coordinates, with finite
+            coordinates in the range accepted by train; m may be 0. Converted to
+            contiguous float32; a copy may be made.
+
+        Returns
+        -------
+        assignments : ndarray of uint32, shape (m,)
+            Centroid IDs.
+        distances : ndarray of float32, shape (m,)
+            Distances to the assigned centroids, as in the distances property.
+
+        Raises
+        ------
+        RuntimeError
+            If no train call has succeeded.
+
+        Notes
+        -----
+        Uses final_assignment and the other parameters of the last successful
+        train call, so each vector's result is independent of the other vectors
+        in x. Approximate assignment builds a centroid graph on first use and
+        reuses it in later calls. For the training vectors, the result
+        reproduces assignments and distances in both modes.
+        """
+
+    @property
+    def centroids(self) -> npt.NDArray[np.float32] | None:
+        """Final centroids, float32 array of shape (k, d), or None before training."""
+
+    @property
+    def assignments(self) -> npt.NDArray[np.uint32] | None:
+        """Final centroid IDs, uint32 array of shape (n,), or None before training."""
+
+    @property
+    def distances(self) -> npt.NDArray[np.float32] | None:
+        """Final assignment distances for all n vectors, float32 array of shape (n,), or None before training."""
+
+    @property
+    def obj(self) -> npt.NDArray[np.float64] | None:
+        """Per-iteration sums of mini-batch assignment distances, float64 array of shape (niter,), or None before training."""
+
+    @property
+    def final_obj(self) -> float | None:
+        """Objective for the final assignments of all n vectors, or None before training."""
+
+    @property
+    def iteration_stats(self) -> list[KMeansIterationStats] | None:
+        """Per-iteration statistics, or None before training: obj sums the mini-batch assignment distances, shift is the squared centroid displacement over the iteration and nsplit counts revived centroids."""
+
+class QGEMeansParameters:
+    """Mutable training settings for QGEMeans.
+
+    Notes
+    -----
+    Create with no arguments; set attributes directly or use keyword arguments
+    on QGEMeans.
+    """
+
+    @property
+    def niter(self) -> int:
+        """Positive number of passes over the training vectors. Default is 8."""
+    @niter.setter
+    def niter(self, value: SupportsIndex) -> None: ...
+    @property
+    def batch_size(self) -> int:
+        """Vectors per mini-batch, capped at the number of training vectors; 0 selects the e-means batch-size law. Default is 0."""
+    @batch_size.setter
+    def batch_size(self, value: SupportsIndex) -> None: ...
+    @property
+    def verbose(self) -> bool:
+        """Print training progress when True. Default is False."""
+    @verbose.setter
+    def verbose(self, value: bool | np.bool_) -> None: ...
+    @property
+    def seed(self) -> int:
+        """Random seed. Default is 42."""
+    @seed.setter
+    def seed(self, value: SupportsIndex) -> None: ...
+    @property
+    def num_threads(self) -> int:
+        """Worker count; 0 selects the available CPU count, capped by OMP_NUM_THREADS. Default is 0."""
+    @num_threads.setter
+    def num_threads(self, value: SupportsIndex) -> None: ...
+    @property
+    def final_assignment(self) -> _FinalAssignment:
+        """'approximate' assigns through a centroid graph over the final centroids; 'exact' uses exhaustive assignment against them. Default is 'approximate'."""
+    @final_assignment.setter
+    def final_assignment(self, value: _FinalAssignment) -> None: ...
+    @property
+    def max_degree(self) -> int:
+        """Centroid graph degree; a positive multiple of 32. Default is 32."""
+    @max_degree.setter
+    def max_degree(self, value: SupportsIndex) -> None: ...
+    @property
+    def ef_construction(self) -> int:
+        """Positive centroid-graph construction search breadth. Default is 240."""
+    @ef_construction.setter
+    def ef_construction(self, value: SupportsIndex) -> None: ...
+    @property
+    def ef_search(self) -> int:
+        """Centroid-graph assignment search breadth, at least 2. Default is 16."""
+    @ef_search.setter
+    def ef_search(self, value: SupportsIndex) -> None: ...
+    @property
+    def graph_build_iterations(self) -> int:
+        """Positive number of graph-building passes after initialization. Default is 1."""
+    @graph_build_iterations.setter
+    def graph_build_iterations(self, value: SupportsIndex) -> None: ...
+    def __init__(self) -> None:
+        """Create parameters with their documented defaults."""
 
 class QGKMeans:
     """Cluster vectors using SymphonyQG graph assignment.
